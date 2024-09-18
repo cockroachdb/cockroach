@@ -497,6 +497,9 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 
 	dbB.Exec(t, fmt.Sprintf("ALTER TABLE tab RENAME COLUMN %[1]s TO str_col, ADD COLUMN %[1]s DECIMAL", originTimestampColumnName))
 
+	// Create the columns in the source side also.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN str_col STRING, ADD COLUMN crdb_replication_origin_timestamp DECIMAL")
+
 	if s.Codec().IsSystem() {
 		dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
 		kvserver.RangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -508,6 +511,8 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.IgnoreLint(t, "column families are not supported yet by LDR")
 
 	ctx := context.Background()
 
@@ -657,18 +662,45 @@ func TestRandomTables(t *testing.T) {
 
 	tableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
-	createStmt := randgen.RandCreateTableWithName(
-		ctx,
-		rng,
-		tableName,
-		1,
-		false, /* isMultiregion */
-		// We do not have full support for column families.
-		randgen.SkipColumnFamilyMutation())
-	stmt := tree.SerializeForDisplay(createStmt)
-	t.Log(stmt)
-	runnerA.Exec(t, stmt)
-	runnerB.Exec(t, stmt)
+
+	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	// Keep retrying until the random table satisfies all the static checks
+	// we make when creating the replication stream.
+	for {
+		createStmt := randgen.RandCreateTableWithName(
+			ctx,
+			rng,
+			tableName,
+			1,
+			false, /* isMultiregion */
+			// We do not have full support for column families.
+			randgen.SkipColumnFamilyMutation())
+		stmt := tree.SerializeForDisplay(createStmt)
+		t.Log(stmt)
+		runnerA.Exec(t, stmt)
+		runnerB.Exec(t, stmt)
+		runnerA.Exec(t, addCol)
+		runnerB.Exec(t, addCol)
+
+		var jobBID jobspb.JobID
+		err := runnerB.DB.QueryRowContext(ctx, streamStartStmt, dbAURL.String()).Scan(&jobBID)
+		if err != nil {
+			t.Log(err)
+			runnerA.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
+			runnerB.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
+			continue
+		}
+
+		// Kill replication job. The one we want to test with is created further
+		// below.
+		runnerB.Exec(t, "CANCEL JOB $1", jobBID)
+		jobutils.WaitForJobToCancel(t, runnerB, jobBID)
+		break
+	}
 
 	// TODO(ssd): We have to turn off randomized_anchor_key
 	// because this, in combination of optimizer difference that
@@ -686,14 +718,6 @@ func TestRandomTables(t *testing.T) {
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
-
-	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
-	defer cleanup()
-
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
@@ -1871,4 +1895,148 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10")
+}
+
+// TestLogicalReplicationCreationChecks verifies that we check that the table
+// schemas are compatible when creating the replication stream.
+func TestLogicalReplicationCreationChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Column families are not allowed.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT NOT NULL CREATE FAMILY f1")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN new_col INT NOT NULL")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: table tab has more than one column family",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for mismatched numbers of columns.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: destination table tab has 3 columns, but the source table tab has 4 columns",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for mismatched column types.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col TEXT NOT NULL")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: destination table tab column new_col has type STRING, but the source table tab has type INT8",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for composite type in primary key.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT NOT NULL")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN composite_col DECIMAL NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN composite_col DECIMAL NOT NULL")
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, composite_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a primary key column \(composite_col\) with composite encoding`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for partial indexes.
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
+	dbA.Exec(t, "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a partial index partial_idx`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for virtual computed columns that are a key of a secondary index.
+	dbA.Exec(t, "DROP INDEX partial_idx")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbA.Exec(t, "CREATE INDEX virtual_col_idx ON tab(virtual_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that is a key of index virtual_col_idx`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for virtual columns that are in the primary index.
+	dbA.Exec(t, "DROP INDEX virtual_col_idx")
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, virtual_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that appears in the primary key`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Change the primary key back, and remove the indexes that are left over from
+	// changing the PK.
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
+	dbA.Exec(t, "DROP INDEX tab_pk_virtual_col_key")
+	dbA.Exec(t, "DROP INDEX tab_pk_key")
+	dbA.Exec(t, "DROP INDEX tab_pk_composite_col_key")
+
+	// Check that CHECK constraints match.
+	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (pk > 0)")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD CONSTRAINT check_constraint_1 CHECK (length(payload) > 1)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: destination table tab CHECK constraints do not match source table tab`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Add missing CHECK constraints, and verify that the stream can be created.
+	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (length(payload) > 1)")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD CONSTRAINT check_constraint_2 CHECK (pk > 0)")
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbBURL.String(),
+	).Scan(&jobAID)
+
+	// Kill replication job.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+
+	// Verify that the stream cannot be created with user defined types.
+	dbA.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b', 'c')")
+	dbB.Exec(t, "CREATE TYPE b.mytype AS ENUM ('a', 'b', 'c')")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN enum_col b.mytype NOT NULL")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: destination table tab column enum_col has user-defined type USER DEFINED ENUM: public.mytype`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check that UNIQUE indexes match.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN enum_col")
+	dbB.Exec(t, "ALTER TABLE b.tab DROP COLUMN enum_col")
+	dbA.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
+	dbB.Exec(t, "CREATE UNIQUE INDEX multi_idx ON b.tab(composite_col, pk)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: destination table tab UNIQUE indexes do not match source table tab`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Create the missing indexes on each side and verify the stream can be
+	// created. Note that the indexes don't need to be created in the same order
+	// for the check to pass.
+	dbA.Exec(t, "CREATE UNIQUE INDEX multi_idx ON tab(composite_col, pk)")
+	dbB.Exec(t, "CREATE UNIQUE INDEX payload_idx ON b.tab(payload)")
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbBURL.String(),
+	).Scan(&jobAID)
+
+	// Kill replication job.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 }

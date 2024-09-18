@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -129,6 +131,7 @@ func createLogicalReplicationStreamPlanHook(
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
 			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+			srcTableDescs      = make([]*descpb.TableDescriptor, len(stmt.Into.Tables))
 			dstTableDescs      = make([]*tabledesc.Mutable, len(stmt.Into.Tables))
 		)
 		for i := range stmt.From.Tables {
@@ -224,7 +227,9 @@ func createLogicalReplicationStreamPlanHook(
 		}
 
 		for i, name := range srcTableNames {
-			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
+			td := spec.TableDescriptors[name]
+			srcTableDescs[i] = &td
+			repPairs[i].SrcDescriptorID = int32(td.ID)
 		}
 
 		replicationStartTime := spec.ReplicationStartTime
@@ -245,6 +250,18 @@ func createLogicalReplicationStreamPlanHook(
 		}
 		if cr, ok := options.GetDefaultFunction(); ok {
 			defaultConflictResolution = *cr
+		}
+
+		if buildutil.CrdbTestBuild {
+			if len(srcTableDescs) != len(dstTableDescs) {
+				panic("srcTableDescs and dstTableDescs should have the same length")
+			}
+		}
+		for i := range srcTableDescs {
+			err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc())
+			if err != nil {
+				return err
+			}
 		}
 
 		jr := jobs.Record{
