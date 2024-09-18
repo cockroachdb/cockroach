@@ -151,6 +151,9 @@ func setupMetamorphic(p perturbation) variations {
 	v.partitionSite = rng.Intn(2) == 0
 	v.cleanRestart = rng.Intn(2) == 0
 	v.cloud = cloudSets[rng.Intn(len(cloudSets))]
+	// TODO(baptist): Temporarily disable the metamorphic tests on other clouds
+	// as they have limitations on configurations that can run.
+	v.cloud = registry.OnlyGCE
 	v.perturbation = p
 	return v
 }
