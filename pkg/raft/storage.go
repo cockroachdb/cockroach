@@ -38,11 +38,8 @@ var ErrSnapOutOfDate = errors.New("requested index is older than the existing sn
 // are unavailable.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
-// LogStorage is a read API for the raft log.
+// LogStorage is a read-only API for the raft log.
 type LogStorage interface {
-	// InitialState returns the saved HardState and ConfState information.
-	InitialState() (pb.HardState, pb.ConfState, error)
-
 	// Entries returns a slice of consecutive log entries in the range [lo, hi),
 	// starting from lo. The maxSize limits the total size of the log entries
 	// returned, but Entries returns at least one entry if any.
@@ -87,6 +84,16 @@ type LogStorage interface {
 	// TODO(pav-kv): replace this with a Prev() method equivalent to logSlice's
 	// prev field. The log storage is just a storage-backed logSlice.
 	FirstIndex() uint64
+
+	// LogSnapshot returns an immutable point-in-time log storage snapshot.
+	LogSnapshot() LogStorageSnapshot
+}
+
+// LogStorageSnapshot is a read-only API for the raft log which has extended
+// immutability guarantees outside RawNode. The immutability must be provided by
+// the application layer.
+type LogStorageSnapshot interface {
+	LogStorage
 }
 
 // StateStorage provides read access to the state machine storage.
@@ -103,6 +110,13 @@ type StateStorage interface {
 //
 // TODO(pav-kv): audit all error handling and document the contract.
 type Storage interface {
+	// InitialState returns the saved HardState and ConfState information.
+	//
+	// TODO(sep-raft-log): this would need to be fetched (fully or partially) from
+	// both log and state machine storage on startup, to detect which of the two
+	// storages is ahead, and initialize correctly.
+	InitialState() (pb.HardState, pb.ConfState, error)
+
 	LogStorage
 	StateStorage
 }
@@ -210,6 +224,12 @@ func (ms *MemoryStorage) FirstIndex() uint64 {
 
 func (ms *MemoryStorage) firstIndex() uint64 {
 	return ms.ents[0].Index + 1
+}
+
+// LogSnapshot implements the LogStorage interface.
+func (ms *MemoryStorage) LogSnapshot() LogStorageSnapshot {
+	// TODO(pav-kv): return an immutable subset of MemoryStorage.
+	return ms
 }
 
 // Snapshot implements the Storage interface.
