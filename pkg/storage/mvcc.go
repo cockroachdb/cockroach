@@ -2959,6 +2959,25 @@ func MVCCBlindConditionalPut(
 		ctx, writer, nil, nil, key, timestamp, value, expVal, allowIfDoesNotExist, originTSOpts, opts)
 }
 
+func maybeConditionFailedError(
+	expBytes []byte, actVal optionalValue, allowNoExisting bool,
+) *kvpb.ConditionFailedError {
+	expValPresent := len(expBytes) != 0
+	actValPresent := actVal.IsPresent()
+	if expValPresent && actValPresent {
+		if !bytes.Equal(expBytes, actVal.Value.TagAndDataBytes()) {
+			return &kvpb.ConditionFailedError{
+				ActualValue: actVal.ToPointer(),
+			}
+		}
+	} else if expValPresent != actValPresent && (actValPresent || !allowNoExisting) {
+		return &kvpb.ConditionFailedError{
+			ActualValue: actVal.ToPointer(),
+		}
+	}
+	return nil
+}
+
 func mvccConditionalPutUsingIter(
 	ctx context.Context,
 	writer Writer,
@@ -2984,17 +3003,9 @@ func mvccConditionalPutUsingIter(
 
 	var valueFn func(existVal optionalValue) (roachpb.Value, error)
 	if originTSOpts.IsEmpty() {
-		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
-				if !bytes.Equal(expBytes, existVal.Value.TagAndDataBytes()) {
-					return roachpb.Value{}, &kvpb.ConditionFailedError{
-						ActualValue: existVal.ToPointer(),
-					}
-				}
-			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
-				return roachpb.Value{}, &kvpb.ConditionFailedError{
-					ActualValue: existVal.ToPointer(),
-				}
+		valueFn = func(actualValue optionalValue) (roachpb.Value, error) {
+			if err := maybeConditionFailedError(expBytes, actualValue, bool(allowNoExisting)); err != nil {
+				return roachpb.Value{}, err
 			}
 			return value, nil
 		}
@@ -3012,17 +3023,9 @@ func mvccConditionalPutUsingIter(
 			// check the expected bytes because a mismatch implies
 			// that the caller may have produced other commands with
 			// outdated data.
-			expValExists := len(expBytes) != 0
-			if expValExists && existVal.IsPresent() && !bytes.Equal(expBytes, existVal.Value.TagAndDataBytes()) {
-				return roachpb.Value{}, &kvpb.ConditionFailedError{
-					HadNewerOriginTimestamp: true,
-					ActualValue:             existVal.ToPointer(),
-				}
-			} else if expValExists != existVal.IsPresent() {
-				return roachpb.Value{}, &kvpb.ConditionFailedError{
-					HadNewerOriginTimestamp: true,
-					ActualValue:             existVal.ToPointer(),
-				}
+			if err := maybeConditionFailedError(expBytes, existVal, false); err != nil {
+				err.HadNewerOriginTimestamp = true
+				return roachpb.Value{}, err
 			}
 			return value, nil
 		}
