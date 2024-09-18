@@ -621,7 +621,11 @@ type TestTenantArgs struct {
 	// determine the tenant's HTTP port.
 	StartingHTTPPort int
 
-	// TracingDefault controls whether the tracing will be on or off by default.
+	// Tracer, if set, will be used by the Server for creating Spans.
+	Tracer *tracing.Tracer
+
+	// TracingDefault controls whether the tracing will be on or off by default,
+	// if Tracer is not set.
 	TracingDefault tracing.TracingMode
 
 	// GoroutineDumpDirName is used to initialize the same named field on the

@@ -817,7 +817,7 @@ func TestTableNameCollision(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection, withDebugUseAfterFinish)
 }
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
