@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -123,7 +124,7 @@ var _ AuthMethod = authLDAP
 func authPassword(
 	_ context.Context,
 	c AuthConn,
-	_ username.SQLUsername,
+	user username.SQLUsername,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
@@ -133,12 +134,12 @@ func authPassword(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity username.SQLUsername,
+		systemIdentity string,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 		_ *ldap.DN,
 	) error {
-		return passwordAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
+		return passwordAuthenticator(ctx, user, clientConnection, pwRetrieveFn, c, execCfg)
 	})
 	return b, nil
 }
@@ -149,7 +150,7 @@ var errExpiredPassword = errors.New("password is expired")
 // behavior constructed by authPassword().
 func passwordAuthenticator(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	user username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	c AuthConn,
@@ -208,7 +209,7 @@ func passwordAuthenticator(
 	// Now check the cleartext password against the retrieved credentials.
 	if err := security.UserAuthPasswordHook(
 		false, passwordStr, hashedPassword, metrics.ConnsWaitingToHash,
-	)(ctx, systemIdentity, clientConnection); err != nil {
+	)(ctx, user.Normalized(), clientConnection); err != nil {
 		if errors.HasType(err, &security.PasswordUserAuthError{}) {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		}
@@ -225,7 +226,7 @@ func passwordAuthenticator(
 	// makes it easy to rollback from SCRAM-SHA-256 if there are issues.
 	sql.MaybeConvertStoredPasswordHash(ctx,
 		execCfg,
-		systemIdentity,
+		user,
 		passwordStr, hashedPassword)
 
 	return nil
@@ -248,7 +249,7 @@ func passwordString(pwdData []byte) (string, error) {
 func authScram(
 	ctx context.Context,
 	c AuthConn,
-	_ username.SQLUsername,
+	user username.SQLUsername,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
@@ -258,12 +259,12 @@ func authScram(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity username.SQLUsername,
+		systemIdentity string,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 		_ *ldap.DN,
 	) error {
-		return scramAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
+		return scramAuthenticator(ctx, user, clientConnection, pwRetrieveFn, c, execCfg)
 	})
 	return b, nil
 }
@@ -437,7 +438,7 @@ func authCert(
 	b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity username.SQLUsername,
+		systemIdentity string,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 		roleSubject *ldap.DN,
@@ -470,11 +471,9 @@ func authCert(
 	})
 	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
 		// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
-		commonName, err := username.MakeSQLUsernameFromUserInput(tlsState.PeerCertificates[0].Subject.CommonName, username.PurposeValidation)
-		if err != nil {
-			return nil, err
-		}
-		b.SetReplacementIdentity(commonName)
+		b.SetReplacementIdentity(
+			lexbase.NormalizeName(tlsState.PeerCertificates[0].Subject.CommonName),
+		)
 	}
 	return b, nil
 }
@@ -537,7 +536,7 @@ var AutoSelectPasswordAuth = settings.RegisterBoolSetting(
 func authAutoSelectPasswordProtocol(
 	_ context.Context,
 	c AuthConn,
-	_ username.SQLUsername,
+	user username.SQLUsername,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
@@ -547,7 +546,7 @@ func authAutoSelectPasswordProtocol(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity username.SQLUsername,
+		systemIdentity string,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 		_ *ldap.DN,
@@ -567,7 +566,7 @@ func authAutoSelectPasswordProtocol(
 		if pwRetrieveErr == nil && hashedPassword.Method() == password.HashBCrypt {
 			// Yes: we have no choice but to request a cleartext password.
 			c.LogAuthInfof(ctx, "found stored crdb-bcrypt credentials; requesting cleartext password")
-			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+			return passwordAuthenticator(ctx, user, clientConnection, newpwfn, c, execCfg)
 		}
 
 		if pwRetrieveErr == nil && hashedPassword.Method() == password.HashSCRAMSHA256 {
@@ -580,7 +579,7 @@ func authAutoSelectPasswordProtocol(
 				// If the cluster is configured to automatically downgrade from SCRAM to
 				// bcrypt, then we also request the cleartext password.
 				c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password")
-				return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+				return passwordAuthenticator(ctx, user, clientConnection, newpwfn, c, execCfg)
 			}
 
 			if autoRehashOnCostChangeBool && configuredHashMethod == password.HashSCRAMSHA256 {
@@ -593,7 +592,7 @@ func authAutoSelectPasswordProtocol(
 					// password when the default cost is changed, then we also request the
 					// cleartext password.
 					c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to re-hash after SCRAM cost change; requesting cleartext password")
-					return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+					return passwordAuthenticator(ctx, user, clientConnection, newpwfn, c, execCfg)
 				}
 			}
 		}
@@ -606,7 +605,7 @@ func authAutoSelectPasswordProtocol(
 		// error, we don't want the fallback to force the client to
 		// transmit a password in clear.
 		c.LogAuthInfof(ctx, "no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256")
-		return scramAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+		return scramAuthenticator(ctx, user, clientConnection, newpwfn, c, execCfg)
 	})
 	return b, nil
 }
@@ -648,7 +647,7 @@ func authTrust(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
+	b.SetAuthenticator(func(_ context.Context, _ string, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
 		return nil
 	})
 	return b, nil
@@ -667,7 +666,9 @@ func authReject(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(ctx context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
+	b.SetAuthenticator(func(
+		ctx context.Context, _ string, _ bool, _ PasswordRetrievalFn, _ *ldap.DN,
+	) error {
 		err := errors.New("authentication rejected by configuration")
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, err)
 		return err
@@ -691,7 +692,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	return func(
 		_ context.Context,
 		c AuthConn,
-		_ username.SQLUsername,
+		user username.SQLUsername,
 		_ tls.ConnectionState,
 		execCfg *sql.ExecutorConfig,
 		_ *hba.Entry,
@@ -699,7 +700,9 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	) (*AuthBehaviors, error) {
 		b := &AuthBehaviors{}
 		b.SetRoleMapper(UseProvidedIdentity)
-		b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, _ bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
+		b.SetAuthenticator(func(
+			ctx context.Context, systemIdentity string, _ bool, _ PasswordRetrievalFn, _ *ldap.DN,
+		) error {
 			c.LogAuthInfof(ctx, "session revival token detected; attempting to use it")
 			if !sql.AllowSessionRevival.Get(&execCfg.Settings.SV) || execCfg.Codec.ForSystemTenant() {
 				return errors.New("session revival tokens are not supported on this cluster")
@@ -760,7 +763,7 @@ var ConfigureJWTAuth = func(
 func authJwtToken(
 	sctx context.Context,
 	c AuthConn,
-	_ username.SQLUsername,
+	user username.SQLUsername,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
@@ -772,7 +775,9 @@ func authJwtToken(
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn, _ *ldap.DN) error {
+	b.SetAuthenticator(func(
+		ctx context.Context, systemIdentity string, clientConnection bool, pwRetrieveFn PasswordRetrievalFn, _ *ldap.DN,
+	) error {
 		c.LogAuthInfof(ctx, "JWT token detected; attempting to use it")
 		if !clientConnection {
 			err := errors.New("JWT token authentication is only available for client connections")
@@ -915,7 +920,7 @@ func authLDAP(
 		}
 	})
 	b := &AuthBehaviors{}
-	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetRoleMapper(UseSpecifiedIdentity(sessionUser))
 
 	ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(sCtx, execCfg.Settings, sessionUser, entry, identMap)
 	if authError != nil {
@@ -928,15 +933,21 @@ func authLDAP(
 	} else {
 		// The DN of user from LDAP server is set as the system identity DN which
 		// can then be used for authenticator & authorizer AuthBehaviors fn.
-		externalUserDN, err := username.MakeSQLUsernameFromUserInput(ldapUserDN.String(), username.PurposeValidation)
-		if err != nil {
-			log.Warningf(sCtx, "cannot create sql user for retrieved DN from LDAP server: %+v", err)
-		}
-		c.SetSystemIdentity(externalUserDN)
+		b.SetReplacementIdentity(ldapUserDN.String())
 	}
 
-	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
+	b.SetAuthenticator(func(
+		ctx context.Context, systemIdentity string, clientConnection bool, _ PasswordRetrievalFn, _ *ldap.DN,
+	) error {
 		c.LogAuthInfof(ctx, "LDAP password provided; attempting to bind to domain")
+
+		// Verify that the systemIdentity is what we expect.
+		if ldapUserDN.String() != systemIdentity {
+			err := errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+
 		if !clientConnection {
 			err := errors.New("LDAP authentication is only available for client connections")
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
@@ -963,9 +974,11 @@ func authLDAP(
 		// If there is no ldap pwd, send the Password Auth Failed error to make the
 		// client prompt for a password.
 		if len(ldapPwd) == 0 {
-			return security.NewErrPasswordUserAuthFailed(user)
+			return security.NewErrPasswordUserAuthFailed(sessionUser)
 		}
-		if detailedErrors, authError := ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, ldapUserDN, user, ldapPwd, entry, identMap); authError != nil {
+		if detailedErrors, authError := ldapManager.m.ValidateLDAPLogin(
+			ctx, execCfg.Settings, ldapUserDN, sessionUser, ldapPwd, entry, identMap,
+		); authError != nil {
 			errForLog := authError
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
@@ -976,29 +989,41 @@ func authLDAP(
 		return nil
 	})
 
-	b.SetAuthorizer(func(ctx context.Context, user username.SQLUsername, clientConnection bool) ([]username.SQLUsername, error) {
+	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) ([]username.SQLUsername, error) {
 		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
-		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(ctx, execCfg.Settings, ldapUserDN, user, entry, identMap); authError != nil {
-			errForLog := authError
+
+		// Verify that the systemIdentity is what we expect.
+		if ldapUserDN.String() != systemIdentity {
+			return nil, errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
+		}
+
+		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
+			ctx, execCfg.Settings, ldapUserDN, sessionUser, entry, identMap,
+		); authError != nil {
+			errForLog := errors.Wrapf(authError, "LDAP authorization: error retrieving ldap groups for authorization")
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
-			log.Warningf(ctx, "LDAP authorization: error retrieving ldap groups for authorization: %+v", errForLog)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, errForLog)
 			return nil, authError
 		} else {
-			log.Infof(ctx, "LDAP authorization sync succeeded; attempting to assign roles")
-			// parse and apply transformation to LDAP group DNs for roles granter.
+			c.LogAuthInfof(ctx, "LDAP authorization sync succeeded; attempting to assign roles")
+			// Parse and apply transformation to LDAP group DNs for roles granter.
 			sqlGroupRoles := make([]username.SQLUsername, len(ldapGroups))
 			for idx := range ldapGroups {
 				var err error
-				if sqlGroupRoles[idx], err = username.MakeSQLUsernameFromUserInput(ldapGroups[idx].String(), username.PurposeValidation); err != nil {
+				// TODO: instead of using the DN as the SQLUsername, we should extract
+				// the CN and use that as the SQLUsername
+				if sqlGroupRoles[idx], err = username.MakeSQLUsernameFromUserInput(
+					ldapGroups[idx].String(), username.PurposeValidation,
+				); err != nil {
 					return nil, errors.Wrapf(err, "LDAP authorization: error creating group role for DN %s", ldapGroups[idx].String())
 				}
 			}
 			return sqlGroupRoles, nil
 		}
 	})
-	b.SetRoleGranter(func(ctx context.Context, user username.SQLUsername, sqlGroups []username.SQLUsername) error {
+	b.SetRoleGranter(func(ctx context.Context, systemIdentity string, sqlGroups []username.SQLUsername) error {
 		return nil
 	})
 

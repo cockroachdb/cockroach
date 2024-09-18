@@ -21,6 +21,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/hba",
         "//pkg/sql/pgwire/identmap",

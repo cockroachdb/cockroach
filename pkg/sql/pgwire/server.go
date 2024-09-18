@@ -1100,8 +1100,8 @@ func (s *Server) serveImpl(
 
 	// We'll build an authPipe to communicate with the authentication process.
 	systemIdentity := c.sessionArgs.SystemIdentity
-	if systemIdentity.Undefined() {
-		systemIdentity = c.sessionArgs.User
+	if systemIdentity == "" {
+		systemIdentity = c.sessionArgs.User.Normalized()
 	}
 	logVerboseAuthn := !inTestWithoutSQL && c.verboseAuthLogEnabled()
 	authPipe := newAuthPipe(c, logVerboseAuthn, authOpt, systemIdentity)
