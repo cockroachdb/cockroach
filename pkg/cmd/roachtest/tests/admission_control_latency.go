@@ -314,7 +314,7 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 	db := v.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	cmd := fmt.Sprintf("ALTER DATABASE backfill CONFIGURE ZONE USING constraints = '[+node%d]', lease_preferences='[[-node%d]]'", target, target)
+	cmd := fmt.Sprintf(`ALTER DATABASE backfill CONFIGURE ZONE USING constraints='{"+node%d":1}', lease_preferences='[[-node%d]]', num_replicas=3`, target, target)
 	_, err := db.ExecContext(ctx, cmd)
 	require.NoError(t, err)
 
