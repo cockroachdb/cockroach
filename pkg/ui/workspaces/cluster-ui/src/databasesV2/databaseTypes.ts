@@ -8,13 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { NodeID } from "src/types/clusterTypes";
+
 export type DatabaseRow = {
   name: string;
   id: number;
   approximateDiskSizeBytes: number;
   tableCount: number;
   rangeCount: number;
-  nodesByRegion: Record<string, number[]>;
+  nodesByRegion: {
+    isLoading: boolean;
+    data: Record<string, NodeID[]>;
+  };
   schemaInsightsCount: number;
   key: string;
 };

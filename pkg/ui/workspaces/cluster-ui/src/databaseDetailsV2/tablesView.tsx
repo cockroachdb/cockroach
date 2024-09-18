@@ -21,6 +21,7 @@ import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
 import { Table, TableColumnProps } from "src/sharedFromCloud/table";
 import useTable from "src/sharedFromCloud/useTable";
+import { NodeID } from "src/types/clusterTypes";
 import { ReactSelectOption } from "src/types/selectTypes";
 import { Bytes, EncodeDatabaseTableUri } from "src/util";
 
@@ -44,8 +45,8 @@ const mockData: TableRow[] = new Array(20).fill(1).map((_, i) => ({
   nodesByRegion:
     i % 2 === 0
       ? {
-          [mockRegionOptions[0].value]: [1, 2],
-          [mockRegionOptions[1].value]: [3],
+          [mockRegionOptions[0].value]: [1, 2] as NodeID[],
+          [mockRegionOptions[1].value]: [3] as NodeID[],
         }
       : null,
   liveDataPercentage: 1,
@@ -168,8 +169,12 @@ export const TablesPageV2 = () => {
   });
   const data = mockData;
 
-  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption[]>([]);
-  const onNodeRegionsChange = (selected: OptionsType<ReactSelectOption>) => {
+  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption<string>[]>(
+    [],
+  );
+  const onNodeRegionsChange = (
+    selected: OptionsType<ReactSelectOption<string>>,
+  ) => {
     setNodeRegions((selected ?? []).map(v => v));
   };
 
