@@ -670,11 +670,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 
 	snapshot, err := r.raftLog.snapshot()
 	if err != nil {
-		if err == ErrSnapshotTemporarilyUnavailable {
-			r.logger.Debugf("%x failed to send snapshot to %x because snapshot is temporarily unavailable", r.id, to)
-			return false
-		}
-		panic(err) // TODO(bdarnell)
+		panic(err) // TODO(pav-kv): handle storage errors uniformly.
 	}
 	if IsEmptySnap(snapshot) {
 		panic("need non-empty snapshot")
