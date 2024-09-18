@@ -329,33 +329,13 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	return true
 }
 
-// slice returns the entries from the unstable log with indexes in the range
-// [lo, hi). The entire range must be stored in the unstable log or the method
-// will panic. The returned slice can be appended to, but the entries in it must
-// not be changed because they are still shared with unstable.
+// slice returns the entries from the unstable log with indexes in the [lo, hi)
+// interval. The entire interval must be within the unstable log bounds, or the
+// method will panic.
 //
-// TODO(pavelkalinnikov): this, and similar []pb.Entry slices, may bubble up all
-// the way to the application code through Ready struct. Protect other slices
-// similarly, and document how the client can use them.
+// TODO(pav-kv): use (lo, hi] semantics instead of [lo, hi). Raft log slices are
+// always constructed in context of being appended after a particular log index,
+// so the (lo, hi] addressing makes more sense.
 func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
-	u.mustCheckOutOfBounds(lo, hi)
-	// NB: use the full slice expression to limit what the caller can do with the
-	// returned slice. For example, an append will reallocate and copy this slice
-	// instead of corrupting the neighbouring u.entries.
-	offset := u.prev.index + 1
-	return u.entries[lo-offset : hi-offset : hi-offset]
-}
-
-// mustCheckOutOfBounds checks that [lo, hi) interval is included in
-// (u.prev.index, u.lastIndex()].
-// Equivalently, u.prev.index + 1 <= lo <= hi <= u.lastIndex() + 1.
-//
-// TODO(pav-kv): the callers check this already. Remove.
-func (u *unstable) mustCheckOutOfBounds(lo, hi uint64) {
-	if lo > hi {
-		u.logger.Panicf("invalid unstable.slice %d > %d", lo, hi)
-	}
-	if last := u.lastIndex(); lo <= u.prev.index || hi > last+1 {
-		u.logger.Panicf("unstable.slice[%d,%d) out of bound (%d,%d]", lo, hi, u.prev.index, last)
-	}
+	return u.sub(lo-1, hi-1)
 }
