@@ -138,6 +138,11 @@ func (s logSlice) forward(index uint64) logSlice {
 	}
 }
 
+// sub returns the entries of this logSlice with indices in (after, to].
+func (s logSlice) sub(after, to uint64) []pb.Entry {
+	return s.entries[after-s.prev.index : to-s.prev.index]
+}
+
 // valid returns nil iff the logSlice is a well-formed log slice. See logSlice
 // comment for details on what constitutes a valid raft log slice.
 func (s logSlice) valid() error {
