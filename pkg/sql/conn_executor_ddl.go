@@ -15,12 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // maybeAutoCommitBeforeDDL checks if the current transaction needs to be
@@ -112,9 +114,15 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ctx context.Context, descID descpb.ID,
 ) error {
+	// If we encountered a missing or dropped / offline descriptor waiting for the schema
+	// change then lets ignore the error, and let the FSM retry, since concurrentSchemaChangeError
+	// errors are retryable. Otherwise, allow the error to bubble back up and kill
+	// the connection.
 	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, *ex.extraTxnState.schemaChangerState,
-	); err != nil {
+	); err != nil &&
+		!catalog.HasInactiveDescriptorError(err) &&
+		!errors.Is(err, catalog.ErrDescriptorNotFound) {
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
