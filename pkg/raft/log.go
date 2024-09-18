@@ -448,14 +448,18 @@ func (l *raftLog) term(i uint64) (uint64, error) {
 	panic(err) // TODO(bdarnell)
 }
 
-func (l *raftLog) entries(i uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
-	if i >= l.lastIndex() {
+// entries returns a contiguous slice of log entries at indices > after, with
+// the total size not exceeding maxSize. The total size can exceed maxSize if
+// the first entry (at index after+1) is larger than maxSize. Returns nil if
+// there are no entries at indices > after.
+func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+	if after >= l.lastIndex() {
 		return nil, nil
 	}
-	return l.slice(i, l.lastIndex(), maxSize)
+	return l.slice(after, l.lastIndex(), maxSize)
 }
 
-// allEntries returns all entries in the log.
+// allEntries returns all entries in the log. For testing only.
 func (l *raftLog) allEntries() []pb.Entry {
 	ents, err := l.entries(l.firstIndex()-1, noLimit)
 	if err == nil {
