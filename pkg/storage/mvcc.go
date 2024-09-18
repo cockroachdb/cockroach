@@ -2873,13 +2873,12 @@ const (
 	CPutFailIfMissing CPutMissingBehavior = false
 )
 
-type CPutWithOriginTimestampOptions struct {
-	OriginTimestamp hlc.Timestamp
-	ShouldWinTie    bool
-}
+type ConditionalPutWriteOptions struct {
+	MVCCWriteOptions
 
-func (o CPutWithOriginTimestampOptions) IsEmpty() bool {
-	return o == CPutWithOriginTimestampOptions{}
+	AllowIfDoesNotExist CPutMissingBehavior
+	OriginTimestamp     hlc.Timestamp
+	ShouldWinTie        bool
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -2904,9 +2903,7 @@ func MVCCConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal []byte,
-	allowIfDoesNotExist CPutMissingBehavior,
-	originTSOpts CPutWithOriginTimestampOptions,
-	opts MVCCWriteOptions,
+	opts ConditionalPutWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
@@ -2932,7 +2929,7 @@ func MVCCConditionalPut(
 		defer ltScanner.close()
 	}
 	return mvccConditionalPutUsingIter(
-		ctx, rw, iter, ltScanner, key, timestamp, value, expVal, allowIfDoesNotExist, originTSOpts, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, value, expVal, opts)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -2951,12 +2948,10 @@ func MVCCBlindConditionalPut(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expVal []byte,
-	allowIfDoesNotExist CPutMissingBehavior,
-	originTSOpts CPutWithOriginTimestampOptions,
-	opts MVCCWriteOptions,
+	opts ConditionalPutWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	return mvccConditionalPutUsingIter(
-		ctx, writer, nil, nil, key, timestamp, value, expVal, allowIfDoesNotExist, originTSOpts, opts)
+		ctx, writer, nil, nil, key, timestamp, value, expVal, opts)
 }
 
 func maybeConditionFailedError(
@@ -2987,24 +2982,22 @@ func mvccConditionalPutUsingIter(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	expBytes []byte,
-	allowNoExisting CPutMissingBehavior,
-	originTSOpts CPutWithOriginTimestampOptions,
-	opts MVCCWriteOptions,
+	opts ConditionalPutWriteOptions,
 ) (roachpb.LockAcquisition, error) {
-	if !originTSOpts.IsEmpty() {
-		if bool(allowNoExisting) {
-			return roachpb.LockAcquisition{}, errors.AssertionFailedf("allowNoExisting and non-zero originTSOpts are incompatible")
+	if !opts.OriginTimestamp.IsEmpty() {
+		if bool(opts.AllowIfDoesNotExist) {
+			return roachpb.LockAcquisition{}, errors.AssertionFailedf("AllowIfDoesNotExist and non-zero OriginTimestamp are incompatible")
 		}
 		putIsInline := timestamp.IsEmpty()
 		if putIsInline {
-			return roachpb.LockAcquisition{}, errors.AssertionFailedf("inline put and non-zero originTSOpts are incompatible")
+			return roachpb.LockAcquisition{}, errors.AssertionFailedf("inline put and non-zero OriginTimestamp are incompatible")
 		}
 	}
 
 	var valueFn func(existVal optionalValue) (roachpb.Value, error)
-	if originTSOpts.IsEmpty() {
+	if opts.OriginTimestamp.IsEmpty() {
 		valueFn = func(actualValue optionalValue) (roachpb.Value, error) {
-			if err := maybeConditionFailedError(expBytes, actualValue, bool(allowNoExisting)); err != nil {
+			if err := maybeConditionFailedError(expBytes, actualValue, bool(opts.AllowIfDoesNotExist)); err != nil {
 				return roachpb.Value{}, err
 			}
 			return value, nil
@@ -3012,7 +3005,7 @@ func mvccConditionalPutUsingIter(
 	} else {
 		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
 			existTS := existVal.timestampForOriginTimestampComparison()
-			proposedIsOriginTSWinner := existTS.Less(originTSOpts.OriginTimestamp) || (existTS.Equal(originTSOpts.OriginTimestamp) && originTSOpts.ShouldWinTie)
+			proposedIsOriginTSWinner := existTS.Less(opts.OriginTimestamp) || (existTS.Equal(opts.OriginTimestamp) && opts.ShouldWinTie)
 			if !proposedIsOriginTSWinner {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					OriginTimestampOlderThan: existTS,
@@ -3035,10 +3028,10 @@ func mvccConditionalPutUsingIter(
 		// don't assert they are the same yet because it is
 		// still unclear how exactly we want to manage this in
 		// the long run.
-		opts.OriginTimestamp = originTSOpts.OriginTimestamp
+		opts.MVCCWriteOptions.OriginTimestamp = opts.OriginTimestamp
 	}
 
-	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
+	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts.MVCCWriteOptions)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It

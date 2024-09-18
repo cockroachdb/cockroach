@@ -1310,17 +1310,18 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw storage.ReadWriter) error {
-		opts := storage.MVCCWriteOptions{
-			Txn:                            txn,
-			LocalTimestamp:                 localTs,
-			Stats:                          e.ms,
-			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
-			MaxLockConflicts:               e.getMaxLockConflicts(),
+		opts := storage.ConditionalPutWriteOptions{
+			MVCCWriteOptions: storage.MVCCWriteOptions{
+				Txn:                            txn,
+				LocalTimestamp:                 localTs,
+				Stats:                          e.ms,
+				ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+				MaxLockConflicts:               e.getMaxLockConflicts(),
+			},
+			AllowIfDoesNotExist: behavior,
+			OriginTimestamp:     originTimestamp,
 		}
-		originTSOpts := storage.CPutWithOriginTimestampOptions{
-			OriginTimestamp: originTimestamp,
-		}
-		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, originTSOpts, opts)
+		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, opts)
 		if err != nil {
 			return err
 		}
