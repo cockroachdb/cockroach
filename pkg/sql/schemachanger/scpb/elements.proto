@@ -118,6 +118,8 @@ message ElementProto {
     Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
     Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
     UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
+    // TODO should i add a top-level element for this?
+    NamedRangeZoneConfig named_range_zone_config = 63 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
 
     // Database elements.
     DatabaseRegionConfig database_region_config = 80 [(gogoproto.moretags) = "parent:\"Database\""];
@@ -573,6 +575,17 @@ message UserPrivileges {
   string user_name = 2;
   uint64 privileges = 3;
   uint64 with_grant_option = 4;
+}
+
+message NamedRangeZoneConfig {
+  uint32 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2;
+
+  // `seq_num` is used to differentiate different zone config elements tied to
+  // the same range. E.g. If we attempt to update a range's zone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 3;
 }
 
 message TableLocalityGlobal {
