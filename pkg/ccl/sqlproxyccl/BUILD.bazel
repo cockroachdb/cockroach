@@ -38,6 +38,7 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/retry",

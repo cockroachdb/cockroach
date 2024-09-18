@@ -2517,15 +2517,17 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 
 	testCases := []struct {
 		name                string
+		sniServerName       string
 		params              map[string]string
 		expectedClusterName string
 		expectedTenantID    uint64
 		expectedParams      map[string]string
 		expectedError       string
 		expectedHint        string
+		expectedMetrics     func(t *testing.T, m *metrics)
 	}{
 		{
-			name:          "empty params",
+			name:          "empty params and server name",
 			params:        map[string]string{},
 			expectedError: "missing cluster identifier",
 			expectedHint:  clusterIdentifierHint,
@@ -2641,6 +2643,32 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedHint:  "Tenant ID 0 is invalid.",
 		},
 		{
+			name:          "invalid sni format",
+			sniServerName: "foo-bar-baz",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:          "invalid sni value",
+			sniServerName: "happy2koala-.abc.aws-ap-south-1.cockroachlabs.cloud",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:                "valid sni value",
+			sniServerName:       "happy-seal-10.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:              map[string]string{},
+			expectedClusterName: "happy-seal",
+			expectedTenantID:    10,
+			expectedParams:      map[string]string{},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.SNIRoutingMethodCount.Value())
+			},
+		},
+		{
 			name: "multiple similar cluster identifiers",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
@@ -2649,6 +2677,11 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(2), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "cluster identifier in database param",
@@ -2659,6 +2692,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: strings.Repeat("a", 100),
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "valid cluster identifier with invalid arrangements",
@@ -2672,6 +2709,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"database": "defaultdb",
 				"options":  "-c  -c -c -c",
 			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "short option: cluster identifier in options param",
@@ -2682,6 +2723,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "short option with spaces: cluster identifier in options param",
@@ -2692,6 +2737,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "long option: cluster identifier in options param",
@@ -2704,6 +2753,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams: map[string]string{
 				"database": "defaultdb",
 				"options":  "--foo=test",
+			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
 			},
 		},
 		{
@@ -2718,6 +2771,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"database": "defaultdb",
 				"options":  "-csearch_path=public \t--foo=test",
 			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name:                "leading 0s are ok",
@@ -2725,19 +2782,24 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala-0",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := &pgproto3.StartupMessage{Parameters: tc.params}
+			m := makeProxyMetrics()
 
 			originalParams := make(map[string]string)
 			for k, v := range msg.Parameters {
 				originalParams[k] = v
 			}
 
-			fe := &FrontendAdmitInfo{Msg: msg}
-			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe)
+			fe := &FrontendAdmitInfo{Msg: msg, SniServerName: tc.sniServerName}
+			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe, &m)
 			if tc.expectedError == "" {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
 
@@ -2755,6 +2817,15 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 
 			// Check that the original parameters were not modified.
 			require.Equal(t, originalParams, msg.Parameters)
+
+			if tc.expectedMetrics != nil {
+				tc.expectedMetrics(t, &m)
+			} else {
+				require.Zero(t, m.RoutingMethodCount.Count())
+				require.Zero(t, m.SNIRoutingMethodCount.Value())
+				require.Zero(t, m.DatabaseRoutingMethodCount.Value())
+				require.Zero(t, m.ClusterOptionRoutingMethodCount.Value())
+			}
 		})
 	}
 }

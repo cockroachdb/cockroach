@@ -375,7 +375,7 @@ func (handler *proxyHandler) handle(
 
 	// NOTE: Errors returned from this function are user-facing errors so we
 	// should be careful with the details that we want to expose.
-	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe)
+	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe, handler.metrics)
 	if err != nil {
 		clientErr := withCode(err, codeParamsRoutingFailed)
 		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
@@ -715,7 +715,7 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 //     through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
 //     "--NAME=VALUE".
 func clusterNameAndTenantFromParams(
-	ctx context.Context, fe *FrontendAdmitInfo,
+	ctx context.Context, fe *FrontendAdmitInfo, metrics *metrics,
 ) (*pgproto3.StartupMessage, string, roachpb.TenantID, error) {
 	clusterIdentifierDB, databaseName, err := parseDatabaseParam(fe.Msg.Parameters["database"])
 	if err != nil {
@@ -748,6 +748,7 @@ func clusterNameAndTenantFromParams(
 				// are blank. If SNI doesn't parse as a valid cluster id, then we assume
 				// that the end user didn't intend to pass cluster info through SNI and
 				// show missing cluster identifier instead of invalid cluster identifier.
+				metrics.SNIRoutingMethodCount.Inc(1)
 				return fe.Msg, clusterName, tenID, nil
 			}
 		}
@@ -790,7 +791,16 @@ func clusterNameAndTenantFromParams(
 			paramsOut[key] = value
 		}
 	}
-
+	// If both are provided, they must be the same, and we will track both.
+	if clusterIdentifierDB != "" {
+		metrics.DatabaseRoutingMethodCount.Inc(1)
+	}
+	// This metric is specific to the --cluster option. If we introduce a new
+	// --routing-id in the future, the existing metrics will still work, and
+	// we should introduce a new RoutingIDOptionReads metric.
+	if clusterIdentifierOpt != "" {
+		metrics.ClusterOptionRoutingMethodCount.Inc(1)
+	}
 	outMsg := &pgproto3.StartupMessage{
 		ProtocolVersion: fe.Msg.ProtocolVersion,
 		Parameters:      paramsOut,
