@@ -383,14 +383,32 @@ message ConditionalPutRequest {
   // the use of this value with transactions.
   bool inline = 7;
 
-  // OriginTimestamp, if set, indicates that the caller wants to put
-  // the value only if any existing key is older than this timestamp.
+  // OriginTimestamp, if set, indicates that the ConditionalPut should only
+  // succeed if the existing value has a "comparison timestamp" that is less than the
+  // provided timestamp.
+  //
+  // The "comparison timestamp" is either:
+  //
+  //    - The OriginTimestamp field in the MVCCValueHeader of the existing
+  //      value, or (if the field is empty)
+  //    - The MVCC timestamp of the existing value, or
+  //    - An empty timestamp, if no existing value exists.
+  //
+  // The conditional put request will only succeed if this timestamp comparison is successful
+  // and the expected bytes matches the actual bytes.
+  //
+  // On success, this timestamp will also be stored in the OriginTimestamp field of the
+  // the MVCCValueHeader for the newly written value.
+  //
   // Used by logical data replication.
   util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
 
-  // ShouldWinOriginTimestampTie indicates whether the value should be
-  // accepted if the origin timestamp is the same as the
-  // origin_timestamp/mvcc_timestamp of the existing value.
+  // ShouldWinOriginTimestampTie, if true, indicates that if the "comparison
+  // timestamp" (see comment on OriginTimestamp) and OriginTimestamp are equal,
+  // then the ConditionalPut should succeed (assuming the expected and actual
+  // bytes also match).
+  //
+  // This must only be used in conjunction with OriginTimestamp.
   bool should_win_origin_timestamp_tie = 9;
 }
 
