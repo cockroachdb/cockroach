@@ -14,7 +14,10 @@ export type DatabaseRow = {
   approximateDiskSizeBytes: number;
   tableCount: number;
   rangeCount: number;
-  nodesByRegion: Record<string, number[]>;
+  nodesByRegion: {
+    isLoading: boolean;
+    data: Record<string, number[]>;
+  };
   schemaInsightsCount: number;
   key: string;
 };

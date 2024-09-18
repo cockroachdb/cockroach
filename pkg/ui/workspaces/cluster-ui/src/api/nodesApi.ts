@@ -9,8 +9,11 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { useMemo } from "react";
+import useSWR from "swr";
 
 import { fetchData } from "src/api";
+import { getRegionFromLocality } from "src/store/nodes";
 
 const NODES_PATH = "_status/nodes_ui";
 
@@ -18,3 +21,41 @@ export const getNodes =
   (): Promise<cockroach.server.serverpb.NodesResponse> => {
     return fetchData(cockroach.server.serverpb.NodesResponse, NODES_PATH);
   };
+
+export const useNodeStatuses = () => {
+  const { data, isLoading, error } = useSWR(NODES_PATH, getNodes, {
+    revalidateOnFocus: false,
+  });
+
+  const nodeIDToRegion = useMemo(() => {
+    const result: Record<number, string> = {};
+    if (!data) {
+      return result;
+    }
+    data.nodes.forEach(ns => {
+      result[ns.desc.node_id] = getRegionFromLocality(ns.desc.locality);
+    });
+    return result;
+  }, [data]);
+
+  const storeIDToNodeID = useMemo(() => {
+    const result: Record<number, number> = {};
+    if (!data) {
+      return result;
+    }
+    data.nodes.forEach(ns => {
+      ns.store_statuses.forEach(store => {
+        result[store.desc.store_id] = ns.desc.node_id;
+      });
+    });
+    return result;
+  }, [data]);
+
+  return {
+    data,
+    isLoading,
+    error,
+    nodeIDToRegion,
+    storeIDToNodeID,
+  };
+};

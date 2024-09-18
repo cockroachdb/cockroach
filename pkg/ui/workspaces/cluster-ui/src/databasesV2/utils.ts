@@ -52,17 +52,36 @@ export const getColTitleFromSortKey = (
 
 export const rawDatabaseMetadataToDatabaseRows = (
   raw: DatabaseMetadata[],
+  nodesInfo: {
+    nodeIDToRegion: Record<number, string>;
+    storeIDToNodeID: Record<number, number>;
+    isLoading: boolean;
+  },
 ): DatabaseRow[] => {
-  return raw.map(
-    (db: DatabaseMetadata): DatabaseRow => ({
+  return raw.map((db: DatabaseMetadata): DatabaseRow => {
+    const nodesByRegion: Record<string, number[]> = {};
+    if (!nodesInfo.isLoading) {
+      db.store_ids?.forEach(nodeID => {
+        const region =
+          nodesInfo.nodeIDToRegion[nodesInfo.storeIDToNodeID[nodeID]];
+        if (!nodesByRegion[region]) {
+          nodesByRegion[region] = [];
+        }
+        nodesByRegion[region].push(nodeID);
+      });
+    }
+    return {
       name: db.db_name,
       id: db.db_id,
       tableCount: db.table_count,
       approximateDiskSizeBytes: db.size_bytes,
       rangeCount: db.table_count,
-      nodesByRegion: {},
       schemaInsightsCount: 0,
       key: db.db_id.toString(),
-    }),
-  );
+      nodesByRegion: {
+        isLoading: nodesInfo.isLoading,
+        data: nodesByRegion,
+      },
+    };
+  });
 };
