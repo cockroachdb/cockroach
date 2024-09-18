@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -412,10 +413,19 @@ func (r *Replica) propose(
 	if !p.useReplicationAdmissionControl() {
 		raftAdmissionMeta = nil
 	}
+
+	encodePriority := r.encodePriorityForRACv2()
+	if encodePriority && raftAdmissionMeta != nil {
+		// AdmissionPriority is the same for both v1 and v2 replication flow control
+		// until we get here. If the v2 encoding is enabled, we need to convert the
+		// priority to the v2 encoding.
+		raftAdmissionMeta.AdmissionPriority = int32(rac2.AdmissionToRaftPriority(
+			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority)))
+	}
 	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey,
 		raftlog.EncodeOptions{
 			RaftAdmissionMeta: raftAdmissionMeta,
-			EncodePriority:    r.encodePriorityForRACv2(),
+			EncodePriority:    encodePriority,
 		})
 	if err != nil {
 		return kvpb.NewError(err)
@@ -1923,11 +1933,12 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	req := newRaftMessageRequest()
 	*req = kvserverpb.RaftMessageRequest{
-		RangeID:       r.RangeID,
-		ToReplica:     toReplica,
-		FromReplica:   fromReplica,
-		Message:       msg,
-		RangeStartKey: startKey, // usually nil
+		RangeID:           r.RangeID,
+		ToReplica:         toReplica,
+		FromReplica:       fromReplica,
+		Message:           msg,
+		RangeStartKey:     startKey, // usually nil
+		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= replica_rac2.EnabledWhenLeaderV1Encoding,
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.

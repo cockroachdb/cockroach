@@ -245,6 +245,7 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			EvalWaitMetrics:     s.evalMetrics,
+			Knobs:               &kvflowcontrol.TestingKnobs{},
 		}
 
 		init := RangeControllerInitState{

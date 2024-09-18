@@ -112,7 +112,7 @@ func TestTracker(t *testing.T) {
 				count := 0
 				var buf strings.Builder
 				buf.WriteString(fmt.Sprintf("pri=%s\n", pri))
-				knobs.UntrackTokensInterceptor = func(tokens kvflowcontrol.Tokens, position kvflowcontrolpb.RaftLogPosition) {
+				knobs.V1.UntrackTokensInterceptor = func(tokens kvflowcontrol.Tokens, position kvflowcontrolpb.RaftLogPosition) {
 					count += 1
 					buf.WriteString(fmt.Sprintf("  tokens=%s %s\n",
 						testingPrintTrimmedTokens(tokens), position))

@@ -368,6 +368,10 @@ func (ss *storesForRACv2) lookup(
 	if r == nil || r.replicaID != replicaID {
 		return nil
 	}
+	if flowTestKnobs := r.store.TestingKnobs().FlowControlTestingKnobs; flowTestKnobs != nil &&
+		flowTestKnobs.UseOnlyForScratchRanges && !r.IsScratchRange() {
+		return nil
+	}
 	return r.flowControlV2
 }
 
