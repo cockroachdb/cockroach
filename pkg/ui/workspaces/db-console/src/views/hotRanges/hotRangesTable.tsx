@@ -35,7 +35,6 @@ import {
 import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
 import { AdminUIState } from "oss/src/redux/state";
 
-
 import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;

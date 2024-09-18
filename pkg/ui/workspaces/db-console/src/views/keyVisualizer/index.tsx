@@ -31,7 +31,6 @@ import { selectClusterSettings } from "src/redux/clusterSettings";
 import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { refreshSettings } from "src/redux/apiReducers";
 
-
 import { BackToAdvanceDebug } from "../reports/containers/util";
 
 import { CanvasHeight, XAxisPadding } from "./constants";

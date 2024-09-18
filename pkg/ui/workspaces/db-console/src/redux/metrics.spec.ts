@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {keys} from "d3";
+import { keys } from "d3";
 import map from "lodash/map";
 import flatMap from "lodash/flatMap";
 import Long from "long";

@@ -352,7 +352,8 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     const inconsistent =
       !isNil(equality) &&
       flow(
-        (nodeIds: string[]) => map(nodeIds, nodeID => this.props.nodeStatusByID[nodeID]),
+        (nodeIds: string[]) =>
+          map(nodeIds, nodeID => this.props.nodeStatusByID[nodeID]),
         statuses => map(statuses, status => equality(status)),
         uniq,
       )(orderedNodeIDs).length > 1;
@@ -435,8 +436,9 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     }
 
     // Sort the node IDs and then convert them back to string for lookups.
-    const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID)
-      .map(nodeID => nodeID.toString());
+    const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID).map(
+      nodeID => nodeID.toString(),
+    );
 
     const dropdownOptions: DropdownOption[] = [
       {

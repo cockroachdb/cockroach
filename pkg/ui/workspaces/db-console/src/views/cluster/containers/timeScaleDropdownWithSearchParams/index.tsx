@@ -91,6 +91,7 @@ const TimeScaleDropdownWithSearchParams = (
 
     // Passing an empty array of dependencies will cause this effect
     // to only run on the initial render.
+    /* eslint react-hooks/exhaustive-deps: "off" */
   }, []);
 
   const onTimeScaleChange = (timeScale: TimeScale) => {
@@ -125,11 +126,11 @@ const scaleSelector = createSelector(
 );
 
 type MapStateToProps = {
-  currentScale: TimeScale
+  currentScale: TimeScale;
 };
 
 type MapDispatchToProps = {
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 };
 
 export default connect<

@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import countBy from "lodash/countBy"
-import each from "lodash/each"
-import filter from "lodash/filter"
-import head from "lodash/head"
-import isArray from "lodash/isArray"
-import isEmpty from "lodash/isEmpty"
-import isNil from "lodash/isNil"
-import isUndefined from "lodash/isUndefined"
-import keyBy from "lodash/keyBy"
-import map from "lodash/map"
-import uniqBy from "lodash/uniqBy"
-import uniq from "lodash/uniq"
-import first from "lodash/first"
-import sortBy from "lodash/sortBy"
-import groupBy from "lodash/groupBy"
-import flow from "lodash/flow"
+import countBy from "lodash/countBy";
+import each from "lodash/each";
+import filter from "lodash/filter";
+import head from "lodash/head";
+import isArray from "lodash/isArray";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import isUndefined from "lodash/isUndefined";
+import keyBy from "lodash/keyBy";
+import map from "lodash/map";
+import uniqBy from "lodash/uniqBy";
+import uniq from "lodash/uniq";
+import first from "lodash/first";
+import sortBy from "lodash/sortBy";
+import groupBy from "lodash/groupBy";
+import flow from "lodash/flow";
 import { createSelector } from "reselect";
 import { util } from "@cockroachlabs/cluster-ui";
 
@@ -513,9 +513,10 @@ export const clusterNameSelector = createSelector(
     );
 
     const nodesWithUniqClusterNames = flow(
-      (statuses: INodeStatus[]) => filter(statuses, s => !isEmpty(s.desc.cluster_name)),
-      statuses => uniqBy(statuses, s => s.desc.cluster_name)
-    )(liveNodesOnCluster)
+      (statuses: INodeStatus[]) =>
+        filter(statuses, s => !isEmpty(s.desc.cluster_name)),
+      statuses => uniqBy(statuses, s => s.desc.cluster_name),
+    )(liveNodesOnCluster);
 
     if (isEmpty(nodesWithUniqClusterNames)) {
       return undefined;
@@ -552,7 +553,7 @@ export const validateNodesSelector = createSelector(
 );
 
 export const versionsSelector = createSelector(validateNodesSelector, nodes => {
-  return uniq(map(nodes, status => status.build_info.tag))
+  return uniq(map(nodes, status => status.build_info.tag));
 });
 
 export const numNodesByVersionsTagSelector = createSelector(

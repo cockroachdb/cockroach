@@ -19,7 +19,6 @@ import { AlertMessage } from "src/views/shared/components/alertMessage";
 
 import "./alertbanner.styl";
 
-
 interface AlertBannerProps {
   /**
    * List of alerts to display in the alert banner.

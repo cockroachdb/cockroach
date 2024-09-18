@@ -13,7 +13,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import {cockroach} from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import isEqual from "lodash/isEqual";
@@ -162,9 +162,7 @@ export class Range extends React.Component<RangeProps, {}> {
     }
 
     // Did we get any responses?
-    if (
-      !some(range.data.responses_by_node_id, resp => resp.infos.length > 0)
-    ) {
+    if (!some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
       return (
         <ErrorPage
           rangeID={rangeID}
@@ -197,9 +195,10 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Gather all replica IDs.
     const replicas = flow(
-      (infos: IRangeInfo[]) => flatMap(infos, info => info.state.state.desc.internal_replicas),
+      (infos: IRangeInfo[]) =>
+        flatMap(infos, info => info.state.state.desc.internal_replicas),
       descriptors => sortBy(descriptors, d => d.replica_id),
-      descriptors => sortedUniqBy(descriptors, d => d.replica_id)
+      descriptors => sortedUniqBy(descriptors, d => d.replica_id),
     )(infos);
 
     return (
@@ -252,7 +251,12 @@ const mapDispatchToProps = {
 };
 
 export default withRouter(
-  connect<RangeStateProps, RangeDispatchProps, RouteComponentProps, AdminUIState>(
+  connect<
+    RangeStateProps,
+    RangeDispatchProps,
+    RouteComponentProps,
+    AdminUIState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(Range),

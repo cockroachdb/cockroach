@@ -47,7 +47,6 @@ import {
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
 
-
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
  * structure based on a MetricProps object.

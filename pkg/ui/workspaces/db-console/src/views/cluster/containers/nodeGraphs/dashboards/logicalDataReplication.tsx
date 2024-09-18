@@ -41,23 +41,25 @@ export default function (props: GraphDashboardProps) {
               .map(d =>
                 d.value
                   ? {
-                    ...d,
-                    value:
-                      d.timestamp_nanos.toNumber() -
-                      util.SecondsToNano(d.value),
-                  }
+                      ...d,
+                      value:
+                        d.timestamp_nanos.toNumber() -
+                        util.SecondsToNano(d.value),
+                    }
                   : d,
               )
           }
         />
       </Axis>
     </LineGraph>,
-    
+
     <LineGraph
       title="Age of Applied Row Updates"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The difference in row update commit times between the source cluster and the destination cluster"}
+      tooltip={
+        "The difference in row update commit times between the source cluster and the destination cluster"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -121,7 +123,9 @@ export default function (props: GraphDashboardProps) {
       title="Batch Application Processing Time: 50th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The 50th percentile in the time it takes to write a batch of row updates"}
+      tooltip={
+        "The 50th percentile in the time it takes to write a batch of row updates"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
@@ -141,7 +145,9 @@ export default function (props: GraphDashboardProps) {
       title="Batch Application Processing Time: 99th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The 99th percentile in the time it takes to write a batch of row updates"}
+      tooltip={
+        "The 99th percentile in the time it takes to write a batch of row updates"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
@@ -181,7 +187,6 @@ export default function (props: GraphDashboardProps) {
           nonNegativeRate
         />
       </Axis>
-
     </LineGraph>,
 
     <LineGraph

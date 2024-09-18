@@ -24,9 +24,7 @@ import {
   refreshNodes,
   refreshSessions,
 } from "src/redux/apiReducers";
-import {
-  nodeDisplayNameByIDSelectorWithoutAddress
-} from "src/redux/nodes";
+import { nodeDisplayNameByIDSelectorWithoutAddress } from "src/redux/nodes";
 import {
   terminateQueryAction,
   terminateSessionAction,

@@ -703,7 +703,9 @@ export const licenseUpdateDismissedLocalSetting = new LocalSetting(
 
 const licenseUpdateDismissedPersistentLoadedSelector = createSelector(
   (state: AdminUIState) => state.uiData,
-  uiData => uiData && uiData.hasOwnProperty(LICENSE_UPDATE_DISMISSED_KEY),
+  uiData =>
+    uiData &&
+    Object.prototype.hasOwnProperty.call(uiData, LICENSE_UPDATE_DISMISSED_KEY),
 );
 
 const licenseUpdateDismissedPersistentSelector = createSelector(
@@ -771,7 +773,7 @@ export const licenseUpdateNotificationSelector = createSelector(
           saveUIData({
             key: LICENSE_UPDATE_DISMISSED_KEY,
             value: dismissedAt.valueOf(),
-          })
+          }),
         );
       },
     };
