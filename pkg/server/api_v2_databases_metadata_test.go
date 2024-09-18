@@ -349,7 +349,18 @@ func TestGetDBMetadata(t *testing.T) {
 			return cmp.Or(cmp.Compare(first.TableCount, second.TableCount), defaultDMComparator(first, second))
 		}
 		lastUpdatedComparator := func(first, second dbMetadata) int {
-			return cmp.Or(first.LastUpdated.Compare(second.LastUpdated), defaultDMComparator(first, second))
+			if first.LastUpdated != nil && second.LastUpdated != nil {
+				return cmp.Or(first.LastUpdated.Compare(*second.LastUpdated), defaultDMComparator(first, second))
+			}
+			if first.LastUpdated == nil && second.LastUpdated == nil {
+				return defaultDMComparator(first, second)
+			}
+
+			if first.LastUpdated == nil {
+				return -1
+			}
+
+			return 1
 		}
 
 		var sortTests = []struct {
@@ -361,7 +372,7 @@ func TestGetDBMetadata(t *testing.T) {
 			{"empty sort", "?sortBy=", defaultDMComparator},
 			{"non-sortable param", "?sortBy=asdfas", defaultDMComparator},
 			{"empty query string and set sort order", "?sortOrder=desc", defaultDMComparator},
-			{"sort by size", "?sortBy=name", nameComparator},
+			{"sort by name", "?sortBy=name", nameComparator},
 			{"sort by size", "?sortBy=size", sizeComparator},
 			{"sort by table count", "?sortBy=tableCount", tableCountComparator},
 			{"sort by lastUpdated", "?sortBy=lastUpdated", lastUpdatedComparator},
@@ -416,8 +427,8 @@ func TestGetDBMetadata(t *testing.T) {
 		require.NoError(t, e)
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String())
 
-		// Assert that user now see results for all dbs
-		require.Len(t, mdResp.Results, 2)
+		// Assert that user now see results for all dbs (new_test_db_1, new_test_db_2, system, postgres, and defaultdb)
+		require.Len(t, mdResp.Results, 5)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
 
 	})
@@ -506,6 +517,13 @@ func TestGetDBMetadata(t *testing.T) {
 		require.Equal(t, int64(1), mdResp.PaginationInfo.TotalResults)
 		// This count should not include views, materialized views, or sequences
 		require.Equal(t, int64(10), mdResp.Results[0].TableCount)
+	})
+
+	t.Run("empty database", func(t *testing.T) {
+		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client,
+			ts.AdminURL().WithPath("/api/v2/database_metadata/?name=defaultdb").String())
+
+		require.Equal(t, int64(1), mdResp.PaginationInfo.TotalResults)
 	})
 }
 
