@@ -149,7 +149,16 @@
 (InnerJoin | SemiJoin
     *
     *
-    $on:* & (CanSplitJoinWithDisjuncts (Root) $on)
+    $on:* &
+        (Let
+            (
+                $firstOnClause
+                $secondOnClause
+                $itemToReplace
+                $ok
+            ):(CanSplitJoinWithDisjuncts (Root) $on)
+            $ok
+        )
     *
 )
 =>
@@ -163,7 +172,13 @@
                     $newRelationCols
                     $aggCols
                     $groupingCols
-                ):(SplitJoinWithDisjuncts (Root) $on)
+                ):(SplitJoinWithDisjuncts
+                    (Root)
+                    $on
+                    $firstOnClause
+                    $secondOnClause
+                    $itemToReplace
+                )
                 $firstJoin
             )
             $secondJoin
@@ -187,7 +202,20 @@
 # SplitDisjunctionOfJoinTerms, except the INTERSECT ALL set operation is used in
 # place of UNION ALL.
 [SplitDisjunctionOfAntiJoinTerms, Explore]
-(AntiJoin * * $on:* & (CanSplitJoinWithDisjuncts (Root) $on) *)
+(AntiJoin
+    *
+    *
+    $on:* &
+        (Let
+            (
+                $firstOnClause
+                $secondOnClause
+                $itemToReplace
+                $ok
+            ):(CanSplitJoinWithDisjuncts (Root) $on)
+            $ok
+        )
+)
 =>
 (Project
     (DistinctOn
@@ -199,7 +227,13 @@
                     $newRelationCols
                     $aggCols
                     $groupingCols
-                ):(SplitJoinWithDisjuncts (Root) $on)
+                ):(SplitJoinWithDisjuncts
+                    (Root)
+                    $on
+                    $firstOnClause
+                    $secondOnClause
+                    $itemToReplace
+                )
                 $firstJoin
             )
             $secondJoin
