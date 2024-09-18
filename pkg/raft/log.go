@@ -524,7 +524,8 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 	return nil
 }
 
-// slice returns a slice of log entries from lo through hi-1, inclusive.
+// slice returns a slice of log entries from lo through hi-1, inclusive. The
+// returned slice can be appended to, but the entries in it must not be mutated.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	// TODO(pav-kv): simplify a bunch of arithmetics below.
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
@@ -536,7 +537,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	if lo > l.unstable.prev.index {
 		ents := limitSize(l.unstable.slice(lo, hi), maxSize)
 		// NB: use the full slice expression to protect the unstable slice from
-		// appends to the returned ents slice.
+		// appends to the returned slice.
 		return ents[:len(ents):len(ents)], nil
 	}
 
