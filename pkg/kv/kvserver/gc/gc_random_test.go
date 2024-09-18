@@ -782,9 +782,10 @@ func mergeRanges(fragments [][]storage.MVCCRangeKeyValue) []storage.MVCCRangeKey
 					// tombstone types.
 					newPartial = append(newPartial, storage.MVCCRangeKeyValue{
 						RangeKey: storage.MVCCRangeKey{
-							StartKey:  partialRangeKeys[j].RangeKey.StartKey,
-							EndKey:    stack[i].RangeKey.EndKey,
-							Timestamp: partialRangeKeys[j].RangeKey.Timestamp,
+							StartKey:               partialRangeKeys[j].RangeKey.StartKey,
+							EndKey:                 stack[i].RangeKey.EndKey,
+							Timestamp:              partialRangeKeys[j].RangeKey.Timestamp,
+							EncodedTimestampSuffix: partialRangeKeys[j].RangeKey.EncodedTimestampSuffix,
 						},
 						Value: partialRangeKeys[j].Value,
 					})
