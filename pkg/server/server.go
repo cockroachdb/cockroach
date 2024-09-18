@@ -1939,7 +1939,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.stopper,
 		s.cfg.TestingKnobs,
 		orphanedLeasesTimeThresholdNanos,
-		s.InitialStart(),
 	); err != nil {
 		return err
 	}
