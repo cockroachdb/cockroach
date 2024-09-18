@@ -1441,6 +1441,70 @@ func (r *Replica) tick(
 	return true, nil
 }
 
+// processMsgApps sends MsgApp to all peers whose send stream is ready to send.
+//
+// FIXME: find the right placement in RACv2 code. Potentially this just needs to
+// be inlined into the Ready handler.
+func (r *Replica) processMsgApps(_ context.Context) error {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	// We are the leader at the given term.
+	var term uint64 // FIXME: we should know it
+
+	// Grab the snapshot of the log, if we are still the leader of the term. This
+	// only locks Replica.mu for reads, and returns quickly. No IO is performed.
+	var logSnap raft.LogSnapshot
+	if !func() bool {
+		r.mu.RLock()
+		defer r.mu.Unlock()
+		rg := r.mu.internalRaftGroup
+		// We need to be the leader of the given term to be able to send MsgApps.
+		if rg.Term() != term || rg.Lead() != raftpb.PeerID(r.replicaID) {
+			return false
+		}
+		logSnap = rg.LogSnapshot()
+		return true
+	}() {
+		return nil
+	}
+
+	// We are still holding raftMu, so it is safe to use the log snapshot for
+	// constructing MsgApps. The log will not be mutated in storage. This will
+	// potentially incur storage reads.
+	//
+	// FIXME: iterate over all peers to whom we should send a MsgApp.
+	slices := make(map[roachpb.ReplicaID]raft.LogSlice, 5)
+	for peer := roachpb.ReplicaID(0); peer < 1; peer++ {
+		// FIXME: should know the parameters, as instructed by the send streams.
+		var after, last, maxSize uint64
+		slice, err := logSnap.LogSlice(after, last, maxSize)
+		if err != nil {
+			return err
+		}
+		slices[peer] = slice
+	}
+	if len(slices) == 0 { // nothing to send
+		return nil
+	}
+
+	// Now grab the Replica.mu again (for writes), and send the MsgApp messages.
+	// No IO happens here. The messages are stashed in RawNode message queue, and
+	// will be dispatched with the next Ready handling. Make sure to do all this
+	// right before the raft scheduler runs the Ready handler, to minimize
+	// latency.
+	return r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+		for peer, slice := range slices {
+			// NB: the message sending can fail here, if we lost leadership in the
+			// meantime, or the Next index is misaligned with the passed-in slice.
+			//
+			// Potentially need to update the send stream accordingly from here.
+			_ = rn.SendMsgApp(raftpb.PeerID(peer), slice)
+		}
+		return true, nil
+	})
+}
+
 func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
