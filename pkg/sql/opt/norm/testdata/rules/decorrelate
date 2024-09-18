@@ -5757,6 +5757,202 @@ project
       └── filters
            └── case:18 OR (x:8 IS NULL) [outer=(8,18)]
 
+# Regression test for #130398. Do not include columns from the RHS of the
+# semi-join when constructin the Project expression. The opt directive is used
+# here because the SplitDisjunctionOfJoinTerms exploration rule must fire to
+# trigger HoistJoinSubquery.
+opt expect=HoistJoinSubquery
+SELECT EXISTS(
+  SELECT 1
+  FROM a
+  WHERE EXISTS(
+    SELECT
+    FROM a AS a2
+    WHERE a2.i = 0 OR (a2.s = a2.s AND a1.i IN (SELECT i FROM a))
+  )
+)
+FROM a AS a1
+UNION
+SELECT true FROM a
+----
+union
+ ├── columns: exists:44!null
+ ├── left columns: exists:32
+ ├── right columns: bool:43
+ ├── cardinality: [0 - 2]
+ ├── key: (44)
+ ├── project
+ │    ├── columns: exists:32!null
+ │    ├── group-by (hash)
+ │    │    ├── columns: a1.k:1!null true_agg:34
+ │    │    ├── grouping columns: a1.k:1!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(34)
+ │    │    ├── left-join-apply
+ │    │    │    ├── columns: a1.k:1!null a1.i:2 true:33
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── scan a [as=a1]
+ │    │    │    │    ├── columns: a1.k:1!null a1.i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: true:33!null
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── fd: ()-->(33)
+ │    │    │    │    ├── semi-join (cross)
+ │    │    │    │    │    ├── outer: (2)
+ │    │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── scan a [as=a2]
+ │    │    │    │    │    │    └── columns: a2.i:16 a2.s:18
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── or [outer=(2,16,18), correlated-subquery]
+ │    │    │    │    │              ├── a2.i:16 = 0
+ │    │    │    │    │              └── and
+ │    │    │    │    │                   ├── (a2.s:18 IS DISTINCT FROM CAST(NULL AS STRING)) OR CAST(NULL AS BOOL)
+ │    │    │    │    │                   └── any: eq
+ │    │    │    │    │                        ├── scan a
+ │    │    │    │    │                        │    └── columns: a.i:23
+ │    │    │    │    │                        └── a1.i:2
+ │    │    │    │    └── projections
+ │    │    │    │         └── true [as=true:33]
+ │    │    │    └── filters (true)
+ │    │    └── aggregations
+ │    │         └── const-not-null-agg [as=true_agg:34, outer=(33)]
+ │    │              └── true:33
+ │    └── projections
+ │         └── true_agg:34 IS NOT NULL [as=exists:32, outer=(34)]
+ └── project
+      ├── columns: bool:43!null
+      ├── fd: ()-->(43)
+      ├── scan a
+      └── projections
+           └── true [as=bool:43]
+
+# This is a more synthetic regression test for #130398.
+exprnorm expect=HoistJoinSubquery disable=PushFilterIntoJoinLeft
+(SemiJoin
+    (Scan [ (Table "xy") (Cols "x,y") ])
+    (Select
+        (Scan [ (Table "uv") (Cols "u,v") ])
+        [ (Is (Var "v") (Null "int")) ]
+    )
+    [
+        (Exists
+            (Select
+                (Scan [ (Table "cd") (Cols "c,d") ])
+                [ (Eq (Var "x") (Var "d")) ]
+            )
+            []
+        )
+    ]
+    []
+)
+----
+group-by (hash)
+ ├── columns: x:1!null y:2
+ ├── grouping columns: x:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── inner-join (cross)
+ │    ├── columns: x:1!null y:2 v:6 d:10!null
+ │    ├── fd: ()-->(6), (1)-->(2), (1)==(10), (10)==(1)
+ │    ├── select
+ │    │    ├── columns: v:6
+ │    │    ├── fd: ()-->(6)
+ │    │    ├── scan uv
+ │    │    │    └── columns: v:6
+ │    │    └── filters
+ │    │         └── v:6 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    ├── inner-join (hash)
+ │    │    ├── columns: x:1!null y:2 d:10!null
+ │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    │    ├── fd: (1)-->(2), (1)==(10), (10)==(1)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:1!null y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan cd
+ │    │    │    └── columns: d:10!null
+ │    │    └── filters
+ │    │         └── x:1 = d:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    └── filters (true)
+ └── aggregations
+      └── const-agg [as=y:2, outer=(2)]
+           └── y:2
+
+# This is a synthetic regression test for #130398 that tests an anti-join.
+exprnorm expect=HoistJoinSubquery disable=PushFilterIntoJoinLeft
+(AntiJoin
+    (Scan [ (Table "xy") (Cols "x,y") ])
+    (Select
+        (Scan [ (Table "uv") (Cols "u,v") ])
+        [ (Is (Var "v") (Null "int")) ]
+    )
+    [
+        (Exists
+            (Select
+                (Scan [ (Table "cd") (Cols "c,d") ])
+                [ (Eq (Var "x") (Var "d")) ]
+            )
+            []
+        )
+    ]
+    []
+)
+----
+anti-join-apply
+ ├── columns: x:1!null y:2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── project
+ │    ├── columns: exists:15!null
+ │    ├── outer: (1)
+ │    ├── group-by (hash)
+ │    │    ├── columns: u:5!null true_agg:14
+ │    │    ├── grouping columns: u:5!null
+ │    │    ├── outer: (1)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(14)
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: u:5!null v:6 true:13
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── fd: ()-->(6)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: u:5!null v:6
+ │    │    │    │    ├── key: (5)
+ │    │    │    │    ├── fd: ()-->(6)
+ │    │    │    │    ├── scan uv
+ │    │    │    │    │    ├── columns: u:5!null v:6
+ │    │    │    │    │    ├── key: (5)
+ │    │    │    │    │    └── fd: (5)-->(6)
+ │    │    │    │    └── filters
+ │    │    │    │         └── v:6 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: true:13!null
+ │    │    │    │    ├── outer: (1)
+ │    │    │    │    ├── fd: ()-->(13)
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: d:10!null
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── fd: ()-->(10)
+ │    │    │    │    │    ├── scan cd
+ │    │    │    │    │    │    └── columns: d:10!null
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── x:1 = d:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    │    │    └── projections
+ │    │    │    │         └── true [as=true:13]
+ │    │    │    └── filters (true)
+ │    │    └── aggregations
+ │    │         └── const-not-null-agg [as=true_agg:14, outer=(13)]
+ │    │              └── true:13
+ │    └── projections
+ │         └── true_agg:14 IS NOT NULL [as=exists:15, outer=(14)]
+ └── filters
+      └── exists:15 [outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
 
 # --------------------------------------------------
 # HoistValuesSubquery
