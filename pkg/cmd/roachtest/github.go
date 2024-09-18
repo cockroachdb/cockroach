@@ -102,6 +102,15 @@ func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnersh
 	return nil
 }
 
+func failuresAsNonReportableError(failures []failure) *registry.NonReportableError {
+	var nonReportable registry.NonReportableError
+	if failuresMatchingError(failures, &nonReportable) {
+		return &nonReportable
+	}
+
+	return nil
+}
+
 // postIssueCondition is a condition that causes issue posting to be
 // skipped. If it returns a non-empty string, posting is skipped for
 // the returned reason.
@@ -130,6 +139,13 @@ var skipConditions = []postIssueCondition{
 		}
 
 		return fmt.Sprintf("not a release branch: %q", defaultOpts.Branch)
+	},
+	func(_ *githubIssues, t test.Test) string {
+		if nonReportable := failuresAsNonReportableError(t.(*testImpl).failures()); nonReportable != nil {
+			return nonReportable.Error()
+		}
+
+		return ""
 	},
 	func(_ *githubIssues, t test.Test) string {
 		if t.Spec().(*registry.TestSpec).Run == nil {
