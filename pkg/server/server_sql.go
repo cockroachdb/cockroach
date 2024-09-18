@@ -1410,7 +1410,6 @@ func (s *SQLServer) preStart(
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
-	initialStart bool,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
@@ -1696,7 +1695,7 @@ func (s *SQLServer) preStart(
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
-	s.startLicenseEnforcer(ctx, knobs, initialStart)
+	s.startLicenseEnforcer(ctx, knobs)
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous
@@ -1847,9 +1846,7 @@ func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }
 
-func (s *SQLServer) startLicenseEnforcer(
-	ctx context.Context, knobs base.TestingKnobs, initialStart bool,
-) {
+func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.TestingKnobs) {
 	// Start the license enforcer. This is only started for the system tenant since
 	// it requires access to the system keyspace. For secondary tenants, this struct
 	// is shared to provide access to the values cached from the KV read.
@@ -1863,7 +1860,7 @@ func (s *SQLServer) startLicenseEnforcer(
 		// diagnostics reporter. This will be handled in CRDB-39991
 		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 			func(ctx context.Context) error {
-				return licenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB, initialStart)
+				return licenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB)
 			})
 		// This is not a critical component. If it fails to start, we log a warning
 		// rather than prevent the entire server from starting.
