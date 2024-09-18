@@ -13,6 +13,7 @@ import {
   crlTheme,
   ConfigProvider as ClusterUIConfigProvider,
   DatabasesPageV2,
+  DatabaseDetailsPageV2,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -35,6 +36,7 @@ import {
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
+  databaseIDAttr,
   executionIdAttr,
   implicitTxnAttr,
   indexNameAttr,
@@ -210,6 +212,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           exact
                           path={"/v2/databases"}
                           component={DatabasesPageV2}
+                        />
+                        <Route
+                          exact
+                          path={`/v2/databases/:${databaseIDAttr}`}
+                          component={DatabaseDetailsPageV2}
                         />
                         <Route
                           exact
