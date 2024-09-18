@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -4005,7 +4006,9 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 ) error {
 	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, *ex.extraTxnState.schemaChangerState,
-	); err != nil {
+	); err != nil &&
+		!catalog.HasInactiveDescriptorError(err) &&
+		!errors.Is(err, catalog.ErrDescriptorNotFound) {
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
