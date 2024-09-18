@@ -639,7 +639,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 
 	var entries []pb.Entry
 	if pr.CanSendEntries(last) {
-		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
+		if entries, err = r.raftLog.entries(prevIndex, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
 		}
@@ -1141,23 +1141,23 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	found := false
 	// Scan all unapplied committed entries to find a config change. Paginate the
 	// scan, to avoid a potentially unlimited memory spike.
-	lo, hi := r.raftLog.applied+1, r.raftLog.committed+1
+	lo, hi := r.raftLog.applied, r.raftLog.committed
 	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
 	// (limiting the read of unapplied committed entries) when raft sends entries
 	// via the Ready struct for application.
-	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
-	// outside the raft package.
+	// TODO(pav-kv): find a way to budget memory/bandwidth for this scan outside
+	// the raft package.
 	pageSize := r.raftLog.maxApplyingEntsSize
-	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
-		for i := range ents {
-			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
+	if err := r.raftLog.scan(lo, hi, pageSize, func(entries []pb.Entry) error {
+		for i := range entries {
+			if t := entries[i].Type; t == pb.EntryConfChange || t == pb.EntryConfChangeV2 {
 				found = true
 				return errBreak
 			}
 		}
 		return nil
 	}); err != nil && err != errBreak {
-		r.logger.Panicf("error scanning unapplied entries [%d, %d): %v", lo, hi, err)
+		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
 	}
 	return found
 }

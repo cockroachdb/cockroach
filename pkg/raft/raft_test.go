@@ -2505,7 +2505,7 @@ func TestStepIgnoreConfig(t *testing.T) {
 	pendingConfIndex := r.pendingConfIndex
 	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
 	wents := []pb.Entry{{Type: pb.EntryNormal, Term: 1, Index: 3, Data: nil}}
-	ents, err := r.raftLog.entries(index+1, noLimit)
+	ents, err := r.raftLog.entries(index, noLimit)
 	require.NoError(t, err)
 	assert.Equal(t, wents, ents)
 	assert.Equal(t, pendingConfIndex, r.pendingConfIndex)
