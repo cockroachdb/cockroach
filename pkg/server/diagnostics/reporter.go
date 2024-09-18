@@ -187,6 +187,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 }
 
+// GetLastSuccessfulTelemetryPing will return the timestamp of when we last got
+// a ping back from the registration server.
+func (r *Reporter) GetLastSuccessfulTelemetryPing() time.Time {
+	ts := timeutil.Unix(r.LastSuccessfulTelemetryPing.Load(), 0)
+	return ts
+}
+
 // CreateReport generates a new diagnostics report containing information about
 // the current node or tenant.
 func (r *Reporter) CreateReport(
