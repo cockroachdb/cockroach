@@ -22,7 +22,7 @@ import { ReactSelectOption } from "src/types/selectTypes";
 
 import { Table, TableColumnProps } from "../sharedFromCloud/table";
 import useTable from "../sharedFromCloud/useTable";
-import { Bytes, EncodeDatabaseUri } from "../util";
+import { Bytes } from "../util";
 
 import { DatabaseRow } from "./databaseTypes";
 
@@ -68,9 +68,7 @@ const columns: TableColumnProps<DatabaseRow>[] = [
     title: "Name",
     sorter: true,
     render: (db: DatabaseRow) => {
-      const encodedDBPath = EncodeDatabaseUri(db.name);
-      // TODO (xzhang: For CC we have to use `${location.pathname}/${db.name}`
-      return <Link to={encodedDBPath}>{db.name}</Link>;
+      return <Link to={`/v2/databases/${db.id}`}>{db.name}</Link>;
     },
   },
   {
