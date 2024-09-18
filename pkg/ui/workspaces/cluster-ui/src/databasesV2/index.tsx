@@ -9,9 +9,8 @@
 // licenses/APL.txt.
 
 import { Skeleton } from "antd";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
-import Select, { OptionsType } from "react-select";
 
 import {
   DatabaseMetadataRequest,
@@ -32,10 +31,11 @@ import {
   TableColumnProps,
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
-import { ReactSelectOption } from "src/types/selectTypes";
 import { Bytes } from "src/util";
 
 import { useNodeStatuses } from "../api";
+import { NodeRegionsSelector } from "../components/nodeRegionsSelector/nodeRegionsSelector";
+import { StoreID } from "../types/clusterTypes";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
@@ -44,11 +44,6 @@ import {
   getSortKeyFromColTitle,
   rawDatabaseMetadataToDatabaseRows,
 } from "./utils";
-
-const mockRegionOptions = [
-  { label: "US East (N. Virginia)", value: "us-east-1" },
-  { label: "US East (Ohio)", value: "us-east-2" },
-];
 
 const COLUMNS: TableColumnProps<DatabaseRow>[] = [
   {
@@ -129,11 +124,12 @@ const createDatabaseMetadataRequestFromParams = (
     sortBy: params.sort?.field ?? "name",
     sortOrder: params.sort?.order ?? "asc",
     name: params.search,
+    storeId: params.filters.storeIDs.map(sid => parseInt(sid, 10)),
   };
 };
 
 export const DatabasesPageV2 = () => {
-  const { params, setSort, setSearch, setPagination } = useTable({
+  const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
 
@@ -143,13 +139,10 @@ export const DatabasesPageV2 = () => {
   const nodesResp = useNodeStatuses();
   const paginationState = data?.pagination_info;
 
-  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption<string>[]>(
-    [],
-  );
-  const onNodeRegionsChange = (
-    selected: OptionsType<ReactSelectOption<string>>,
-  ) => {
-    setNodeRegions((selected ?? []).map(v => v));
+  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
+    setFilters({
+      storeIDs: storeIDs.map(sid => sid.toString()),
+    });
   };
 
   const tableData = useMemo(
@@ -193,6 +186,10 @@ export const DatabasesPageV2 = () => {
     [sort],
   );
 
+  const nodeRegionsValue = params.filters.storeIDs.map(
+    sid => parseInt(sid, 10) as StoreID,
+  );
+
   return (
     <PageLayout>
       <PageHeader title="Databases" />
@@ -202,13 +199,8 @@ export const DatabasesPageV2 = () => {
             <Search placeholder="Search databases" onSubmit={setSearch} />
           </PageConfigItem>
           <PageConfigItem minWidth={"200px"}>
-            <Select
-              placeholder={"Regions"}
-              name="nodeRegions"
-              options={mockRegionOptions}
-              clearable={true}
-              isMulti
-              value={nodeRegions}
+            <NodeRegionsSelector
+              value={nodeRegionsValue}
               onChange={onNodeRegionsChange}
             />
           </PageConfigItem>
