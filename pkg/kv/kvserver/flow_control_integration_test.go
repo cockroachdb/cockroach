@@ -671,8 +671,10 @@ func TestFlowControlCrashedNode(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
-						MaintainStreamsForBrokenRaftTransport: func() bool {
-							return maintainStreamsForBrokenRaftTransport.Load()
+						V1: kvflowcontrol.TestingKnobsV1{
+							MaintainStreamsForBrokenRaftTransport: func() bool {
+								return maintainStreamsForBrokenRaftTransport.Load()
+							},
 						},
 					},
 				},
@@ -804,14 +806,16 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 							// deductions/returns.
 							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 						},
-						MaintainStreamsForBehindFollowers: func() bool {
-							return maintainStreamsForBehindFollowers.Load()
-						},
-						MaintainStreamsForInactiveFollowers: func() bool {
-							return maintainStreamsForInactiveFollowers.Load()
-						},
-						MaintainStreamsForBrokenRaftTransport: func() bool {
-							return maintainStreamsForBrokenRaftTransport.Load()
+						V1: kvflowcontrol.TestingKnobsV1{
+							MaintainStreamsForBehindFollowers: func() bool {
+								return maintainStreamsForBehindFollowers.Load()
+							},
+							MaintainStreamsForInactiveFollowers: func() bool {
+								return maintainStreamsForInactiveFollowers.Load()
+							},
+							MaintainStreamsForBrokenRaftTransport: func() bool {
+								return maintainStreamsForBrokenRaftTransport.Load()
+							},
 						},
 					},
 				},
@@ -1092,8 +1096,10 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
-						MaintainStreamsForInactiveFollowers: func() bool {
-							return maintainStreamsForInactiveFollowers.Load()
+						V1: kvflowcontrol.TestingKnobsV1{
+							MaintainStreamsForInactiveFollowers: func() bool {
+								return maintainStreamsForInactiveFollowers.Load()
+							},
 						},
 					},
 				},
@@ -1864,11 +1870,13 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 						},
 						UseOnlyForScratchRanges: true,
-						MaintainStreamsForInactiveFollowers: func() bool {
-							// This test deals with quiesced ranges where
-							// followers have no activity. We don't want to
-							// disconnect streams due to this inactivity.
-							return true
+						V1: kvflowcontrol.TestingKnobsV1{
+							MaintainStreamsForInactiveFollowers: func() bool {
+								// This test deals with quiesced ranges where
+								// followers have no activity. We don't want to
+								// disconnect streams due to this inactivity.
+								return true
+							},
 						},
 					},
 				},
@@ -2228,14 +2236,6 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
-						MaintainStreamsForBehindFollowers: func() bool {
-							// TODO(irfansharif): This test is flakey without
-							// this change -- we disconnect one stream or
-							// another because raft says we're no longer
-							// actively replicating through it. Why? Something
-							// to do with the many proposals we're issuing?
-							return true
-						},
 						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
 							// This test asserts on the exact values of tracked
 							// tokens. In non-test code, the tokens deducted are
@@ -2243,6 +2243,16 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 							// the proposals. We don't care about such
 							// differences.
 							return kvflowcontrol.Tokens(1 << 10 /* 1KiB */)
+						},
+						V1: kvflowcontrol.TestingKnobsV1{
+							MaintainStreamsForBehindFollowers: func() bool {
+								// TODO(irfansharif): This test is flakey without
+								// this change -- we disconnect one stream or
+								// another because raft says we're no longer
+								// actively replicating through it. Why? Something
+								// to do with the many proposals we're issuing?
+								return true
+							},
 						},
 					},
 				},

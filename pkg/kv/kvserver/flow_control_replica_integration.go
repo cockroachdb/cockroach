@@ -226,7 +226,7 @@ func (f *replicaFlowControlIntegrationImpl) onRaftTransportDisconnected(
 		return // nothing to do
 	}
 
-	if fn := f.knobs.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
+	if fn := f.knobs.V1.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
 		return // nothing to do
 	}
 
@@ -311,12 +311,12 @@ func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb
 	inactiveFollowers := f.replicaForFlowControl.getInactiveFollowers()
 	disconnectedFollowers := f.replicaForFlowControl.getDisconnectedFollowers()
 
-	maintainStreamsForBrokenRaftTransport := f.knobs.MaintainStreamsForBrokenRaftTransport != nil &&
-		f.knobs.MaintainStreamsForBrokenRaftTransport()
-	maintainStreamsForInactiveFollowers := f.knobs.MaintainStreamsForInactiveFollowers != nil &&
-		f.knobs.MaintainStreamsForInactiveFollowers()
-	maintainStreamsForBehindFollowers := f.knobs.MaintainStreamsForBehindFollowers != nil &&
-		f.knobs.MaintainStreamsForBehindFollowers()
+	maintainStreamsForBrokenRaftTransport := f.knobs.V1.MaintainStreamsForBrokenRaftTransport != nil &&
+		f.knobs.V1.MaintainStreamsForBrokenRaftTransport()
+	maintainStreamsForInactiveFollowers := f.knobs.V1.MaintainStreamsForInactiveFollowers != nil &&
+		f.knobs.V1.MaintainStreamsForInactiveFollowers()
+	maintainStreamsForBehindFollowers := f.knobs.V1.MaintainStreamsForBehindFollowers != nil &&
+		f.knobs.V1.MaintainStreamsForBehindFollowers()
 
 	notActivelyReplicatingTo := make(map[roachpb.ReplicaDescriptor]struct{})
 	ourReplicaID := f.replicaForFlowControl.getReplicaID()
@@ -485,4 +485,9 @@ func (r *replicaForRACv2) MuRUnlock() {
 // LeaseholderMuRLocked implements replica_rac2.Replica.
 func (r *replicaForRACv2) LeaseholderMuRLocked() roachpb.ReplicaID {
 	return r.mu.state.Lease.Replica.ReplicaID
+}
+
+// IsScratchRange implements replica_rac2.Replica.
+func (r *replicaForRACv2) IsScratchRange() bool {
+	return (*Replica)(r).IsScratchRange()
 }

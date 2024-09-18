@@ -1560,6 +1560,7 @@ func NewStore(
 		s.cfg.KVFlowStreamTokenProvider,
 		replica_rac2.NewStreamCloseScheduler(
 			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
+		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.

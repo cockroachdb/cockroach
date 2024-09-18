@@ -162,8 +162,8 @@ func (h *Handle) deductTokensForInner(
 		return nil // unused return value in production code
 	}
 
-	if h.knobs.OverrideTokenDeduction != nil {
-		tokens = h.knobs.OverrideTokenDeduction()
+	if fn := h.knobs.OverrideTokenDeduction; fn != nil {
+		tokens = fn()
 	}
 
 	for _, c := range h.mu.connections {
