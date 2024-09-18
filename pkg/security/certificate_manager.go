@@ -207,11 +207,11 @@ func (cm *CertificateManager) RegisterExpirationCache(cache *ClientCertExpiratio
 // given client certificate. An update is contingent on whether the old
 // expiration is after the new expiration.
 func (cm *CertificateManager) MaybeUpsertClientExpiration(
-	ctx context.Context, identity username.SQLUsername, expiration int64,
+	ctx context.Context, identity string, expiration int64,
 ) {
 	if cache := cm.clientCertExpirationCache; cache != nil {
 		cache.MaybeUpsert(ctx,
-			identity.Normalized(),
+			identity,
 			expiration,
 			cm.certMetrics.ClientExpiration,
 			cm.certMetrics.ClientTTL,

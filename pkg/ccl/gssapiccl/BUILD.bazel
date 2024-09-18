@@ -30,6 +30,7 @@ go_library(
             "//pkg/security/username",
             "//pkg/settings",
             "//pkg/sql",
+            "//pkg/sql/lexbase",
             "//pkg/sql/pgwire",
             "//pkg/sql/pgwire/hba",
             "//pkg/sql/pgwire/identmap",

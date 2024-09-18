@@ -305,7 +305,7 @@ message LocalOnlySessionData {
   int64 transaction_timeout = 81 [(gogoproto.casttype) = "time.Duration"];
   // SystemIdentityProto is the original name of the client presented to pgwire
   // before it was mapped to a SQL identifier.
-  string system_identity_proto = 82 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  string system_identity_proto = 82;
   // DescriptorValidationMode indicates whether to validate the descriptors at
   // read and write time, at read time only, or never.
   int64 descriptor_validation_mode = 83 [(gogoproto.casttype) = "DescriptorValidationMode"];

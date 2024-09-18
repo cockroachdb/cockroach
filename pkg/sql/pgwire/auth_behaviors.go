@@ -27,7 +27,7 @@ import (
 type AuthBehaviors struct {
 	authenticator       Authenticator
 	connClose           func()
-	replacementIdentity username.SQLUsername
+	replacementIdentity string
 	replacedIdentity    bool
 	roleMapper          RoleMapper
 	authorizer          Authorizer
@@ -51,7 +51,7 @@ var _ = (*AuthBehaviors)(nil).SetReplacementIdentity
 // returns an error if SetAuthenticator has not been called.
 func (b *AuthBehaviors) Authenticate(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	roleSubject *ldap.DN,
@@ -86,13 +86,13 @@ func (b *AuthBehaviors) SetConnClose(fn func()) {
 // This allows "ambient" authentication mechanisms, such as GSSAPI, to
 // provide replacement values. This method will return ok==false if
 // SetReplacementIdentity has not been called.
-func (b *AuthBehaviors) ReplacementIdentity() (_ username.SQLUsername, ok bool) {
+func (b *AuthBehaviors) ReplacementIdentity() (_ string, ok bool) {
 	return b.replacementIdentity, b.replacedIdentity
 }
 
 // SetReplacementIdentity allows the AuthMethod to override the
 // client-reported system identity.
-func (b *AuthBehaviors) SetReplacementIdentity(id username.SQLUsername) {
+func (b *AuthBehaviors) SetReplacementIdentity(id string) {
 	b.replacementIdentity = id
 	b.replacedIdentity = true
 }
@@ -100,7 +100,7 @@ func (b *AuthBehaviors) SetReplacementIdentity(id username.SQLUsername) {
 // MapRole delegates to the RoleMapper passed to SetRoleMapper or
 // returns an error if SetRoleMapper has not been called.
 func (b *AuthBehaviors) MapRole(
-	ctx context.Context, systemIdentity username.SQLUsername,
+	ctx context.Context, systemIdentity string,
 ) ([]username.SQLUsername, error) {
 	if found := b.roleMapper; found != nil {
 		return found(ctx, systemIdentity)
@@ -121,7 +121,7 @@ func (b *AuthBehaviors) SetAuthorizer(a Authorizer) {
 // MaybeAuthorize delegates to the Authorizer passed to SetAuthorizer and if
 // successful obtains the grants using RoleGranter passed to SetRoleGranter.
 func (b *AuthBehaviors) MaybeAuthorize(
-	ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool,
+	ctx context.Context, systemIdentity string, clientConnection bool,
 ) error {
 	if b.authorizer != nil {
 		sqlGroups, err := b.authorizer(ctx, systemIdentity, clientConnection)
@@ -136,7 +136,7 @@ func (b *AuthBehaviors) MaybeAuthorize(
 // GrantRole delegates to the RoleGranter passed to SetRoleGranter or
 // returns an error if SetRoleGranter has not been called.
 func (b *AuthBehaviors) GrantRole(
-	ctx context.Context, systemIdentity username.SQLUsername, sqlGroups []username.SQLUsername,
+	ctx context.Context, systemIdentity string, sqlGroups []username.SQLUsername,
 ) error {
 	if found := b.roleGranter; found != nil {
 		return found(ctx, systemIdentity, sqlGroups)

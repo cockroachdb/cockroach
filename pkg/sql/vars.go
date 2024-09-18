@@ -1097,10 +1097,10 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`system_identity`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return evalCtx.SessionData().SystemIdentity().Normalized(), nil
+			return evalCtx.SessionData().SystemIdentity(), nil
 		},
 		GetFromSessionData: func(sd *sessiondata.SessionData) string {
-			return sd.SystemIdentity().Normalized()
+			return sd.SystemIdentity()
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},

@@ -180,7 +180,7 @@ func parseClientProvidedSessionParameters(
 						return args, pgerror.Newf(pgcode.InvalidParameterValue,
 							"cannot specify system identity via options")
 					}
-					args.SystemIdentity, _ = username.MakeSQLUsernameFromUserInput(optvalue, username.PurposeValidation)
+					args.SystemIdentity = optvalue
 					continue
 
 				case "cluster":
