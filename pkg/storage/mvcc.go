@@ -2873,12 +2873,28 @@ const (
 	CPutFailIfMissing CPutMissingBehavior = false
 )
 
+// ConditionalPutWriteOptions bundles options for the
+// MVCCConditionalPut and MVCCBlindConditionalPut functions.
 type ConditionalPutWriteOptions struct {
 	MVCCWriteOptions
 
 	AllowIfDoesNotExist CPutMissingBehavior
-	OriginTimestamp     hlc.Timestamp
-	ShouldWinTie        bool
+	// OriginTimestamp, if set, indicates that the caller wants to put
+	// the value only if any existing key is older than this timestamp.
+	// Used by logical data replication.
+	//
+	// This OriginTimestamp will be written to the OriginTimestamp field
+	// in the MVCCValueHeader of the write resulting from the
+	// ConditionalPut, replacing any existing any existing
+	// OriginTimestamp.
+	OriginTimestamp hlc.Timestamp
+	// ShouldWinOriginTimestampTie indicates whether the value should be
+	// accepted if the origin timestamp is the same as the
+	// origin_timestamp/mvcc_timestamp of the existing value.
+	//
+	// This must be used only in conjunction with a non-empty
+	// OriginTimestamp.
+	ShouldWinOriginTimestampTie bool
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -2954,6 +2970,10 @@ func MVCCBlindConditionalPut(
 		ctx, writer, nil, nil, key, timestamp, value, expVal, opts)
 }
 
+// maybeConditionFailedError returns a non-nil ConditionFailedError if
+// the expBytes and actVal don't match. If allowNoExisting is true,
+// then a non-existent actual value is allowed even when
+// expected-value is non-empty.
 func maybeConditionFailedError(
 	expBytes []byte, actVal optionalValue, allowNoExisting bool,
 ) *kvpb.ConditionFailedError {
@@ -3005,7 +3025,7 @@ func mvccConditionalPutUsingIter(
 	} else {
 		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
 			existTS := existVal.timestampForOriginTimestampComparison()
-			proposedIsOriginTSWinner := existTS.Less(opts.OriginTimestamp) || (existTS.Equal(opts.OriginTimestamp) && opts.ShouldWinTie)
+			proposedIsOriginTSWinner := existTS.Less(opts.OriginTimestamp) || (existTS.Equal(opts.OriginTimestamp) && opts.ShouldWinOriginTimestampTie)
 			if !proposedIsOriginTSWinner {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					OriginTimestampOlderThan: existTS,

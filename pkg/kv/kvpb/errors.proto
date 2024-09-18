@@ -407,7 +407,9 @@ message ConditionFailedError {
   // with the returned ActualValue.
   optional bool had_newer_origin_timestamp = 2 [(gogoproto.nullable) = false];
   // OriginTimestampOlderThan is returned when an OriginTimestamp was
-  // send in the conditional put and was older than an existing value.
+  // sent in the conditional put and it was either older than the
+  // OriginTimestamp (if it exists) or the existing values MVCC
+  // timetamp.
   optional util.hlc.Timestamp origin_timestamp_older_than = 3 [(gogoproto.nullable) = false];
 }
 
