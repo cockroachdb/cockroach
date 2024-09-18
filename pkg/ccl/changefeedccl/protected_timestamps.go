@@ -42,24 +42,30 @@ func createProtectedTimestampRecord(
 		jobsprotectedts.Jobs, targetToProtect)
 }
 
+// systemTablesToProtect holds the descriptor IDs of the system tables
+// that need to be protected to ensure that a CHANGEFEED can do a
+// historical read of a table descriptor.
+var systemTablesToProtect = []descpb.ID{
+	keys.DescriptorTableID,
+	keys.CommentsTableID,
+	keys.ZonesTableID,
+}
+
 func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
-	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+1)
+	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
 	_ = targets.EachTableID(func(id descpb.ID) error {
 		tablesToProtect = append(tablesToProtect, id)
 		return nil
 	})
-	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
+	tablesToProtect = append(tablesToProtect, systemTablesToProtect...)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
 func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []roachpb.Span {
-	// NB: We add 1 because we're also going to protect system.descriptors.
-	// We protect system.descriptors because a changefeed needs all of the history
-	// of table descriptors to version data.
-	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+1)
+	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
 	addTablePrefix := func(id uint32) {
 		tablePrefix := codec.TablePrefix(id)
 		spansToProtect = append(spansToProtect, roachpb.Span{
@@ -71,6 +77,8 @@ func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []r
 		addTablePrefix(uint32(id))
 		return nil
 	})
-	addTablePrefix(keys.DescriptorTableID)
+	for _, id := range systemTablesToProtect {
+		addTablePrefix(uint32(id))
+	}
 	return spansToProtect
 }
