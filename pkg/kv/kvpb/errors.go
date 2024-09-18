@@ -1187,9 +1187,9 @@ func (e *ConditionFailedError) Error() string {
 
 func (e *ConditionFailedError) SafeFormatError(p errors.Printer) (next error) {
 	if e.HadNewerOriginTimestamp {
-		p.Printf("origin timestamp winner with unexpected value: %s", e.ActualValue)
+		p.Printf("higher OriginTimestamp but unexpected value: %s", e.ActualValue)
 	} else if e.OriginTimestampOlderThan.IsSet() {
-		p.Printf("origin timestamp older than %s", e.OriginTimestampOlderThan)
+		p.Printf("OriginTimestamp older than %s", e.OriginTimestampOlderThan)
 	} else {
 		p.Printf("unexpected value: %s", e.ActualValue)
 	}
