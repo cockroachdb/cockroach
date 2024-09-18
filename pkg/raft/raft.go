@@ -639,7 +639,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 
 	var entries []pb.Entry
 	if pr.CanSendEntries(last) {
-		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
+		if entries, err = r.raftLog.entries(prevIndex, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
 		}
@@ -1141,7 +1141,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	found := false
 	// Scan all unapplied committed entries to find a config change. Paginate the
 	// scan, to avoid a potentially unlimited memory spike.
-	lo, hi := r.raftLog.applied+1, r.raftLog.committed+1
+	lo, hi := r.raftLog.applied, r.raftLog.committed
 	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
 	// (limiting the read of unapplied committed entries) when raft sends entries
 	// via the Ready struct for application.
@@ -1157,7 +1157,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 		}
 		return nil
 	}); err != nil && err != errBreak {
-		r.logger.Panicf("error scanning unapplied entries [%d, %d): %v", lo, hi, err)
+		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
 	}
 	return found
 }

@@ -328,10 +328,3 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	u.entryInProgress = min(u.entryInProgress, a.prev.index)
 	return true
 }
-
-// slice returns the entries from the unstable log with indexes in the (lo, hi]
-// interval. The entire interval must be within the unstable log bounds, or the
-// method will panic.
-func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
-	return u.sub(lo, hi)
-}
