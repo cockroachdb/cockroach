@@ -1,4 +1,4 @@
-# Test ORed ON clause predicates which may be split into unions or 
+# Test ORed ON clause predicates which may be split into unions or
 # intersections. The rewrite is cost-based, so may not always show up in the
 # query plan.
 # Use tables both with and without a primary key, to test when PK columns are

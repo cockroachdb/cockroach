@@ -1536,6 +1536,37 @@ func (c *CustomFuncs) makeFilteredSelectForJoin(
 	return newSelect
 }
 
+// CanSplitJoinWithDisjuncts returns true if the given join can be split into a
+// union of two joins. See SplitJoinWithDisjuncts for more details.
+func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
+	joinRel memo.RelExpr, joinFilters memo.FiltersExpr,
+) bool {
+	leftInput := joinRel.Child(0).(memo.RelExpr)
+	rightInput := joinRel.Child(1).(memo.RelExpr)
+
+	switch joinRel.Op() {
+	case opt.InnerJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
+		// Do nothing
+	default:
+		panic(errors.AssertionFailedf("expected joinRel to be inner, semi, or anti-join"))
+	}
+
+	origLeftScan, _, ok := c.getfilteredCanonicalScan(leftInput)
+	if !ok {
+		return false
+	}
+
+	origRightScan, _, ok := c.getfilteredCanonicalScan(rightInput)
+	if !ok {
+		return false
+	}
+
+	// Look for a disjunction of equijoin predicates.
+	// TODO(mgartner): Make this more efficient.
+	_, _, _, ok = c.splitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
+	return ok
+}
+
 // SplitJoinWithDisjuncts checks a join relation for a disjunction of predicates
 // in an InnerJoin, SemiJoin or AntiJoin. If present, and the inputs to the join
 // are canonical scans, or Selects from canonical scans, it builds two new join
@@ -1562,20 +1593,10 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 	newRelationCols opt.ColSet,
 	aggCols opt.ColSet,
 	groupingCols opt.ColSet,
-	ok bool,
 ) {
-	notOkSplitJoin := func() (memo.RelExpr, memo.RelExpr, opt.ColSet, opt.ColSet, opt.ColSet, bool) {
-		emptyColSet := opt.ColSet{}
-		return nil, nil, emptyColSet, emptyColSet, emptyColSet, false
-	}
-
-	var joinPrivate *memo.JoinPrivate
-	var leftInput memo.RelExpr
-	var rightInput memo.RelExpr
-
-	joinPrivate = joinRel.Private().(*memo.JoinPrivate)
-	leftInput = joinRel.Child(0).(memo.RelExpr)
-	rightInput = joinRel.Child(1).(memo.RelExpr)
+	joinPrivate := joinRel.Private().(*memo.JoinPrivate)
+	leftInput := joinRel.Child(0).(memo.RelExpr)
+	rightInput := joinRel.Child(1).(memo.RelExpr)
 
 	switch joinRel.Op() {
 	case opt.InnerJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
@@ -1586,12 +1607,12 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 
 	origLeftScan, leftFilters, ok := c.getfilteredCanonicalScan(leftInput)
 	if !ok {
-		return notOkSplitJoin()
+		panic(errors.AssertionFailedf("expected join left input to have canonical scan"))
 	}
 	origLeftScanPrivate := &origLeftScan.ScanPrivate
 	origRightScan, rightFilters, ok := c.getfilteredCanonicalScan(rightInput)
 	if !ok {
-		return notOkSplitJoin()
+		panic(errors.AssertionFailedf("expected join right input to have canonical scan"))
 	}
 	origRightScanPrivate := &origRightScan.ScanPrivate
 
@@ -1599,7 +1620,7 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 	firstOnClause, secondOnClause, itemToReplace, ok :=
 		c.splitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
 	if !ok {
-		return notOkSplitJoin()
+		panic(errors.AssertionFailedf("expected join filters to have splitable disjunction"))
 	}
 
 	// Add in the primary key columns so the caller can group by them to
@@ -1736,7 +1757,7 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("Unexpected join type while splitting disjuncted join predicates: %v",
 			joinRel.Op()))
 	}
-	return firstJoin, secondJoin, newRelationCols, aggCols, groupingCols, true
+	return firstJoin, secondJoin, newRelationCols, aggCols, groupingCols
 }
 
 // getfilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
