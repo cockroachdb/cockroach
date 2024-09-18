@@ -690,46 +690,14 @@ func TestIsOutOfBounds(t *testing.T) {
 		wpanic        bool
 		wErrCompacted bool
 	}{
-		{
-			first - 2, first + 1,
-			false,
-			true,
-		},
-		{
-			first - 1, first + 1,
-			false,
-			true,
-		},
-		{
-			first, first,
-			false,
-			false,
-		},
-		{
-			first + num/2, first + num/2,
-			false,
-			false,
-		},
-		{
-			first + num - 1, first + num - 1,
-			false,
-			false,
-		},
-		{
-			first + num, first + num,
-			false,
-			false,
-		},
-		{
-			first + num, first + num + 1,
-			true,
-			false,
-		},
-		{
-			first + num + 1, first + num + 1,
-			true,
-			false,
-		},
+		{lo: first - 2, hi: first + 1, wErrCompacted: true},
+		{lo: first - 1, hi: first + 1, wErrCompacted: true},
+		{lo: first, hi: first},
+		{lo: first + num/2, hi: first + num/2},
+		{lo: first + num - 1, hi: first + num - 1},
+		{lo: first + num, hi: first + num},
+		{lo: first + num, hi: first + num + 1, wpanic: true},
+		{lo: first + num + 1, hi: first + num + 1, wpanic: true},
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
