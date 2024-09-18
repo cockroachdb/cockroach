@@ -30,6 +30,8 @@ var ErrCompacted = errors.New("requested index is unavailable due to compaction"
 
 // ErrSnapOutOfDate is returned by Storage.CreateSnapshot when a requested
 // index is older than the existing snapshot.
+//
+// TODO(pav-kv): this is used only in tests. Remove it.
 var ErrSnapOutOfDate = errors.New("requested index is older than the existing snapshot")
 
 // ErrUnavailable is returned by Storage interface when the requested log entries
@@ -39,9 +41,10 @@ var ErrUnavailable = errors.New("requested entry at index is unavailable")
 // Storage is an interface that may be implemented by the application
 // to retrieve log entries from storage.
 //
-// If any Storage method returns an error, the raft instance will
-// become inoperable and refuse to participate in elections; the
-// application is responsible for cleanup and recovery in this case.
+// If any method returns an error other than ErrCompacted or ErrUnavailable, the
+// raft instance generally does not behave gracefully, e.g. it may panic.
+//
+// TODO(pav-kv): audit all error handling and document the contract.
 type Storage interface {
 	// TODO(tbg): split this into two interfaces, LogStorage and StateStorage.
 
