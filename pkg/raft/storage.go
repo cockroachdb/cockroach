@@ -36,10 +36,6 @@ var ErrSnapOutOfDate = errors.New("requested index is older than the existing sn
 // are unavailable.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
-// ErrSnapshotTemporarilyUnavailable is returned by the Storage interface when the required
-// snapshot is temporarily unavailable.
-var ErrSnapshotTemporarilyUnavailable = errors.New("snapshot is temporarily unavailable")
-
 // Storage is an interface that may be implemented by the application
 // to retrieve log entries from storage.
 //
@@ -85,10 +81,7 @@ type Storage interface {
 	// into the latest Snapshot; if storage only contains the dummy entry the
 	// first log entry is not available).
 	FirstIndex() (uint64, error)
-	// Snapshot returns the most recent snapshot.
-	// If snapshot is temporarily unavailable, it should return ErrSnapshotTemporarilyUnavailable,
-	// so raft state machine could know that Storage needs some time to prepare
-	// snapshot and call Snapshot later.
+	// Snapshot returns the most recent state machine snapshot.
 	Snapshot() (pb.Snapshot, error)
 }
 
