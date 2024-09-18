@@ -577,19 +577,16 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	return extend(ents, unstable), nil
 }
 
-// l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)
+// mustCheckOutOfBounds checks that the [lo, hi) interval is within the bounds
+// of this raft log: l.firstIndex() <= lo <= hi <= l.lastIndex() + 1.
 func (l *raftLog) mustCheckOutOfBounds(lo, hi uint64) error {
 	if lo > hi {
 		l.logger.Panicf("invalid slice %d > %d", lo, hi)
 	}
-	fi := l.firstIndex()
-	if lo < fi {
+	if fi := l.firstIndex(); lo < fi {
 		return ErrCompacted
-	}
-
-	length := l.lastIndex() + 1 - fi
-	if hi > fi+length {
-		l.logger.Panicf("slice[%d,%d) out of bound [%d,%d]", lo, hi, fi, l.lastIndex())
+	} else if li := l.lastIndex(); hi > li+1 {
+		l.logger.Panicf("slice[%d,%d) out of bound [%d,%d]", lo, hi, fi, li)
 	}
 	return nil
 }
