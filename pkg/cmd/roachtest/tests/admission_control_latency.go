@@ -765,10 +765,6 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 	}
 }
 
-// minAcceptableLatencyThreshold is the threshold below which we consider the
-// latency acceptable regardless of any relative change from the baseline.
-const minAcceptableLatencyThreshold = 10 * time.Millisecond
-
 // isAcceptableChange determines if a change from the baseline is acceptable.
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
@@ -786,7 +782,7 @@ func isAcceptableChange(
 		baseStat := baseline[name]
 		otherStat := other[name]
 		increase := float64(otherStat.score) / float64(baseStat.score)
-		if float64(otherStat.P99) > float64(minAcceptableLatencyThreshold) && increase > acceptableChange {
+		if increase > acceptableChange {
 			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
 			allPassed = false
 		} else {
