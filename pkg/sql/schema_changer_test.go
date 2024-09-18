@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"math/rand"
 	"regexp"
 	"strconv"
@@ -606,6 +607,11 @@ func TestRaceWithBackfill(t *testing.T) {
 				notifyBackfill()
 				return nil
 			},
+		},
+		SQLEvalContext: &eval.TestingKnobs{
+			// This prevents using a small kv-batch-size, which is suspected
+			// of causing the test to time out when run with race detection enabled.
+			ForceProductionValues: true,
 		},
 	}
 
