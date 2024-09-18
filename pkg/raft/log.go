@@ -261,7 +261,7 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 		// See comment in hasNextCommittedEnts.
 		return nil
 	}
-	lo, hi := l.applying+1, l.maxAppliableIndex(allowUnstable)+1 // [lo, hi)
+	lo, hi := l.applying, l.maxAppliableIndex(allowUnstable) // (lo, hi]
 	if lo >= hi {
 		// Nothing to apply.
 		return nil
@@ -420,44 +420,42 @@ func (l *raftLog) lastEntryID() entryID {
 	return entryID{term: t, index: index}
 }
 
-func (l *raftLog) term(i uint64) (uint64, error) {
-	// Check the unstable log first, even before computing the valid term range,
-	// which may need to access stable Storage. If we find the entry's term in
-	// the unstable log, we know it was in the valid range.
-	if t, ok := l.unstable.maybeTerm(i); ok {
-		return t, nil
-	}
-
-	// The valid term range is [firstIndex-1, lastIndex]. Even though the entry at
-	// firstIndex-1 is compacted away, its term is available for matching purposes
-	// when doing log appends.
-	if i+1 < l.firstIndex() {
+// term returns the term of the log entry at the given index.
+func (l *raftLog) term(index uint64) (uint64, error) {
+	// Check the unstable log first, even before computing the valid index range,
+	// which may need to access the storage. If we find the entry's term in the
+	// unstable log, we know it was in the valid range.
+	if index > l.unstable.lastIndex() {
+		return 0, ErrUnavailable
+	} else if index >= l.unstable.prev.index {
+		return l.unstable.termAt(index), nil
+	} else if index+1 < l.firstIndex() {
 		return 0, ErrCompacted
 	}
-	if i > l.lastIndex() {
-		return 0, ErrUnavailable
-	}
 
-	t, err := l.storage.Term(i)
+	term, err := l.storage.Term(index)
 	if err == nil {
-		return t, nil
-	}
-	if err == ErrCompacted || err == ErrUnavailable {
+		return term, nil
+	} else if err == ErrCompacted || err == ErrUnavailable {
 		return 0, err
 	}
-	panic(err) // TODO(bdarnell)
+	panic(err) // TODO(pav-kv): return the error and handle it up the stack.
 }
 
-func (l *raftLog) entries(i uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
-	if i > l.lastIndex() {
+// entries returns a contiguous slice of log entries at indices > after, with
+// the total size not exceeding maxSize. The total size can exceed maxSize if
+// the first entry (at index after+1) is larger than maxSize. Returns nil if
+// there are no entries at indices > after.
+func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+	if after >= l.lastIndex() {
 		return nil, nil
 	}
-	return l.slice(i, l.lastIndex()+1, maxSize)
+	return l.slice(after, l.lastIndex(), maxSize)
 }
 
-// allEntries returns all entries in the log.
+// allEntries returns all entries in the log. For testing only.
 func (l *raftLog) allEntries() []pb.Entry {
-	ents, err := l.entries(l.firstIndex(), noLimit)
+	ents, err := l.entries(l.firstIndex()-1, noLimit)
 	if err == nil {
 		return ents
 	}
@@ -498,12 +496,12 @@ func (l *raftLog) restore(s snapshot) bool {
 	return true
 }
 
-// scan visits all log entries in the [lo, hi) range, returning them via the
+// scan visits all log entries in the (lo, hi] range, returning them via the
 // given callback. The callback can be invoked multiple times, with consecutive
 // sub-ranges of the requested range. Returns up to pageSize bytes worth of
 // entries at a time. May return more if a single entry size exceeds the limit.
 //
-// The entries in [lo, hi) must exist, otherwise scan() eventually returns an
+// The entries in (lo, hi] must exist, otherwise scan() eventually returns an
 // error (possibly after passing some entries through the callback).
 //
 // If the callback returns an error, scan terminates and returns this error
@@ -524,34 +522,44 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 	return nil
 }
 
-// slice returns a slice of log entries from lo through hi-1, inclusive.
+// slice returns a prefix of the log in the (lo, hi] interval, with the total
+// entries size up to maxSize. May exceed maxSize if the first entry (lo+1) is
+// larger. Returns at least one entry if the interval is non-empty.
+//
+// The returned slice can be appended to, but the entries in it must not be
+// mutated.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
-	// TODO(pav-kv): simplify a bunch of arithmetics below.
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
-	}
-	if lo == hi {
+	} else if lo >= hi {
 		return nil, nil
 	}
-	if lo > l.unstable.prev.index {
-		ents := limitSize(l.unstable.slice(lo, hi), maxSize)
+
+	// Fast path: the (lo, hi] interval is fully in the unstable log.
+	if lo >= l.unstable.prev.index {
+		ents := limitSize(l.unstable.sub(lo, hi), maxSize)
 		// NB: use the full slice expression to protect the unstable slice from
-		// appends to the returned ents slice.
+		// potential appends to the returned slice.
 		return ents[:len(ents):len(ents)], nil
 	}
 
-	cut := min(hi, l.unstable.prev.index+1)
-	ents, err := l.storage.Entries(lo, cut, uint64(maxSize))
+	// Invariant: lo < cut = min(hi, l.unstable.prev.index).
+	cut := min(hi, l.unstable.prev.index)
+	// TODO(pav-kv): make Entries() take (lo, hi] instead of [lo, hi), for
+	// consistency. All raft log slices are constructed in context of being
+	// appended after a certain index, so (lo, hi] addressing makes more sense.
+	ents, err := l.storage.Entries(lo+1, cut+1, uint64(maxSize))
 	if err == ErrCompacted {
 		return nil, err
 	} else if err == ErrUnavailable {
-		l.logger.Panicf("entries[%d:%d) is unavailable from storage", lo, cut)
+		l.logger.Panicf("entries(%d:%d] is unavailable from storage", lo, cut)
 	} else if err != nil {
-		panic(err) // TODO(pavelkalinnikov): handle errors uniformly
+		panic(err) // TODO(pav-kv): handle errors uniformly
 	}
-	if hi <= l.unstable.prev.index+1 {
+	if hi <= l.unstable.prev.index { // all (lo, hi] entries are in storage
 		return ents, nil
 	}
+	// Invariant below: lo < cut < hi, and cut == l.unstable.prev.index.
 
 	// Fast path to check if ents has reached the size limitation. Either the
 	// returned slice is shorter than requested (which means the next entry would
@@ -566,7 +574,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 		return ents, nil
 	}
 
-	unstable := limitSize(l.unstable.slice(l.unstable.prev.index+1, hi), maxSize-size)
+	unstable := limitSize(l.unstable.sub(cut, hi), maxSize-size)
 	// Total size of unstable may exceed maxSize-size only if len(unstable) == 1.
 	// If this happens, ignore this extra entry.
 	if len(unstable) == 1 && size+entsSize(unstable) > maxSize {
@@ -577,19 +585,16 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	return extend(ents, unstable), nil
 }
 
-// l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)
+// mustCheckOutOfBounds checks that the (lo, hi] interval is within the bounds
+// of this raft log: l.firstIndex()-1 <= lo <= hi <= l.lastIndex().
 func (l *raftLog) mustCheckOutOfBounds(lo, hi uint64) error {
 	if lo > hi {
 		l.logger.Panicf("invalid slice %d > %d", lo, hi)
 	}
-	fi := l.firstIndex()
-	if lo < fi {
+	if fi := l.firstIndex(); lo+1 < fi {
 		return ErrCompacted
-	}
-
-	length := l.lastIndex() + 1 - fi
-	if hi > fi+length {
-		l.logger.Panicf("slice[%d,%d) out of bound [%d,%d]", lo, hi, fi, l.lastIndex())
+	} else if li := l.lastIndex(); hi > li {
+		l.logger.Panicf("slice(%d,%d] out of bound [%d,%d]", lo, hi, fi, li)
 	}
 	return nil
 }

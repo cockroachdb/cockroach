@@ -62,6 +62,10 @@ type LogStorage interface {
 	//
 	// Returns ErrCompacted if entry lo has been compacted, or ErrUnavailable if
 	// encountered an unavailable entry in [lo, hi).
+	//
+	// TODO(pav-kv): all log slices in raft are constructed in context of being
+	// appended after a particular log index, so (lo, hi] semantics fits better
+	// than [lo, hi).
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
 
 	// Term returns the term of the entry at the given index, which must be in the
