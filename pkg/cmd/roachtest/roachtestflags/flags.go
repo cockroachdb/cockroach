@@ -435,6 +435,14 @@ var (
 						providers. Set this to false when running many concurrent Azure tests. Azure
 						can return stale VM information when many PUT calls are made in succession.`,
 	})
+
+	AlwaysCollectArtifacts bool = false
+	_                           = registerRunFlag(&AlwaysCollectArtifacts, FlagInfo{
+		Name: "always-collect-artifacts",
+		Usage: `
+						Always collect artifacts during test teardown, even if the test did not
+						time out or fail.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
