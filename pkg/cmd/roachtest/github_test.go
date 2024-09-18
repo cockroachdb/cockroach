@@ -67,19 +67,18 @@ func TestShouldPost(t *testing.T) {
 		nodeCount         int
 		envGithubAPIToken string
 		envTcBuildBranch  string
-		expectedPost      bool
 		expectedReason    string
 	}{
 		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
-		{true, 1, "token", "master", false, "issue posting was disabled via command line flag"},
+		{true, 1, "token", "master", "issue posting was disabled via command line flag"},
 		// nodeCount
-		{false, 0, "token", "master", false, "Cluster.NodeCount is zero"},
+		{false, 0, "token", "master", "Cluster.NodeCount is zero"},
 		// apiToken
-		{false, 1, "", "master", false, "GitHub API token not set"},
+		{false, 1, "", "master", "GitHub API token not set"},
 		// branch
-		{false, 1, "token", "", false, `not a release branch: "branch-not-found-in-env"`},
-		{false, 1, "token", "master", true, ""},
+		{false, 1, "token", "", `not a release branch: "branch-not-found-in-env"`},
+		{false, 1, "token", "master", ""},
 	}
 
 	reg := makeTestRegistry()
@@ -100,8 +99,7 @@ func TestShouldPost(t *testing.T) {
 		ti := &testImpl{spec: testSpec}
 		github := &githubIssues{disable: c.disableIssues}
 
-		doPost, skipReason := github.shouldPost(ti)
-		require.Equal(t, c.expectedPost, doPost)
+		skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedReason, skipReason)
 	}
 }
