@@ -51,10 +51,10 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	// timestamp that was already setup.
 	enforcer := &license.Enforcer{}
 	ts2 := ts1.Add(1)
-	enforcer.TestingKnobs = &license.TestingKnobs{
+	enforcer.SetTestingKnobs(&license.TestingKnobs{
 		EnableGracePeriodInitTSWrite: true,
 		OverrideStartTime:            &ts2,
-	}
+	})
 	// Ensure request for the grace period init ts1 before start just returns the start
 	// time used when the enforcer was created.
 	require.Equal(t, ts2, enforcer.GetGracePeriodInitTS())

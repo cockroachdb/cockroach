@@ -1852,7 +1852,7 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 	// is shared to provide access to the values cached from the KV read.
 	if s.execCfg.Codec.ForSystemTenant() {
 		if knobs.Server != nil {
-			s.execCfg.LicenseEnforcer.TestingKnobs = &knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+			s.execCfg.LicenseEnforcer.SetTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs)
 		}
 		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 			func(ctx context.Context) error {
