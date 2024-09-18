@@ -660,6 +660,30 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	return true
 }
 
+func (r *raft) sendMsgApp(to pb.PeerID, ls logSlice) bool {
+	if r.state != StateLeader || r.Term != ls.term {
+		return false
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.Next != ls.prev.index+1 {
+		return false
+	}
+	commit := r.raftLog.committed
+	// Send the MsgApp, and update the progress accordingly.
+	r.send(pb.Message{
+		To:      to,
+		Type:    pb.MsgApp,
+		Index:   ls.prev.index,
+		LogTerm: ls.prev.term,
+		Entries: ls.entries,
+		Commit:  commit,
+		Match:   pr.Match,
+	})
+	pr.SentEntries(len(ls.entries), uint64(payloadsSize(ls.entries)))
+	pr.MaybeUpdateSentCommit(commit)
+	return true
+}
+
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
 func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
