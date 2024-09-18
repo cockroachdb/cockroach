@@ -1108,11 +1108,14 @@ var (
 	// DZeroDecimal is the decimal constant '0'.
 	DZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
 
-	// dNaNDecimal is the decimal constant 'NaN'.
-	dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+	// DNaNDecimal is the decimal constant 'NaN'.
+	DNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
-	// dPosInfDecimal is the decimal constant 'inf'.
-	dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+	// DPosInfDecimal is the decimal constant 'inf'.
+	DPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+
+	// DNegInfDecimal is the decimal constant '-inf'.
+	DNegInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: true}}
 )
 
 // IsMax implements the Datum interface.
@@ -1127,12 +1130,12 @@ func (d *DDecimal) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 
 // Max implements the Datum interface.
 func (d *DDecimal) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dPosInfDecimal, true
+	return DPosInfDecimal, true
 }
 
 // Min implements the Datum interface.
 func (d *DDecimal) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dNaNDecimal, true
+	return DNaNDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.
