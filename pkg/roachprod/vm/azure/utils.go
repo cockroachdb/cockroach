@@ -103,6 +103,11 @@ EOF
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
 sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 
+# Uninstall unattended-upgrades
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades
+
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
 * soft core unlimited
