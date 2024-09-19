@@ -271,9 +271,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			// down to the bits. Note that this comes from the Storage, which
 			// will not reflect any unstable entries that we'll only be presented
 			// with in the next Ready.
-			lastIndex, err = s.LastIndex()
-			require.NoError(t, err)
-
+			lastIndex = s.LastIndex()
 			entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
 			require.NoError(t, err)
 			require.Len(t, entries, 2)
@@ -393,9 +391,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	// down to the bits. Note that this comes from the Storage, which
 	// will not reflect any unstable entries that we'll only be presented
 	// with in the next Ready.
-	lastIndex, err = s.LastIndex()
-	require.NoError(t, err)
-
+	lastIndex = s.LastIndex()
 	entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
@@ -491,9 +487,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	require.NoError(t, err)
 	proposeConfChangeAndApply(cc2)
 
-	lastIndex, err := s.LastIndex()
-	require.NoError(t, err)
-
+	lastIndex := s.LastIndex()
 	// the last three entries should be: ConfChange cc1, cc1, cc2
 	entries, err := s.Entries(lastIndex-2, lastIndex+1, noLimit)
 	require.NoError(t, err)
@@ -547,17 +541,14 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
 		require.NotEmpty(t, cs.Voters, "no voters specified")
-		fi, err := storage.FirstIndex()
-		require.NoError(t, err)
+		fi := storage.FirstIndex()
 		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
 
-		_, err = storage.Entries(fi, fi, math.MaxUint64)
+		_, err := storage.Entries(fi, fi, math.MaxUint64)
 		// TODO(tbg): match exact error
 		require.Error(t, err, "should not have been able to load first index")
 
-		li, err := storage.LastIndex()
-		require.NoError(t, err)
-
+		li := storage.LastIndex()
 		_, err = storage.Entries(li, li, math.MaxUint64)
 		require.Error(t, err, "should not have been able to load last index")
 
