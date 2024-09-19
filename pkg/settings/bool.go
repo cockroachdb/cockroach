@@ -13,6 +13,8 @@ package settings
 import (
 	"context"
 	"strconv"
+
+	"github.com/cockroachdb/errors"
 )
 
 // BoolSetting is the interface of a setting variable that will be
@@ -21,6 +23,7 @@ import (
 type BoolSetting struct {
 	common
 	defaultValue bool
+	validateFn   func(*Values, bool) error
 }
 
 var _ internalSetting = &BoolSetting{}
@@ -82,32 +85,63 @@ var _ = (*BoolSetting).Default
 // For testing usage only.
 func (b *BoolSetting) Override(ctx context.Context, sv *Values, v bool) {
 	sv.setValueOrigin(ctx, b.slot, OriginOverride)
-	b.set(ctx, sv, v)
+	_ = b.set(ctx, sv, v)
 	sv.setDefaultOverride(b.slot, v)
 }
 
-func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
+// Validate that a value conforms with the validation function.
+func (b *BoolSetting) Validate(sv *Values, v bool) error {
+	if b.validateFn != nil {
+		if err := b.validateFn(sv, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) error {
+	if err := b.Validate(sv, v); err != nil {
+		return err
+	}
 	vInt := int64(0)
 	if v {
 		vInt = 1
 	}
 	sv.setInt64(ctx, b.slot, vInt)
+	return nil
 }
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	if val := sv.getDefaultOverride(b.slot); val != nil {
-		b.set(ctx, sv, val.(bool))
+		_ = b.set(ctx, sv, val.(bool))
 		return
 	}
-	b.set(ctx, sv, b.defaultValue)
+	if err := b.set(ctx, sv, b.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
 func RegisterBoolSetting(
 	class Class, key InternalKey, desc string, defaultValue bool, opts ...SettingOption,
 ) *BoolSetting {
-	setting := &BoolSetting{defaultValue: defaultValue}
+	validateFn := func(sv *Values, val bool) error {
+		for _, opt := range opts {
+			switch {
+			case opt.commonOpt != nil:
+				continue
+			case opt.validateBoolFn != nil:
+			default:
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if err := opt.validateBoolFn(sv, val); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	setting := &BoolSetting{defaultValue: defaultValue, validateFn: validateFn}
 	register(class, key, desc, setting)
 	setting.apply(opts)
 	return setting

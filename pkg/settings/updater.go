@@ -177,8 +177,7 @@ func (u updater) setInternal(
 		if err != nil {
 			return err
 		}
-		setting.set(ctx, u.sv, b)
-		return nil
+		return setting.set(ctx, u.sv, b)
 
 	case numericSetting:
 		i, err := setting.DecodeValue(value.Value)
