@@ -49,10 +49,11 @@ func newMessageHandler(size int) testMessageHandler {
 	}
 }
 
-func (tmh *testMessageHandler) HandleMessage(msg *slpb.Message) {
+func (tmh *testMessageHandler) HandleMessage(msg *slpb.Message) error {
 	// Simulate a message handling delay.
 	time.Sleep(time.Duration(rand.Int63n(int64(maxDelay))))
 	tmh.messages <- msg
+	return nil
 }
 
 var _ MessageHandler = (*testMessageHandler)(nil)
