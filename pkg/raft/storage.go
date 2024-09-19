@@ -74,7 +74,8 @@ type LogStorage interface {
 	// entry may not be available.
 	Term(index uint64) (uint64, error)
 	// LastIndex returns the index of the last entry in the log.
-	LastIndex() (uint64, error)
+	// TODO(pav-kv): replace this with LastEntryID() which never fails.
+	LastIndex() uint64
 	// FirstIndex returns the index of the first log entry that is possibly
 	// available via Entries. Older entries have been incorporated into the
 	// StateStorage.Snapshot.
@@ -85,7 +86,7 @@ type LogStorage interface {
 	//
 	// TODO(pav-kv): replace this with a Prev() method equivalent to logSlice's
 	// prev field. The log storage is just a storage-backed logSlice.
-	FirstIndex() (uint64, error)
+	FirstIndex() uint64
 }
 
 // StateStorage provides read access to the state machine storage.
@@ -188,11 +189,11 @@ func (ms *MemoryStorage) Term(i uint64) (uint64, error) {
 }
 
 // LastIndex implements the Storage interface.
-func (ms *MemoryStorage) LastIndex() (uint64, error) {
+func (ms *MemoryStorage) LastIndex() uint64 {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.lastIndex++
-	return ms.lastIndex(), nil
+	return ms.lastIndex()
 }
 
 func (ms *MemoryStorage) lastIndex() uint64 {
@@ -200,11 +201,11 @@ func (ms *MemoryStorage) lastIndex() uint64 {
 }
 
 // FirstIndex implements the Storage interface.
-func (ms *MemoryStorage) FirstIndex() (uint64, error) {
+func (ms *MemoryStorage) FirstIndex() uint64 {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.firstIndex++
-	return ms.firstIndex(), nil
+	return ms.firstIndex()
 }
 
 func (ms *MemoryStorage) firstIndex() uint64 {
