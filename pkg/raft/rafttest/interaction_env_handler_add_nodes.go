@@ -65,8 +65,6 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.MaxCommittedSizePerReady)
 			case "disable-conf-change-validation":
 				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
-			case "step-down-on-removal":
-				arg.Scan(t, i, &cfg.StepDownOnRemoval)
 			case "crdb-version":
 				var key string
 				arg.Scan(t, i, &key)

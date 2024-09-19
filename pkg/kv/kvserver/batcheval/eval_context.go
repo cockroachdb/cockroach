@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -106,6 +107,7 @@ type EvalContext interface {
 	ExcludeDataFromBackup(context.Context, roachpb.Span) (bool, error)
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
+	GetRangeLeaseDuration() time.Duration
 	GetRangeInfo(context.Context) roachpb.RangeInfo
 
 	// GetCurrentReadSummary returns a new ReadSummary reflecting all reads
@@ -165,27 +167,29 @@ type ImmutableEvalContext interface {
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
 // For technical reasons, the interface is implemented by a wrapper .EvalContext().
 type MockEvalCtx struct {
-	ClusterSettings      *cluster.Settings
-	Desc                 *roachpb.RangeDescriptor
-	StoreID              roachpb.StoreID
-	NodeID               roachpb.NodeID
-	Clock                *hlc.Clock
-	Stats                enginepb.MVCCStats
-	QPS                  float64
-	CPU                  float64
-	AbortSpan            *abortspan.AbortSpan
-	GCThreshold          hlc.Timestamp
-	Term                 kvpb.RaftTerm
-	FirstIndex           kvpb.RaftIndex
-	CanCreateTxnRecordFn func() (bool, kvpb.TransactionAbortedReason)
-	MinTxnCommitTSFn     func() hlc.Timestamp
-	Lease                roachpb.Lease
-	CurrentReadSummary   rspb.ReadSummary
-	ClosedTimestamp      hlc.Timestamp
-	RevokedLeaseSeq      roachpb.LeaseSequence
-	MaxBytes             int64
-	ApproxDiskBytes      uint64
-	EvalKnobs            kvserverbase.BatchEvalTestingKnobs
+	ClusterSettings        *cluster.Settings
+	Desc                   *roachpb.RangeDescriptor
+	StoreID                roachpb.StoreID
+	NodeID                 roachpb.NodeID
+	Clock                  *hlc.Clock
+	Stats                  enginepb.MVCCStats
+	QPS                    float64
+	CPU                    float64
+	AbortSpan              *abortspan.AbortSpan
+	GCThreshold            hlc.Timestamp
+	Term                   kvpb.RaftTerm
+	FirstIndex             kvpb.RaftIndex
+	CanCreateTxnRecordFn   func() (bool, kvpb.TransactionAbortedReason)
+	MinTxnCommitTSFn       func() hlc.Timestamp
+	LastReplicaGCTimestamp hlc.Timestamp
+	Lease                  roachpb.Lease
+	RangeLeaseDuration     time.Duration
+	CurrentReadSummary     rspb.ReadSummary
+	ClosedTimestamp        hlc.Timestamp
+	RevokedLeaseSeq        roachpb.LeaseSequence
+	MaxBytes               int64
+	ApproxDiskBytes        uint64
+	EvalKnobs              kvserverbase.BatchEvalTestingKnobs
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -280,10 +284,13 @@ func (m *mockEvalCtxImpl) ExcludeDataFromBackup(context.Context, roachpb.Span) (
 	return false, nil
 }
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
-	panic("unimplemented")
+	return m.LastReplicaGCTimestamp, nil
 }
 func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return m.Lease, roachpb.Lease{}
+}
+func (m *mockEvalCtxImpl) GetRangeLeaseDuration() time.Duration {
+	return m.RangeLeaseDuration
 }
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}

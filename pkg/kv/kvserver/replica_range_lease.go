@@ -753,6 +753,11 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 	}
 }
 
+// GetRangeLeaseDuration is part of the EvalContext interface.
+func (r *Replica) GetRangeLeaseDuration() time.Duration {
+	return r.store.cfg.RangeLeaseDuration
+}
+
 // requiresExpirationLeaseRLocked returns whether this range unconditionally
 // uses an expiration-based lease. Ranges located before or including the node
 // liveness table must always use expiration leases to avoid circular
