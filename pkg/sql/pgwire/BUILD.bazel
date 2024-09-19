@@ -7,6 +7,7 @@ go_library(
         "auth_behaviors.go",
         "auth_methods.go",
         "authenticator.go",
+        "authorizer.go",
         "command_result.go",
         "conn.go",
         "hba_conf.go",
