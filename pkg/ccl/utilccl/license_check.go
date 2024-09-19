@@ -44,11 +44,6 @@ var enterpriseLicense = settings.RegisterStringSetting(
 				return nil
 			}
 
-			if l.Type == licenseccl.License_Trial && trialLicenseUsageCount.Load() > 0 {
-				return errors.WithHint(errors.Newf("a trial license has previously been installed on this cluster"),
-					"Please install a non-trial license to continue")
-			}
-
 			reportingSetting, ok, _ := settings.LookupForLocalAccess("diagnostics.reporting.enabled", true /* forSystemTenant */)
 			if !ok {
 				log.Warning(context.Background(), "unable to find setting for diagnostic reporting")
