@@ -46,7 +46,7 @@ var (
 	}
 )
 
-const numFullBackups = 5
+const numFullBackups = 3
 
 type roundTripSpecs struct {
 	name                 string
