@@ -26,14 +26,13 @@ type AuthBehaviors struct {
 	replacedIdentity    bool
 	roleMapper          RoleMapper
 	authorizer          Authorizer
-	roleGranter         RoleGranter
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
 var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
 var _ func() = (*AuthBehaviors)(nil).ConnClose
 var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
-var _ RoleGranter = (*AuthBehaviors)(nil).GrantRole
+var _ Authorizer = (*AuthBehaviors)(nil).MaybeAuthorize
 
 // This is a hack for the unused-symbols linter. These two functions
 // are, at present, only called by the GSSAPI integration. The code
@@ -118,28 +117,8 @@ func (b *AuthBehaviors) SetAuthorizer(a Authorizer) {
 func (b *AuthBehaviors) MaybeAuthorize(
 	ctx context.Context, systemIdentity string, clientConnection bool,
 ) error {
-	if b.authorizer != nil {
-		sqlGroups, err := b.authorizer(ctx, systemIdentity, clientConnection)
-		if err != nil {
-			return err
-		}
-		return b.GrantRole(ctx, systemIdentity, sqlGroups)
+	if found := b.authorizer; found != nil {
+		return found(ctx, systemIdentity, clientConnection)
 	}
 	return nil
-}
-
-// GrantRole delegates to the RoleGranter passed to SetRoleGranter or
-// returns an error if SetRoleGranter has not been called.
-func (b *AuthBehaviors) GrantRole(
-	ctx context.Context, systemIdentity string, sqlGroups []username.SQLUsername,
-) error {
-	if found := b.roleGranter; found != nil {
-		return found(ctx, systemIdentity, sqlGroups)
-	}
-	return errors.New("no RoleGranter provided to AuthBehaviors")
-}
-
-// SetRoleGranter updates the RoleMapper to be used.
-func (b *AuthBehaviors) SetRoleGranter(g RoleGranter) {
-	b.roleGranter = g
 }

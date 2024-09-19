@@ -984,12 +984,12 @@ func authLDAP(
 		return nil
 	})
 
-	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) ([]username.SQLUsername, error) {
+	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
 
 		// Verify that the systemIdentity is what we expect.
 		if ldapUserDN.String() != systemIdentity {
-			return nil, errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
+			return errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
 		}
 
 		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
@@ -1000,7 +1000,7 @@ func authLDAP(
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, errForLog)
-			return nil, authError
+			return authError
 		} else {
 			c.LogAuthInfof(ctx, "LDAP authorization sync succeeded; attempting to assign roles")
 			// Parse and apply transformation to LDAP group DNs for roles granter.
@@ -1012,14 +1012,11 @@ func authLDAP(
 				if sqlGroupRoles[idx], err = username.MakeSQLUsernameFromUserInput(
 					ldapGroups[idx].String(), username.PurposeValidation,
 				); err != nil {
-					return nil, errors.Wrapf(err, "LDAP authorization: error creating group role for DN %s", ldapGroups[idx].String())
+					return errors.Wrapf(err, "LDAP authorization: error creating group role for DN %s", ldapGroups[idx].String())
 				}
 			}
-			return sqlGroupRoles, nil
+			return nil
 		}
-	})
-	b.SetRoleGranter(func(ctx context.Context, systemIdentity string, sqlGroups []username.SQLUsername) error {
-		return nil
 	})
 
 	return b, nil
