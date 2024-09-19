@@ -770,7 +770,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	relProps := scan.Relational()
 	stats := relProps.Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
-		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		large := !stats.Available || stats.RowCount >= b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
 			b.flags.Set(exec.PlanFlagContainsFullTableScan)
 			if large {
