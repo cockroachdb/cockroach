@@ -1535,7 +1535,7 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) (string, error) {
-	if timedOut || t.Failed() {
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		snapURL := ""
 		if timedOut {
 			// If the Side-Eye integration was configured, capture a snapshot of the

@@ -83,6 +83,14 @@ type TestingKnobs struct {
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
 	BeforeWaitForJobsQuery func(jobs []jobspb.JobID)
+
+	// Jobs updater will use this function to get the current time. If nil,
+	// "registry.clock.Now" will be used.
+	//
+	// TODO (xiaochen): currently only "Updater.canceled" uses this knob,
+	// we may want to extend this to other parts of the jobs package and
+	// give this knob a default value (so it won't be nil).
+	StubTimeNow func() time.Time
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

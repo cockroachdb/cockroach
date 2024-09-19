@@ -214,7 +214,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 
 	if roachtestflags.TeamCity {
 		// Collect the runner logs.
-		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir))
+		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
 
 	if summaryErr := maybeDumpSummaryMarkdown(runner); summaryErr != nil {
