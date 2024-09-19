@@ -19,12 +19,13 @@ import (
 )
 
 type raftNodeForRACv2 struct {
+	Replica
 	*raft.RawNode
 }
 
 // NewRaftNode creates a RaftNode implementation from the given RawNode.
-func NewRaftNode(rn *raft.RawNode) RaftNode {
-	return raftNodeForRACv2{RawNode: rn}
+func NewRaftNode(rn *raft.RawNode, r Replica) RaftNode {
+	return raftNodeForRACv2{RawNode: rn, Replica: r}
 }
 
 func (rn raftNodeForRACv2) TermLocked() uint64 {
@@ -47,6 +48,9 @@ func (rn raftNodeForRACv2) FollowerStateRaftMuLocked(
 	replicaID roachpb.ReplicaID,
 ) rac2.FollowerStateInfo {
 	// TODO(pav-kv): this is a temporary implementation.
+	rn.MuRLock()
+	defer rn.MuRUnlock()
+
 	status := rn.Status()
 	if progress, ok := status.Progress[raftpb.PeerID(replicaID)]; ok {
 		return rac2.FollowerStateInfo{
