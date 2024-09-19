@@ -125,6 +125,8 @@ FOR UPDATE
 ----
 lock stock
  ├── columns: s_quantity:3 s_ytd:14 s_order_cnt:15 s_remote_cnt:16 s_data:17 s_dist_05:8  [hidden: s_i_id:1!null s_w_id:2!null]
+ ├── key columns: s_w_id:2 s_i_id:1
+ ├── lock columns: (20-36)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 5]
  ├── volatile, mutations
@@ -823,6 +825,8 @@ FOR UPDATE
 ----
 lock new_order
  ├── columns: no_o_id:1!null  [hidden: no_d_id:2!null no_w_id:3!null]
+ ├── key columns: no_w_id:3 no_d_id:2 no_o_id:1
+ ├── lock columns: (6-8)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
  ├── volatile, mutations

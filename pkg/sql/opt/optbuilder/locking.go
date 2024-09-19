@@ -435,8 +435,8 @@ func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope
 	newTabID := md.DuplicateTable(lb.table, b.factory.RemapCols)
 	newTab := md.Table(newTabID)
 	// Add remapped columns for the new table reference. For now we lock all
-	// column families of the primary index of the table, so include all ordinary
-	// and mutation columns.
+	// non-virtual columns of all families of the primary index of the table, so
+	// include all ordinary and mutation columns.
 	ordinals := tableOrdinals(newTab, columnKinds{
 		includeMutations: true,
 		includeSystem:    false,
@@ -444,7 +444,9 @@ func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope
 	})
 	var lockCols opt.ColSet
 	for _, ord := range ordinals {
-		lockCols.Add(newTabID.ColumnID(ord))
+		if !tab.Column(ord).IsVirtualComputed() {
+			lockCols.Add(newTabID.ColumnID(ord))
+		}
 	}
 	private := &memo.LockPrivate{
 		Table:     newTabID,

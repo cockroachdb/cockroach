@@ -536,3 +536,28 @@ user testuser
 
 statement ok
 COMMIT
+
+subtest regression_130661
+
+statement ok
+CREATE TABLE t130661 (
+	id INT PRIMARY KEY NOT NULL,
+	i INT NOT NULL,
+	v INT AS (i + 1) VIRTUAL NOT NULL,
+	FAMILY (id),
+	FAMILY (i)
+)
+
+statement ok
+INSERT INTO t130661 VALUES (1, 10)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SELECT * FROM t130661 WHERE id = 1 FOR UPDATE
+
+statement ok
+COMMIT
+
+subtest end
