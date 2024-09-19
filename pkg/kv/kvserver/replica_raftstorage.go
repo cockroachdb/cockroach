@@ -57,25 +57,73 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	}())
 
 // replicaRaftStorage implements the raft.Storage interface.
+//
+// All mutating calls to raft.RawNode require that r.mu is held. All read-only
+// calls to raft.RawNode require that r.mu is held at least for reads.
+//
+// All methods implementing raft.Storage are called from within, or on behalf of
+// a RawNode. When called from within RawNode, r.mu is held necessarily (and
+// maybe r.raftMu). Conceptually, r.mu only needs to be locked for reading, but
+// implementation details may require an exclusive lock (see method comments).
+// When called from outside RawNode (on behalf of a RawNode "snapshot"), the
+// caller must hold r.raftMu and/or r.mu.
+//
+// RawNode has the in-memory "unstable" state which services most of its needs.
+// Most RawNode.Step updates are completed in memory, while only holding r.mu.
+//
+// RawNode falls back to reading from Storage when it does not have the needed
+// state in memory. For example, the leader may need to read log entries from
+// storage to construct a log append request for a follower, or a follower may
+// need to interact with its storage upon receiving such a request to check
+// whether the appended log slice is consistent with raft rules.
+//
+// (1) RawNode guarantees that everything it reads from Storage has no in-flight
+// writes. Raft always reads state that it knows to be stable (meaning it does
+// not have pending writes) and, in some cases, also synced / durable. Storage
+// acknowledges completed writes / syncs back to RawNode, under r.mu, so that
+// RawNode can correctly implement this guarantee.
+//
+// (2) The content of raft.Storage is always mutated while holding r.raftMu,
+// which is an un-contended "IO" mutex and is allowed to be held longer. Most
+// writes are extracted from RawNode while holding r.raftMu and r.mu (in the
+// Ready() loop), and handed over to storage under r.raftMu. There are a few
+// cases when CRDB synthesizes the writes (e.g. during a range split / merge, or
+// raft log truncations) under r.raftMu.
+//
+// The guarantees explain why holding only r.mu is sufficient for RawNode or its
+// snapshot to be in a consistent state. Under r.mu, new writes are blocked,
+// because of (2), and by (1) reads never conflict with the in-flight writes.
+//
+// However, r.mu is a widely used mutex, and not recommended for IO. When doing
+// work on behalf RawNode that involves IO (like constructing log appends for a
+// follower), we would like to release r.mu. The two guarantees make it possible
+// to observe a consistent RawNode snapshot while only holding r.raftMu.
+//
+// While both r.raftMu and r.mu are held, we can take a shallow / COW copy of
+// the RawNode or its relevant subset (e.g. the raft log; the Ready struct is
+// also considered such). A subsequent release of r.mu allows RawNode to resume
+// making progress. The raft.Storage does not observe any new writes while
+// r.raftMu is still held, by the guarantee (2). Combined with guarantee (1), it
+// means that both the original and the snapshot RawNode remain consistent. The
+// shallow copy represents a valid past state of the RawNode.
+//
+// TODO(pav-kv): the snapshotting with only r.raftMu held is not implemented,
+// but should be done soon.
+//
+// All the implementation methods assume that the required locks are held, and
+// don't acquire them. The specific locking requirements are noted in each
+// method's comment. The method names do not follow our "Locked" naming
+// conventions, due to being an implementation of raft.Storage interface from a
+// different package.
+//
+// Many of the methods defined in this file are wrappers around static
+// functions. This is done to facilitate their use from Replica.Snapshot(),
+// where it is important that all the data that goes into the snapshot comes
+// from a consistent view of the database, and not the replica's in-memory state
+// or via a reference to Replica.store.Engine().
 type replicaRaftStorage Replica
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
-
-// All calls to raft.RawNode require that both Replica.raftMu and
-// Replica.mu are held. All of the functions exposed via the
-// raft.Storage interface will in turn be called from RawNode, so none
-// of these methods may acquire either lock, but they may require
-// their caller to hold one or both locks (even though they do not
-// follow our "Locked" naming convention). Specific locking
-// requirements (e.g. whether r.mu must be held for reading or writing)
-// are noted in each method's comments.
-//
-// Many of the methods defined in this file are wrappers around static
-// functions. This is done to facilitate their use from
-// Replica.Snapshot(), where it is important that all the data that
-// goes into the snapshot comes from a consistent view of the
-// database, and not the replica's in-memory state or via a reference
-// to Replica.store.Engine().
 
 // InitialState implements the raft.Storage interface.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
