@@ -106,6 +106,6 @@ func (s *SessionData) User() username.SQLUsername {
 
 // SystemIdentity retrieves the session's system identity.
 // (Identity presented by the client prior to identity mapping.)
-func (s *LocalOnlySessionData) SystemIdentity() username.SQLUsername {
-	return s.SystemIdentityProto.Decode()
+func (s *LocalOnlySessionData) SystemIdentity() string {
+	return s.SystemIdentityProto
 }

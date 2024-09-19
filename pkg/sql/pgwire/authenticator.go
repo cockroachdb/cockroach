@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/go-ldap/ldap/v3"
 )
 
@@ -23,7 +22,7 @@ import (
 // username, etc) is who it claims to be.
 type Authenticator = func(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	roleSubject *ldap.DN,

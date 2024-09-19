@@ -983,7 +983,7 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize:   args.ConnResultsBufferSize,
 			IsSuperuser:         args.IsSuperuser,
-			SystemIdentityProto: args.SystemIdentity.EncodeProto(),
+			SystemIdentityProto: args.SystemIdentity,
 		},
 	}
 	if len(args.CustomOptionSessionDefaults) > 0 {

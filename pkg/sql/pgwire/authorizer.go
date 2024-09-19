@@ -21,12 +21,12 @@ import (
 // synchronize this information from some external authorization system (e.g.:
 // LDAP groups, JWT claims or X.509 SAN or other fields, etc). It returns list
 // of system identities which map to roles created specifically to assign the
-// privileges to the session and could be either the subject distinguished names
-// defined in role options or the role itself. Authorizer is intended to be used
-// with GrantRolesFn which assigns it to intended groups(roles).
+// privileges to the session and must be valid SQL users/roles. Authorizer is
+// intended to be used with GrantRolesFn which assigns it to intended
+// groups(roles).
 type Authorizer = func(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	clientConnection bool,
 ) ([]username.SQLUsername, error)
 
@@ -40,6 +40,6 @@ type Authorizer = func(
 // (*AuthBehaviors).MaybeAuthorize().
 type RoleGranter = func(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	sqlGroups []username.SQLUsername,
 ) error

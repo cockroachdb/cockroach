@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -120,18 +121,19 @@ func (c *conn) handleAuthentication(
 	}
 
 	// Choose the system identity that we'll use below for mapping
-	// externally-provisioned principals to database users.
-	var systemIdentity username.SQLUsername
+	// externally-provisioned principals to database users. The system identity
+	// always is normalized to lower case.
+	var systemIdentity string
 	if found, ok := behaviors.ReplacementIdentity(); ok {
-		systemIdentity = found
+		systemIdentity = lexbase.NormalizeName(found)
 		ac.SetSystemIdentity(systemIdentity)
 	} else {
-		if !c.sessionArgs.SystemIdentity.Undefined() {
+		if c.sessionArgs.SystemIdentity != "" {
 			// This case is used in tests, which pass a system_identity
 			// option directly.
-			systemIdentity = c.sessionArgs.SystemIdentity
+			systemIdentity = lexbase.NormalizeName(c.sessionArgs.SystemIdentity)
 		} else {
-			systemIdentity = c.sessionArgs.User
+			systemIdentity = c.sessionArgs.User.Normalized()
 		}
 	}
 	c.sessionArgs.SystemIdentity = systemIdentity
@@ -179,10 +181,9 @@ func (c *conn) handleAuthentication(
 
 	// At this point, we know that the requested user exists and is allowed to log
 	// in. Now we can delegate to the selected AuthMethod implementation to
-	// complete the authentication.
-	// TODO(souravcrl): Verify whether to use systemIdentity or dbUser here since
-	// systemIdentity refers to external system name, which is same as dbUser name
-	// incase ReplacementIdentity is not set.
+	// complete the authentication. We must pass in the systemIdentity here,
+	// since the authenticator may use an external source to verify the
+	// user and its credentials.
 	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn, roleSubject); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
@@ -195,7 +196,8 @@ func (c *conn) handleAuthentication(
 
 	// Since authentication was successful for the user session, we try to perform
 	// additional authorization for the user. This delegates to the selected
-	// AuthMethod implementation to complete the authorization.
+	// AuthMethod implementation to complete the authorization. Only certain
+	// methods, like LDAP, will actually perform authorization here.
 	if err := behaviors.MaybeAuthorize(ctx, systemIdentity, true /* public */); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
@@ -262,14 +264,14 @@ func (c *conn) authOKMessage() error {
 // from the external authentication system with the database user name
 // that the user has requested to connect as."
 func (c *conn) checkClientUsernameMatchesMapping(
-	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity username.SQLUsername,
+	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity string,
 ) error {
 	mapped, err := mapper(ctx, systemIdentity)
 	if err != nil {
 		return err
 	}
 	if len(mapped) == 0 {
-		return errors.Newf("system identity %q did not map to a database role", systemIdentity.Normalized())
+		return errors.Newf("system identity %q did not map to a database role", systemIdentity)
 	}
 	for _, m := range mapped {
 		if m == c.sessionArgs.User {
@@ -278,7 +280,7 @@ func (c *conn) checkClientUsernameMatchesMapping(
 		}
 	}
 	return errors.Newf("requested user identity %q does not correspond to any mapping for system identity %q",
-		c.sessionArgs.User, systemIdentity.Normalized())
+		c.sessionArgs.User, systemIdentity)
 }
 
 func (c *conn) findAuthenticationMethod(
@@ -423,7 +425,7 @@ type AuthConn interface {
 	// SetSystemIdentity updates the AuthConn with an externally-defined
 	// identity for the connection. This is useful for "ambient"
 	// authentication mechanisms, such as GSSAPI.
-	SetSystemIdentity(systemIdentity username.SQLUsername)
+	SetSystemIdentity(systemIdentity string)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
 	LogAuthInfof(ctx context.Context, msg redact.RedactableString)
@@ -463,15 +465,13 @@ type authRes struct {
 	err error
 }
 
-func newAuthPipe(
-	c *conn, logAuthn bool, authOpt authOptions, systemIdentity username.SQLUsername,
-) *authPipe {
+func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, systemIdentity string) *authPipe {
 	ap := &authPipe{
 		c:           c,
 		log:         logAuthn,
 		connDetails: authOpt.connDetails,
 		authDetails: eventpb.CommonSessionDetails{
-			SystemIdentity: systemIdentity.Normalized(),
+			SystemIdentity: systemIdentity,
 			Transport:      authOpt.connType.String(),
 		},
 		ch:         make(chan []byte),
@@ -529,8 +529,8 @@ func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {
 	p.authDetails.User = dbUser.Normalized()
 }
 
-func (p *authPipe) SetSystemIdentity(systemIdentity username.SQLUsername) {
-	p.authDetails.SystemIdentity = systemIdentity.Normalized()
+func (p *authPipe) SetSystemIdentity(systemIdentity string) {
+	p.authDetails.SystemIdentity = systemIdentity
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -109,7 +110,7 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 				"cannot find provided user %s on LDAP server", user.Normalized())
 	}
 
-	retrievedUserDN, err = distinguishedname.ParseDN(userDN)
+	retrievedUserDN, err = distinguishedname.ParseDN(lexbase.NormalizeName(userDN))
 	if err != nil {
 		return nil, redact.Sprintf("error parsing user DN %s obtained from LDAP server: %v", userDN, err),
 			errors.WithDetailf(
