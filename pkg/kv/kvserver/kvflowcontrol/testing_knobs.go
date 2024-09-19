@@ -22,7 +22,7 @@ type TestingKnobs struct {
 	UseOnlyForScratchRanges bool
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
-	OverrideTokenDeduction func() Tokens
+	OverrideTokenDeduction func(tokens Tokens) Tokens
 	// OverrideV2EnabledWhenLeaderLevel is used to override the level at which
 	// RACv2 is enabled when a replica is the leader.
 	OverrideV2EnabledWhenLeaderLevel func() V2EnabledWhenLeaderLevel

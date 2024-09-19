@@ -163,7 +163,7 @@ func (h *Handle) deductTokensForInner(
 	}
 
 	if fn := h.knobs.OverrideTokenDeduction; fn != nil {
-		tokens = fn()
+		tokens = fn(tokens)
 	}
 
 	for _, c := range h.mu.connections {

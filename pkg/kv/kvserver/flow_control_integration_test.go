@@ -800,7 +800,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
-						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test makes use of (small) increment
 							// requests, but wants to see large token
 							// deductions/returns.
@@ -1210,7 +1210,7 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 					UseOnlyForScratchRanges: true,
-					OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+					OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 						// This test asserts on the exact values of tracked
 						// tokens. In non-test code, the tokens deducted are
 						// a few bytes off (give or take) from the size of
@@ -1723,7 +1723,7 @@ func TestFlowControlQuiescedRange(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
-						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test asserts on the exact values of tracked
 							// tokens. In non-test code, the tokens deducted are
 							// a few bytes off (give or take) from the size of
@@ -1861,7 +1861,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
-						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test asserts on the exact values of tracked
 							// tokens. In non-test code, the tokens deducted are
 							// a few bytes off (give or take) from the size of
@@ -2236,7 +2236,7 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
-						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test asserts on the exact values of tracked
 							// tokens. In non-test code, the tokens deducted are
 							// a few bytes off (give or take) from the size of
