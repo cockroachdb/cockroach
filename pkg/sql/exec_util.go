@@ -712,7 +712,7 @@ var largeFullScanRows = settings.RegisterFloatSetting(
 	"default value for large_full_scan_rows session setting which determines "+
 		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
 		"is set to true",
-	1000.0,
+	0,
 	settings.WithPublic)
 
 var costScansWithDefaultColSize = settings.RegisterBoolSetting(
