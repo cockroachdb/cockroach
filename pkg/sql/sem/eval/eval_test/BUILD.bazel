@@ -23,7 +23,6 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/eval",
