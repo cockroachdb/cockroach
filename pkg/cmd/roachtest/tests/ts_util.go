@@ -75,6 +75,26 @@ func getMetrics(
 	return getMetricsWithSamplePeriod(ctx, c, t, adminURL, virtualCluster, start, end, defaultSamplePeriod, tsQueries)
 }
 
+// sumCounterIncreases sums the increase in consecutive data points in the
+// provided series. It's intended for measuring how many times a counter in the
+// provided series, taking into account counter resets that are possible (eg,
+// when a process restarts). sumCounterIncreases should only be used with
+// counter metrics. If a value is smaller than it's predecessor, a counter
+// restart is presumed and the entire value of the counter post-restart is
+// incorporated into the sum.
+func sumCounterIncreases(dataPoints []tspb.TimeSeriesDatapoint) (sum float64) {
+	for i := 1; i < len(dataPoints); i++ {
+		if dataPoints[i-1].Value > dataPoints[i].Value {
+			// Counter reset. Interpret the data point at i as a delta from
+			// zero.
+			sum += dataPoints[i].Value
+			continue
+		}
+		sum += dataPoints[i].Value - dataPoints[0].Value
+	}
+	return sum
+}
+
 func getMetricsWithSamplePeriod(
 	ctx context.Context,
 	c cluster.Cluster,

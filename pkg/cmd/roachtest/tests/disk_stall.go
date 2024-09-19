@@ -312,7 +312,7 @@ func runDiskStalledDetection(
 		{name: "cr.node.sql.query.count", queryType: total},
 	})
 	cum := response.Results[0].Datapoints
-	totalQueriesPreStall := cum[len(cum)-1].Value - cum[0].Value
+	totalQueriesPreStall := sumCounterIncreases(cum)
 	t.L().PrintfCtx(ctx, "%.2f queries completed before stall", totalQueriesPreStall)
 
 	t.Status("inducing write stall")
@@ -350,7 +350,8 @@ func runDiskStalledDetection(
 	}
 
 	// Let the workload continue after the stall.
-	workloadAfterDur := 10*time.Minute - timeutil.Since(workloadStartAt)
+	workloadContinuedAt := timeutil.Now()
+	workloadAfterDur := 10*time.Minute - workloadContinuedAt.Sub(workloadStartAt)
 	t.Status("letting workload continue for ", workloadAfterDur, " with n1 stalled")
 	select {
 	case <-ctx.Done():
@@ -360,11 +361,11 @@ func runDiskStalledDetection(
 
 	{
 		now := timeutil.Now()
-		response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadStartAt, now, []tsQuery{
+		response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadContinuedAt, now, []tsQuery{
 			{name: "cr.node.sql.query.count", queryType: total},
 		})
 		cum := response.Results[0].Datapoints
-		totalQueriesPostStall := cum[len(cum)-1].Value - totalQueriesPreStall
+		totalQueriesPostStall := sumCounterIncreases(cum)
 		preStallQPS := totalQueriesPreStall / stallAt.Sub(workloadStartAt).Seconds()
 		postStallQPS := totalQueriesPostStall / workloadAfterDur.Seconds()
 		t.L().PrintfCtx(ctx, "%.2f total queries committed after stall\n", totalQueriesPostStall)
