@@ -123,6 +123,7 @@ func (tt *transportTester) AddNodeWithoutGossip(
 		clock,
 		nodedialer.New(tt.nodeRPCContext, gossip.AddressResolver(tt.gossip)),
 		grpcServer,
+		nil, /* knobs */
 	)
 	tt.transports[nodeID] = transport
 
@@ -154,7 +155,7 @@ func (tt *transportTester) UpdateGossip(nodeID roachpb.NodeID, address net.Addr)
 // AddStore registers a store on a node and returns a message handler for
 // messages sent to that store.
 func (tt *transportTester) AddStore(id slpb.StoreIdent) testMessageHandler {
-	handler := newMessageHandler(100)
+	handler := newMessageHandler(sendBufferSize)
 	tt.transports[id.NodeID].ListenMessages(id.StoreID, &handler)
 	return handler
 }
@@ -215,6 +216,10 @@ func TestTransportSendAndReceive(t *testing.T) {
 		}
 		require.ElementsMatch(t, stores, senders)
 	}
+	// There are two stores per node, so we expect the number of messages sent and
+	// received by each node to be equal to twice the number of stores.
+	require.Equal(t, 2*int64(len(stores)), tt.transports[node1].metrics.MessagesSent.Count())
+	require.Equal(t, 2*int64(len(stores)), tt.transports[node2].metrics.MessagesReceived.Count())
 }
 
 // TestTransportRestartedNode simulates a node restart by stopping a node's
@@ -247,12 +252,40 @@ func TestTransportRestartedNode(t *testing.T) {
 
 	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 
-	checkSend := func(expectedSuccess bool) {
+	checkSend := func(expectedEnqueued bool, expectSent bool) {
+		initialSent := tt.transports[sender.NodeID].metrics.MessagesSent.Count()
 		testutils.SucceedsSoon(
 			t, func() error {
-				sendSuccess := tt.transports[sender.NodeID].SendAsync(ctx, msg)
-				if sendSuccess != expectedSuccess {
-					return errors.Newf("send success is still %v", sendSuccess)
+				enqueued := tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				if enqueued != expectedEnqueued {
+					return errors.Newf("send success is still %v", enqueued)
+				}
+				return nil
+			},
+		)
+		if expectSent {
+			testutils.SucceedsSoon(
+				t, func() error {
+					sent := tt.transports[sender.NodeID].metrics.MessagesSent.Count()
+					if initialSent+1 != sent {
+						return errors.New("message not sent yet")
+					}
+					return nil
+				},
+			)
+		}
+	}
+
+	checkDropped := func(withNewSend bool) {
+		initialDropped := tt.transports[sender.NodeID].metrics.MessagesDropped.Count()
+		if withNewSend {
+			tt.transports[sender.NodeID].SendAsync(ctx, msg)
+		}
+		testutils.SucceedsSoon(
+			t, func() error {
+				dropped := tt.transports[sender.NodeID].metrics.MessagesDropped.Count()
+				if initialDropped+1 != dropped {
+					return errors.New("message not dropped yet")
 				}
 				return nil
 			},
@@ -279,7 +312,10 @@ func TestTransportRestartedNode(t *testing.T) {
 
 	// Part 1: send a message to the receiver whose address hasn't been gossiped yet.
 	// The message is sent out successfully.
-	checkSend(true /* expectedSuccess */)
+	checkSend(true /* expectedEnqueued */, false /* expectSent */)
+	// No need for another SendAsync; just confirm that the one as part of
+	// checkSend resulted in incremented MessagesDropped.
+	checkDropped(false /* withNewSend */)
 
 	// Part 2: send messages to the receiver, whose address is now gossiped, and
 	// assert the messages are received.
@@ -289,14 +325,17 @@ func TestTransportRestartedNode(t *testing.T) {
 	// Part 3: send messages to the crashed receiver and ensure the message send
 	// fails after the circuit breaker kicks in.
 	receiverStopper.Stop(context.Background())
-	checkSend(false /* expectedSuccess */)
+	checkSend(false /* expectedEnqueued */, false /* expectSent */)
+	// Do another SendAsync to specifically check that the tripped circuit breaker
+	// results in incremented MessagesDropped.
+	checkDropped(true /* withNewSend */)
 
 	// Part 4: send messages to the restarted/replaced receiver; ensure the
 	// message send succeeds (after the circuit breaker un-trips) and the messages
 	// are received.
 	tt.AddNode(receiver.NodeID)
 	tt.AddStore(receiver)
-	checkSend(true /* expectedSuccess */)
+	checkSend(true /* expectedEnqueued */, true /* expectSent */)
 	checkReceive()
 }
 
@@ -337,12 +376,16 @@ func TestTransportSendToMissingStore(t *testing.T) {
 			select {
 			case received := <-handler.messages:
 				require.Equal(t, existingMsg, *received)
+				require.Equal(
+					t, int64(1), tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count(),
+				)
 				return nil
 			default:
 			}
 			return errors.New("still waiting to receive message")
 		},
 	)
+	require.Equal(t, int64(2), tt.transports[sender.NodeID].metrics.MessagesSent.Count())
 }
 
 // TestTransportClockPropagation verifies that the HLC clock timestamps are
@@ -454,5 +497,51 @@ func TestTransportShortCircuit(t *testing.T) {
 				ctx, slpb.Message{Type: slpb.MsgHeartbeat, From: store1, To: store3},
 			)
 		}, "sending message to a remote store with a nil dialer",
+	)
+}
+
+// TestTransportIdleSendQueue tests that the send queue idles out.
+func TestTransportIdleSendQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
+	sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	receiver := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(2)}
+	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	tt.AddStore(sender)
+	handler := tt.AddStore(receiver)
+
+	tt.transports[sender.NodeID].knobs.OverrideIdleTimeout = func() time.Duration {
+		return time.Millisecond
+	}
+
+	// Send and receive a message.
+	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, msg, *received)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
+
+	testutils.SucceedsSoon(
+		t, func() error {
+			if tt.transports[sender.NodeID].metrics.SendQueueIdle.Count() != int64(1) {
+				return errors.New("idle queue metrics not incremented yet")
+			}
+			return nil
+		},
 	)
 }
