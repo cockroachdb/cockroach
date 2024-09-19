@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -110,6 +111,11 @@ type TestingKnobs struct {
 	// OverrideMaxOpenTransactions if set, overrides the maximum open transactions
 	// when checking if active throttling.
 	OverrideMaxOpenTransactions *int64
+
+	// OverwriteClusterInitGracePeriodTS, if true, forces the enforcer to
+	// overwrite the existing cluster initialization grace period timestamp,
+	// even if one is already set.
+	OverwriteClusterInitGracePeriodTS bool
 }
 
 // TelemetryStatusReporter is the interface we use to find the last ping
@@ -163,9 +169,7 @@ func (e *Enforcer) GetTestingKnobs() *TestingKnobs {
 // Start will load the necessary metadata for the enforcer. It reads from the
 // KV license metadata and will populate any missing data as needed. The DB
 // passed in must have access to the system tenant.
-func (e *Enforcer) Start(
-	ctx context.Context, st *cluster.Settings, db isql.DB, initialStart bool,
-) error {
+func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, db isql.DB) error {
 	// We always start disabled. If an error occurs, the enforcer setup will be
 	// incomplete, but the server will continue to start. To ensure stability in
 	// that case, we leave throttling disabled.
@@ -175,7 +179,7 @@ func (e *Enforcer) Start(
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.maybeWriteClusterInitGracePeriodTS(ctx, db, initialStart); err != nil {
+		if err := e.maybeWriteClusterInitGracePeriodTS(ctx, db); err != nil {
 			return err
 		}
 	}
@@ -199,20 +203,24 @@ func (e *Enforcer) Start(
 
 // maybeWriteClusterInitGracePeriodTS checks if the cluster init grace period
 // timestamp needs to be written to the KV layer and writes it if needed.
-func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(
-	ctx context.Context, db isql.DB, initialStart bool,
-) error {
+func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(ctx context.Context, db isql.DB) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We could use a conditional put for this logic. However, we want to read
 		// and cache the value, and the common case is that the value will be read.
 		// Only during the initialization of the first node in the cluster will we
 		// need to write a new timestamp. So, we optimize for the case where the
 		// timestamp already exists.
-		val, err := txn.KV().Get(ctx, keys.GracePeriodInitTimestamp)
+		val, err := txn.KV().Get(ctx, keys.ClusterInitGracePeriodTimestamp)
 		if err != nil {
 			return err
 		}
-		if val.Value == nil {
+		tk := e.GetTestingKnobs()
+		if val.Value == nil || (tk != nil && tk.OverwriteClusterInitGracePeriodTS) {
+			initialStart, err := e.getIsNewClusterEstimate(ctx, txn)
+			if err != nil {
+				return err
+			}
+
 			// The length of the grace period without a license varies based on the
 			// cluster's creation time. Older databases built when we had a
 			// CockroachDB core license are given more time.
@@ -224,7 +232,7 @@ func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(
 			end := e.getStartTime().Add(gracePeriodLength)
 			log.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC().String())
 			e.clusterInitGracePeriodEndTS.Store(end.Unix())
-			return txn.KV().Put(ctx, keys.GracePeriodInitTimestamp, e.clusterInitGracePeriodEndTS.Load())
+			return txn.KV().Put(ctx, keys.ClusterInitGracePeriodTimestamp, e.clusterInitGracePeriodEndTS.Load())
 		}
 		e.clusterInitGracePeriodEndTS.Store(val.ValueInt())
 		log.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS().String())
@@ -486,4 +494,37 @@ func (e *Enforcer) getInitialIsDisabledValue() bool {
 		return !envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LICENSE_ENFORCER", false)
 	}
 	return !tk.Enable
+}
+
+// getIsNewClusterEstimate is a helper to determine if the cluster is a newly
+// created one. This is used in Start processing to help determine the length
+// of the grace period when no license is installed.
+func (e *Enforcer) getIsNewClusterEstimate(ctx context.Context, txn isql.Txn) (bool, error) {
+	data, err := txn.QueryRow(ctx, "check if enforcer start is near cluster init time", txn.KV(),
+		`SELECT min(completed_at) FROM system.migrations`)
+	if err != nil {
+		return false, err
+	}
+	if len(data) == 0 {
+		return false, errors.New("no rows found in system.migrations")
+	}
+	var ts time.Time
+	switch t := data[0].(type) {
+	case *tree.DTimestampTZ:
+		ts = t.Time
+	default:
+		return false, errors.Newf("unexpected data type: %v", t)
+	}
+
+	// We are going to lean on system.migrations to determine if the cluster is
+	// new or not. If the cluster is new, the minimum value for the completed_at
+	// column should roughly match the start time of this enforcer. We will query
+	// that value and see if it's within 2 hours of it. If it's within that range
+	// we treat it as if it's a new cluster.
+	st := e.getStartTime()
+	if st.After(ts.Add(-1*time.Hour)) && st.Before(ts.Add(1*time.Hour)) {
+		return true, nil
+	}
+	log.Infof(ctx, "cluster init is not within the bounds of the enforcer start time: %v", ts)
+	return false, nil
 }
