@@ -110,25 +110,25 @@ type testRaftNode struct {
 }
 
 func (rn *testRaftNode) TermLocked() uint64 {
-	rn.r.mu.AssertHeld()
+	rn.r.mu.AssertRHeld()
 	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
 	return rn.term
 }
 
 func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
-	rn.r.mu.AssertHeld()
+	rn.r.mu.AssertRHeld()
 	fmt.Fprintf(rn.b, " RaftNode.LeaderLocked() = %s\n", rn.leader)
 	return rn.leader
 }
 
 func (rn *testRaftNode) LogMarkLocked() rac2.LogMark {
-	rn.r.mu.AssertHeld()
+	rn.r.mu.AssertRHeld()
 	fmt.Fprintf(rn.b, " RaftNode.LogMarkLocked() = %+v\n", rn.mark)
 	return rn.mark
 }
 
 func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
-	rn.r.mu.AssertHeld()
+	rn.r.mu.AssertRHeld()
 	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
 	return rn.nextUnstableIndex
 }
@@ -330,8 +330,10 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "log-term", &mark.Term)
 				d.ScanArgs(t, "log-index", &mark.Index)
+				r.mu.Lock()
 				r.initRaft(mark)
 				p.InitRaftLocked(ctx, r.raftNode)
+				r.mu.Unlock()
 				return builderStr()
 
 			case "set-raft-state":
