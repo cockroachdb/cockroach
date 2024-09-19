@@ -127,10 +127,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}
-			fi, err := s.FirstIndex()
-			if err != nil {
-				return err
-			}
+			fi := s.FirstIndex()
 			// At the time of writing and for *MemoryStorage, applying a
 			// snapshot also truncates appropriately, but this would change with
 			// other storage engines potentially.

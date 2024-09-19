@@ -76,17 +76,10 @@ func newLog(storage Storage, logger Logger) *raftLog {
 func newLogWithSize(
 	storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize,
 ) *raftLog {
-	firstIndex, err := storage.FirstIndex()
-	if err != nil {
-		panic(err) // TODO(bdarnell)
-	}
-	lastIndex, err := storage.LastIndex()
-	if err != nil {
-		panic(err) // TODO(bdarnell)
-	}
+	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
-		panic(err) // TODO(pav-kv)
+		panic(err) // TODO(pav-kv): the storage should always cache the last term.
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
@@ -336,11 +329,7 @@ func (l *raftLog) firstIndex() uint64 {
 	if i, ok := l.unstable.maybeFirstIndex(); ok {
 		return i
 	}
-	index, err := l.storage.FirstIndex()
-	if err != nil {
-		panic(err) // TODO(bdarnell)
-	}
-	return index
+	return l.storage.FirstIndex()
 }
 
 func (l *raftLog) lastIndex() uint64 {

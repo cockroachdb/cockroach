@@ -176,16 +176,12 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 
 // LastIndex implements the raft.Storage interface.
 // LastIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) LastIndex() (uint64, error) {
-	index, err := r.TypedLastIndex()
-	if err != nil {
-		r.reportRaftStorageError(err)
-	}
-	return uint64(index), err
+func (r *replicaRaftStorage) LastIndex() uint64 {
+	return uint64(r.TypedLastIndex())
 }
 
-func (r *replicaRaftStorage) TypedLastIndex() (kvpb.RaftIndex, error) {
-	return (*Replica)(r).raftLastIndexRLocked(), nil
+func (r *replicaRaftStorage) TypedLastIndex() kvpb.RaftIndex {
+	return (*Replica)(r).raftLastIndexRLocked()
 }
 
 // GetLastIndex returns the index of the last entry in the replica's Raft log.
@@ -203,16 +199,12 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	index, err := r.TypedFirstIndex()
-	if err != nil {
-		r.reportRaftStorageError(err)
-	}
-	return uint64(index), err
+func (r *replicaRaftStorage) FirstIndex() uint64 {
+	return uint64(r.TypedFirstIndex())
 }
 
-func (r *replicaRaftStorage) TypedFirstIndex() (kvpb.RaftIndex, error) {
-	return (*Replica)(r).raftFirstIndexRLocked(), nil
+func (r *replicaRaftStorage) TypedFirstIndex() kvpb.RaftIndex {
+	return (*Replica)(r).raftFirstIndexRLocked()
 }
 
 // GetFirstIndex returns the index of the first entry in the replica's Raft log.
