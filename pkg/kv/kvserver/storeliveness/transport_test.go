@@ -49,10 +49,15 @@ func newMessageHandler(size int) testMessageHandler {
 	}
 }
 
-func (tmh *testMessageHandler) HandleMessage(msg *slpb.Message) {
+func (tmh *testMessageHandler) HandleMessage(msg *slpb.Message) error {
 	// Simulate a message handling delay.
 	time.Sleep(time.Duration(rand.Int63n(int64(maxDelay))))
-	tmh.messages <- msg
+	select {
+	case tmh.messages <- msg:
+		return nil
+	default:
+		return receiveQueueSizeLimitReachedErr
+	}
 }
 
 var _ MessageHandler = (*testMessageHandler)(nil)
@@ -75,16 +80,18 @@ type transportTester struct {
 	nodeRPCContext *rpc.Context
 	clocks         map[roachpb.NodeID]clockWithManualSource
 	transports     map[roachpb.NodeID]*Transport
+	maxHandlerSize int
 }
 
 func newTransportTester(t testing.TB, st *cluster.Settings) *transportTester {
 	ctx := context.Background()
 	tt := &transportTester{
-		t:          t,
-		st:         st,
-		stopper:    stop.NewStopper(),
-		clocks:     map[roachpb.NodeID]clockWithManualSource{},
-		transports: map[roachpb.NodeID]*Transport{},
+		t:              t,
+		st:             st,
+		stopper:        stop.NewStopper(),
+		clocks:         map[roachpb.NodeID]clockWithManualSource{},
+		transports:     map[roachpb.NodeID]*Transport{},
+		maxHandlerSize: maxReceiveQueueSize,
 	}
 
 	opts := rpc.DefaultContextOptions()
@@ -155,7 +162,7 @@ func (tt *transportTester) UpdateGossip(nodeID roachpb.NodeID, address net.Addr)
 // AddStore registers a store on a node and returns a message handler for
 // messages sent to that store.
 func (tt *transportTester) AddStore(id slpb.StoreIdent) testMessageHandler {
-	handler := newMessageHandler(100)
+	handler := newMessageHandler(tt.maxHandlerSize)
 	tt.transports[id.NodeID].ListenMessages(id.StoreID, &handler)
 	return handler
 }
@@ -540,6 +547,68 @@ func TestTransportIdleSendQueue(t *testing.T) {
 		t, func() error {
 			if tt.transports[sender.NodeID].metrics.SendQueueIdle.Count() != int64(1) {
 				return errors.New("idle queue metrics not incremented yet")
+			}
+			return nil
+		},
+	)
+}
+
+// TestTransportFullReceiveQueue tests that messages are dropped when the
+// receive queue reaches its max size.
+func TestTransportFullReceiveQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	tt.maxHandlerSize = 100
+	defer tt.Stop()
+
+	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
+	sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	receiver := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(2)}
+	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	tt.AddStore(sender)
+	tt.AddStore(receiver)
+
+	// Fill up the receive queue of the receiver. Nothing is consuming from it.
+	sendDropped := 0
+	for i := 0; i < tt.maxHandlerSize; i++ {
+		testutils.SucceedsSoon(t, func() error {
+			// The message enqueue can fail temporarily if the sender queue fills up.
+			if !tt.transports[sender.NodeID].SendAsync(ctx, msg) {
+				sendDropped++
+				return errors.New("still waiting to enqueue message")
+			}
+			return nil
+		})
+	}
+
+	require.Equal(t, int64(sendDropped), tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count())
+	testutils.SucceedsSoon(
+		t, func() error {
+			if tt.transports[sender.NodeID].metrics.MessagesSent.Count() != int64(tt.maxHandlerSize) {
+				return errors.New("not all messages are sent yet")
+			}
+			return nil
+		},
+	)
+	testutils.SucceedsSoon(
+		t, func() error {
+			if tt.transports[receiver.NodeID].metrics.MessagesReceived.Count() != int64(tt.maxHandlerSize) {
+				return errors.New("not all messages are received yet")
+			}
+			return nil
+		},
+	)
+	// The receiver queue is full but the enqueue to the sender queue succeeds.
+	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
+	testutils.SucceedsSoon(
+		t, func() error {
+			if tt.transports[receiver.NodeID].metrics.MessagesReceiveDropped.Count() != int64(1) {
+				return errors.New("message not dropped yet")
 			}
 			return nil
 		},
