@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -41,20 +42,34 @@ func TestUpdateTableMetadataCacheJobRunsOnRPCTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	updateStartedSignalCh := make(chan struct{})
+	jobContinueCh := make(chan struct{})
+	defer close(updateStartedSignalCh)
+	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
+		func(ctx context.Context, ie isql.Executor) error {
+			updateStartedSignalCh <- struct{}{}
+			// Wait for the test to signal that the job should continue.
+			<-jobContinueCh
+			return nil
+		})
+	defer restoreUpdate()
+
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Get the node id that claimed the update job. We'll issue the
 	// RPC to a node that doesn't own the job to test that the RPC can
 	// propagate the request to the correct node.
+	jobutils.WaitForJobToRun(t, conn, jobs.UpdateTableMetadataCacheJobID)
+
 	var nodeID int
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.Query(t, `
-SELECT claim_instance_id FROM system.jobs 
-WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJobID)
+SELECT claim_instance_id FROM system.jobs WHERE id = $1 AND claim_instance_id IS NOT NULL`,
+			jobs.UpdateTableMetadataCacheJobID)
 		if !row.Next() {
 			return errors.New("no node has claimed the job")
 		}
@@ -70,24 +85,30 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		return nil
 	})
 
+	<-updateStartedSignalCh
+
 	metrics := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
+	require.Equal(t, int64(1), metrics.NumRuns.Count())
+	var runningStatus string
+	row := conn.QueryRow(t,
+		`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
+		jobs.UpdateTableMetadataCacheJobID)
+	row.Scan(&runningStatus)
+	require.Containsf(t, runningStatus, "Job started at", "running_status not updated")
+
+	// Allow job to continue.
+	jobContinueCh <- struct{}{}
+
 	testutils.SucceedsSoon(t, func() error {
-		if metrics.NumRuns.Count() != 1 {
-			return errors.New("job hasn't run yet")
-		}
-		row := conn.Query(t,
+		row := conn.QueryRow(t,
 			`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
 			jobs.UpdateTableMetadataCacheJobID)
-		if !row.Next() {
-			return errors.New("last_run_time not updated")
+		row.Scan(&runningStatus)
+		if strings.Contains(runningStatus, "Job completed at") {
+			return nil
 		}
-		var runningStatus string
-		require.NoError(t, row.Scan(&runningStatus))
-		if !strings.Contains(runningStatus, "Job completed at") {
-			return errors.New("running_status not updated")
-		}
-		return nil
+		return errors.New("job status not changed to completed")
 	})
 }
 
@@ -147,17 +168,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
 
 	// Wait for the job to be claimed by a node.
-	testutils.SucceedsSoon(t, func() error {
-		row := conn.Query(t, `
-				SELECT claim_instance_id, status FROM system.jobs 
-				WHERE id = $1 AND claim_instance_id IS NOT NULL
-                      AND status = 'running'`,
-			jobs.UpdateTableMetadataCacheJobID)
-		if !row.Next() {
-			return errors.New("no node has claimed the job")
-		}
-		return nil
-	})
+	jobutils.WaitForJobToRun(t, conn, jobs.UpdateTableMetadataCacheJobID)
 
 	require.Zero(t, getMockCallCount(), "Job should not run automatically by default")
 
