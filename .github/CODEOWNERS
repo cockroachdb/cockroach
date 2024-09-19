@@ -112,6 +112,7 @@
 /pkg/sql/database*.go        @cockroachdb/sql-foundations
 /pkg/sql/drop*.go            @cockroachdb/sql-foundations
 /pkg/sql/grant*.go           @cockroachdb/sql-foundations
+/pkg/sql/multitenant_admin_function_test.go @cockroachdb/sql-foundations
 /pkg/sql/rename*.go          @cockroachdb/sql-foundations
 /pkg/sql/revoke*.go          @cockroachdb/sql-foundations
 /pkg/sql/schema*.go          @cockroachdb/sql-foundations
