@@ -107,8 +107,8 @@ func (lu *mockLDAPUtil) ListGroups(
 		return nil, errors.Newf(groupListFailureMessage+": user dn %q does not belong to any groups", userDN)
 	}
 
-	ldapGroupsDN = strings.Split(userDN, ",")
-	return ldapGroupsDN, nil
+	groupDN := "CN=parent_role"
+	return []string{groupDN}, nil
 }
 
 var _ ILDAPUtil = &mockLDAPUtil{}
