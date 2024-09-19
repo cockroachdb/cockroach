@@ -260,13 +260,6 @@ type Config struct {
 	// See: https://github.com/etcd-io/raft/issues/80
 	DisableConfChangeValidation bool
 
-	// StepDownOnRemoval makes the leader step down when it is removed from the
-	// group or demoted to a learner.
-	//
-	// This behavior will become unconditional in the future. See:
-	// https://github.com/etcd-io/raft/issues/83
-	StepDownOnRemoval bool
-
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
 
@@ -428,7 +421,6 @@ type raft struct {
 	// when raft changes its state to follower or candidate.
 	randomizedElectionTimeout int
 	disableProposalForwarding bool
-	stepDownOnRemoval         bool
 
 	tick func()
 	step stepFunc
@@ -464,7 +456,6 @@ func newRaft(c *Config) *raft {
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
-		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
 		crdbVersion:                 c.CRDBVersion,
 	}
@@ -2272,7 +2263,7 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	r.isLearner = pr != nil && pr.IsLearner
 
 	if (pr == nil || r.isLearner) && r.state == StateLeader {
-		// This node is leader and was removed or demoted, step down if requested.
+		// This node is leader and was removed or demoted, step down.
 		//
 		// We prevent demotions at the time writing but hypothetically we handle
 		// them the same way as removing the leader.
@@ -2280,11 +2271,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
-		if r.stepDownOnRemoval {
-			// NB: Similar to the CheckQuorum step down case, we must remember our
-			// prior stint as leader, lest we regress the QSE.
-			r.becomeFollower(r.Term, r.lead)
-		}
+		//
+		// NB: Similar to the CheckQuorum step down case, we must remember our
+		// prior stint as leader, lest we regress the QSE.
+		r.becomeFollower(r.Term, r.lead)
 		return cs
 	}
 

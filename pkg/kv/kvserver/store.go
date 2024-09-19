@@ -87,7 +87,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -334,12 +333,6 @@ var SnapshotSendLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// raftStepDownOnRemoval is a metamorphic test parameter that makes Raft leaders
-// step down on demotion or removal. Following an upgrade, clusters may have
-// replicas with mixed settings, because it's only changed when initializing
-// replicas. Varying it makes sure we handle this state.
-var raftStepDownOnRemoval = metamorphic.ConstantWithTestBool("raft-step-down-on-removal", true)
-
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	return testStoreConfig(clock, clusterversion.Latest.Version())
@@ -409,16 +402,9 @@ func newRaftConfig(
 		Storage:                     strg,
 		Logger:                      logger,
 		StoreLiveness:               storeLiveness,
-
-		// We only set this on replica initialization, so replicas without
-		// StepDownOnRemoval may remain on 23.2 nodes until they restart. That's
-		// totally fine, we just can't rely on this behavior until 24.1, but
-		// we currently don't either.
-		StepDownOnRemoval: raftStepDownOnRemoval,
-
-		PreVote:     true,
-		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
-		CRDBVersion: storeCfg.Settings.Version,
+		PreVote:                     true,
+		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion:                 storeCfg.Settings.Version,
 	}
 }
 
@@ -707,7 +693,7 @@ A first phenomenon to understand is that of uninitialized Replicas, which is the
 State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an
 uninitialized Replica can only advance to a nonzero log position ("become
 initialized") via a Raft snapshot (this is because we initialize all Ranges in
-the system at log index raftInitialLogIndex which allows us to write arbitrary
+the system at log index RaftInitialLogIndex which allows us to write arbitrary
 amounts of data into the initial state without having to worry about the size
 of individual log entries; see WriteInitialReplicaState).
 

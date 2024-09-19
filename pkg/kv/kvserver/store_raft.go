@@ -449,7 +449,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// the snapshot is targeting an uninitialized replica. The only known reason
 			// for raft to ignore a snapshot is if it doesn't move the applied index
 			// forward, but an uninitialized replica's applied index is zero (and a
-			// snapshot's is at least raftInitialLogIndex).
+			// snapshot's is at least RaftInitialLogIndex).
 			if inSnap.placeholder != nil {
 				if _, err := s.removePlaceholder(ctx, inSnap.placeholder, typ); err != nil {
 					log.Fatalf(ctx, "unable to remove placeholder: %s", err)

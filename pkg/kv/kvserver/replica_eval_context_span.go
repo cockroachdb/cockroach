@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -205,6 +206,11 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 // GetLease returns the Replica's current and next lease (if any).
 func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return rec.i.GetLease()
+}
+
+// GetRangeLeaseDuration is part of the EvalContext interface.
+func (rec SpanSetReplicaEvalContext) GetRangeLeaseDuration() time.Duration {
+	return rec.i.GetRangeLeaseDuration()
 }
 
 // GetRangeInfo is part of the EvalContext interface.
