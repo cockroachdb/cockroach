@@ -21,6 +21,7 @@ import (
 type BoolSetting struct {
 	common
 	defaultValue bool
+	validateFn   func(*Values, bool) error
 }
 
 var _ internalSetting = &BoolSetting{}
@@ -76,25 +77,41 @@ var _ = (*BoolSetting).Default
 //
 // For testing usage only.
 func (b *BoolSetting) Override(ctx context.Context, sv *Values, v bool) {
-	b.set(ctx, sv, v)
+	_ = b.set(ctx, sv, v)
 	sv.setDefaultOverride(b.slot, v)
 }
 
-func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
+// Validate that a value conforms with the validation function.
+func (b *BoolSetting) Validate(sv *Values, v bool) error {
+	if b.validateFn != nil {
+		if err := b.validateFn(sv, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) error {
+	if err := b.Validate(sv, v); err != nil {
+		return err
+	}
 	vInt := int64(0)
 	if v {
 		vInt = 1
 	}
 	sv.setInt64(ctx, b.slot, vInt)
+	return nil
 }
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	if val := sv.getDefaultOverride(b.slot); val != nil {
-		b.set(ctx, sv, val.(bool))
+		_ = b.set(ctx, sv, val.(bool))
 		return
 	}
-	b.set(ctx, sv, b.defaultValue)
+	if err := b.set(ctx, sv, b.defaultValue); err != nil {
+		panic(err)
+	}
 }
 
 // WithPublic sets public visibility and can be chained.
@@ -104,8 +121,18 @@ func (b *BoolSetting) WithPublic() *BoolSetting {
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(class Class, key, desc string, defaultValue bool) *BoolSetting {
-	setting := &BoolSetting{defaultValue: defaultValue}
+func RegisterBoolSetting(
+	class Class, key, desc string, defaultValue bool, validateFns ...func(*Values, bool) error,
+) *BoolSetting {
+	validateFn := func(sv *Values, val bool) error {
+		for _, fn := range validateFns {
+			if err := fn(sv, val); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	setting := &BoolSetting{defaultValue: defaultValue, validateFn: validateFn}
 	register(class, key, desc, setting)
 	return setting
 }
