@@ -4,7 +4,7 @@ set -euo pipefail
 set +e
 # Append any given command-line parameters. If a switch listed below is also
 # passed by the caller, the passed one takes precedence.
-bin/roachtest run \
+COCKROACH_REDACTION_POLICY_MANAGED=1 bin/roachtest run \
   --teamcity \
   --os-volume-size=32 \
   "$@"
