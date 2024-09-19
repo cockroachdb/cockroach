@@ -8,12 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This explicit typing helps us differentiate between
-// node ids and store ids.
-export type NodeID = number;
-export type StoreID = number;
-
-export type Region = {
-  code: string; // e.g. us-east-1
-  label: string;
-};
+export enum DatabaseColName {
+  NAME = "Name",
+  SIZE = "Size",
+  RANGE_COUNT = "Range Count",
+  TABLE_COUNT = "Table Count",
+  NODE_REGIONS = "Regions / Nodes",
+}

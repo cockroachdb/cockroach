@@ -11,7 +11,7 @@
 export type DatabaseRow = {
   name: string;
   id: number;
-  approximateDiskSizeMiB: number;
+  approximateDiskSizeBytes: number;
   tableCount: number;
   rangeCount: number;
   nodesByRegion: Record<string, number[]>;
