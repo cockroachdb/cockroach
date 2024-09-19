@@ -102,55 +102,78 @@ func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnersh
 	return nil
 }
 
-// postIssueCondition encapsulates a condition that causes issue
-// posting to be skipped. The `reason` field contains a textual
-// description as to why issue posting was skipped.
-type postIssueCondition struct {
-	cond   func(g *githubIssues, t test.Test) bool
-	reason string
+func failuresAsNonReportableError(failures []failure) *registry.NonReportableError {
+	var nonReportable registry.NonReportableError
+	if failuresMatchingError(failures, &nonReportable) {
+		return &nonReportable
+	}
+
+	return nil
 }
+
+// postIssueCondition is a condition that causes issue posting to be
+// skipped. If it returns a non-empty string, posting is skipped for
+// the returned reason.
+type postIssueCondition func(g *githubIssues, t test.Test) string
 
 var defaultOpts = issues.DefaultOptionsFromEnv()
 
 var skipConditions = []postIssueCondition{
-	{
-		cond:   func(g *githubIssues, _ test.Test) bool { return g.disable },
-		reason: "issue posting was disabled via command line flag",
+	func(g *githubIssues, _ test.Test) string {
+		if g.disable {
+			return "issue posting was disabled via command line flag"
+		}
+
+		return ""
 	},
-	{
-		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.CanPost() },
-		reason: "GitHub API token not set",
+	func(g *githubIssues, _ test.Test) string {
+		if defaultOpts.CanPost() {
+			return ""
+		}
+
+		return "GitHub API token not set"
 	},
-	{
-		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.IsReleaseBranch() },
-		reason: fmt.Sprintf("not a release branch: %q", defaultOpts.Branch),
+	func(g *githubIssues, _ test.Test) string {
+		if defaultOpts.IsReleaseBranch() {
+			return ""
+		}
+
+		return fmt.Sprintf("not a release branch: %q", defaultOpts.Branch)
 	},
-	{
-		cond:   func(_ *githubIssues, t test.Test) bool { return t.Spec().(*registry.TestSpec).Run == nil },
-		reason: "TestSpec.Run is nil",
+	func(_ *githubIssues, t test.Test) string {
+		if nonReportable := failuresAsNonReportableError(t.(*testImpl).failures()); nonReportable != nil {
+			return nonReportable.Error()
+		}
+
+		return ""
 	},
-	{
-		cond:   func(_ *githubIssues, t test.Test) bool { return t.Spec().(*registry.TestSpec).Cluster.NodeCount == 0 },
-		reason: "Cluster.NodeCount is zero",
+	func(_ *githubIssues, t test.Test) string {
+		if t.Spec().(*registry.TestSpec).Run == nil {
+			return "TestSpec.Run is nil"
+		}
+
+		return ""
+	},
+	func(_ *githubIssues, t test.Test) string {
+		if t.Spec().(*registry.TestSpec).Cluster.NodeCount == 0 {
+			return "Cluster.NodeCount is zero"
+		}
+
+		return ""
 	},
 }
 
-// shouldPost two values: whether GitHub posting should happen, and a
-// reason for skipping (non-empty only when posting should *not*
-// happen).
-func (g *githubIssues) shouldPost(t test.Test) (bool, string) {
-	post := true
-	var reason string
-
+// shouldPost checks whether we should post a GitHub issue: if we do,
+// the return value will be the empty string. Otherwise, this function
+// returns the reason for not posting.
+func (g *githubIssues) shouldPost(t test.Test) string {
 	for _, sc := range skipConditions {
-		if sc.cond(g, t) {
-			post = false
-			reason = sc.reason
-			break
+		if skipReason := sc(g, t); skipReason != "" {
+			return skipReason
 		}
 	}
 
-	return post, reason
+	return ""
 }
 
 func (g *githubIssues) createPostRequest(
@@ -319,8 +342,8 @@ func (g *githubIssues) createPostRequest(
 func (g *githubIssues) MaybePost(
 	t *testImpl, l *logger.Logger, message string, sideEyeTimeoutSnapshotURL string,
 ) (*issues.TestFailureIssue, error) {
-	doPost, skipReason := g.shouldPost(t)
-	if !doPost {
+	skipReason := g.shouldPost(t)
+	if skipReason != "" {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
 		return nil, nil
 	}
