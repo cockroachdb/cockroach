@@ -49,12 +49,12 @@ var systemTablesToProtect = []descpb.ID{
 	keys.DescriptorTableID,
 	keys.CommentsTableID,
 	keys.ZonesTableID,
+	// Required for CDC Queries.
+	// TODO: do we need any other tables, such as `keys.UsersTableID`?
+	keys.RoleMembersTableID,
 }
 
 func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
-	// NB: We add 1 because we're also going to protect system.descriptors.
-	// We protect system.descriptors because a changefeed needs all of the history
-	// of table descriptors to version data.
 	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
 	_ = targets.EachTableID(func(id descpb.ID) error {
 		tablesToProtect = append(tablesToProtect, id)

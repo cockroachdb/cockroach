@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -172,6 +173,37 @@ func fetchTableDescriptors(
 		return nil, err
 	}
 	return targetDescs, nil
+}
+
+func fetchRoleMembers(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	ts hlc.Timestamp,
+) ([][]string, error) {
+	var roleMembers [][]string
+
+	execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		it, err := txn.QueryIteratorEx(ctx, "test-get-role-members", txn.KV(), sessiondata.NoSessionDataOverride, "SELECT role, member FROM system.role_members")
+		if err != nil {
+			return err
+		}
+		defer it.Close()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+			role, member := string(tree.MustBeDString(it.Cur()[0])), string(tree.MustBeDString(it.Cur()[1]))
+			roleMembers = append(roleMembers, []string{role, member})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return roleMembers, nil
 }
 
 // changefeedResultTypes is the types returned by changefeed stream.
