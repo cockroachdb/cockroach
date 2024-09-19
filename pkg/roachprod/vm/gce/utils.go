@@ -222,6 +222,7 @@ sudo apt-get install -qy chrony
 
 # Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
 systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
 apt-get purge -y unattended-upgrades
 
 {{ if not .EnableCron }}
