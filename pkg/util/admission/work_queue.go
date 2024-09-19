@@ -759,9 +759,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
+			q.mu.Lock()
+			queueLen := tenant.waitingWorkHeap.Len()
+			q.mu.Unlock()
+
 			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				tenant.waitingWorkHeap.Len(),
-				tenant.id, info.Priority,
+				queueLen, tenant.id, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.Origin,
 				info.ReplicatedWorkInfo.LogPosition,
