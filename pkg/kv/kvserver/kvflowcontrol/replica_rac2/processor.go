@@ -557,6 +557,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 	if level != EnabledWhenLeaderV1Encoding || p.desc.replicas == nil {
 		return
 	}
+	log.VEventf(ctx, 1, "enabled v2 protocol using v1 priority encoding")
 	// May need to create RangeController.
 	var leaderID roachpb.ReplicaID
 	var term uint64
