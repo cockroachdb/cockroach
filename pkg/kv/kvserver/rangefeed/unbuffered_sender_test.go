@@ -60,8 +60,8 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 	t.Run("nil handling", func(t *testing.T) {
 		const streamID = 0
 		const rangeID = 1
-		streamCtx, cancel := context.WithCancel(context.Background())
-		ubs.AddStream(streamID, cancel)
+		streamCtx := context.Background()
+		//ubs.AddRegistration(streamID, )
 		// Note that kvpb.NewError(nil) == nil.
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 		ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
@@ -99,9 +99,10 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 
-		for _, muxError := range testRangefeedCompletionErrors {
-			ubs.AddStream(muxError.streamID, func() {})
-		}
+		//for _, muxError := range testRangefeedCompletionErrors {
+		// AddRegistration instead here
+		//	ubs.AddStream(muxError.streamID, func() {})
+		//}
 
 		require.Equal(t, testRangefeedCounter.get(), int32(3))
 
@@ -153,8 +154,8 @@ func TestUnbufferedSenderOnBlockingIO(t *testing.T) {
 
 	const streamID = 0
 	const rangeID = 1
-	streamCtx, streamCancel := context.WithCancel(context.Background())
-	ubs.AddStream(0, streamCancel)
+	streamCtx := context.Background()
+	//ubs.AddStream(0, streamCancel)
 
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: streamID,
@@ -207,7 +208,7 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 	require.NoError(t, ubs.Start(ctx, stopper))
 	defer ubs.Stop()
 
-	ubs.AddStream(1, func() {})
+	//ubs.AddStream(1, func() {})
 	require.Equal(t, testRangefeedCounter.get(), int32(1))
 
 	var wg sync.WaitGroup

@@ -127,6 +127,7 @@ type unbufferedRegistration struct {
 var _ registration = (*unbufferedRegistration)(nil)
 
 func newUnbufferedRegistration(
+	ctx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -138,8 +139,11 @@ func newUnbufferedRegistration(
 	stream BufferedStream,
 	unregisterFn func(),
 ) *unbufferedRegistration {
+	brCtx, cancel := context.WithCancel(ctx)
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
+			ctx:              brCtx,
+			cancelFunc:       cancel,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -207,6 +211,9 @@ func (ubr *unbufferedRegistration) disconnect(pErr *kvpb.Error) {
 	defer ubr.mu.Unlock()
 	if alreadyDisconnected := ubr.setDisconnectedIfNotWithLock(); !alreadyDisconnected {
 		ubr.stream.Disconnect(pErr)
+		//if f := ubr.getUnreg(); f != nil {
+		//	f()
+		//}
 	}
 }
 
@@ -328,6 +335,11 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	return errors.Errorf("unbufferedRegistration %v failed to empty in time", ubr.Range())
 }
 
+func (ubr *unbufferedRegistration) close(ctx context.Context) {
+	ubr.setDisconnectedIfNot()
+	ubr.discardCatchUpBuffer(ctx)
+}
+
 func (ubr *unbufferedRegistration) setDisconnectedIfNot() {
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
@@ -408,8 +420,8 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 				}
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-ubr.stream.Context().Done():
-				return ubr.stream.Context().Err()
+			case <-ubr.ctx.Done():
+				return ubr.ctx.Err()
 			default:
 				// Done.
 				return nil

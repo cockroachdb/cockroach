@@ -203,6 +203,7 @@ type Processor interface {
 	//
 	// NB: startTS is exclusive; the first possible event will be at startTS.Next().
 	Register(
+		ctx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
 		catchUpIter *CatchUpIterator,
@@ -587,6 +588,7 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 
 // Register  implements Processor interface.
 func (p *LegacyProcessor) Register(
+	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -603,6 +605,7 @@ func (p *LegacyProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
+		ctx,
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 	)

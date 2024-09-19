@@ -15,12 +15,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Stream is an object capable of transmitting RangeFeedEvents from a server
 // rangefeed to a client.
 type Stream interface {
 	kvpb.RangeFeedEventSink
+
+	// AddRegistration associate the given registration to this stream.
+	AddRegistration(r registration, cleanup func(registration) bool)
 	// Disconnect disconnects the stream with the provided error. Note that this
 	// function can be called by the processor worker while holding raftMu, so it
 	// is important that this function doesn't block IO or try acquiring locks
@@ -28,32 +32,53 @@ type Stream interface {
 	Disconnect(err *kvpb.Error)
 }
 
+// StreamManager is an interface that defines the methods required to manage a
+// rangefeed.Stream at the node level. Implemented by BufferedSender
+// and UnbufferedSender.
+type StreamManager interface {
+	// SendBufferedError disconnects the stream with the ev.StreamID and sends
+	// error back to client. This call is un-blocking, and additional clean-up
+	// takes place async. Caller cannot expect immediate disconnection.
+	SendBufferedError(ev *kvpb.MuxRangeFeedEvent)
+	// AddStream adds a new per-range stream for the streamManager to manage.
+	//AddStream(streamID int64, cancel context.CancelFunc)
+	// Start starts the streamManager background job to manage all active streams.
+	// It continues until it errors or Stop is called. It is not valid to call
+	// Start multiple times or restart after Stop.
+	Start(ctx context.Context, stopper *stop.Stopper) error
+	// Stop streamManager background job if it is still running.
+	Stop()
+	// Error returns a channel that will be non-empty if the streamManager
+	// encounters an error and a node level shutdown is required.
+	Error() chan error
+
+	// AddRegistration associate the given registration to the given streamID.
+	AddRegistration(streamID int64, r registration, cleanup func(registration) bool)
+}
+
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *UnbufferedSender
+	// TODO(ssd): Think about the overlap between this and UnbufferedSender above.
+	manager StreamManager
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender, manager StreamManager,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
+		manager:  manager,
 	}
 }
 
 var _ kvpb.RangeFeedEventSink = (*PerRangeEventSink)(nil)
 var _ Stream = (*PerRangeEventSink)(nil)
-
-func (s *PerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -82,6 +107,10 @@ func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 		Error: *transformRangefeedErrToClientError(err),
 	})
 	s.wrapped.SendBufferedError(ev)
+}
+
+func (s *PerRangeEventSink) AddRegistration(r registration, cleanup func(registration) bool) {
+	s.manager.AddRegistration(s.streamID, r, cleanup)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client

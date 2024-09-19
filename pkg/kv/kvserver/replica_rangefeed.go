@@ -238,9 +238,9 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
+	ctx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
 ) error {
-	ctx := r.AnnotateCtx(stream.Context())
+	ctx = r.AnnotateCtx(ctx)
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
@@ -445,7 +445,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+		reg, filter := p.Register(ctx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
 		if reg {
 			// Registered successfully with an existing processor.
@@ -532,7 +532,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchUpIter, withDiff,
+	reg, filter := p.Register(ctx, span, startTS, catchUpIter, withDiff,
 		withFiltering, withOmitRemote, stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
 	if !reg {
 		select {

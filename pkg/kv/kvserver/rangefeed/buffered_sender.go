@@ -86,10 +86,11 @@ type BufferedSender struct {
 	errCh chan error
 
 	// streamID -> context cancellation
-	streams syncutil.Map[int64, context.CancelFunc]
+	// TODO: figure out how to remove this
+	//streams syncutil.Map[int64, context.CancelFunc]
 
-	// streamID -> cleanup callback
-	rangefeedCleanup syncutil.Map[int64, func()]
+	// streamID -> managedRegistration
+	registrations syncutil.Map[int64, managedRegistration]
 
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
@@ -109,6 +110,11 @@ type BufferedSender struct {
 	// Unblocking channel to notify the BufferedSender.run goroutine that there
 	// are events to send.
 	notifyDataC chan struct{}
+}
+
+type managedRegistration struct {
+	reg     registration
+	cleanup func(registration) bool
 }
 
 func NewBufferedSender(
@@ -193,9 +199,9 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
-	if cancel, ok := bs.streams.LoadAndDelete(ev.StreamID); ok {
+	if r, ok := bs.registrations.Load(ev.StreamID); ok {
 		// Fine to skip nil checking here since that would be a programming error.
-		(*cancel)()
+		r.reg.cancel()
 		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
 		if err := bs.SendBuffered(ev, nil); err != nil {
 			// Ignore error since the stream is already disconnecting. There is nothing
@@ -220,36 +226,39 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // SendBufferedError. TODO(wenyihu6): check with Nathan and see if this is okay?
 // Shouldn't be possible since RegisterRangefeedCleanUp is blocking until
 // stores.Rangefeed returns.
-func (bs *BufferedSender) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
-	bs.metrics.IncRangefeedCleanUp()
-	bs.rangefeedCleanup.Store(streamID, &cleanUp)
+func (bs *BufferedSender) AddRegistration(streamID int64, r registration, cleanUp func(registration) bool) {
+	bs.registrations.Store(streamID, &managedRegistration{
+		reg:     r,
+		cleanup: cleanUp,
+	})
 }
 
 // disconnectAll disconnects all active streams and invokes all rangefeed clean
 // up callbacks. It is expected to be called during BufferedSender.Stop.
 func (bs *BufferedSender) disconnectAll() {
-	bs.streams.Range(func(streamID int64, cancel *context.CancelFunc) bool {
-		(*cancel)()
-		// Remove the stream from the activeStreams map.
-		bs.streams.Delete(streamID)
-		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
-		return true
-	})
+	//bs.streams.Range(func(streamID int64, cancel *context.CancelFunc) bool {
+	//	//(*cancel)()
+	//	// Remove the stream from the activeStreams map.
+	//	//bs.streams.Delete(streamID)
+	//	//bs.metrics.UpdateMetricsOnRangefeedDisconnect()
+	//	return true
+	//})
 
-	bs.rangefeedCleanup.Range(func(streamID int64, cleanUp *func()) bool {
-		(*cleanUp)()
+	bs.registrations.Range(func(streamID int64, mr *managedRegistration) bool {
+		mr.reg.cancel()
 		bs.metrics.DecRangefeedCleanUp()
-		bs.rangefeedCleanup.Delete(streamID)
+		mr.cleanup(mr.reg)
+		bs.registrations.Delete(streamID)
 		return true
 	})
 }
 
-func (bs *BufferedSender) AddStream(streamID int64, cancel context.CancelFunc) {
-	if _, loaded := bs.streams.LoadOrStore(streamID, &cancel); loaded {
-		log.Fatalf(context.Background(), "stream %d already exists", streamID)
-	}
-	bs.metrics.UpdateMetricsOnRangefeedConnect()
-}
+//func (bs *BufferedSender) AddStream(streamID int64, cancel context.CancelFunc) {
+//	if _, loaded := bs.streams.LoadOrStore(streamID, &cancel); loaded {
+//		log.Fatalf(context.Background(), "stream %d already exists", streamID)
+//	}
+//	bs.metrics.UpdateMetricsOnRangefeedConnect()
+//}
 
 // run forwards buffered events back to the client. run is expected to be called
 // in a goroutine and will block until the context is done or the stopper is
@@ -277,13 +286,14 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 					err := bs.sender.Send(e.event)
 					e.alloc.Release(ctx)
 					if e.event.Error != nil {
+						// TODO(wenyihu6): check if we need to cancel context here
 						bs.metrics.IncErrorEvents()
 						// Add metrics here
-						if cleanUp, ok := bs.rangefeedCleanup.LoadAndDelete(e.event.StreamID); ok {
+						if mr, ok := bs.registrations.LoadAndDelete(e.event.StreamID); ok {
 							bs.metrics.DecRangefeedCleanUp()
 							// TODO(wenyihu6): add more observability metrics into how long the
 							// clean up call is taking
-							(*cleanUp)()
+							mr.cleanup(mr.reg)
 						}
 					}
 					if err != nil {

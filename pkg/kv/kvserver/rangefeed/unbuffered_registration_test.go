@@ -58,11 +58,9 @@ func TestUnbufferedRegOnConcurrentDisconnect(t *testing.T) {
 		wg.Add(1)
 		go func(id int64) {
 			defer wg.Done()
-			ctx, done := context.WithCancel(context.Background())
-			bs.AddStream(id, done)
-			p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			p.Register(context.Background(), h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				NewBufferedPerRangeEventSink(ctx, r1, id, bs), func() {})
+				NewBufferedPerRangeEventSink(r1, id, bs, bs), func() {})
 		}(id)
 	}
 	wg.Wait()
@@ -142,15 +140,13 @@ func TestUnbufferedRegOnDisconnect(t *testing.T) {
 		EndKey: roachpb.Key("w"),
 	}
 	catchUpIter := newTestIterator(keyValues, roachpb.Key("w"))
-	ctx, done := context.WithCancel(context.Background())
 	const r1 = 1
 	const s1 = 1
 
-	bs.AddStream(s1, done)
 	require.Equal(t, int32(1), testRangefeedCounter.get())
-	p.Register(h.span, startTs, makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
+	p.Register(ctx, h.span, startTs, makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
 		true /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-		NewBufferedPerRangeEventSink(ctx, r1, s1, bs), func() {})
+		NewBufferedPerRangeEventSink(r1, s1, bs, bs), func() {})
 
 	key := roachpb.Key("d")
 	val1 := roachpb.Value{RawBytes: []byte("val1"), Timestamp: hlc.Timestamp{WallTime: 5}}

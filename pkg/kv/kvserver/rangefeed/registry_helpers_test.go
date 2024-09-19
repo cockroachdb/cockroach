@@ -157,6 +157,9 @@ type testStream struct {
 	}
 }
 
+func (s *testStream) AddRegistration(r registration, cleanup func(registration) bool) {
+}
+
 func newTestStream() *testStream {
 	ctx, done := context.WithCancel(context.Background())
 	return &testStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1)}
@@ -336,6 +339,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 	switch cfg.withRegistrationTestTypes {
 	case buffered:
 		return newBufferedRegistration(
+			context.Background(),
 			cfg.span,
 			cfg.ts,
 			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
@@ -350,6 +354,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 		)
 	case unbuffered:
 		return newUnbufferedRegistration(
+			context.Background(),
 			cfg.span,
 			cfg.ts,
 			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),

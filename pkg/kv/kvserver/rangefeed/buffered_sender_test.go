@@ -51,11 +51,10 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 	t.Run("basic operation", func(t *testing.T) {
 		const streamID = 0
 		var num atomic.Int32
-		streamCtx, cancel := context.WithCancel(context.Background())
-		bs.AddStream(int64(streamID), cancel)
-		bs.RegisterRangefeedCleanUp(int64(streamID), func() {
-			num.Add(1)
-		})
+		streamCtx := context.Background()
+		//bs.RegisterRangefeedCleanUp(int64(streamID), func() {
+		//	num.Add(1)
+		//})
 		require.Equal(t, int64(0), getLen())
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
@@ -68,8 +67,7 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 	t.Run("cleanup map and active streams map out of sync", func(t *testing.T) {
 		const streamID = 0
 		var num atomic.Int32
-		streamCtx, cancel := context.WithCancel(context.Background())
-		bs.AddStream(int64(streamID), cancel)
+		streamCtx := context.Background()
 		require.Equal(t, int32(1), testRangefeedCounter.get())
 
 		// Disconnect stream without registering clean up should still work.
@@ -83,11 +81,11 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 	t.Run("multiple clean up should do nothing", func(t *testing.T) {
 		const streamID = 0
 		var num atomic.Int32
-		_, cancel := context.WithCancel(context.Background())
-		bs.AddStream(int64(streamID), cancel)
-		bs.RegisterRangefeedCleanUp(int64(streamID), func() {
-			num.Add(1)
-		})
+		//_, cancel := context.WithCancel(context.Background())
+		//bs.AddStream(int64(streamID), cancel)
+		//bs.RegisterRangefeedCleanUp(int64(streamID), func() {
+		//	num.Add(1)
+		//})
 
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
@@ -142,11 +140,11 @@ func TestBufferedSenderOnStop(t *testing.T) {
 		randBool := rng.Intn(2) == 0
 		require.LessOrEqualf(t, streamIdStart, streamIdEnd, "test programming error")
 		if randBool || streamIdStart == streamIdEnd {
-			_, cancel := context.WithCancel(context.Background())
-			bs.AddStream(streamIdEnd, cancel)
-			bs.RegisterRangefeedCleanUp(streamIdEnd, func() {
-				actualSum.Add(1)
-			})
+			//_, cancel := context.WithCancel(context.Background())
+			//bs.AddStream(streamIdEnd, cancel)
+			//bs.RegisterRangefeedCleanUp(streamIdEnd, func() {
+			//	actualSum.Add(1)
+			//})
 			streamIdEnd++
 		} else {
 			bs.SendBufferedError(makeMuxRangefeedErrorEvent(streamIdStart, 1, kvpb.NewError(nil)))

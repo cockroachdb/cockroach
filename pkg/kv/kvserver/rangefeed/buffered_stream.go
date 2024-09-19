@@ -11,8 +11,6 @@
 package rangefeed
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -26,41 +24,32 @@ type BufferedStream interface {
 	Stream
 	// SendBuffered buffers the event before sending it to the underlying Stream.
 	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
-	// RegisterRangefeedCleanUp is used to register a cleanup callback that will
-	// be invoked after Disconnect is called. It is up to the implementation on
-	// when or whether the callback is invoked. The caller should coordinate with
-	// the implementation.
-	RegisterRangefeedCleanUp(func())
 }
 
 // BufferedPerRangeEventSink is an implementation of BufferedStream which is
 // similar to PerRangeEventSink but buffers events in BufferedSender before
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *BufferedSender
+	manager  StreamManager
 }
 
 func NewBufferedPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender, manager StreamManager,
 ) *BufferedPerRangeEventSink {
 	return &BufferedPerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
+		manager:  manager,
 	}
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
 var _ Stream = (*BufferedPerRangeEventSink)(nil)
 var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
-
-func (s *BufferedPerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -114,12 +103,6 @@ func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.SendBufferedError(ev)
 }
 
-// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
-// background async job when the stream is disconnected. Note that the callback
-// will not be invoked immediately during  Disconnect and may not be called if
-// the BufferedSender.run has stopped. Caller needs to ensure that this is not
-// called after BufferedSender has stopped. For p.Register, it is currently done
-// by waiting for runRequest to complete for each stores.RangeFeed call.
-func (s *BufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
-	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
+func (s *BufferedPerRangeEventSink) AddRegistration(r registration, cleanup func(registration) bool) {
+	s.manager.AddRegistration(s.streamID, r, cleanup)
 }

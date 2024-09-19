@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -302,6 +302,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 //
 // NB: startTS is exclusive; the first possible event will be at startTS.Next().
 func (p *ScheduledProcessor) Register(
+	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -322,12 +323,13 @@ func (p *ScheduledProcessor) Register(
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
 		p.Metrics.RangefeedUnbufferedRegistration.Inc(1)
-		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
+		r = newUnbufferedRegistration(ctx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn,
+		)
 	} else {
 		p.Metrics.RangefeedBufferedRegistration.Inc(1)
 		r = newBufferedRegistration(
-			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			ctx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)
 	}
@@ -340,7 +342,33 @@ func (p *ScheduledProcessor) Register(
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
+		// addstream to stream manager somehow: pass r and p OR p.unregisterClient
+		// 1. async (blocking during r.disconnect) 2. will it be properly cleaned up in different ways
+
+		// sendbufferederror signal clean up with streammanager
+
+		// 1. we pass down to register has AddRegistrationForStream(streamID, registration + processor / unregisterClient clean up callback)
+		// 2. stream has a reference to its manager -> pass the
+
+		// TODO:
+		// 1. clean up we have - move per registration clean up to unregisterclient
+		// 2. look at context cancellation situation and see if we can centralize context cancellation (runOutputLoop)
+		//    - pass context down, make ctx.cancel() with registration
+		//   - q: is it bad to store cancel function in structs?
+		// 3. pass stream manager to add registration with p.Register
+		// 4. rework the callback to centralize clean up
+
+		// BufferedSender would still execute callback
+		// Look at all error pathways, try to come up with a cleaner api
+		// try to get rid of Disconnect v.s. disconnect
+
+		// two things owns registration: processor and streammanager (signal registrations to do clean up)
+		// everything sends to the streammanager
+
+		// We need to addstream here to avoid racy conditions.
+
 		// Add the new registration to the registry.
+		stream.AddRegistration(r, p.unregisterClient)
 		p.reg.Register(ctx, r)
 
 		// Prep response with filter that includes the new registration.
@@ -353,27 +381,9 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		if ubr, ok := r.(*unbufferedRegistration); ok {
-			bufferedStream.RegisterRangefeedCleanUp(func() {
-				// BufferedRegistration has a dedicated goroutine watching for context
-				// cancellation and handles rangefeed cleanup. UnbufferedRegistration
-				// relies on this callback for rangefeed cleanup. In case that
-				// disconnect happens from rangefeed side, setDisconnectedIfNot is
-				// no-op. If StreamMuxer initiated the disconnect, it will be properly
-				// disconnected.
-				ubr.setDisconnectedIfNot()
-				// Unregister the registration from the processor. No more raft updates
-				// will be published to registration after this.
-				// TODO(wenyihu6): understand what happens if p is stopped here already
-				if p.unregisterClient(r) {
-					// unreg callback is set by replica to tear down processors that have
-					// zero registrations left and to update event filters.
-					if f := r.getUnreg(); f != nil {
-						f()
-					}
-				}
-			})
-		}
+		// registration calls stream manager disconnect with id
+		// stream manager would just disconnect all registrations
+		// not blocking during disconnect
 
 		// Run an output loop for the registry. For BufferedRegistration, this is
 		// long-running. For UnbufferedRegistration, this is short-lived (just for
@@ -389,13 +399,13 @@ func (p *ScheduledProcessor) Register(
 				// for bufferedRegistration. This is not true for
 				// unbufferedRegistration. Instead, unbufferedRegistration relies on
 				// RegisterRangefeedCleanUp above.
-				if p.unregisterClient(r) {
-					// unreg callback is set by replica to tear down processors that have
-					// zero registrations left and to update event filters.
-					if f := r.getUnreg(); f != nil {
-						f()
-					}
-				}
+				p.unregisterClient(r)
+				// unreg callback is set by replica to tear down processors that have
+				// zero registrations left and to update event filters.
+				//if f := r.getUnreg(); f != nil {
+				//	f()
+				//}
+				//}
 			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
@@ -407,9 +417,9 @@ func (p *ScheduledProcessor) Register(
 			// Normally, ubr.runOutputLoop is responsible for draining catch up
 			// buffer. If it fails to start, we should drain it here. Double check if
 			// runOutputLoop is guaranteed to be invoked if err == nil here.
-			if ubr, ok := r.(*unbufferedRegistration); ok {
-				ubr.discardCatchUpBuffer(ctx)
-			}
+			//if ubr, ok := r.(*unbufferedRegistration); ok {
+			//	ubr.discardCatchUpBuffer(ctx)
+			//}
 			p.reg.Unregister(ctx, r)
 		}
 		return f

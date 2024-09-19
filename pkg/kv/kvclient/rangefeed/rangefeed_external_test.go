@@ -1633,9 +1633,9 @@ func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channe
 	return &channelSink{ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1)}
 }
 
-func (c *channelSink) Context() context.Context {
-	return c.ctx
-}
+//func (c *channelSink) Context() context.Context {
+//	return c.ctx
+//}
 
 func (c *channelSink) SendUnbufferedIsThreadSafe() {}
 

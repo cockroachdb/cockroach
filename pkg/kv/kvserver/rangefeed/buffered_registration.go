@@ -75,6 +75,7 @@ type bufferedRegistration struct {
 var _ registration = &bufferedRegistration{}
 
 func newBufferedRegistration(
+	ctx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -87,8 +88,11 @@ func newBufferedRegistration(
 	stream Stream,
 	unregisterFn func(),
 ) *bufferedRegistration {
+	rCtx, cancel := context.WithCancel(ctx)
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			ctx:              rCtx,
+			cancelFunc:       cancel,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -217,8 +221,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.stream.Context().Done():
-			return br.stream.Context().Err()
+		case <-br.ctx.Done():
+			return br.ctx.Err()
 		}
 	}
 }
@@ -234,6 +238,10 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	br.mu.Unlock()
 	err := br.outputLoop(ctx)
 	br.disconnect(kvpb.NewError(err))
+}
+
+func (br *bufferedRegistration) close(ctx context.Context) {
+	br.drainAllocations(ctx)
 }
 
 // drainAllocations should be done after registration is disconnected from
