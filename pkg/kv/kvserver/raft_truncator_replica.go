@@ -35,17 +35,21 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 	return *r.mu.state.TruncatedState
 }
 
-func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
-	ctx context.Context,
-	trunc *kvserverpb.RaftTruncatedState,
+func (r *raftTruncatorReplica) setTruncatedState(
+	rt kvserverpb.RaftTruncatedState,
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (expectedFirstIndexWasAccurate bool) {
-	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
-		ctx, trunc, expectedFirstIndexPreTruncation)
-	return expectedFirstIndexAccurate
+	isDeltaTrusted bool,
+) {
+	(*Replica)(r).setTruncatedStateMuLocked(&rt, expectedFirstIndexPreTruncation, isDeltaTrusted)
 }
 
-func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+func (r *raftTruncatorReplica) applySideEffects(
+	ctx context.Context, trunc *kvserverpb.RaftTruncatedState,
+) {
+	(*Replica)(r).handleTruncatedStateResult(ctx, trunc)
+}
+
+func (r *raftTruncatorReplica) setTruncationDelta(deltaBytes int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.raftLogSize += deltaBytes
@@ -57,9 +61,6 @@ func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, is
 	}
 	if r.mu.raftLogLastCheckSize < 0 {
 		r.mu.raftLogLastCheckSize = 0
-	}
-	if !isDeltaTrusted {
-		r.mu.raftLogSizeTrusted = false
 	}
 }
 

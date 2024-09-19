@@ -486,17 +486,24 @@ func (r *Replica) handleLeaseResult(
 		assertNoLeaseJump)
 }
 
-func (r *Replica) handleTruncatedStateResult(
-	ctx context.Context,
-	t *kvserverpb.RaftTruncatedState,
+func (r *Replica) setTruncatedStateMuLocked(
+	ts *kvserverpb.RaftTruncatedState,
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
+	isDeltaTrusted bool,
+) {
 	r.mu.Lock()
-	expectedFirstIndexWasAccurate =
+	defer r.mu.Unlock()
+	expectedFirstIndexWasAccurate :=
 		r.mu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
-	r.mu.state.TruncatedState = t
-	r.mu.Unlock()
+	r.mu.state.TruncatedState = ts
+	if !expectedFirstIndexWasAccurate || !isDeltaTrusted {
+		r.mu.raftLogSizeTrusted = false
+	}
+}
 
+func (r *Replica) handleTruncatedStateResult(
+	ctx context.Context, t *kvserverpb.RaftTruncatedState,
+) (raftLogDelta int64) {
 	// Clear any entries in the Raft log entry cache for this range up
 	// to and including the most recently truncated index.
 	r.store.raftEntryCache.Clear(r.RangeID, t.Index+1)
@@ -523,7 +530,7 @@ func (r *Replica) handleTruncatedStateResult(
 	// crashes if the filesystem is quick enough to sync it for us. Add a test
 	// that syncs the files removal here, and "crashes" right after, to help
 	// reproduce and fix #113135.
-	return -size, expectedFirstIndexWasAccurate
+	return -size
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -607,6 +614,6 @@ func (r *Replica) handleChangeReplicasResult(
 }
 
 // TODO(sumeer): remove method when all truncation is loosely coupled.
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, isDeltaTrusted bool) {
-	(*raftTruncatorReplica)(r).setTruncationDeltaAndTrusted(delta, isDeltaTrusted)
+func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
+	(*raftTruncatorReplica)(r).setTruncationDelta(delta)
 }

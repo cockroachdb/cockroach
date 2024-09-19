@@ -437,6 +437,16 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				res.RaftLogDelta)
 		}
 		if apply {
+			// Update the Replica's in-memory TruncatedState before applying the write
+			// batch to storage. Readers of the raft log storage who synchronize with
+			// it via r.mu, and read TruncatedState, will then expect to find entries
+			// at indices > TruncatedState.Index in the log. If we write the batch
+			// first, and only then update TruncatedState, there is a time window
+			// during which the log storage appears to have a gap.
+			isDeltaTrusted := res.RaftExpectedFirstIndex != 0
+			b.r.setTruncatedStateMuLocked(res.State.TruncatedState,
+				res.RaftExpectedFirstIndex, isDeltaTrusted)
+
 			// This truncation command will apply synchronously in this batch.
 			// Determine if there are any sideloaded entries that will be removed as a
 			// side effect.

@@ -287,7 +287,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
-	isRaftLogTruncationDeltaTrusted := true
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
@@ -298,11 +297,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// This strongly coupled truncation code will be removed in the release
 		// following LooselyCoupledRaftLogTruncation.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
-				ctx, newTruncState, rResult.RaftExpectedFirstIndex)
-			if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
-				isRaftLogTruncationDeltaTrusted = false
-			}
+			raftLogDelta := sm.r.handleTruncatedStateResult(ctx, newTruncState)
 			rResult.RaftLogDelta += raftLogDelta
 			rResult.State.TruncatedState = nil
 			rResult.RaftExpectedFirstIndex = 0
@@ -327,7 +322,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// This code path will be taken exactly when the preceding block has
 		// newTruncState != nil. It is needlessly confusing that these two are not
 		// in the same place.
-		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
+		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta)
 		rResult.RaftLogDelta = 0
 	}
 

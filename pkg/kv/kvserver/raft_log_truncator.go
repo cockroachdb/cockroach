@@ -251,13 +251,17 @@ type replicaForTruncator interface {
 	getRangeID() roachpb.RangeID
 	// Returns the current truncated state.
 	getTruncatedState() kvserverpb.RaftTruncatedState
-	// Updates the replica state after the truncation is enacted.
-	setTruncatedStateAndSideEffects(
-		_ context.Context, _ *kvserverpb.RaftTruncatedState, expectedFirstIndexPreTruncation kvpb.RaftIndex,
-	) (expectedFirstIndexWasAccurate bool)
-	// Updates the stats related to the raft log size after the truncation is
+	// Updates the replica truncated state before the truncation is enacted.
+	setTruncatedState(
+		_ kvserverpb.RaftTruncatedState,
+		expectedFirstIndexPreTruncation kvpb.RaftIndex,
+		isDeltaTrusted bool,
+	)
+	// Updates the stats related to the raft log size before the truncation is
 	// enacted.
-	setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool)
+	setTruncationDelta(deltaBytes int64)
+	// Updates the replica state after the truncation is enacted.
+	applySideEffects(_ context.Context, _ *kvserverpb.RaftTruncatedState)
 	// Returns the pending truncations queue. The caller is allowed to mutate
 	// the return value by additionally acquiring pendingLogTruncations.mu.
 	getPendingTruncs() *pendingLogTruncations
@@ -574,6 +578,19 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		pendingTruncs.reset()
 		return
 	}
+	// Update the Replica's in-memory TruncatedState before applying the write
+	// batch to storage. Readers of the raft log storage who synchronize with it
+	// via r.mu, and read TruncatedState, will then expect to find entries at
+	// indices > TruncatedState.Index in the log. If we write the batch first, and
+	// only then update TruncatedState, there is a time window during which the
+	// log storage appears to have a gap.
+	pendingTruncs.iterateLocked(func(index int, trunc pendingTruncation) {
+		if index > enactIndex {
+			return
+		}
+		r.setTruncatedState(trunc.RaftTruncatedState, trunc.expectedFirstIndex, trunc.isDeltaTrusted)
+		r.setTruncationDelta(trunc.logDeltaBytes)
+	})
 	// sync=false since we don't need a guarantee that the truncation is
 	// durable. Loss of a truncation means we have more of the suffix of the
 	// raft log, which does not affect correctness.
@@ -588,13 +605,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		if index > enactIndex {
 			return
 		}
-		isDeltaTrusted := true
-		expectedFirstIndexWasAccurate := r.setTruncatedStateAndSideEffects(
-			ctx, &trunc.RaftTruncatedState, trunc.expectedFirstIndex)
-		if !expectedFirstIndexWasAccurate || !trunc.isDeltaTrusted {
-			isDeltaTrusted = false
-		}
-		r.setTruncationDeltaAndTrusted(trunc.logDeltaBytes, isDeltaTrusted)
+		r.applySideEffects(ctx, &trunc.RaftTruncatedState)
 	})
 	// Now remove the enacted truncations. It is the same iteration as the
 	// previous one, but we do it while holding pendingTruncs.mu. Note that

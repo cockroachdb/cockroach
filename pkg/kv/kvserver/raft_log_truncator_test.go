@@ -145,9 +145,24 @@ func (r *replicaTruncatorTest) getPendingTruncs() *pendingLogTruncations {
 	return &r.pendingTruncs
 }
 
-func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
-	fmt.Fprintf(r.buf, "r%d.setTruncationDeltaAndTrusted(delta:%d, trusted:%t)\n",
-		r.rangeID, deltaBytes, isDeltaTrusted)
+func (r *replicaTruncatorTest) setTruncatedState(
+	truncState kvserverpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation kvpb.RaftIndex,
+	isDeltaTrusted bool,
+) {
+	expectedFirstIndexWasAccurate := r.truncState.Index+1 == expectedFirstIndexPreTruncation
+	r.truncState = truncState
+	fmt.Fprintf(r.buf, "r%d.setTruncatedState(exp:%d, trusted:%t) => accurate:%t\n",
+		r.rangeID, expectedFirstIndexPreTruncation, isDeltaTrusted, expectedFirstIndexWasAccurate)
+}
+func (r *replicaTruncatorTest) setTruncationDelta(deltaBytes int64) {
+	fmt.Fprintf(r.buf, "r%d.setTruncationDelta(delta:%d)\n", r.rangeID, deltaBytes)
+}
+
+func (r *replicaTruncatorTest) applySideEffects(
+	_ context.Context, ts *kvserverpb.RaftTruncatedState,
+) {
+	fmt.Fprintf(r.buf, "r%d.applySideEffects(index:%d)\n", r.rangeID, ts.Index)
 }
 
 func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
@@ -160,19 +175,6 @@ func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
 func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 	fmt.Fprintf(r.buf, "r%d.getStateLoader\n", r.rangeID)
 	return r.stateLoader
-}
-
-func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
-	_ context.Context,
-	truncState *kvserverpb.RaftTruncatedState,
-	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (expectedFirstIndexWasAccurate bool) {
-	expectedFirstIndexWasAccurate = r.truncState.Index+1 == expectedFirstIndexPreTruncation
-	r.truncState = *truncState
-	fmt.Fprintf(r.buf,
-		"r%d.setTruncatedStateAndSideEffects(..., expectedFirstIndex:%d) => trusted:%t\n",
-		r.rangeID, expectedFirstIndexPreTruncation, expectedFirstIndexWasAccurate)
-	return expectedFirstIndexWasAccurate
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
