@@ -6,7 +6,13 @@ exec-sql
 CREATE DATABASE db;
 CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON db.t (j);
+----
+
+exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+----
+
+exec-sql
 ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
 ----
 
@@ -59,6 +65,9 @@ translate database=db table=t
 # continues to hold a placeholder zone config.
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 3600;
+----
+
+exec-sql
 ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
 ----
 
