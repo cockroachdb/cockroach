@@ -20,6 +20,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
+var cantBeTrue = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
+	fmt.Println("testing it cant be true")
+	if b {
+		return fmt.Errorf("it cant be true")
+	}
+	return nil
+})
+
+var cantBeFalse = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
+	fmt.Println("testing it cant be false")
+	if !b {
+		return fmt.Errorf("it cant be false")
+	}
+	return nil
+})
+
 func TestValidationOptions(t *testing.T) {
 	type subTest struct {
 		val         interface{}
@@ -180,6 +196,20 @@ func TestValidationOptions(t *testing.T) {
 				{val: 1, opt: settings.ByteSizeWithMinimum(10), expectedErr: "cannot be set to a value lower than 10 B"},
 				{val: 10, opt: settings.ByteSizeWithMinimum(10), expectedErr: ""},
 				{val: 11, opt: settings.ByteSizeWithMinimum(10), expectedErr: ""},
+			},
+		},
+		{
+			testLabel: "bool",
+			settingFn: func(n int, bval interface{}, opt settings.SettingOption) settings.Setting {
+				val := bval.(bool)
+				return settings.RegisterBoolSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					val, opt)
+			},
+			subTests: []subTest{
+				{val: true, opt: cantBeTrue, expectedErr: "it cant be true"},
+				{val: false, opt: cantBeTrue, expectedErr: ""},
+				{val: true, opt: cantBeFalse, expectedErr: ""},
+				{val: false, opt: cantBeFalse, expectedErr: "it cant be false"},
 			},
 		},
 	}
