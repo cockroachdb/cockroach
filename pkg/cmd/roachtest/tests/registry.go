@@ -43,6 +43,7 @@ func RegisterTests(r registry.Registry) {
 	registerClusterReplicationResilience(r)
 	registerClusterReplicationDisconnect(r)
 	registerConnectionLatencyTest(r)
+	registerLDAPConnectionLatencyTest(r)
 	registerCopy(r)
 	registerCopyFrom(r)
 	registerCostFuzz(r)
