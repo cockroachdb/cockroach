@@ -57,6 +57,13 @@ type Timer struct {
 	Read bool
 }
 
+// AsTimerI returns the Timer as a TimerI. This is helpful
+// to write code that accepts a Timer in production and a manual
+// timer in tests.
+func (t *Timer) AsTimerI() TimerI {
+	return (*timer)(t)
+}
+
 // Reset changes the timer to expire after duration d and returns
 // the new value of the timer. This method includes the fix proposed
 // in https://github.com/golang/go/issues/11513#issuecomment-157062583,
