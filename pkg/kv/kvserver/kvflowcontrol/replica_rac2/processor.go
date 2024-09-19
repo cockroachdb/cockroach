@@ -94,9 +94,6 @@ type RaftScheduler interface {
 // reads Raft state at various points while holding raftMu, and expects those
 // various reads to be mutually consistent.
 type RaftNode interface {
-	// RaftInterface is an interface that abstracts the raft.RawNode for use in
-	// the RangeController.
-	rac2.RaftInterface
 	// TermLocked returns the current term of this replica.
 	TermLocked() uint64
 	// LeaderLocked returns the current known leader. This state can advance
@@ -114,6 +111,19 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
+	// ReplicasStateLocked returns the current status state of all replicas. The
+	// value of Match, Next are populated iff in StateReplicate. All entries >=
+	// Next have not had MsgApps constructed during the lifetime of this
+	// StateReplicate (they may have been constructed previously).
+	//
+	// When a follower transitions from {StateProbe,StateSnapshot} =>
+	// StateReplicate, we start trying to send MsgApps. We should notice such
+	// transitions both in rac2.HandleRaftEventRaftMuLocked and
+	// rac2.SetReplicasRaftMuLocked.
+	//
+	// infoMap is an in-out parameter. It is expected to be empty, and is
+	// populated with the ReplicaStateInfos for all replicas.
+	ReplicasStateLocked(infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo)
 }
 
 // AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
@@ -174,7 +184,6 @@ type rangeControllerInitState struct {
 	rangeID        roachpb.RangeID
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
-	raftInterface  rac2.RaftInterface
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
@@ -464,6 +473,9 @@ type processorImpl struct {
 		//
 		// TODO(pav-kv): factor out pendingAdmittedMu and scratch into a type.
 		scratch map[roachpb.ReplicaID]rac2.AdmittedVector
+		// scratchInfoMap is used as a pre-allocated in-out parameter for calling
+		// ReplicasStateLocked when constructing a rac2.RaftEvent.
+		scratchInfoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo
 
 		// rcReferenceUpdateMu is a narrow mutex held when rc reference is updated.
 		// To access rc, the code must hold raftMu or rcReferenceUpdateMu.
@@ -745,7 +757,6 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 		rangeID:        p.opts.RangeID,
 		tenantID:       p.desc.tenantID,
 		localReplicaID: p.opts.ReplicaID,
-		raftInterface:  p.replMu.raftNode,
 	})
 
 	func() {
@@ -754,6 +765,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 		p.leader.pendingAdmittedMu.updates = map[roachpb.ReplicaID]rac2.AdmittedVector{}
 	}()
 	p.leader.scratch = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+	p.leader.scratchInfoMap = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 
 	p.leader.rcReferenceUpdateMu.Lock()
 	defer p.leader.rcReferenceUpdateMu.Unlock()
@@ -780,6 +792,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// NotEnabledWhenLeader, since this replica could be a follower and the leader
 	// may switch to v2.
 
+	p.leader.scratchInfoMap = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	// Grab the state we need in one shot after acquiring Replica mu.
 	var nextUnstableIndex uint64
 	var leaderID, leaseholderID roachpb.ReplicaID
@@ -791,6 +804,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		leaderID = p.replMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuRLocked()
 		term = p.replMu.raftNode.TermLocked()
+		p.replMu.raftNode.ReplicasStateLocked(p.leader.scratchInfoMap)
 	}()
 	if len(e.Entries) > 0 {
 		nextUnstableIndex = e.Entries[0].Index
@@ -804,6 +818,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// NB: since we've registered the latest log/snapshot write (if any) above,
 	// our admitted vector is likely consistent with the latest leader term.
 	p.maybeSendAdmittedRaftMuLocked(ctx)
+	e.ReplicasStateInfo = p.leader.scratchInfoMap
 	if rc := p.leader.rc; rc != nil {
 		if knobs := p.opts.Knobs; knobs == nil || !knobs.UseOnlyForScratchRanges ||
 			p.opts.Replica.IsScratchRange() {
@@ -1023,8 +1038,9 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	// p.leader.scratch, so can be read and written without holding
 	// pendingAdmittedMu.
 	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
-	// Swap the pendingAdmittedMu.updates map with the empty scratch if non-empty. This is an optimization to
-	// minimize the time we hold the pendingAdmittedMu lock.
+	// Swap the pendingAdmittedMu.updates map with the empty scratch if
+	// non-empty. This is an optimization to minimize the time we hold the
+	// pendingAdmittedMu lock.
 	if updatesEmpty := func() bool {
 		p.leader.pendingAdmittedMu.Lock()
 		defer p.leader.pendingAdmittedMu.Unlock()
@@ -1184,7 +1200,6 @@ func (f RangeControllerFactoryImpl) New(
 			TenantID:            state.tenantID,
 			LocalReplicaID:      state.localReplicaID,
 			SSTokenCounter:      f.streamTokenCounterProvider,
-			RaftInterface:       state.raftInterface,
 			Clock:               f.clock,
 			CloseTimerScheduler: f.closeTimerScheduler,
 			EvalWaitMetrics:     f.evalWaitMetrics,
