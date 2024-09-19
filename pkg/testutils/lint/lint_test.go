@@ -43,23 +43,10 @@ import (
 
 // Various copyright file headers we lint on.
 var (
-	bslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
+	cslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-`)
-	cclHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License \(the "License"\); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 `)
 
 	apacheHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
@@ -88,8 +75,8 @@ var (
 	// cockroachModifiedCopyright is a header that's required to be added any
 	// time a file with etcdApacheHeader is modified by authors from CRL.
 	cockroachModifiedCopyright = regexp.MustCompile(
-		`// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+		`// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 20\d\d The Cockroach Authors.`)
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
@@ -285,7 +272,7 @@ func TestLint(t *testing.T) {
 
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
-			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
+			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.scss", "*.styl", "*.proto", "*.rl",
 		}
 
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{"ls-files"}, extensions...)...)
@@ -330,20 +317,15 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isCCL := strings.Contains(filename, "ccl/")
 			isApache := strings.HasPrefix(filename, "obsservice")
 			switch {
-			case isCCL:
-				if cclHeader.Find(data) == nil {
-					t.Errorf("did not find expected CCL license header in %s", filename)
-				}
 			case isApache:
 				if apacheHeader.Find(data) == nil {
 					t.Errorf("did not find expected Apache license header in %s", filename)
 				}
 			default:
-				if bslHeader.Find(data) == nil {
-					t.Errorf("did not find expected BSL license header in %s", filename)
+				if cslHeader.Find(data) == nil {
+					t.Errorf("did not find expected CockroachDB Software license header in %s", filename)
 				}
 			}
 		}); err != nil {
@@ -418,13 +400,13 @@ func TestLint(t *testing.T) {
 			data = data[0:n]
 			if _, ok := added[filename]; ok {
 				// Typically, any new file that is added will include a
-				// Cockroach BSL header. However, if most of it isn't new code,
-				// and is moved from an existing etcd forked file, the author
-				// may consider it as modified; the linter is liberal enough to
-				// allow either of these.
-				assert.True(t, (bslHeader.Find(data) != nil) ||
+				// CockroachDB Software License header. However, if most of it isn't
+				// new code, and is moved from an existing etcd forked file, the
+				// author may consider it as modified; the linter is liberal enough
+				// to allow either of these.
+				assert.True(t, (cslHeader.Find(data) != nil) ||
 					(etcdApacheHeader.Find(data) != nil && cockroachModifiedCopyright.Find(data) != nil),
-					"did not find expected either Cockroach BSL license header or Apache "+
+					"did not find expected either CockroachDB Software License header or Apache "+
 						"license header and Cockroach copyright header in %s", filename)
 			} else {
 				assert.NotNilf(t, etcdApacheHeader.Find(data),
