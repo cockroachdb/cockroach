@@ -14,6 +14,7 @@ import (
 // SettingOption is the type of an option that can be passed to Register.
 type SettingOption struct {
 	commonOpt          func(*common)
+	validateBoolFn     func(*Values, bool) error
 	validateDurationFn func(time.Duration) error
 	validateInt64Fn    func(int64) error
 	validateFloat64Fn  func(float64) error
@@ -101,6 +102,11 @@ func WithValidateInt(fn func(int64) error) SettingOption {
 // WithValidateFloat adds a validation function for a float64 setting.
 func WithValidateFloat(fn func(float64) error) SettingOption {
 	return SettingOption{validateFloat64Fn: fn}
+}
+
+// WithValidateBool adds a validation function for a boolean setting.
+func WithValidateBool(fn func(*Values, bool) error) SettingOption {
+	return SettingOption{validateBoolFn: fn}
 }
 
 // WithValidateString adds a validation function for a string setting.

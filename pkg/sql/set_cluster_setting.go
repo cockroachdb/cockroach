@@ -776,6 +776,9 @@ func toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.BoolSetting:
 		if b, ok := d.(*tree.DBool); ok {
+			if err := setting.Validate(&st.SV, bool(*b)); err != nil {
+				return "", err
+			}
 			return settings.EncodeBool(bool(*b)), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
