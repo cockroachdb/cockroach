@@ -148,8 +148,19 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
+	// Verify the user and check if DB console session could be started.
+	verified, pwRetrieveFn, err := a.authServer.VerifyUserSessionDBConsole(a.ctx, username)
+	if err != nil {
+		srverrors.APIV2InternalError(r.Context(), err, w)
+		return
+	}
+	if !verified {
+		http.Error(w, "the provided credentials did not match any account on the server", http.StatusUnauthorized)
+		return
+	}
+
 	// Verify the provided username/password pair.
-	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
+	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"), pwRetrieveFn)
 	if err != nil {
 		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
