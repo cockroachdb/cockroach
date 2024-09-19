@@ -62,13 +62,17 @@ var catchupStartupRate = settings.RegisterIntSetting(
 // ForEachRangeFn is used to execute `fn` over each range in a rangefeed.
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
 
+// A RangeObserver is a function that observes the ranges in a rangefeed
+// by polling fn.
+type RangeObserver func(fn ForEachRangeFn)
+
 type rangeFeedConfig struct {
 	overSystemTable       bool
 	withDiff              bool
 	withFiltering         bool
 	withMetadata          bool
 	withMatchingOriginIDs []uint32
-	rangeObserver         func(ForEachRangeFn)
+	rangeObserver         RangeObserver
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -128,7 +132,7 @@ func WithMatchingOriginIDs(originIDs ...uint32) RangeFeedOption {
 
 // WithRangeObserver is called when the rangefeed starts with a function that
 // can be used to iterate over all the ranges.
-func WithRangeObserver(observer func(ForEachRangeFn)) RangeFeedOption {
+func WithRangeObserver(observer RangeObserver) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.rangeObserver = observer
 	})
