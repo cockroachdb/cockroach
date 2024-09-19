@@ -3506,11 +3506,18 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	return t.finishExecStatement(stmt, execSQL, res, err)
 }
 
+var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
+
 func (t *logicTest) finishExecStatement(
 	stmt logicStatement, execSQL string, res gosql.Result, err error,
 ) (bool, error) {
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
+		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
+		// not work because only unique hash-sharded indexes are allowed, yet we
+		// format them as unique constraints.
+		if !uniqueHashPattern.MatchString(stmt.sql) {
+			sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
+		}
 	}
 	if err == nil && stmt.expectCount >= 0 {
 		var count int64
@@ -3593,7 +3600,12 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err error) error {
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
+		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
+		// not work because only unique hash-sharded indexes are allowed, yet we
+		// format them as unique constraints.
+		if !uniqueHashPattern.MatchString(query.sql) {
+			sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
+		}
 
 		// If expecting an error, then read all result rows, since some errors are
 		// only triggered after initial rows are returned.

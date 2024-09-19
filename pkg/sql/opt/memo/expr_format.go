@@ -702,6 +702,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *LockExpr:
+		f.formatColList(tp, "key columns:", t.KeyCols, opt.ColSet{} /* notNullCols */)
+		tp.Childf("lock columns: %v", t.LockCols)
 		f.formatLocking(tp, t.Locking)
 
 	case *WithExpr:
