@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 )
@@ -86,4 +87,28 @@ func ParseDNFromCertificate(cert *x509.Certificate) (*ldap.DN, error) {
 	}
 
 	return subjectDN, nil
+}
+
+// ExtractCNAsSQLUsername looks for the common name (CN) field of the given
+// distinguished name and converts it to a SQLUsername. If the CN field is not
+// present, the function returns an empty SQLUsername and a "not found" flag.
+func ExtractCNAsSQLUsername(dn *ldap.DN) (_ username.SQLUsername, found bool, _ error) {
+	var sqlRoleString string
+rdn_loop:
+	for _, rdn := range dn.RDNs {
+		for _, attr := range rdn.Attributes {
+			if strings.EqualFold(attr.Type, "cn") {
+				sqlRoleString = attr.Value
+				break rdn_loop
+			}
+		}
+	}
+	sqlRole, err := username.MakeSQLUsernameFromUserInput(sqlRoleString, username.PurposeValidation)
+	if err != nil {
+		return username.EmptyRoleName(), false, err
+	}
+	if sqlRole.IsEmptyRole() {
+		return username.EmptyRoleName(), false, nil
+	}
+	return sqlRole, true, err
 }

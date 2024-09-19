@@ -25,6 +25,7 @@ const (
 type mockLDAPUtil struct {
 	conn      *ldap.Conn
 	tlsConfig *tls.Config
+	groupDNs  []string
 }
 
 // MaybeInitLDAPsConn implements the ILDAPUtil interface.
@@ -80,6 +81,11 @@ func (lu *mockLDAPUtil) Search(
 	return distinguishedName, nil
 }
 
+// setGroups overrides the return value of ListGroups for testing purposes.
+func (lu *mockLDAPUtil) setGroups(groupsDN []string) {
+	lu.groupDNs = groupsDN
+}
+
 // ListGroups implements the ILDAPUtil interface.
 func (lu *mockLDAPUtil) ListGroups(
 	ctx context.Context, conf ldapConfig, userDN string,
@@ -104,8 +110,7 @@ func (lu *mockLDAPUtil) ListGroups(
 		return nil, errors.Newf(groupListFailureMessage+": user dn %q does not belong to any groups", userDN)
 	}
 
-	ldapGroupsDN = strings.Split(userDN, ",")
-	return ldapGroupsDN, nil
+	return lu.groupDNs, nil
 }
 
 var _ ILDAPUtil = &mockLDAPUtil{}
