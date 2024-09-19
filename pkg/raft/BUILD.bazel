@@ -13,6 +13,7 @@ go_library(
         "rawnode.go",
         "status.go",
         "storage.go",
+        "term_cache.go",
         "types.go",
         "util.go",
     ],

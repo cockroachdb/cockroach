@@ -41,6 +41,8 @@ type LogSnapshot struct {
 	storage LogStorage
 	// unstable contains the unstable log entries.
 	unstable logSlice
+	// terms contains cached term change positions in the log.
+	terms termCache
 	// logger gives access to logging errors.
 	logger Logger
 }
@@ -84,6 +86,13 @@ type raftLog struct {
 	// applyingEntsPaused is true when entry application has been paused until
 	// enough progress is acknowledged.
 	applyingEntsPaused bool
+
+	// terms contains compressed information about the terms of log entries for a
+	// suffix of the log.
+	//
+	// TODO(pav-kv): consider moving this to LogStorage implementation when it's
+	// clean enough to follow all the append/truncation events.
+	terms termCache
 }
 
 // newLog returns log using the given storage and default options. It
@@ -104,7 +113,7 @@ func newLogWithSize(
 		panic(err) // TODO(pav-kv): the storage should always cache the last term.
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
-	return &raftLog{
+	rl := &raftLog{
 		storage:             storage,
 		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
@@ -116,6 +125,8 @@ func newLogWithSize(
 
 		logger: logger,
 	}
+	rl.terms.init(last)
+	return rl
 }
 
 func (l *raftLog) String() string {
@@ -171,7 +182,11 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	return l.unstable.truncateAndAppend(a)
+	if !l.unstable.truncateAndAppend(a) {
+		return false
+	}
+	l.terms.append(a)
+	return true
 }
 
 // append adds the given log slice to the end of the log.
@@ -179,7 +194,11 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 // Returns false if the operation can not be done: entry a.prev does not match
 // the lastEntryID of this log, or a.term is outdated.
 func (l *raftLog) append(a logSlice) bool {
-	return l.unstable.append(a)
+	if !l.unstable.append(a) {
+		return false
+	}
+	l.terms.append(a)
+	return true
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
@@ -447,7 +466,9 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 	} else if index+1 < l.first {
 		return 0, ErrCompacted
 	}
-
+	if term, ok := l.terms.term(index); ok {
+		return term, nil
+	}
 	term, err := l.storage.Term(index)
 	if err == nil {
 		return term, nil
@@ -508,6 +529,7 @@ func (l *raftLog) restore(s snapshot) bool {
 		return false
 	}
 	l.committed = id.index
+	l.terms.init(s.lastEntryID())
 	return true
 }
 
@@ -659,6 +681,7 @@ func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 		first:    l.firstIndex(),
 		storage:  storage,
 		unstable: l.unstable.logSlice,
+		terms:    l.terms,
 		logger:   l.logger,
 	}
 }
