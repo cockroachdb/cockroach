@@ -310,9 +310,11 @@ func makeExternalSpanSendFunc(
 	rewrite := func(k roachpb.Key) (roachpb.Key, error) {
 		if buildutil.CrdbTestBuild {
 			if !bytes.HasPrefix(k, ext.OldPrefix) {
-				return nil, errors.AssertionFailedf(
-					"external row data does not have old prefix, key=%v, oldPrefix=%v", k, ext.OldPrefix,
-				)
+				// Panic in order to get a full stacktrace.
+				panic(errors.AssertionFailedf(
+					"external row data does not have old prefix, key=%v, keybytes=%v oldPrefix=%v",
+					k, []byte(k), ext.OldPrefix,
+				))
 			}
 		}
 		if len(ext.OldPrefix) == len(ext.NewPrefix) {
