@@ -7,6 +7,7 @@ package utilccl
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -46,6 +47,33 @@ var enterpriseLicense = settings.RegisterStringSetting(
 					"Please install a non-trial license to continue")
 			}
 			return err
+
+			if l == nil {
+				return nil
+			}
+
+			reportingSetting, ok, _ := settings.LookupForLocalAccess("diagnostics.reporting.enabled", true /* forSystemTenant */)
+			if !ok {
+				log.Warning(context.Background(), "unable to find setting for diagnostic reporting")
+				return nil
+			}
+			reportingStr, err := reportingSetting.DecodeToString(reportingSetting.Encoded(sv))
+			if err != nil {
+				return err
+			}
+
+			reporting, err := strconv.ParseBool(reportingStr)
+			if err != nil {
+				return err
+			}
+
+			// if the cluster license is limited and the reporting value passed in is
+			// disabled, then do not allow diagnostics to be set.
+			isLimited := l != nil && l.Type == licenseccl.License_Free || l.Type == licenseccl.License_Trial
+			if !reporting && isLimited {
+				return errors.New("diagnostics.reporting.enabled must be true to use this license")
+			}
+			return nil
 		},
 	),
 	// Even though string settings are non-reportable by default, we
