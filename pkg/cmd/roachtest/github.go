@@ -119,6 +119,13 @@ type postIssueCondition func(g *githubIssues, t test.Test) string
 var defaultOpts = issues.DefaultOptionsFromEnv()
 
 var skipConditions = []postIssueCondition{
+	func(_ *githubIssues, t test.Test) string {
+		if nonReportable := failuresAsNonReportableError(t.(*testImpl).failures()); nonReportable != nil {
+			return nonReportable.Error()
+		}
+
+		return ""
+	},
 	func(g *githubIssues, _ test.Test) string {
 		if g.disable {
 			return "issue posting was disabled via command line flag"
@@ -139,13 +146,6 @@ var skipConditions = []postIssueCondition{
 		}
 
 		return fmt.Sprintf("not a release branch: %q", defaultOpts.Branch)
-	},
-	func(_ *githubIssues, t test.Test) string {
-		if nonReportable := failuresAsNonReportableError(t.(*testImpl).failures()); nonReportable != nil {
-			return nonReportable.Error()
-		}
-
-		return ""
 	},
 	func(_ *githubIssues, t test.Test) string {
 		if t.Spec().(*registry.TestSpec).Run == nil {
