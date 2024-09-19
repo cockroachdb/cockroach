@@ -94,8 +94,6 @@ type RaftScheduler interface {
 // reads Raft state at various points while holding raftMu, and expects those
 // various reads to be mutually consistent.
 type RaftNode interface {
-	// RaftInterface is an interface that abstracts the raft.RawNode for use in
-	// the RangeController.
 	rac2.RaftInterface
 	// TermLocked returns the current term of this replica.
 	TermLocked() uint64
@@ -114,6 +112,19 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
+	// ReplicasStateLocked returns the current status state of all replicas.
+	// RACv2 uses the Match and Next indices only for replicas in StateReplicate.
+	// All entries >= Next have not had MsgApps constructed during the lifetime
+	// of this StateReplicate (they may have been constructed previously).
+	//
+	// When a follower transitions from {StateProbe,StateSnapshot} =>
+	// StateReplicate, we start trying to send MsgApps. We should notice such
+	// transitions both in rac2.HandleRaftEventRaftMuLocked and
+	// rac2.SetReplicasRaftMuLocked.
+	//
+	// infoMap is an in-out parameter. It is expected to be empty, and is
+	// populated with the ReplicaStateInfos for all replicas.
+	ReplicasStateLocked(infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo)
 }
 
 // AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
@@ -423,6 +434,10 @@ type processorImpl struct {
 	// leaseholderID is the currently known leaseholder replica.
 	leaseholderID roachpb.ReplicaID
 
+	// scratchInfoMap is used as a pre-allocated in-out parameter for calling
+	// ReplicasStateLocked when constructing a rac2.RaftEvent.
+	scratchInfoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo
+
 	// State at a follower.
 	follower struct {
 		// isLeaderUsingV2Protocol is true when the leaderID indicated that it's
@@ -511,6 +526,7 @@ func NewProcessor(opts ProcessorOptions) Processor {
 		opts:                       opts,
 		enabledWhenLeader:          opts.EnabledWhenLeaderLevel,
 		v1EncodingPriorityMismatch: log.Every(time.Minute),
+		scratchInfoMap:             make(map[roachpb.ReplicaID]rac2.ReplicaStateInfo),
 	}
 }
 
@@ -775,6 +791,10 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		log.Fatal(ctx, "RaftNode is not initialized")
 		return
 	}
+
+	// We will use the scratchInfoMap to get the latest state of the replicas and
+	// construct the RaftEvent. Ensure that it is empty before we start.
+	clear(p.scratchInfoMap)
 	// NB: we need to call makeStateConsistentRaftMuLocked even if
 	// NotEnabledWhenLeader, since this replica could be a follower and the leader
 	// may switch to v2.
@@ -790,6 +810,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		leaderID = p.replMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuRLocked()
 		term = p.replMu.raftNode.TermLocked()
+		p.replMu.raftNode.ReplicasStateLocked(p.scratchInfoMap)
 	}()
 	if len(e.Entries) > 0 {
 		nextUnstableIndex = e.Entries[0].Index
@@ -803,6 +824,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// NB: since we've registered the latest log/snapshot write (if any) above,
 	// our admitted vector is likely consistent with the latest leader term.
 	p.maybeSendAdmittedRaftMuLocked(ctx)
+	e.ReplicasStateInfo = p.scratchInfoMap
 	if rc := p.leader.rc; rc != nil {
 		if knobs := p.opts.Knobs; knobs == nil || !knobs.UseOnlyForScratchRanges ||
 			p.opts.Replica.IsScratchRange() {
@@ -1022,8 +1044,9 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	// p.leader.scratch, so can be read and written without holding
 	// pendingAdmittedMu.
 	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
-	// Swap the pendingAdmittedMu.updates map with the empty scratch if non-empty. This is an optimization to
-	// minimize the time we hold the pendingAdmittedMu lock.
+	// Swap the pendingAdmittedMu.updates map with the empty scratch if
+	// non-empty. This is an optimization to minimize the time we hold the
+	// pendingAdmittedMu lock.
 	if updatesEmpty := func() bool {
 		p.leader.pendingAdmittedMu.Lock()
 		defer p.leader.pendingAdmittedMu.Unlock()
