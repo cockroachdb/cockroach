@@ -664,7 +664,6 @@ func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
 
 func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb.BulkOpSummary) {
 	sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
-	sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -951,9 +950,6 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-
-	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
-	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
