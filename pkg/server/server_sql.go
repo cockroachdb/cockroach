@@ -1279,13 +1279,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
-			Cluster:       c,
-			DB:            cfg.internalDB,
-			Settings:      cfg.Settings,
-			JobRegistry:   jobRegistry,
-			Stopper:       cfg.stopper,
-			KeyVisKnobs:   keyVisKnobs,
-			SQLStatsKnobs: sqlStatsKnobs,
+			Cluster:            c,
+			DB:                 cfg.internalDB,
+			Settings:           cfg.Settings,
+			JobRegistry:        jobRegistry,
+			Stopper:            cfg.stopper,
+			KeyVisKnobs:        keyVisKnobs,
+			SQLStatsKnobs:      sqlStatsKnobs,
+			TenantInfoAccessor: cfg.tenantConnect,
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
