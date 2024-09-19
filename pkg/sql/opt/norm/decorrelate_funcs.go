@@ -391,7 +391,13 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	}
 
 	join := c.ConstructApplyJoin(op, left, hoister.input(), newFilters, private)
-	passthrough := c.OutputCols(left).Union(c.OutputCols(right))
+	var passthrough opt.ColSet
+	switch op {
+	case opt.SemiJoinOp, opt.AntiJoinOp:
+		passthrough = c.OutputCols(left)
+	default:
+		passthrough = c.OutputCols(left).Union(c.OutputCols(right))
+	}
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, passthrough)
 }
 
