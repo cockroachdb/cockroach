@@ -85,23 +85,6 @@ type RangeController interface {
 	InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle
 }
 
-// TODO(pav-kv): This interface a placeholder for the interface containing raft
-// methods. Replace this as part of #128019.
-type RaftInterface interface {
-	// FollowerStateRaftMuLocked returns the current state of a follower. The
-	// value of Match, Next are populated iff in StateReplicate. All entries >=
-	// Next have not had MsgApps constructed during the lifetime of this
-	// StateReplicate (they may have been constructed previously).
-	//
-	// When a follower transitions from {StateProbe,StateSnapshot} =>
-	// StateReplicate, we start trying to send MsgApps. We should
-	// notice such transitions both in HandleRaftEvent and
-	// SetReplicasRaftMuLocked.
-	//
-	// Requires Replica.raftMu to be held, Replica.mu is not held.
-	FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
-}
-
 type FollowerStateInfo struct {
 	State tracker.StateType
 
@@ -146,6 +129,11 @@ type RaftEvent struct {
 	// A key can map to an empty slice, in order to reuse already allocated
 	// slice memory.
 	MsgApps map[roachpb.ReplicaID][]raftpb.Message
+	// FollowersStateInfo contains the state of all followers. This is used to
+	// determine if the state of a follower has changed, and if so, to update the
+	// flow control state. It also informs the RangeController of a replica's
+	// Match and Next.
+	FollowersStateInfo map[roachpb.ReplicaID]FollowerStateInfo
 }
 
 // RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
@@ -257,7 +245,6 @@ type RangeControllerOptions struct {
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
 	SSTokenCounter      *StreamTokenCounterProvider
-	RaftInterface       RaftInterface
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
 	EvalWaitMetrics     *EvalWaitMetrics
@@ -446,8 +433,7 @@ retry:
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
 	shouldWaitChange := false
 	for r, rs := range rc.replicaMap {
-		info := rc.opts.RaftInterface.FollowerStateRaftMuLocked(r)
-		shouldWaitChange = rs.handleReadyState(ctx, info) || shouldWaitChange
+		shouldWaitChange = rs.handleReadyState(ctx, e.FollowersStateInfo[r]) || shouldWaitChange
 	}
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.

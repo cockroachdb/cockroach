@@ -1110,7 +1110,8 @@ func (r *testingRCRange) testingDeductTokens(
 	r.mu.quorumPosition.Index++
 
 	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{
-		Term: r.mu.quorumPosition.Term,
+		FollowersStateInfo: r.followersStateInfo(),
+		Term:               r.mu.quorumPosition.Term,
 		Entries: []raftpb.Entry{testingCreateEntry(t, entryInfo{
 			term:   r.mu.quorumPosition.Term,
 			index:  r.mu.quorumPosition.Index,
@@ -1161,7 +1162,7 @@ func (r *testingRCRange) testingReturnTokens(
 		repl.info.Next = r.mu.quorumPosition.Index + 1
 		r.mu.r.replicaSet[rid] = repl
 		r.rc.AdmitRaftMuLocked(ctx, rs.desc.ReplicaID, av)
-		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
+		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithFollowersInfo()))
 	}
 }
 
@@ -1206,7 +1207,7 @@ func (r *testingRCRange) testingConnectStream(
 	}
 	// Send an empty raft event in order to trigger any state changes.
 	require.NoError(t, r.rc.SetReplicasRaftMuLocked(ctx, r.mu.r.replicas()))
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
+	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithFollowersInfo()))
 }
 
 // testingDisconnectStream changes the tracker state of a given stream's
@@ -1223,7 +1224,7 @@ func (r *testingRCRange) testingDisconnectStream(
 	rs.info.State = tracker.StateSnapshot
 	r.mu.r.replicaSet[rid] = rs
 	// Send an empty raft event in order to trigger any state changes.
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
+	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithFollowersInfo()))
 }
 
 // testingString returns a string representation of the tracker state for use

@@ -13,8 +13,6 @@ package replica_rac2
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -43,18 +41,7 @@ func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 	return rn.NextUnstableIndex()
 }
 
-func (rn raftNodeForRACv2) FollowerStateRaftMuLocked(
-	replicaID roachpb.ReplicaID,
-) rac2.FollowerStateInfo {
+func (rn raftNodeForRACv2) FollowersStateRLocked() raft.Status {
 	// TODO(pav-kv): this is a temporary implementation.
-	status := rn.Status()
-	if progress, ok := status.Progress[raftpb.PeerID(replicaID)]; ok {
-		return rac2.FollowerStateInfo{
-			State: progress.State,
-			Match: progress.Match,
-			Next:  progress.Next,
-		}
-	}
-
-	return rac2.FollowerStateInfo{State: tracker.StateProbe}
+	return rn.Status()
 }

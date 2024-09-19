@@ -241,7 +241,6 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 			TenantID:            r.tenantID,
 			LocalReplicaID:      r.localReplicaID,
 			SSTokenCounter:      s.ssTokenCounter,
-			RaftInterface:       testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			EvalWaitMetrics:     s.evalMetrics,
@@ -258,7 +257,7 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 	s.maybeSetInitialTokens(r)
 	// Send through an empty raft event to trigger creating necessary replica
 	// send streams for the range.
-	require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, RaftEvent{}))
+	require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, testRC.makeRaftEventWithFollowersInfo()))
 	return testRC
 }
 
@@ -294,15 +293,21 @@ type testingRCRange struct {
 	}
 }
 
-func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo {
+func (r *testingRCRange) makeRaftEventWithFollowersInfo() RaftEvent {
+	return RaftEvent{
+		FollowersStateInfo: r.followersStateInfo(),
+	}
+}
+
+func (r *testingRCRange) followersStateInfo() map[roachpb.ReplicaID]FollowerStateInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	replica, ok := r.mu.r.replicaSet[replicaID]
-	if !ok {
-		return FollowerStateInfo{}
+	followersStateInfo := map[roachpb.ReplicaID]FollowerStateInfo{}
+	for _, replica := range r.mu.r.replicaSet {
+		followersStateInfo[replica.desc.ReplicaID] = replica.info
 	}
-	return replica.info
+	return followersStateInfo
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -593,7 +598,7 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 		}
 		timer.MarkRead()
 		require.NoError(t.state.t,
-			t.state.ranges[rangeID].rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
+			t.state.ranges[rangeID].rc.HandleRaftEventRaftMuLocked(ctx, t.state.ranges[rangeID].makeRaftEventWithFollowersInfo()))
 	}()
 }
 
@@ -785,7 +790,7 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, testRC.rc.SetReplicasRaftMuLocked(ctx, r.replicas()))
 					// Send an empty raft event in order to trigger any potential
 					// connectedState changes.
-					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
+					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, testRC.makeRaftEventWithFollowersInfo()))
 				}
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
@@ -871,7 +876,8 @@ func TestRangeController(t *testing.T) {
 
 				propRangeEntries := func() {
 					event := RaftEvent{
-						Entries: make([]raftpb.Entry, len(buf)),
+						Entries:            make([]raftpb.Entry, len(buf)),
+						FollowersStateInfo: state.ranges[lastRangeID].followersStateInfo(),
 					}
 					for i, state := range buf {
 						event.Entries[i] = testingCreateEntry(t, state)

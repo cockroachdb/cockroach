@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -133,13 +134,10 @@ func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	return rn.nextUnstableIndex
 }
 
-func (rn *testRaftNode) FollowerStateRaftMuLocked(
-	replicaID roachpb.ReplicaID,
-) rac2.FollowerStateInfo {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.FollowerStateRaftMuLocked(%v)\n", replicaID)
-	// TODO(kvoli,sumeerbhola): implement.
-	return rac2.FollowerStateInfo{}
+func (rn *testRaftNode) FollowersStateRLocked() raft.Status {
+	rn.r.mu.AssertRHeld()
+	fmt.Fprint(rn.b, " RaftNode.FollowersStateRLocked\n")
+	return raft.Status{}
 }
 
 func (rn *testRaftNode) setMark(t *testing.T, mark rac2.LogMark) {
