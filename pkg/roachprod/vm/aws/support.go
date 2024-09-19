@@ -167,6 +167,11 @@ zpool list
 
 sudo apt-get install -qy chrony
 
+# Uninstall unattended-upgrades
+sudo service unattended-upgrades stop
+sudo rm -rf /var/log/unattended-upgrades
+sudo apt-get purge -y unattended-upgrades
+
 # Override the chrony config. In particular,
 # log aggressively when clock is adjusted (0.01s)
 # and exclusively use a single time server.
