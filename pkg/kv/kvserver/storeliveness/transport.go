@@ -44,7 +44,7 @@ const (
 	connClass = rpc.SystemClass
 )
 
-var logSendQueueFullEvery = log.Every(1 * time.Second)
+var logQueueFullEvery = log.Every(1 * time.Second)
 
 // MessageHandler is the interface that must be implemented by
 // arguments to Transport.ListenMessages.
@@ -53,7 +53,7 @@ type MessageHandler interface {
 	// block (e.g. do a synchronous disk write) to prevent a single store with a
 	// problem (e.g. a stalled disk) from affecting message receipt by other
 	// stores on the same node.
-	HandleMessage(msg *slpb.Message)
+	HandleMessage(msg *slpb.Message) error
 }
 
 // sendQueue is a queue of outgoing Messages.
@@ -178,7 +178,16 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 		)
 		return
 	}
-	(*handler).HandleMessage(msg)
+	if err := (*handler).HandleMessage(msg); err != nil {
+		if logQueueFullEvery.ShouldLog() {
+			log.Warningf(
+				t.AnnotateCtx(context.Background()),
+				"error handling message to store %v: %v", msg.To, err,
+			)
+		}
+		t.metrics.MessagesReceiveDropped.Inc(1)
+		return
+	}
 	t.metrics.MessagesReceived.Inc(1)
 }
 
@@ -223,7 +232,7 @@ func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued b
 		t.metrics.SendQueueBytes.Inc(int64(msg.Size()))
 		return true
 	default:
-		if logSendQueueFullEvery.ShouldLog() {
+		if logQueueFullEvery.ShouldLog() {
 			log.Warningf(
 				t.AnnotateCtx(context.Background()),
 				"store liveness send queue to n%d is full", toNodeID,
