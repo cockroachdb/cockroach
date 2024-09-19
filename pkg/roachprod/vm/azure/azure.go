@@ -746,7 +746,11 @@ func (p *Provider) createVM(
 		OSInitializedFile:    vm.OSInitializedFile,
 		StartupLogs:          vm.StartupLogs,
 	}
-	if !opts.SSDOpts.UseLocalSSD {
+	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
+	if useNVMe {
+		startupArgs.DiskControllerNVMe = true
+	}
+	if !opts.SSDOpts.UseLocalSSD && !useNVMe {
 		// We define lun42 explicitly in the data disk request below.
 		lun := 42
 		startupArgs.AttachedDiskLun = &lun
@@ -864,6 +868,10 @@ func (p *Provider) createVM(
 			},
 		},
 	}
+	if useNVMe {
+		machine.VirtualMachineProperties.StorageProfile.DiskControllerType = compute.NVMe
+	}
+
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
 
@@ -1689,4 +1697,26 @@ func MachineFamilyVersionFromMachineType(machineType string) int {
 		}
 	}
 	return -1
+}
+
+// MachineSupportsNVMe Azure supports Nvme for E series v5 machine family.
+// OS disk and network disk support nvme. Local storage do not support nvme.
+func MachineSupportsNVMe(machineType string) bool {
+	version := MachineFamilyVersionFromMachineType(machineType)
+	if version == 5 {
+		matches := azureMachineTypes.FindStringSubmatch(machineType)
+		if len(matches) >= 4 {
+			family, features := matches[1], matches[3]
+			// additive features of azure vm are represented by lower case letter
+			// b = Block Storage performance
+			// d = diskful (that is, a local temp disk is present);
+			// s = Premium Storage capable, including possible use of Ultra SSD
+			// https://learn.microsoft.com/en-us/azure/virtual-machines/vm-naming-conventions
+			// example of supported machine types Standard_E2bds_v5, Standard_E2bs_v5
+			if family == "Standard_E" && (features == "bs" || features == "bds") {
+				return true
+			}
+		}
+	}
+	return false
 }

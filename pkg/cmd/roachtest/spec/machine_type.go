@@ -214,6 +214,7 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 // N.B. cpus is expected to be an even number; validation is deferred to a specific cloud provider.
 //
 // See ExampleSelectAzureMachineType for an exhaustive list of selected machine types.
+// TODO: Add Ebsv5 machine type to leverage NVMe
 func SelectAzureMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch, error) {
 	series := "Ddsv5" // 4 GB RAM per CPU
 	selectedArch := vm.ArchAMD64
