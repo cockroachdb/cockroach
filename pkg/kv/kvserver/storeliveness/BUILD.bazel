@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "config.go",
         "fabric.go",
+        "metrics.go",
         "persist.go",
         "requester_state.go",
         "support_manager.go",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
