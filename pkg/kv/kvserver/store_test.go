@@ -250,7 +250,7 @@ func createTestStoreWithoutStart(
 		nil, /* knobs */
 	)
 	cfg.StoreLivenessTransport = storeliveness.NewTransport(
-		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server,
+		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
 	)
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
