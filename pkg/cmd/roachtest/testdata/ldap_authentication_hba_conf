@@ -1,0 +1,3 @@
+host    all           roachprod           0.0.0.0/0          password
+host    all           all            all                 ldap ldapserver=%s ldapport=636 "ldapbasedn=OU=Users,DC=example,DC=com" "ldapbinddn=CN=John Doe,OU=Users,DC=example,DC=com" ldapbindpasswd=%s ldapsearchattribute=uid "ldapsearchfilter=(mail=*)"
+host    all           root           0.0.0.0/0          password
