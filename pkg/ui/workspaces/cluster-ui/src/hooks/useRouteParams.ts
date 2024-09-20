@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export enum TableColName {
-  NAME = "Name",
-  REPLICATION_SIZE = "Replication Size",
-  RANGE_COUNT = "Ranges",
-  COLUMN_COUNT = "Columns",
-  NODE_REGIONS = "Regions / Nodes",
-  LIVE_DATA_PERCENTAGE = "% of Live data",
-  STATS_LAST_UPDATED = "Stats last updated",
-}
+import { useParams } from "react-router";
+
+import { databaseIDAttr } from "src/util";
+
+type Params = {
+  [databaseIDAttr]: string;
+  // Add more as needed.
+};
+export const useRouteParams = useParams<Params>;

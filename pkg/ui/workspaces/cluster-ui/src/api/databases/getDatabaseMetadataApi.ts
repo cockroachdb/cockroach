@@ -32,7 +32,7 @@ export type DatabaseMetadata = {
   db_name: string;
   size_bytes: number;
   table_count: number;
-  store_ids: number[] | null;
+  store_ids: number[];
   last_updated: string;
 };
 
@@ -44,8 +44,9 @@ export type DatabaseMetadataRequest = {
   storeIds?: number[];
 };
 
-export type DatabaseMetadataResponse =
-  APIV2ResponseWithPaginationState<DatabaseMetadata>;
+export type DatabaseMetadataResponse = APIV2ResponseWithPaginationState<
+  DatabaseMetadata[]
+>;
 
 export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
   const urlParams = new URLSearchParams();
