@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -66,6 +67,16 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					return err.Error()
 				}
 				return fmt.Sprintf("pruned %d table(s)", pruned)
+			case "flush-stores":
+				// Flush store so that bytes return non-zero from span stats.
+				s := s.StorageLayer()
+				err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+					return store.TODOEngine().Flush()
+				})
+				if err != nil {
+					return err.Error()
+				}
+				return "success"
 			default:
 				return "unknown command"
 			}
