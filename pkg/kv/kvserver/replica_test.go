@@ -15020,3 +15020,29 @@ func TestLockAcquisitions1PCInteractions(t *testing.T) {
 		})
 	})
 }
+
+func TestRaftTracing(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tc := testContext{}
+
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+	// testContext tests like to move the manual clock around and assume that they can write at past
+	// timestamps.
+	cfg.TestingKnobs.DontCloseTimestamps = true
+	cfg.TestingKnobs.DisableMergeWaitForReplicasInit = true
+	cfg.TestingKnobs.TraceAllRaftEvents = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	tr := tc.store.cfg.AmbientCtx.Tracer
+	ctx, finish := tracing.ContextWithRecordingSpan(
+		ctx, tr, "testTrace",
+	)
+
+	require.NoError(t, tc.store.DB().Put(ctx, "foo", "bar"))
+	trace := finish()
+	fmt.Println(trace)
+}
