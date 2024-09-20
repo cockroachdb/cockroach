@@ -66,6 +66,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -4891,7 +4893,9 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		defer func() {
-			t.Log(err)
+			if err != nil {
+				t.Log(err)
+			}
 		}()
 		if err := txn.Put(ctx, "a", "a"); err != nil {
 			return err
@@ -5254,7 +5258,8 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	s, db := setupDBAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
@@ -5265,8 +5270,14 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	readDone := make(chan error)
 	go func() {
 		readDone <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			ctx, sp := tracing.EnsureChildSpan(ctx, s.Tracer(), "limited-scan", tracing.WithForceRealSpan())
+			sp.SetRecordingType(tracingpb.RecordingVerbose)
 			defer func() {
-				t.Log(err)
+				rec := sp.FinishAndGetConfiguredRecording()
+				if err != nil {
+					t.Log(err)
+					t.Log(rec)
+				}
 			}()
 			// There is no contention when doing optimistic evaluation, since it can read a
 			// which is not locked.
