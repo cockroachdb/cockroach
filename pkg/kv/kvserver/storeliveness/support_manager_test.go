@@ -58,6 +58,10 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
+	// Pause the clock so it does not exceed the provided support expiration when
+	// calling SupportFrom later.
+	manual.Pause()
+
 	// Start sending heartbeats to the remote store by calling SupportFrom.
 	epoch, expiration, supported := sm.SupportFrom(remoteStore)
 	require.Equal(t, slpb.Epoch(0), epoch)
@@ -114,13 +118,17 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
+	// Pause the clock so it does not exceed the provided support expiration when
+	// calling SupportFor later.
+	manual.Pause()
+
 	// Process a heartbeat from the remote store.
 	heartbeat := &slpb.Message{
 		Type:       slpb.MsgHeartbeat,
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(time.Second),
+		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
 	}
 	sm.HandleMessage(heartbeat)
 
@@ -144,6 +152,9 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	epoch, supported := sm.SupportFor(remoteStore)
 	require.Equal(t, slpb.Epoch(1), epoch)
 	require.True(t, supported)
+
+	// Resume the clock, so support can be withdrawn.
+	manual.Resume()
 
 	// Wait for support to be withdrawn.
 	testutils.SucceedsSoon(
@@ -276,6 +287,10 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
+
+	// Pause the clock so it does not exceed the provided support expiration when
+	// calling SupportFrom and SupportFor later.
+	manual.Pause()
 
 	// Establish support for and from the remote store.
 	sm.SupportFrom(remoteStore)

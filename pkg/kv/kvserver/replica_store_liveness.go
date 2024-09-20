@@ -124,5 +124,7 @@ func raftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.Ran
 
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
-	return ts.Less(r.store.Clock().Now())
+	// A support expiration timestamp equal to the current time is considered
+	// expired, to be consistent with support withdrawal in Store Liveness.
+	return ts.LessEq(r.store.Clock().Now())
 }

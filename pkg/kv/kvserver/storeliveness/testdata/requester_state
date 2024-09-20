@@ -123,7 +123,8 @@ epoch: 2, expiration: 410.000000000,0, support provided: true
 
 
 # -------------------------------------------------------------
-# Store (n1, s1) requests support but receives to response.
+# Store (n1, s1) requests support but receives no response.
+# Previously-provided support has expired.
 # -------------------------------------------------------------
 
 send-heartbeats now=500 liveness-interval=10s
@@ -133,7 +134,7 @@ heartbeats:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 0, expiration: 0,0, support provided: false
 
 debug-requester-state
 ----
@@ -183,7 +184,7 @@ heartbeats:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 0, expiration: 0,0, support provided: false
 
 send-heartbeats now=700 liveness-interval=10s
 ----
