@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/golang/snappy"
 )
 
@@ -105,6 +106,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
 	// if this method is called again.
+	ctx = logtags.AddTag(ctx, "id", s.streamID)
+	ctx = logtags.AddTag(ctx, "dst-node", s.spec.ConsumerNode)
+	ctx = logtags.AddTag(ctx, "dst-proc", s.spec.ConsumerProc)
 	if s.errCh != nil {
 		return errors.AssertionFailedf("expected to be started once")
 	}
