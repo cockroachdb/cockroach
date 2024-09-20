@@ -66,7 +66,7 @@ const COLUMNS: TableColumnProps<DatabaseRow>[] = [
   },
   {
     title: DatabaseColName.TABLE_COUNT,
-    sorter: false,
+    sorter: true,
     render: (db: DatabaseRow) => {
       return db.tableCount;
     },
