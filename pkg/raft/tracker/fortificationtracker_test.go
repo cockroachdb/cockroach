@@ -304,9 +304,9 @@ func (mockStoreLiveness) SupportFor(pb.PeerID) (pb.Epoch, bool) {
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
-func (m mockStoreLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
+func (m mockStoreLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
 	entry := m.liveness[id]
-	return entry.epoch, entry.ts, true
+	return entry.epoch, entry.ts
 }
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.
