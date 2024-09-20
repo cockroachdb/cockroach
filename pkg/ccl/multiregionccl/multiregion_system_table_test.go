@@ -108,12 +108,28 @@ func TestMrSystemDatabase(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(fmt.Sprintf("Sqlliveness %s", testCase.name), func(t *testing.T) {
-			row := testCase.database.QueryRow(t, `SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
-			var sessionID string
-			var crdbRegion string
-			var rawExpiration apd.Decimal
-			row.Scan(&crdbRegion, &sessionID, &rawExpiration)
-			require.Equal(t, "us-east1", crdbRegion)
+			// When optimizing the system database the ALTER DATABASE command will
+			// delete stats, but these are refreshed in memory using a range feed.
+			// Since there can be a delay in the new stats being picked up its possible
+			// for this query to fail with:
+			// "unsupported comparison: bytes to crdb_internal_region"
+			// querying table statistics. This is a transient condition that will
+			// clear up once the range feed catches up.
+			testutils.SucceedsSoon(t, func() error {
+				row := testCase.database.DB.QueryRowContext(ctx, `SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
+				var sessionID string
+				var crdbRegion string
+				var rawExpiration apd.Decimal
+				err := row.Scan(&crdbRegion, &sessionID, &rawExpiration)
+				if err != nil {
+					return err
+				}
+				if crdbRegion != "us-east1" {
+					return errors.AssertionFailedf("unexpected region, got: %q expected: %q",
+						crdbRegion, "us-east1")
+				}
+				return nil
+			})
 		})
 
 		t.Run(fmt.Sprintf("Sqlinstances %s", testCase.name), func(t *testing.T) {
