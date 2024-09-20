@@ -11,6 +11,8 @@
 package replica_rac2
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -64,10 +66,10 @@ func (rn raftNodeForRACv2) ReplicasStateLocked(
 }
 
 // SendPingRaftMuLocked implements rac2.RaftInterface.
-func (rn raftNodeForRACv2) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+func (rn raftNodeForRACv2) SendPingRaftMuLocked(ctx context.Context, to roachpb.ReplicaID) bool {
 	rn.r.MuLock()
 	defer rn.r.MuUnlock()
-	return rn.RawNode.SendPing(raftpb.PeerID(to))
+	return rn.RawNode.SendPing(ctx, raftpb.PeerID(to))
 }
 
 // MakeMsgAppRaftMuLocked implements rac2.RaftInterface.

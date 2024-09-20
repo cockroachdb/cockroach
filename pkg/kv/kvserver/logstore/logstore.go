@@ -90,7 +90,7 @@ func (m *MsgStorageAppend) MustSync() bool {
 }
 
 // OnDone returns the storage write post-processing information.
-func (m *MsgStorageAppend) OnDone() MsgStorageAppendDone { return m.Responses }
+func (m *MsgStorageAppend) OnDone(ctx context.Context) MsgStorageAppendDone { return m.Responses }
 
 // MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
 // done, such as sending messages back to raft node and its peers.
@@ -320,7 +320,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		*waiterCallback = nonBlockingSyncWaiterCallback{
 			ctx:            ctx,
 			cb:             cb,
-			onDone:         m.OnDone(),
+			onDone:         m.OnDone(ctx),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -338,7 +338,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.OnDone(), storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.OnDone(ctx), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync

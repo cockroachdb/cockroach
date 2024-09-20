@@ -282,7 +282,7 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
+	rightRepl.maybeUnquiesceLocked(ctx, true /* wakeLeader */, true /* mayCampaign */)
 
 	return rightRepl
 }

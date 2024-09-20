@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -41,7 +42,7 @@ func (env *InteractionEnv) RaftLog(idx int) error {
 		fmt.Fprintf(env.Output, "log is empty: first index=%d, last index=%d", fi, li)
 		return nil
 	}
-	ents, err := s.Entries(fi, li+1, math.MaxUint64)
+	ents, err := s.Entries(context.Background(), fi, li+1, math.MaxUint64)
 	if err != nil {
 		return err
 	}

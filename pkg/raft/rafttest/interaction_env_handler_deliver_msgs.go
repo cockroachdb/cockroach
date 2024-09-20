@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -98,7 +99,7 @@ func (env *InteractionEnv) DeliverMsgs(typ raftpb.MessageType, rs ...Recipient) 
 				continue
 			}
 			toIdx := int(msg.To - 1)
-			if err := env.Nodes[toIdx].Step(msg); err != nil {
+			if err := env.Nodes[toIdx].Step(context.Background(), msg); err != nil {
 				fmt.Fprintln(env.Output, err)
 			}
 		}

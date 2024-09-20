@@ -44,7 +44,7 @@ type node struct {
 	state raftpb.HardState
 }
 
-func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
+func startNode(ctx context.Context, id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	st := raft.NewMemoryStorage()
 	c := &raft.Config{
 		ID:                        id,
@@ -57,7 +57,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
-	rn := raft.StartNode(c, peers)
+	rn := raft.StartNode(ctx, c, peers)
 	n := &node{
 		Node:    rn,
 		id:      id,
@@ -70,6 +70,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 }
 
 func (n *node) start() {
+	ctx := context.Background()
 	n.stopc = make(chan struct{})
 	ticker := time.NewTicker(5 * time.Millisecond).C
 
@@ -77,7 +78,7 @@ func (n *node) start() {
 		for {
 			select {
 			case <-ticker:
-				n.Tick()
+				n.Tick(ctx)
 			case rd := <-n.Ready():
 				if !raft.IsEmptyHardState(rd.HardState) {
 					n.mu.Lock()
@@ -85,7 +86,7 @@ func (n *node) start() {
 					n.mu.Unlock()
 					n.storage.SetHardState(n.state)
 				}
-				n.storage.Append(rd.Entries)
+				n.storage.Append(ctx, rd.Entries)
 				time.Sleep(time.Millisecond)
 
 				// simulate async send, more like real world...
@@ -96,7 +97,7 @@ func (n *node) start() {
 						n.iface.send(mlocal)
 					}()
 				}
-				n.Advance()
+				n.Advance(ctx)
 			case m := <-n.iface.recv():
 				go n.Step(context.TODO(), m)
 			case <-n.stopc:
@@ -135,7 +136,7 @@ func (n *node) stop() {
 
 // restart restarts the node. restart a started node
 // blocks and might affect the future stop operation.
-func (n *node) restart() {
+func (n *node) restart(ctx context.Context) {
 	// wait for the shutdown
 	<-n.stopc
 	c := &raft.Config{
@@ -149,7 +150,7 @@ func (n *node) restart() {
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
-	n.Node = raft.RestartNode(c)
+	n.Node = raft.RestartNode(ctx, c)
 	n.start()
 	n.iface.connect()
 }

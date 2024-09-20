@@ -27,13 +27,14 @@ import (
 )
 
 func BenchmarkProposal3Nodes(b *testing.B) {
+	ctx := context.Background()
 	peers := []raft.Peer{{ID: 1, Context: nil}, {ID: 2, Context: nil}, {ID: 3, Context: nil}}
 	nt := newRaftNetwork(1, 2, 3)
 
 	nodes := make([]*node, 0)
 
 	for i := 1; i <= 3; i++ {
-		n := startNode(pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
+		n := startNode(ctx, pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
 		nodes = append(nodes, n)
 	}
 	// get ready and warm up
@@ -41,7 +42,7 @@ func BenchmarkProposal3Nodes(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		nodes[0].Propose(ctx, []byte("somedata"))
 	}
 
 	for _, n := range nodes {

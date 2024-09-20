@@ -18,10 +18,12 @@
 package raft
 
 import (
+	"context"
 	"errors"
 	"sync"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ErrCompacted is returned by Storage.Entries/Compact when a requested
@@ -63,7 +65,7 @@ type LogStorage interface {
 	// TODO(pav-kv): all log slices in raft are constructed in context of being
 	// appended after a particular log index, so (lo, hi] semantics fits better
 	// than [lo, hi).
-	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
+	Entries(ctx context.Context, lo, hi, maxSize uint64) ([]pb.Entry, error)
 
 	// Term returns the term of the entry at the given index, which must be in the
 	// valid range: [FirstIndex()-1, LastIndex()]. The term of the entry before
@@ -164,7 +166,7 @@ func (ms *MemoryStorage) SetHardState(st pb.HardState) error {
 }
 
 // Entries implements the Storage interface.
-func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
+func (ms *MemoryStorage) Entries(ctx context.Context, lo, hi, maxSize uint64) ([]pb.Entry, error) {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.entries++
@@ -173,7 +175,7 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		return nil, ErrCompacted
 	}
 	if hi > ms.lastIndex()+1 {
-		getLogger().Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
+		log.Fatalf(ctx, "entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
 	}
 	// only contains dummy entries.
 	if len(ms.ents) == 1 {
@@ -263,7 +265,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap pb.Snapshot) error {
 // If any configuration changes have been made since the last compaction,
 // the result of the last ApplyConfChange must be passed in.
 func (ms *MemoryStorage) CreateSnapshot(
-	i uint64, cs *pb.ConfState, data []byte,
+	ctx context.Context, i uint64, cs *pb.ConfState, data []byte,
 ) (pb.Snapshot, error) {
 	ms.Lock()
 	defer ms.Unlock()
@@ -273,7 +275,7 @@ func (ms *MemoryStorage) CreateSnapshot(
 
 	offset := ms.ents[0].Index
 	if i > ms.lastIndex() {
-		getLogger().Panicf("snapshot %d is out of bound lastindex(%d)", i, ms.lastIndex())
+		log.Fatalf(ctx, "snapshot %d is out of bound lastindex(%d)", i, ms.lastIndex())
 	}
 
 	ms.snapshot.Metadata.Index = i
@@ -288,7 +290,7 @@ func (ms *MemoryStorage) CreateSnapshot(
 // Compact discards all log entries prior to compactIndex.
 // It is the application's responsibility to not attempt to compact an index
 // greater than raftLog.applied.
-func (ms *MemoryStorage) Compact(compactIndex uint64) error {
+func (ms *MemoryStorage) Compact(ctx context.Context, compactIndex uint64) error {
 	ms.Lock()
 	defer ms.Unlock()
 	offset := ms.ents[0].Index
@@ -296,7 +298,7 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 		return ErrCompacted
 	}
 	if compactIndex > ms.lastIndex() {
-		getLogger().Panicf("compact %d is out of bound lastindex(%d)", compactIndex, ms.lastIndex())
+		log.Fatalf(ctx, "compact %d is out of bound lastindex(%d)", compactIndex, ms.lastIndex())
 	}
 
 	i := compactIndex - offset
@@ -314,7 +316,7 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 // Append the new entries to storage.
 // TODO (xiangli): ensure the entries are continuous and
 // entries[0].Index > ms.entries[0].Index
-func (ms *MemoryStorage) Append(entries []pb.Entry) error {
+func (ms *MemoryStorage) Append(ctx context.Context, entries []pb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -343,7 +345,7 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	case uint64(len(ms.ents)) == offset:
 		ms.ents = append(ms.ents, entries...)
 	default:
-		getLogger().Panicf("missing log entry [last: %d, append at: %d]",
+		log.Fatalf(ctx, "missing log entry [last: %d, append at: %d]",
 			ms.lastIndex(), entries[0].Index)
 	}
 	return nil

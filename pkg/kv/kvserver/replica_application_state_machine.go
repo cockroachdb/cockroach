@@ -390,7 +390,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 		// to raft.
 		return nil
 	}
-	return sm.r.withRaftGroup(func(rn *raft.RawNode) (bool, error) {
+	return sm.r.withRaftGroup(ctx, func(rn *raft.RawNode) (bool, error) {
 		// NB: `etcd/raft` configuration changes diverge from the official Raft way
 		// in that a configuration change becomes active when the corresponding log
 		// entry is applied (rather than appended). This ultimately enables the way
@@ -445,7 +445,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 		// it will receive batches of entries together with a committed index
 		// encompassing the entire batch, again making sure that these batches are
 		// durably committed upon receipt.
-		rn.ApplyConfChange(cc)
+		rn.ApplyConfChange(ctx, cc)
 		return true, nil
 	})
 }
