@@ -5417,26 +5417,25 @@ project
  ├── columns: r:13
  ├── immutable
  ├── group-by (hash)
- │    ├── columns: scalar:14!null bool_or:16 rownum:18!null
- │    ├── grouping columns: rownum:18!null
+ │    ├── columns: k:1!null scalar:14!null bool_or:16
+ │    ├── grouping columns: k:1!null
  │    ├── immutable
- │    ├── key: (18)
- │    ├── fd: ()-->(14), (18)-->(14,16)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(14), (1)-->(14,16)
  │    ├── left-join-apply
- │    │    ├── columns: i:2 column12:12 scalar:14!null notnull:15 rownum:18!null
+ │    │    ├── columns: k:1!null i:2 column12:12 scalar:14!null notnull:15
  │    │    ├── immutable
- │    │    ├── fd: ()-->(14), (18)-->(2)
- │    │    ├── ordinality
- │    │    │    ├── columns: i:2 scalar:14!null rownum:18!null
- │    │    │    ├── key: (18)
- │    │    │    ├── fd: ()-->(14), (18)-->(2,14)
- │    │    │    └── project
- │    │    │         ├── columns: scalar:14!null i:2
- │    │    │         ├── fd: ()-->(14)
- │    │    │         ├── scan a
- │    │    │         │    └── columns: i:2
- │    │    │         └── projections
- │    │    │              └── (5, 50) [as=scalar:14]
+ │    │    ├── fd: ()-->(14), (1)-->(2)
+ │    │    ├── project
+ │    │    │    ├── columns: scalar:14!null k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: ()-->(14), (1)-->(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── projections
+ │    │    │         └── (5, 50) [as=scalar:14]
  │    │    ├── project
  │    │    │    ├── columns: notnull:15!null column12:12!null
  │    │    │    ├── outer: (2)

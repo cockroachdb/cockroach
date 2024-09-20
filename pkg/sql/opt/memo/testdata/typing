@@ -419,18 +419,16 @@ SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 project
  ├── columns: exists:11(bool!null)
  ├── group-by (hash)
- │    ├── columns: true_agg:13(bool) rownum:15(int!null)
- │    ├── grouping columns: rownum:15(int!null)
+ │    ├── columns: x:1(int!null) true_agg:13(bool)
+ │    ├── grouping columns: x:1(int!null)
  │    ├── left-join (cross)
- │    │    ├── columns: expr:5(int!null) true:12(bool) rownum:15(int!null)
- │    │    ├── ordinality
- │    │    │    ├── columns: expr:5(int!null) rownum:15(int!null)
- │    │    │    └── project
- │    │    │         ├── columns: expr:5(int!null)
- │    │    │         ├── scan a
- │    │    │         │    └── columns: x:1(int!null)
- │    │    │         └── projections
- │    │    │              └── x:1 + 1 [as=expr:5, type=int]
+ │    │    ├── columns: x:1(int!null) expr:5(int!null) true:12(bool)
+ │    │    ├── project
+ │    │    │    ├── columns: expr:5(int!null) x:1(int!null)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: x:1(int!null)
+ │    │    │    └── projections
+ │    │    │         └── x:1 + 1 [as=expr:5, type=int]
  │    │    ├── project
  │    │    │    ├── columns: true:12(bool!null)
  │    │    │    ├── scan a
