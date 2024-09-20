@@ -36,27 +36,27 @@ import { Bytes } from "src/util";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
-import {
-  getColTitleFromSortKey,
-  getSortKeyFromColTitle,
-  rawDatabaseMetadataToDatabaseRows,
-} from "./utils";
+import { rawDatabaseMetadataToDatabaseRows } from "./utils";
 
 const mockRegionOptions = [
   { label: "US East (N. Virginia)", value: "us-east-1" },
   { label: "US East (Ohio)", value: "us-east-2" },
 ];
 
-const COLUMNS: TableColumnProps<DatabaseRow>[] = [
+const COLUMNS: (TableColumnProps<DatabaseRow> & {
+  sortKey?: DatabaseSortOptions;
+})[] = [
   {
     title: DatabaseColName.NAME,
     sorter: true,
+    sortKey: DatabaseSortOptions.NAME,
     render: (db: DatabaseRow) => {
       return <Link to={`/v2/databases/${db.id}`}>{db.name}</Link>;
     },
   },
   {
     title: DatabaseColName.SIZE,
+    sortKey: DatabaseSortOptions.REPLICATION_SIZE,
     sorter: true,
     render: (db: DatabaseRow) => {
       return Bytes(db.approximateDiskSizeBytes);
@@ -64,6 +64,7 @@ const COLUMNS: TableColumnProps<DatabaseRow>[] = [
   },
   {
     title: DatabaseColName.TABLE_COUNT,
+    sortKey: DatabaseSortOptions.TABLE_COUNT,
     sorter: true,
     render: (db: DatabaseRow) => {
       return db.tableCount;
@@ -71,6 +72,7 @@ const COLUMNS: TableColumnProps<DatabaseRow>[] = [
   },
   {
     title: DatabaseColName.RANGE_COUNT,
+    sortKey: DatabaseSortOptions.RANGES,
     sorter: true,
     render: (db: DatabaseRow) => {
       return db.rangeCount;
@@ -157,7 +159,7 @@ export const DatabasesPageV2 = () => {
         return;
       }
       setSort({
-        field: getSortKeyFromColTitle(COLUMNS[colKey].title as DatabaseColName),
+        field: COLUMNS[colKey].sortKey,
         order: sorter.order === "descend" ? "desc" : "asc",
       });
     }
@@ -167,8 +169,7 @@ export const DatabasesPageV2 = () => {
   const colsWithSort = useMemo(
     () =>
       COLUMNS.map((col, i) => {
-        const title = getColTitleFromSortKey(sort.field as DatabaseSortOptions);
-        const colInd = COLUMNS.findIndex(c => c.title === title);
+        const colInd = COLUMNS.findIndex(c => c.title === sort.field);
         const sortOrder: SortDirection =
           sort?.order === "desc" ? "descend" : "ascend";
         return {
