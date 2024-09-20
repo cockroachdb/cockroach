@@ -1011,15 +1011,16 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
 	// Swap the updates map with the empty scratch. This is an optimization to
 	// minimize the time we hold the pendingAdmittedMu lock.
-	func() {
+	if updatesEmpty := func() bool {
 		p.leader.pendingAdmittedMu.Lock()
 		defer p.leader.pendingAdmittedMu.Unlock()
 		if updates = p.leader.pendingAdmittedMu.updates; len(updates) != 0 {
 			p.leader.pendingAdmittedMu.updates = p.leader.scratch
 			p.leader.scratch = updates
+			return false
 		}
-	}()
-	if len(updates) == 0 {
+		return true
+	}(); updatesEmpty {
 		return
 	}
 	for replicaID, state := range updates {
