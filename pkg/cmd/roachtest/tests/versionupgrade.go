@@ -255,26 +255,6 @@ func binaryUpgradeStep(
 	}
 }
 
-func preventAutoUpgradeStep(node int) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
-		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func allowAutoUpgradeStep(node int) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
-		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 // NB: this is intentionally kept separate from binaryUpgradeStep because we run
 // feature tests between the steps, and we want to expose them (at least
 // heuristically) to the real-world situation in which some nodes have already
@@ -372,10 +352,4 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
-}
-
-func sleepStep(d time.Duration) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		time.Sleep(d)
-	}
 }
