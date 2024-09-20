@@ -1,0 +1,249 @@
+# Register three notifications on each stream (s1,s2). This test will walk
+# through the functionality of the store token watcher, including registering
+# notifications, adjusting the number of tokens being watched, and canceling
+# registered notifications.
+#
+# The same output is printed after each operation to show the state of the
+# notifications. The syntax is:
+#
+#  stream=<stream> tokens=<tokens> len=<len>
+#   name=<name> handle_id=<handle_id> deducted=<deducted>/<deduct> state=<state>
+#   ...
+# 
+# Where deducted=<deducted>/<deduct> is the number of tokens the notification
+# has deducted / wants to deduct on each notification. The deducted value only
+# changes when the notification is 'notified' of available tokens via the store
+# token watcher. len=<len> is the number of non-cancelled notifications
+# registered on the stream
+#
+# Each stream starts with no tokens. Therefore we expect every registered
+# notification to be in the 'waiting' state.
+register
+  name=a store_id=1 deduct=1
+  name=b store_id=1 deduct=2
+  name=c store_id=1 deduct=3
+  name=d store_id=2 deduct=4
+  name=e store_id=2 deduct=5
+  name=f store_id=2 deduct=6
+----
+stream=t1/s1 tokens=0 len=3
+  name=a handle_id=1 deducted=0/1 state=waiting
+  name=b handle_id=2 deducted=0/2 state=waiting
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=0 len=3
+  name=d handle_id=1 deducted=0/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+cancel name=a
+----
+stream=t1/s1 tokens=0 len=2
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=0/2 state=waiting
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=0 len=3
+  name=d handle_id=1 deducted=0/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+# Add two tokens to each stream. Despite not being enough tokens for 'd', all
+# the watcher is concerned with is that there are tokens available (>0). Expect
+# the watcher to notify 'b' and 'd', which will be reflected in their deducted
+# token amounts and the stream's available tokens.
+adjust
+  store_id=1 tokens=2
+  store_id=2 tokens=2
+----
+stream=t1/s1 tokens=0 len=2
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=waiting
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=-2 len=3
+  name=d handle_id=1 deducted=4/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+# The caller is required to cancel their notifications if they no longer need
+# tokens. Cancel 'b' so it will no longer deduct tokens when notified.
+cancel name=b
+----
+stream=t1/s1 tokens=0 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=0/3 state=waiting
+stream=t1/s2 tokens=-2 len=3
+  name=d handle_id=1 deducted=4/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+# Add another two tokens to each stream. Expect 'c' to be notified, and 'e' to
+# not be notified as the tokens are not > 0 yet.
+adjust
+  store_id=1 tokens=2
+  store_id=2 tokens=2
+----
+stream=t1/s1 tokens=-1 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=3/3 state=waiting
+stream=t1/s2 tokens=0 len=3
+  name=d handle_id=1 deducted=4/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=waiting
+
+cancel name=f
+----
+stream=t1/s1 tokens=-1 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=3/3 state=waiting
+stream=t1/s2 tokens=0 len=2
+  name=d handle_id=1 deducted=4/4 state=waiting
+  name=e handle_id=2 deducted=0/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add not quite enough tokens for 'c' to be notified. 'e' should now be
+# notified and deduct tokens.
+adjust
+  store_id=1 tokens=1
+  store_id=2 tokens=4
+----
+stream=t1/s1 tokens=0 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=3/3 state=waiting
+stream=t1/s2 tokens=-1 len=2
+  name=d handle_id=1 deducted=4/4 state=waiting
+  name=e handle_id=2 deducted=5/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add 100 tokens to each stream. Expect each of the remaining registered
+# notifications to be notified and deduct tokens multiple times (as they aren't
+# cancelled). We can observe that the tokens are being deducted in a cycle,
+# ordered by the registered notification's queue order.
+adjust
+  store_id=1 tokens=100
+  store_id=2 tokens=100
+----
+stream=t1/s1 tokens=-2 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=waiting
+stream=t1/s2 tokens=0 len=2
+  name=d handle_id=1 deducted=48/4 state=waiting
+  name=e handle_id=2 deducted=60/5 state=waiting
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Cancel the remaining notifications.
+cancel name=e
+----
+stream=t1/s1 tokens=-2 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=waiting
+stream=t1/s2 tokens=0 len=1
+  name=d handle_id=1 deducted=48/4 state=waiting
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+cancel name=d
+----
+stream=t1/s1 tokens=-2 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=waiting
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+cancel name=c
+----
+stream=t1/s1 tokens=-2 len=0
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add 2 tokens to s1 to make both streams have the same tokens available, 0.
+adjust
+  store_id=1 tokens=2
+----
+stream=t1/s1 tokens=0 len=0
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Both streams are now empty and have no registered notifications. Register
+# another set of notifications on the first stream, in order to verify that the
+# watcher correctly handles switching between an empty and non-empty state. We
+# will add a multiple of the deduct tokens and observe the notifications being
+# notified in a cycle.
+register
+  name=g store_id=1 deduct=10
+  name=h store_id=1 deduct=100
+----
+stream=t1/s1 tokens=0 len=2
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+  name=g handle_id=4 deducted=0/10 state=waiting
+  name=h handle_id=5 deducted=0/100 state=waiting
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Add 110k tokens, expect to see 1000 cycles of notifications e.g., 
+# 110_000 / (10+100) = 1000.
+# 'g' will have deducted 10*1000=10_000 tokens.
+# 'h' will have deducted 100*1000=100_000 tokens.
+adjust
+  store_id=1 tokens=110000
+----
+stream=t1/s1 tokens=0 len=2
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+  name=g handle_id=4 deducted=10000/10 state=waiting
+  name=h handle_id=5 deducted=100000/100 state=waiting
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# Lastly, cancel the notifications.
+cancel name=g
+----
+stream=t1/s1 tokens=0 len=1
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+  name=g handle_id=4 deducted=10000/10 state=cancelled
+  name=h handle_id=5 deducted=100000/100 state=waiting
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+cancel name=h
+----
+stream=t1/s1 tokens=0 len=0
+  name=a handle_id=1 deducted=0/1 state=cancelled
+  name=b handle_id=2 deducted=2/2 state=cancelled
+  name=c handle_id=3 deducted=105/3 state=cancelled
+  name=g handle_id=4 deducted=10000/10 state=cancelled
+  name=h handle_id=5 deducted=100000/100 state=cancelled
+stream=t1/s2 tokens=0 len=0
+  name=d handle_id=1 deducted=48/4 state=cancelled
+  name=e handle_id=2 deducted=60/5 state=cancelled
+  name=f handle_id=3 deducted=0/6 state=cancelled
+
+# vim:ft=sh

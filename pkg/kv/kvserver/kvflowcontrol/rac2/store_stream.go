@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/queue"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -320,35 +322,228 @@ func pprintTokens(t kvflowcontrol.Tokens) string {
 	return humanize.IBytes(uint64(t))
 }
 
-// SendTokenWatcherHandleID is a unique identifier for a handle that is
-// watching for available elastic send tokens on a stream.
-type SendTokenWatcherHandleID int64
-
-// SendTokenWatcher is the interface for watching and waiting on available
-// elastic send tokens. The watcher registers a notification, which will be
-// called when elastic tokens are available for the stream this watcher is
-// monitoring. Note only elastic tokens are watched as this is intended to be
-// used when a send queue exists.
-//
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type SendTokenWatcher interface {
-	// NotifyWhenAvailable queues up for elastic tokens for the given send token
-	// counter. When elastic tokens are available, the provided
-	// TokenGrantNotification is called. It is the caller's responsibility to
-	// call CancelHandle when tokens are no longer needed, or when the caller is
-	// done.
-	NotifyWhenAvailable(
-		*tokenCounter,
-		TokenGrantNotification,
-	) SendTokenWatcherHandleID
-	// CancelHandle cancels the given handle, stopping it from being notified
-	// when tokens are available. CancelHandle should be called at most once.
-	CancelHandle(SendTokenWatcherHandleID)
+// SendTokenWatcher can be used for watching and waiting on available elastic
+// send tokens. The caller registers a notification, which will be called when
+// elastic tokens are available for the given stream being watched. Note that
+// only elastic tokens are watched, as the SendTokenWatcher is intended to be
+// used when a send queue exists for a replication stream, requiring only one
+// goroutine per stream.
+type SendTokenWatcher struct {
+	stopper  *stop.Stopper
+	watchers syncutil.Map[kvflowcontrol.Stream, sendStreamTokenWatcher]
 }
+
+// NewSendTokenWatcher creates a new SendTokenWatcher.
+func NewSendTokenWatcher(stopper *stop.Stopper) *SendTokenWatcher {
+	return &SendTokenWatcher{stopper: stopper}
+}
+
+// sendTokenWatcherWC is the class of tokens the send token watcher is
+// watching.
+const sendTokenWatcherWC = admissionpb.ElasticWorkClass
 
 // TokenGrantNotification is an interface that is called when tokens are
 // available.
 type TokenGrantNotification interface {
 	// Notify is called when tokens are available to be granted.
 	Notify(context.Context)
+}
+
+// SendTokenWatcherHandle is a unique handle that is watching for available
+// elastic send tokens on a stream.
+type SendTokenWatcherHandle struct {
+	// id is the unique identifier for this handle.
+	id uint64
+	// stream is the stream that this handle is watching.
+	stream kvflowcontrol.Stream
+}
+
+// NotifyWhenAvailable queues up for elastic tokens for the given send token
+// counter. When elastic tokens are available, the provided
+// TokenGrantNotification is called. It is the caller's responsibility to call
+// CancelHandle when tokens are no longer needed, or when the caller is done.
+func (s *SendTokenWatcher) NotifyWhenAvailable(
+	ctx context.Context, tc *tokenCounter, notify TokenGrantNotification,
+) SendTokenWatcherHandle {
+	return s.watcher(tc).add(ctx, notify)
+}
+
+// CancelHandle cancels the given handle, stopping it from being notified when
+// tokens are available.
+func (s *SendTokenWatcher) CancelHandle(ctx context.Context, handle SendTokenWatcherHandle) {
+	if w, ok := s.watchers.Load(handle.stream); ok {
+		w.remove(ctx, handle)
+	}
+}
+
+// watcher returns the sendStreamTokenWatcher for the given stream. If the
+// watcher does not exist, it is created.
+func (s *SendTokenWatcher) watcher(tc *tokenCounter) *sendStreamTokenWatcher {
+	if w, ok := s.watchers.Load(tc.Stream()); ok {
+		return w
+	}
+	w, _ := s.watchers.LoadOrStore(tc.Stream(), newSendStreamTokenWatcher(s.stopper, tc))
+	return w
+}
+
+// sendStreamTokenWatcher is a watcher for available elastic send tokens on a
+// stream. It watches for available tokens and notifies the caller when tokens
+// are available.
+type sendStreamTokenWatcher struct {
+	stopper *stop.Stopper
+	tc      *tokenCounter
+	// nonEmptyCh is used to signal the watcher that there are events to process.
+	// When the heap is empty, the watcher will wait for the next event to be
+	// added before processing, by waiting on this channel.
+	nonEmptyCh chan struct{}
+	mu         struct {
+		syncutil.Mutex
+		// size is the number of waiting handles in the queue.
+		size uint64
+		// idSeq is the unique identifier for the next handle.
+		idSeq uint64
+		// started is true if the watcher is running, false otherwise. It is used
+		// to prevent running more than one goroutine per stream.
+		started bool
+		// queueItems maps handles to their grant notification.
+		queueItems map[SendTokenWatcherHandle]TokenGrantNotification
+		// queue is the FIFO ordered queue of handles to be notified when tokens
+		// are available.
+		queue *queue.Queue[SendTokenWatcherHandle]
+	}
+}
+
+func newSendStreamTokenWatcher(stopper *stop.Stopper, tc *tokenCounter) *sendStreamTokenWatcher {
+	w := &sendStreamTokenWatcher{
+		stopper:    stopper,
+		tc:         tc,
+		nonEmptyCh: make(chan struct{}, 1),
+	}
+	w.mu.started = false
+	w.mu.queueItems = make(map[SendTokenWatcherHandle]TokenGrantNotification)
+	w.mu.queue, _ = queue.NewQueue[SendTokenWatcherHandle]()
+	return w
+}
+
+// add adds a handle to be watched for available tokens. The handle is added to
+// the queue and the watcher is started if it is not already running.
+func (w *sendStreamTokenWatcher) add(
+	ctx context.Context, notify TokenGrantNotification,
+) SendTokenWatcherHandle {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.mu.idSeq++
+	w.mu.size++
+	handle := SendTokenWatcherHandle{id: w.mu.idSeq, stream: w.tc.stream}
+	w.mu.queueItems[handle] = notify
+	w.mu.queue.Enqueue(handle)
+
+	log.VEventf(ctx, 3, "%v (id=%d) watching stream %v", notify, handle.id, w.tc.stream)
+	if !w.mu.started {
+		// This is the first handle added to the queue, so start the watcher.
+		log.VEventf(ctx, 2, "starting %v send stream token watcher", w.tc.stream)
+		if err := w.stopper.RunAsyncTask(ctx,
+			"flow-control-send-stream-token-watcher", w.run); err == nil {
+			w.mu.started = true
+		} else {
+			log.Warningf(ctx, "failed to start send stream token watcher: %v", err)
+		}
+	}
+
+	if w.mu.size == 1 {
+		// The queue was empty, so signal the watcher that there are events to
+		// process.
+		log.VEventf(ctx, 3, "signaling %v non-empty", w.tc.stream)
+		select {
+		case w.nonEmptyCh <- struct{}{}:
+		default:
+		}
+	}
+
+	return handle
+}
+
+// remove removes the handle from being watched for available tokens.
+func (w *sendStreamTokenWatcher) remove(ctx context.Context, handle SendTokenWatcherHandle) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// Don't bother removing it from the queue. When the handle is dequeued, the
+	// handle won't be in the queueItems map and will be ignored.
+	if notification, ok := w.mu.queueItems[handle]; ok {
+		log.VEventf(ctx, 3, "%v (id=%d) stopped watching stream %v",
+			notification, handle.id, w.tc.stream)
+		w.mu.size--
+		delete(w.mu.queueItems, handle)
+	}
+}
+
+func (s *sendStreamTokenWatcher) run(ctx context.Context) {
+	for {
+		if empty := s.size() == 0; empty {
+			// The watcher will wait here until a item is added to the queue, or
+			// until cancellation.
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.stopper.ShouldQuiesce():
+				return
+			case <-s.nonEmptyCh:
+			}
+		}
+
+		available, handle := s.tc.TokensAvailable(sendTokenWatcherWC)
+		// When there are no tokens available, wait for token counter channel to be
+		// signaled, or until cancellation.
+		if !available {
+		waiting:
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-s.stopper.ShouldQuiesce():
+					return
+				case <-handle.WaitChannel():
+					if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
+						break waiting
+					}
+				}
+			}
+		}
+		// There were either tokens available (without waiting), or we waited, were
+		// unblocked and confirmed that there are tokens available. Notify the next
+		// handle in line.
+		if grant, found := s.nextGrant(); found {
+			log.VEventf(ctx, 4,
+				"notifying %v of available tokens for stream %v", grant, s.tc.stream)
+			grant.Notify(ctx)
+		}
+	}
+}
+
+// nextGrant returns the next grant in the queue and true if a grant is
+// available. If no grant is available, it returns false. If a grant is found
+// and dequeued, it will be immediately enqueued again. The top-level caller of
+// NotifyWhenAvailable is responsible for removing the handle when they are
+// done, or no longer require tokens after being notified.
+func (s *sendStreamTokenWatcher) nextGrant() (grant TokenGrantNotification, found bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for handle, ok := s.mu.queue.Dequeue(); ok; handle, ok = s.mu.queue.Dequeue() {
+		// The front of the queue could be a handle that was removed, so we need to
+		// check if it's still in the queueItems map.
+		if grant, found = s.mu.queueItems[handle]; found {
+			s.mu.queue.Enqueue(handle)
+			return grant, found
+		}
+	}
+	// Either the queue was empty or non-empty but every handle was removed.
+	return nil, false
+}
+
+// size returns the number of watching handles.
+func (s *sendStreamTokenWatcher) size() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.size
 }

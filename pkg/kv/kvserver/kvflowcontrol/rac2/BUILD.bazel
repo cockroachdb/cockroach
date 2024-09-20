@@ -29,6 +29,8 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/queue",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
