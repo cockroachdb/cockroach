@@ -807,8 +807,7 @@ func getTableDescriptors(
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
-			tableName := m.GetTableName()
-			err = errors.Errorf("table %q does not exist", tableName)
+			err = errors.Wrapf(m.Unwrap(), "table %q does not exist", m.GetTableName())
 		}
 		err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 		if !initialHighWater.IsEmpty() {
