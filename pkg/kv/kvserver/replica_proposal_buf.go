@@ -126,6 +126,7 @@ type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	maybeRegister(context.Context, []raftpb.Entry)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -888,6 +889,8 @@ func proposeBatch(
 		//      slice of entries. See etcd-io/raft#57.
 		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
 	}
+
+	p.maybeRegister(ctx, ents)
 	return err
 }
 
@@ -1173,6 +1176,20 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 
 func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
+}
+
+// maybeRegister is called when a proposal is about to be proposed. It goes
+// through all the entries in the proposal and registers them for tracking if
+// the context was set up for tracking when it was submitted.
+func (rp *replicaProposer) maybeRegister(ctx context.Context, ents []raftpb.Entry) {
+	r := (*Replica)(rp)
+	for _, e := range ents {
+		if id, valid, traced := getID(e); valid && traced {
+			if prop, ok := r.mu.proposals[id]; ok {
+				rp.mu.raftTracer.Register(prop, ents)
+			}
+		}
+	}
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {

@@ -236,28 +236,40 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		typ, _, err := raftlog.EncodingOf(e)
-		if err != nil {
-			continue
-		}
-		switch typ {
-		case raftlog.EntryEncodingStandardWithAC,
-			raftlog.EntryEncodingSideloadedWithAC,
-			raftlog.EntryEncodingStandardWithoutAC,
-			raftlog.EntryEncodingSideloadedWithoutAC:
-			id, _ := raftlog.DecomposeRaftEncodingStandardOrSideloaded(e.Data)
+		id, valid, _ := getID(e)
+		if valid {
 			ids = append(ids, id)
-		case raftlog.EntryEncodingRaftConfChange, raftlog.EntryEncodingRaftConfChangeV2:
-			// Configuration changes don't have the CmdIDKey easily accessible but are
-			// rare, so fully decode the entry.
-			ent, err := raftlog.NewEntry(e)
-			if err != nil {
-				continue
-			}
-			ids = append(ids, ent.ID)
 		}
 	}
 	return ids
+}
+
+// getID extracts the command ID from the entry, if possible. The returned bool
+// are first whether the id is valid, and the second whether the entry is
+// traced.
+func getID(e raftpb.Entry) (kvserverbase.CmdIDKey, bool, bool) {
+	typ, _, err := raftlog.EncodingOf(e)
+	if err != nil {
+		return "", false, false
+	}
+	switch typ {
+	case raftlog.EntryEncodingStandardWithAC,
+		raftlog.EntryEncodingSideloadedWithAC,
+		raftlog.EntryEncodingStandardWithoutAC,
+		raftlog.EntryEncodingSideloadedWithoutAC:
+		id, _ := raftlog.DecomposeRaftEncodingStandardOrSideloaded(e.Data)
+		return id, true, raftlog.IsTraced(e.Data[0])
+	case raftlog.EntryEncodingRaftConfChange, raftlog.EntryEncodingRaftConfChangeV2:
+		// Configuration changes don't have the CmdIDKey easily accessible but are
+		// rare, so fully decode the entry.
+		ent, err := raftlog.NewEntry(e)
+		if err != nil {
+			return "", false, false
+		}
+		return ent.ID, true, false
+	default:
+		return "", false, false
+	}
 }
 
 // traceProposals logs a trace event with the provided string for each proposed

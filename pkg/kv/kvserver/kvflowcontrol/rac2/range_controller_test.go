@@ -818,7 +818,7 @@ func testingCreateEntry(t *testing.T, info entryInfo) raftpb.Entry {
 		metaBuf, err = protoutil.Marshal(&meta)
 		require.NoError(t, err)
 	}
-	cmdBufPrefix := raftlog.EncodeCommandBytes(info.enc, cmdID, nil, info.pri)
+	cmdBufPrefix := raftlog.EncodeCommandBytes(context.Background(), info.enc, cmdID, nil, info.pri)
 	paddingLen := int(info.tokens) - len(cmdBufPrefix) - len(metaBuf)
 	// Padding also needs to decode as part of the RaftCommand proto, so we
 	// abuse the WriteBatch.Data field which is a byte slice. Since it is a

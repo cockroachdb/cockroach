@@ -136,7 +136,7 @@ func getPriority(b byte) raftpb.Priority {
 	return raftpb.Priority((b & priMask) >> priShift)
 }
 
-func isTraced(b byte) bool {
+func IsTraced(b byte) bool {
 	return b&isTracedMask != 0
 }
 

@@ -600,6 +600,11 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 	r.raftMu.AssertHeld()
 	var sideChannelInfo replica_rac2.SideChannelInfoUsingRaftMessageRequest
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// If this message requested tracing, begin tracing it.
+		for _, e := range req.TracedEntries {
+			r.mu.raftTracer.RegisterRemote(r.raftCtx, e.Index, e.TraceId, e.SpanId)
+		}
+		r.mu.raftTracer.MaybeTrace(req.Message)
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
 		// group.
@@ -1158,6 +1163,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
+			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
 			if state, err = s.StoreEntries(ctx, state, app, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1189,6 +1195,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	stats.tApplicationBegin = timeutil.Now()
 	if hasMsg(msgStorageApply) {
+		r.mu.raftTracer.MaybeTrace(msgStorageApply)
+		// TODO: remove
 		r.traceEntries(msgStorageApply.Entries, "committed, before applying any entries")
 
 		err := appTask.ApplyCommittedEntries(ctx)
@@ -1931,6 +1939,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
 				raft.DescribeMessage(m, raftEntryFormatter), err)
 		}
+		r.mu.raftTracer.MaybeTrace(m)
 		// NB: we can reset messages in the localMsgs.recycled slice without holding
 		// the localMsgs mutex because no-one ever writes to localMsgs.recycled and
 		// we are holding raftMu, which must be held to switch localMsgs.active and
@@ -1949,6 +1958,7 @@ func (r *Replica) sendRaftMessage(
 ) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
+	tracedCtxs := r.mu.raftTracer.MaybeTrace(msg)
 	r.mu.RLock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), lastFromReplica)
@@ -2002,6 +2012,20 @@ func (r *Replica) sendRaftMessage(
 		RangeStartKey:       startKey, // usually nil
 		UsingRac2Protocol:   r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
 		LowPriorityOverride: lowPriorityOverride,
+	}
+	if len(tracedCtxs) > 0 {
+		var tracedEntries []*kvserverpb.TracedEntries
+		for _, tracedCtx := range tracedCtxs {
+			span := tracing.SpanFromContext(tracedCtx.Ctx)
+			// TODO(baptist): Maybe type traceID and spanID in the proto.
+			tracedEntries = append(tracedEntries, &kvserverpb.TracedEntries{
+				TraceId: uint64(span.TraceID()),
+				SpanId:  uint64(span.SpanID()),
+				Index:   tracedCtx.Index,
+			})
+
+		}
+		req.TracedEntries = tracedEntries
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.

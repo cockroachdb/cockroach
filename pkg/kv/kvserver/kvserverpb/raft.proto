@@ -48,6 +48,13 @@ message RaftHeartbeat {
   bool lagging_followers_on_quiesce_accurate = 10;
 }
 
+message TracedEntries {
+  // The traced entries.
+  uint64 index = 1;
+  uint64 trace_id = 2;
+	uint64 span_id = 3;
+}
+
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec. If a RaftMessageRequest has a non-empty number of
 // heartbeats or heartbeat_resps, the contents of the message field is treated
@@ -108,6 +115,8 @@ message RaftMessageRequest {
   //
   // TODO(pav-kv): remove.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 15 [(gogoproto.nullable) = false];
+
+  repeated TracedEntries traced_entries = 16;
   reserved 10;
 }
 

@@ -204,6 +204,10 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	return buf.String()
 }
 
+func DescribeTarget(id pb.PeerID) string {
+	return describeTarget(id)
+}
+
 func describeTarget(id pb.PeerID) string {
 	switch id {
 	case None:
