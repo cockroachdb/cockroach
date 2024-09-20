@@ -540,6 +540,12 @@ type StoreTestingKnobs struct {
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.
 	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
+
+	// RaftReportUnreachableBypass is called when a replica reports that another
+	// replica is unreachable. If the bypass function is non-nil and returns
+	// true, the report is ignored and ReportUnreachable is not called on the
+	// raft group for that replica.
+	RaftReportUnreachableBypass func(roachpb.ReplicaID) bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
