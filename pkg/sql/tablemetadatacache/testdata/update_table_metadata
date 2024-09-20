@@ -24,6 +24,14 @@ query
 CREATE SEQUENCE myseq
 ----
 
+query
+INSERT INTO mytable VALUES (1, 2), (3, 4), (5, 6)
+----
+
+flush-stores
+----
+success
+
 update-cache
 ----
 updated 62 table(s)
@@ -112,6 +120,21 @@ ui system public 1 14 3 0 TABLE {1} 1 <nil>
 users system public 1 4 4 1 TABLE {1} 1 <nil>
 web_sessions system public 1 19 9 4 TABLE {1} 1 <nil>
 zones system public 1 5 2 0 TABLE {1} 1 <nil>
+
+query
+SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
+----
+0
+
+query
+SELECT count(*) FROM system.table_metadata WHERE replication_size_bytes > 0
+----
+62
+
+query
+SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_data_bytes
+----
+0
 
 query
 DROP TABLE mytable
