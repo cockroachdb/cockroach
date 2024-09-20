@@ -7552,3 +7552,266 @@ semi-join (hash)
  │         └── a IS DISTINCT FROM CAST(NULL AS INT8)
  └── filters
       └── x = a
+
+# --------------------------------------------------
+# TryDecorrelateUnion
+# --------------------------------------------------
+
+# Case with UnionAll.
+norm expect=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION ALL SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── group-by (hash)
+ │    ├── left-join (hash)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── scan a
+ │    │    │    ├── project
+ │    │    │    │    ├── scan xy
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1
+ │    │    │    └── filters
+ │    │    │         └── x = k
+ │    │    ├── project
+ │    │    │    ├── scan uv
+ │    │    │    └── projections
+ │    │    │         └── 1
+ │    │    └── filters
+ │    │         └── v = k
+ │    └── aggregations
+ │         ├── any-not-null-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── i
+ │         ├── const-agg
+ │         │    └── f
+ │         ├── const-agg
+ │         │    └── s
+ │         └── const-agg
+ │              └── j
+ └── projections
+      └── CASE WHEN COALESCE("?column?", "?column?") IS NOT NULL THEN 1 ELSE 0 END
+
+# Case with Union.
+norm expect=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── group-by (hash)
+ │    ├── left-join (hash)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── scan a
+ │    │    │    ├── project
+ │    │    │    │    ├── scan xy
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1
+ │    │    │    └── filters
+ │    │    │         └── x = k
+ │    │    ├── project
+ │    │    │    ├── scan uv
+ │    │    │    └── projections
+ │    │    │         └── 1
+ │    │    └── filters
+ │    │         └── v = k
+ │    └── aggregations
+ │         ├── any-not-null-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── i
+ │         ├── const-agg
+ │         │    └── f
+ │         ├── const-agg
+ │         │    └── s
+ │         └── const-agg
+ │              └── j
+ └── projections
+      └── CASE WHEN COALESCE("?column?", "?column?") IS NOT NULL THEN 1 ELSE 0 END
+
+# Case with an uncorrelated Union branch.
+norm expect=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION ALL SELECT 1 FROM uv WHERE u = 1) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── inner-join-apply
+ │    ├── scan a
+ │    ├── inner-join (cross)
+ │    │    ├── scalar-group-by
+ │    │    │    ├── project
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── x = k
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1
+ │    │    │    └── aggregations
+ │    │    │         └── any-not-null-agg
+ │    │    │              └── "?column?"
+ │    │    ├── scalar-group-by
+ │    │    │    ├── project
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── scan uv
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── u = 1
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1
+ │    │    │    └── aggregations
+ │    │    │         └── any-not-null-agg
+ │    │    │              └── "?column?"
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── CASE WHEN COALESCE("?column?", "?column?") IS NOT NULL THEN 1 ELSE 0 END
+
+# Case with more than one union operator.
+norm expect=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (
+  SELECT 1 FROM xy WHERE x = k
+  UNION ALL SELECT 1 FROM uv WHERE v = k
+  UNION ALL SELECT 1 FROM cd WHERE d = k
+) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── group-by (hash)
+ │    ├── left-join (hash)
+ │    │    ├── project
+ │    │    │    ├── group-by (hash)
+ │    │    │    │    ├── left-join (hash)
+ │    │    │    │    │    ├── left-join (hash)
+ │    │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         └── 1
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── x = k
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── scan uv
+ │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │         └── 1
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── v = k
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── any-not-null-agg
+ │    │    │    │         │    └── "?column?"
+ │    │    │    │         ├── const-agg
+ │    │    │    │         │    └── "?column?"
+ │    │    │    │         ├── const-agg
+ │    │    │    │         │    └── i
+ │    │    │    │         ├── const-agg
+ │    │    │    │         │    └── f
+ │    │    │    │         ├── const-agg
+ │    │    │    │         │    └── s
+ │    │    │    │         └── const-agg
+ │    │    │    │              └── j
+ │    │    │    └── projections
+ │    │    │         └── COALESCE("?column?", "?column?")
+ │    │    ├── project
+ │    │    │    ├── scan cd
+ │    │    │    └── projections
+ │    │    │         └── 1
+ │    │    └── filters
+ │    │         └── d = k
+ │    └── aggregations
+ │         ├── any-not-null-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── "?column?"
+ │         ├── const-agg
+ │         │    └── i
+ │         ├── const-agg
+ │         │    └── f
+ │         ├── const-agg
+ │         │    └── s
+ │         └── const-agg
+ │              └── j
+ └── projections
+      └── CASE WHEN COALESCE("?column?", "?column?") IS NOT NULL THEN 1 ELSE 0 END
+
+# No-op because there is no Union.
+norm expect-not=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── left-join (hash)
+ │    ├── scan a
+ │    ├── scan xy
+ │    └── filters
+ │         └── x = k
+ └── projections
+      └── CASE WHEN x IS NOT NULL THEN 1 ELSE 0 END
+
+# No-op because there's an Intersect instead of a Union.
+norm expect-not=TryDecorrelateUnion format=hide-all
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k INTERSECT SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── left-join-apply
+ │    ├── scan a
+ │    ├── intersect-all
+ │    │    ├── project
+ │    │    │    ├── select
+ │    │    │    │    ├── scan xy
+ │    │    │    │    └── filters
+ │    │    │    │         └── x = k
+ │    │    │    └── projections
+ │    │    │         └── 1
+ │    │    └── project
+ │    │         ├── select
+ │    │         │    ├── scan uv
+ │    │         │    └── filters
+ │    │         │         └── v = k
+ │    │         └── projections
+ │    │              └── 1
+ │    └── filters (true)
+ └── projections
+      └── CASE WHEN "?column?" IS NOT NULL THEN 1 ELSE 0 END
+
+# No-op case because one of the aggregations isn't any-not-null.
+norm expect-not=TryDecorrelateUnion format=hide-all
+SELECT * FROM a INNER JOIN LATERAL (SELECT sum(x) FROM (SELECT x FROM xy WHERE x = k UNION ALL SELECT v FROM uv WHERE v = k)) ON True;
+----
+group-by (hash)
+ ├── left-join-apply
+ │    ├── scan a
+ │    ├── union-all
+ │    │    ├── select
+ │    │    │    ├── scan xy
+ │    │    │    └── filters
+ │    │    │         └── xy.x = k
+ │    │    └── select
+ │    │         ├── scan uv
+ │    │         └── filters
+ │    │              └── v = k
+ │    └── filters (true)
+ └── aggregations
+      ├── sum
+      │    └── x
+      ├── const-agg
+      │    └── i
+      ├── const-agg
+      │    └── f
+      ├── const-agg
+      │    └── s
+      └── const-agg
+           └── j
+
+# No-op case because the Union isn't correlated.
+norm expect-not=TryDecorrelateUnion format=hide-all
+SELECT * FROM a INNER JOIN LATERAL (SELECT 1 FROM xy UNION ALL SELECT 1 FROM uv) ON True;
+----
+inner-join (cross)
+ ├── scan a
+ ├── union-all
+ │    ├── project
+ │    │    ├── scan xy
+ │    │    └── projections
+ │    │         └── 1
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── 1
+ └── filters (true)
