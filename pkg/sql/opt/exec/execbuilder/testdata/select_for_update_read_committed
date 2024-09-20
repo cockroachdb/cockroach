@@ -22,6 +22,8 @@ query T
 EXPLAIN (OPT) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 ----
 lock supermarket
+ ├── key columns: person
+ ├── lock columns: (7-10)
  ├── locking: for-update,durability-guaranteed
  └── scan supermarket
       └── constraint: /1: [/'matilda' - /'matilda']
@@ -57,6 +59,8 @@ update supermarket
            └── subquery
                 └── project
                      └── lock supermarket
+                          ├── key columns: person
+                          ├── lock columns: (19-22)
                           ├── locking: for-update,durability-guaranteed
                           └── scan supermarket
                                └── constraint: /13: [/'matilda' - /'matilda']
@@ -119,6 +123,8 @@ SELECT aisle + 1 FROM s
 with &1 (s)
  ├── project
  │    └── lock supermarket
+ │         ├── key columns: person
+ │         ├── lock columns: (7-10)
  │         ├── locking: for-update,durability-guaranteed
  │         └── scan supermarket
  │              └── constraint: /1: [/'matilda' - /'matilda']
@@ -182,6 +188,8 @@ with &1 (names)
  ├── values
  │    └── ('matilda',)
  └── lock supermarket
+      ├── key columns: supermarket.person
+      ├── lock columns: (9-12)
       ├── locking: for-update,durability-guaranteed
       └── project
            └── inner-join (lookup supermarket)
@@ -254,6 +262,8 @@ SELECT aisle
   FOR UPDATE
 ----
 lock supermarket
+ ├── key columns: person
+ ├── lock columns: (7-10)
  ├── locking: for-update,durability-guaranteed
  └── project
       └── index-join supermarket
@@ -309,6 +319,8 @@ SELECT aisle
   FOR UPDATE
 ----
 lock supermarket
+ ├── key columns: person
+ ├── lock columns: (7-10)
  ├── locking: for-update,durability-guaranteed
  └── project
       └── inner-join (lookup supermarket)
