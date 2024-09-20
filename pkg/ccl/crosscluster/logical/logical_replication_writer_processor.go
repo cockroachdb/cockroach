@@ -261,7 +261,9 @@ func newLogicalReplicationWriterProcessor(
 //
 // Start implements the RowSource interface.
 func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(logtags.AddTag(ctx, "job", lrw.spec.JobID), "part", lrw.spec.PartitionSpec.PartitionID)
+	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
+	ctx = logtags.AddTag(ctx, "src-node", lrw.spec.PartitionSpec.PartitionID)
+	ctx = logtags.AddTag(ctx, "proc", lrw.ProcessorID)
 	streampb.RegisterActiveLogicalConsumerStatus(&lrw.debug)
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
