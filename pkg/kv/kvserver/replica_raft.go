@@ -1369,7 +1369,11 @@ func (r *Replica) tick(
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
+	bypassFn := r.store.TestingKnobs().RaftReportUnreachableBypass
 	for remoteReplica := range remotes {
+		if bypassFn != nil && bypassFn(remoteReplica) {
+			continue
+		}
 		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(remoteReplica))
 	}
 

@@ -357,7 +357,11 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		seed:              seed,
 	}
 	r.mu.pausedFollowers, _ = computeExpendableOverloadedFollowers(ctx, d)
+	bypassFn := r.store.TestingKnobs().RaftReportUnreachableBypass
 	for replicaID := range r.mu.pausedFollowers {
+		if bypassFn != nil && bypassFn(replicaID) {
+			continue
+		}
 		// We're dropping messages to those followers (see handleRaftReady) but
 		// it's a good idea to tell raft not to even bother sending in the first
 		// place. Raft will react to this by moving the follower to probing state
