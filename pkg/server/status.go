@@ -2349,6 +2349,23 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	telemetry.Inc(telemetryPrometheusVars)
 }
 
+// Ranges returns current tenant's range info for the specified node.
+func (t *statusServer) Ranges(
+	ctx context.Context, req *serverpb.RangesRequest,
+) (*serverpb.RangesResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Response contains replica metadata which is privileged.
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	// TODO(shubhamdhama) : which system server would it connect to perform
+	// in external process mode.
+	return t.sqlServer.tenantConnect.Ranges(ctx, req)
+}
+
 // Ranges returns range info for the specified node.
 func (s *systemStatusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
@@ -2408,15 +2425,21 @@ func (s *systemStatusServer) rangesHelper(
 		return resp, next, err
 	}
 
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		// TODO: Is this fair assumption if ok is false
+		tID = roachpb.SystemTenantID
+	}
+
+	tenantKeySpan := keys.MakeTenantSpan(tID)
+
 	output := serverpb.RangesResponse{
 		Ranges: make([]serverpb.RangeInfo, 0, s.stores.GetStoreCount()),
 	}
 
 	convertRaftStatus := func(raftStatus *raft.Status) serverpb.RaftState {
 		if raftStatus == nil {
-			return serverpb.RaftState{
-				State: RaftStateDormant,
-			}
+			return serverpb.RaftState{State: RaftStateDormant}
 		}
 
 		state := serverpb.RaftState{
@@ -2447,12 +2470,9 @@ func (s *systemStatusServer) rangesHelper(
 		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		raftStatus := rep.RaftStatus()
-		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
-		var span serverpb.PrettySpan
 		desc := rep.Desc()
-		span.StartKey = desc.StartKey.String()
-		span.EndKey = desc.EndKey.String()
+		span := serverpb.PrettySpan{StartKey: desc.StartKey.String(), EndKey: desc.EndKey.String()}
 		state := rep.State(ctx)
 		var topKLocksByWaiters []serverpb.RangeInfo_LockInfo
 		for _, lm := range metrics.LockTableMetrics.TopKLocksByWaiters {
@@ -2479,7 +2499,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 		return serverpb.RangeInfo{
 			Span:          span,
-			RaftState:     raftState,
+			RaftState:     convertRaftStatus(raftStatus),
 			State:         state,
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
@@ -2538,20 +2558,27 @@ func (s *systemStatusServer) rangesHelper(
 
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		now := store.Clock().NowAsClockTimestamp()
+		appendRangeInfo := func(rep *kvserver.Replica) {
+			if !tID.IsSystem() {
+				rangeReplicaSpan := rep.Desc().RSpan().AsRawSpanWithNoLocals()
+				if !tenantKeySpan.Contains(rangeReplicaSpan) {
+					return
+				}
+			}
+
+			output.Ranges = append(output.Ranges, constructRangeInfo(
+				rep,
+				store.Ident.StoreID,
+				rep.Metrics(ctx, now, isLiveMap, clusterNodes),
+			))
+		}
+
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-			store.VisitReplicas(
-				func(rep *kvserver.Replica) bool {
-					output.Ranges = append(output.Ranges,
-						constructRangeInfo(
-							rep,
-							store.Ident.StoreID,
-							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-						))
-					return true // continue.
-				},
-				kvserver.WithReplicasInOrder(),
-			)
+			store.VisitReplicas(func(r *kvserver.Replica) bool {
+				appendRangeInfo(r)
+				return true // continue.
+			}, kvserver.WithReplicasInOrder())
 			return nil
 		}
 
@@ -2562,12 +2589,7 @@ func (s *systemStatusServer) rangesHelper(
 				// Not found: continue.
 				continue
 			}
-			output.Ranges = append(output.Ranges,
-				constructRangeInfo(
-					rep,
-					store.Ident.StoreID,
-					rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-				))
+			appendRangeInfo(rep)
 		}
 		return nil
 	})

@@ -119,6 +119,10 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TenantRanges":
 		return a.authTenantRanges(tenID)
 
+	// TODO: Verify
+	case "/cockroach.server.serverpb.Status/Ranges":
+		return a.authTenantRanges(tenID)
+
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
