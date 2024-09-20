@@ -34,6 +34,7 @@ export const rawTableMetadataToRows = (
     return {
       name: table.table_name,
       dbName: table.db_name,
+      tableID: table.table_id,
       dbID: table.db_id,
       replicationSizeBytes: table.replication_size_bytes,
       rangeCount: table.range_count,

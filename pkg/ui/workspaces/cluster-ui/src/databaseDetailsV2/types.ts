@@ -11,6 +11,7 @@ export type TableRow = {
   qualifiedNameWithSchema: string;
   name: string;
   dbName: string;
+  tableID: number;
   dbID: number;
   replicationSizeBytes: number;
   rangeCount: number;
