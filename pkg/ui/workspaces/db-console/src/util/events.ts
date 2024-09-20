@@ -181,6 +181,12 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
     case eventTypes.ALTER_ROLE:
       if (info.Options && info.Options.length > 0) {
         return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+      } else if (
+        info.SetInfo &&
+        info.SetInfo.length === 1 &&
+        info.SetInfo[0] === "DEFAULTSETTINGS"
+      ) {
+        return `Role Altered: User ${info.User} altered default settings for role ${info.RoleName}`;
       } else {
         return `Role Altered: User ${info.User} altered role ${info.RoleName}`;
       }
@@ -240,6 +246,7 @@ export interface EventInfo {
   RoleName?: string;
   SchemaName?: string;
   SequenceName?: string;
+  SetInfo?: string[];
   SettingName?: string;
   Statement?: string;
   TableName?: string;
