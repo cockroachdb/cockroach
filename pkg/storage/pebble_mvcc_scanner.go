@@ -887,6 +887,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			if len(p.mostRecentKey) == 0 {
 				p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
 			}
+			// We don't have to fall through to `p.checkUncertainty` because FIXME.
 			return true /* ok */, false
 		}
 
@@ -1527,10 +1528,9 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 						}
 					}
 				}
-			}
-
-			// Check if any of the range keys are in the uncertainty interval.
-			if p.checkUncertainty {
+				// We don't have to fall through to `p.checkUncertainty` because FIXME.
+			} else if p.checkUncertainty {
+				// Check if any of the range keys are in the uncertainty interval.
 				for _, version := range p.curRangeKeys.Versions {
 					if version.Timestamp.LessEq(p.ts) {
 						break
