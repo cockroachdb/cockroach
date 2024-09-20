@@ -126,6 +126,7 @@ type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
+	registerForTracing(*ProposalData, raftpb.Entry)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -874,19 +875,26 @@ func proposeBatch(
 		p.onErrProposalDropped(ents, props, raftGroup.BasicStatus().RaftState)
 		return nil //nolint:returnerrcheck
 	}
-	if err == nil {
-		// Now that we know what raft log position[1] this proposal is to end up
-		// in, deduct flow tokens for it. This is done without blocking (we've
-		// already waited for available flow tokens pre-evaluation). The tokens
-		// will later be returned once we're informed of the entry being
-		// admitted below raft.
-		//
-		// [1]: We're relying on an undocumented side effect of upstream raft
-		//      API where it populates the index and term for the passed in
-		//      slice of entries. See etcd-io/raft#57.
-		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+	if err != nil {
+		return err
 	}
-	return err
+	// Now that we know what raft log position[1] this proposal is to end up
+	// in, deduct flow tokens for it. This is done without blocking (we've
+	// already waited for available flow tokens pre-evaluation). The tokens
+	// will later be returned once we're informed of the entry being
+	// admitted below raft.
+	//
+	// [1]: We're relying on an undocumented side effect of upstream raft
+	//      API where it populates the index and term for the passed in
+	//      slice of entries. See etcd-io/raft#57.
+	maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+
+	// Register the proposal with rafttrace. This will add the trace to the raft
+	// lifecycle. We trace at most one entry per batch, so pick the last one as
+	// is the last one to be completed.
+	lastIndex := len(ents) - 1
+	p.registerForTracing(props[lastIndex], ents[lastIndex])
+	return nil
 }
 
 func maybeDeductFlowTokens(
@@ -1171,6 +1179,10 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 
 func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
+}
+
+func (rp *replicaProposer) registerForTracing(p *ProposalData, e raftpb.Entry) {
+	(*Replica)(rp).mu.raftTracer.Register(p, e)
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
