@@ -364,19 +364,30 @@ hosts file.
 
 			if !listDetails {
 				// Print header only if we are not printing cluster details.
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
 					"Cluster", "Clouds", "Size", "VM", "Arch",
 					color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
 					color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
-					color.HiWhiteString("$/TTL"))
+					color.HiWhiteString("$/TTL"), color.HiWhiteString("Roachtest"))
 				// Print separator.
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
 					"", "", "", "",
 					color.HiWhiteString(""), color.HiWhiteString(""),
 					color.HiWhiteString(""), color.HiWhiteString(""),
-					color.HiWhiteString(""))
+					color.HiWhiteString(""), color.HiWhiteString(""))
 			}
 			totalCostPerHour := 0.0
+			// Max test name is dictated by label length.
+			// https://cloud.google.com/resource-manager/docs/labels-overview#requirements
+			maxTestName := 63
+			stripProject := func(clouds []string) []string {
+				for i, cloud := range clouds {
+					if idx := strings.Index(cloud, ":"); idx > 0 {
+						clouds[i] = cloud[0:idx]
+					}
+				}
+				return clouds
+			}
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]
 				if listDetails {
@@ -386,8 +397,8 @@ hosts file.
 				} else {
 					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
 					// so we make it left-aligned.
-					fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-						len(c.VMs), machineType(c.VMs), cpuArch(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s", name+strings.Repeat(" ", maxClusterName-len(name)),
+						stripProject(c.Clouds()), len(c.VMs), machineType(c.VMs), cpuArch(c.VMs))
 					if !c.IsLocal() {
 						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
 							switch {
@@ -399,6 +410,8 @@ hosts file.
 								return color.HiRedString
 							}
 						}
+
+						testName := c.VMs[0].Labels["test_name"]
 						timeRemaining := c.LifetimeRemaining().Round(time.Second)
 						formatTTL := func(ttl time.Duration) string {
 							if c.VMs[0].Preemptible {
@@ -413,19 +426,21 @@ hosts file.
 						costSinceCreation := cost * float64(alive) / float64(time.Hour)
 						costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
 						if cost > 0 {
-							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t",
 								color.HiGreenString(p.Sprintf("$%.2f", cost)),
 								colorByCostBucket(costSinceCreation)(p.Sprintf("$%.2f", costSinceCreation)),
 								color.HiWhiteString(alive.String()),
 								formatTTL(timeRemaining),
-								colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)))
+								colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)),
+								color.HiWhiteString(testName+strings.Repeat(" ", maxTestName-len(testName))))
 						} else {
-							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t",
 								color.HiGreenString(""),
 								color.HiGreenString(""),
 								color.HiWhiteString(alive.String()),
 								formatTTL(timeRemaining),
-								color.HiGreenString(""))
+								color.HiGreenString(""),
+								color.HiWhiteString(testName+strings.Repeat(" ", maxTestName-len(testName))))
 						}
 					} else {
 						fmt.Fprintf(tw, "\t(-)")
