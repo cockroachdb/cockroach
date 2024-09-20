@@ -633,7 +633,9 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 var disallowFullTableScans = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	`sql.defaults.disallow_full_table_scans.enabled`,
-	"setting to true rejects queries that have planned a full table scan",
+	"setting to true rejects queries that have planned a full table scan; set "+
+		"large_full_scan_rows > 0 to allow small full table scans estimated to "+
+		"read fewer than large_full_scan_rows",
 	false,
 	settings.WithPublic)
 
@@ -709,10 +711,11 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 var largeFullScanRows = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.large_full_scan_rows",
-	"default value for large_full_scan_rows session setting which determines "+
-		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
-		"is set to true",
-	1000.0,
+	"default value for large_full_scan_rows session variable which determines "+
+		"the table size at which full scans are considered large and disallowed "+
+		"when disallow_full_table_scans is set to true; set to 0 to reject all "+
+		"full table or full index scans when disallow_full_table_scans is true",
+	0,
 	settings.WithPublic)
 
 var costScansWithDefaultColSize = settings.RegisterBoolSetting(
