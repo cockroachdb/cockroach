@@ -120,8 +120,10 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		)
 		return 0, hlc.Timestamp{}, false
 	}
-	// An empty expiration implies support has expired.
-	if ss.Expiration.IsEmpty() {
+	// An empty expiration or expiration in the past implies support has expired.
+	// A support expiration timestamp equal to the current time is considered
+	// expired, to be consistent with the logic in maybeWithdrawSupport.
+	if ss.Expiration.IsEmpty() || ss.Expiration.LessEq(sm.clock.Now()) {
 		return 0, hlc.Timestamp{}, false
 	}
 	return ss.Epoch, ss.Expiration, true
