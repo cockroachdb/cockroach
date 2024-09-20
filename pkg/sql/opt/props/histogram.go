@@ -275,24 +275,35 @@ func (h *Histogram) filter(
 	keyCtx := constraint.KeyContext{Ctx: ctx, EvalCtx: h.evalCtx, Columns: columns}
 
 	// Find the first span that may overlap with the histogram.
-	firstBucket := makeSpanFromBucket(ctx, &iter, prefix)
-	for spanIndex < spanCount {
-		span := getSpan(spanIndex)
-		if firstBucket.StartsAfter(&keyCtx, span) {
-			spanIndex++
-			continue
+	//
+	// A span returned from spanBuilder.makeSpanFromBucket is only valid until
+	// the next call to the method (see the method for more details). It is safe
+	// to reuse the same spanBuilder here and below because the spans are only
+	// used for comparison and are not stored, and two spans are never
+	// built and referenced simultaneously.
+	var sb spanBuilder
+	{
+		// Limit the scope of firstBucket to avoid referencing it below after
+		// sb.makeSpanFromBucket has been called again.
+		firstBucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		for spanIndex < spanCount {
+			span := getSpan(spanIndex)
+			if firstBucket.StartsAfter(&keyCtx, span) {
+				spanIndex++
+				continue
+			}
+			break
 		}
-		break
-	}
-	if spanIndex == spanCount {
-		return filtered
+		if spanIndex == spanCount {
+			return filtered
+		}
 	}
 
 	// Use binary search to find the first bucket that overlaps with the span.
 	span := getSpan(spanIndex)
 	bucIndex := sort.Search(bucketCount, func(i int) bool {
 		iter.setIdx(i)
-		bucket := makeSpanFromBucket(ctx, &iter, prefix)
+		bucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
 		if desc {
 			return span.StartsAfter(&keyCtx, &bucket)
 		}
@@ -322,7 +333,7 @@ func (h *Histogram) filter(
 
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
-		left := makeSpanFromBucket(ctx, &iter, prefix)
+		left := sb.makeSpanFromBucket(ctx, &iter, prefix)
 		right := getSpan(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
@@ -330,6 +341,8 @@ func (h *Histogram) filter(
 			continue
 		}
 
+		// Copying the span is safe here because the keys within the spans are
+		// never mutated.
 		filteredSpan := left
 		if !filteredSpan.TryIntersectWith(&keyCtx, right) {
 			filtered.addEmptyBucket(ctx, iter.b.UpperBound, desc)
@@ -390,7 +403,7 @@ func (h *Histogram) filter(
 			filtered.addEmptyBucket(ctx, iter.inclusiveLowerBound(ctx), desc)
 		} else if lastBucket := filtered.buckets[len(filtered.buckets)-1]; lastBucket.NumRange != 0 {
 			iter.setIdx(0)
-			span := makeSpanFromBucket(ctx, &iter, prefix)
+			span := sb.makeSpanFromBucket(ctx, &iter, prefix)
 			ub := h.getPrevUpperBound(ctx, span.EndKey(), span.EndBoundary(), colOffset)
 			filtered.addEmptyBucket(ctx, ub, desc)
 		}
@@ -649,7 +662,18 @@ func (hi *histogramIter) inclusiveUpperBound(ctx context.Context) tree.Datum {
 	return hi.ub
 }
 
-func makeSpanFromBucket(
+type spanBuilder struct {
+	startScratch []tree.Datum
+	endScratch   []tree.Datum
+}
+
+// makeSpanFromBucket constructs a constraint.Span from iter's current histogram
+// bucket.
+//
+// WARNING: The returned span is only valid until this method is invoked again
+// on the same spanBuilder. This is because it reuses scratch slices in the
+// spanBuilder to reduce allocations when building span keys.
+func (sb *spanBuilder) makeSpanFromBucket(
 	ctx context.Context, iter *histogramIter, prefix []tree.Datum,
 ) (span constraint.Span) {
 	start, startBoundary := iter.lowerBound()
@@ -665,10 +689,14 @@ func makeSpanFromBucket(
 		startBoundary = constraint.IncludeBoundary
 		endBoundary = constraint.IncludeBoundary
 	}
+	sb.startScratch = append(sb.startScratch[:0], prefix...)
+	sb.startScratch = append(sb.startScratch, start)
+	sb.endScratch = append(sb.endScratch[:0], prefix...)
+	sb.endScratch = append(sb.endScratch, end)
 	span.Init(
-		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], start)...),
+		constraint.MakeCompositeKey(sb.startScratch...),
 		startBoundary,
-		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], end)...),
+		constraint.MakeCompositeKey(sb.endScratch...),
 		endBoundary,
 	)
 	return span
