@@ -78,18 +78,24 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // to Replica.store.Engine().
 
 // InitialState implements the raft.Storage interface.
-// InitialState requires that r.mu is held for writing because it requires
-// exclusive access to r.mu.stateLoader.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+	// The call must synchronize with raft IO. Called when raft is initialized
+	// under both r.raftMu and r.mu. We don't technically need r.mu here, but we
+	// know it is held.
+	r.raftMu.AssertHeld()
+	r.mu.AssertHeld()
+
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
-	// For uninitialized ranges, membership is unknown at this point.
-	if raft.IsEmptyHardState(hs) || err != nil {
-		if err != nil {
-			r.reportRaftStorageError(err)
-		}
+	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
+	if err != nil {
+		r.reportRaftStorageError(err)
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
+	// For uninitialized ranges, membership is unknown at this point.
+	if raft.IsEmptyHardState(hs) {
+		return raftpb.HardState{}, raftpb.ConfState{}, nil
+	}
+	// NB: r.mu.state is guarded by both r.raftMu and r.mu.
 	cs := r.mu.state.Desc.Replicas().ConfState()
 	return hs, cs, nil
 }
