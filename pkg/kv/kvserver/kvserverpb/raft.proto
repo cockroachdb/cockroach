@@ -20,6 +20,7 @@ import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
 import "raft/raftpb/raft.proto";
 import "util/hlc/timestamp.proto";
+import "util/tracing/tracingpb/tracing.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
@@ -113,6 +114,10 @@ message RaftMessageRequest {
   //
   // TODO(pav-kv): remove.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 15 [(gogoproto.nullable) = false];
+
+  cockroach.util.tracing.tracingpb.TraceInfo trace_info = 18;
+
+  repeated cockroach.util.tracing.tracingpb.RecordedSpan collected_spans = 19 [ (gogoproto.nullable) = false ];
   reserved 10;
 }
 
