@@ -1537,3 +1537,32 @@ func getSubstituteColsSetOp(set memo.RelExpr, substituteCols opt.ColSet) opt.Col
 	}
 	return newSubstituteCols
 }
+
+// MakeCoalesceProjectionsForUnion builds a series of projections that coalesce
+// columns from the left and right inputs of a union, projecting the result
+// using the union operator's output columns.
+func (c *CustomFuncs) MakeCoalesceProjectionsForUnion(
+	setPrivate *memo.SetPrivate,
+) memo.ProjectionsExpr {
+	projections := make(memo.ProjectionsExpr, len(setPrivate.OutCols))
+	for i := range setPrivate.OutCols {
+		projections[i] = c.f.ConstructProjectionsItem(
+			c.f.ConstructCoalesce(memo.ScalarListExpr{
+				c.f.ConstructVariable(setPrivate.LeftCols[i]),
+				c.f.ConstructVariable(setPrivate.RightCols[i]),
+			}),
+			setPrivate.OutCols[i],
+		)
+	}
+	return projections
+}
+
+// MakeAnyNotNullScalarGroupBy wraps the input expression in a ScalarGroupBy
+// that aggregates the input columns with AnyNotNull functions.
+func (c *CustomFuncs) MakeAnyNotNullScalarGroupBy(input memo.RelExpr) memo.RelExpr {
+	return c.f.ConstructScalarGroupBy(
+		input,
+		c.MakeAggCols(opt.AnyNotNullAggOp, input.Relational().OutputCols),
+		memo.EmptyGroupingPrivate,
+	)
+}
