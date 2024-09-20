@@ -91,9 +91,9 @@ func newNodeTestHarness(
 	ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
 	var n *node
 	if len(peers) > 0 {
-		n = setupNode(cfg, peers)
+		n = setupNode(ctx, cfg, peers)
 	} else {
-		rn, err := NewRawNode(cfg)
+		rn, err := NewRawNode(ctx, cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func newNodeTestHarness(
 		}()
 		defer cancel()
 		defer n.Stop()
-		n.run()
+		n.run(ctx)
 	}()
 	t.Cleanup(n.Stop)
 	return ctx, cancel, &nodeTestHarness{node: n, t: t}

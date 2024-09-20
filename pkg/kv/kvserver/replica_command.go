@@ -3013,7 +3013,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 					return err
 				}
 				if resp.MsgAppResp != nil {
-					_ = r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+					_ = r.withRaftGroup(ctx, func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 						msg := *resp.MsgAppResp
 						// With a delegated snapshot, the recipient received the snapshot
 						// from another replica and will thus respond to it instead. But the
@@ -3021,7 +3021,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 						msg.To = rn.BasicStatus().ID
 						// We do want to unquiesce here - we wouldn't ever want state transitions
 						// on a quiesced replica.
-						return true, rn.Step(*resp.MsgAppResp)
+						return true, rn.Step(ctx, *resp.MsgAppResp)
 					})
 				}
 				return nil

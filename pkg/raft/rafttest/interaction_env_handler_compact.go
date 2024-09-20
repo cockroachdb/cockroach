@@ -15,6 +15,7 @@
 package rafttest
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -33,7 +34,7 @@ func (env *InteractionEnv) handleCompact(t *testing.T, d datadriven.TestData) er
 // Compact truncates the log on the node at index idx so that the supplied new
 // first index results.
 func (env *InteractionEnv) Compact(idx int, newFirstIndex uint64) error {
-	if err := env.Nodes[idx].Compact(newFirstIndex); err != nil {
+	if err := env.Nodes[idx].Compact(context.Background(), newFirstIndex); err != nil {
 		return err
 	}
 	return env.RaftLog(idx)

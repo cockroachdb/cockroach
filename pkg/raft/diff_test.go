@@ -15,6 +15,7 @@
 package raft
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -58,7 +59,7 @@ func ltoa(l *raftLog) string {
 	s := fmt.Sprintf("lastIndex: %d\n", l.lastIndex())
 	s += fmt.Sprintf("applied:  %d\n", l.applied)
 	s += fmt.Sprintf("applying:  %d\n", l.applying)
-	for i, e := range l.allEntries() {
+	for i, e := range l.allEntries(context.Background()) {
 		s += fmt.Sprintf("#%d: %+v\n", i, e)
 	}
 	return s

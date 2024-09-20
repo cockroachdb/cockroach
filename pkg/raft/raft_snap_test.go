@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -35,55 +36,58 @@ var (
 )
 
 func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
+	ctx := context.Background()
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.becomeFollower(testingSnap.term, None)
-	sm.restore(testingSnap)
+	sm.becomeFollower(ctx, testingSnap.term, None)
+	sm.restore(ctx, testingSnap)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
+	sm.becomeCandidate(ctx)
+	sm.becomeLeader(ctx)
 
 	// force set the next of node 2, so that
 	// node 2 needs a snapshot
 	sm.trk.Progress(2).Next = sm.raftLog.firstIndex()
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
+	sm.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
 	if sm.trk.Progress(2).PendingSnapshot != 11 {
 		t.Fatalf("PendingSnapshot = %d, want 11", sm.trk.Progress(2).PendingSnapshot)
 	}
 }
 
 func TestPendingSnapshotPauseReplication(t *testing.T) {
+	ctx := context.Background()
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.becomeFollower(testingSnap.term, None)
-	sm.restore(testingSnap)
+	sm.becomeFollower(ctx, testingSnap.term, None)
+	sm.restore(ctx, testingSnap)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
+	sm.becomeCandidate(ctx)
+	sm.becomeLeader(ctx)
 
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-	msgs := sm.readMessages()
+	sm.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	msgs := sm.readMessages(ctx)
 	if len(msgs) != 0 {
 		t.Fatalf("len(msgs) = %d, want 0", len(msgs))
 	}
 }
 
 func TestSnapshotFailure(t *testing.T) {
+	ctx := context.Background()
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.becomeFollower(testingSnap.term, None)
-	sm.restore(testingSnap)
+	sm.becomeFollower(ctx, testingSnap.term, None)
+	sm.restore(ctx, testingSnap)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
+	sm.becomeCandidate(ctx)
+	sm.becomeLeader(ctx)
 
 	sm.trk.Progress(2).Next = 1
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: true})
+	sm.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: true})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}
@@ -96,18 +100,19 @@ func TestSnapshotFailure(t *testing.T) {
 }
 
 func TestSnapshotSucceed(t *testing.T) {
+	ctx := context.Background()
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.becomeFollower(testingSnap.term, None)
-	sm.restore(testingSnap)
+	sm.becomeFollower(ctx, testingSnap.term, None)
+	sm.restore(ctx, testingSnap)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
+	sm.becomeCandidate(ctx)
+	sm.becomeLeader(ctx)
 
 	sm.trk.Progress(2).Next = 1
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: false})
+	sm.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: false})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}
@@ -120,20 +125,21 @@ func TestSnapshotSucceed(t *testing.T) {
 }
 
 func TestSnapshotAbort(t *testing.T) {
+	ctx := context.Background()
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.becomeFollower(testingSnap.term, None)
-	sm.restore(testingSnap)
+	sm.becomeFollower(ctx, testingSnap.term, None)
+	sm.restore(ctx, testingSnap)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
+	sm.becomeCandidate(ctx)
+	sm.becomeLeader(ctx)
 
 	sm.trk.Progress(2).Next = 1
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
 	// A successful msgAppResp that has a higher/equal index than the
 	// pending snapshot should abort the pending snapshot.
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: 11})
+	sm.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: 11})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}

@@ -15,6 +15,7 @@
 package rafttest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
@@ -30,5 +31,5 @@ func (env *InteractionEnv) handlePropose(t *testing.T, d datadriven.TestData) er
 
 // Propose a regular entry.
 func (env *InteractionEnv) Propose(idx int, data []byte) error {
-	return env.Nodes[idx].Propose(data)
+	return env.Nodes[idx].Propose(context.Background(), data)
 }

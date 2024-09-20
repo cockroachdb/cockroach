@@ -2235,7 +2235,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
-	r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
+	r.maybeUnquiesceLocked(ctx, false /* wakeLeader */, true /* mayCampaign */)
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {

@@ -57,7 +57,7 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 func (r *Replica) maybeUnquiesce(ctx context.Context, wakeLeader, mayCampaign bool) bool {
 	r.mu.TracedLock(ctx)
 	defer r.mu.Unlock()
-	return r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
+	return r.maybeUnquiesceLocked(ctx, wakeLeader, mayCampaign)
 }
 
 // maybeUnquiesceLocked unquiesces the replica if it is quiesced and can be
@@ -76,11 +76,10 @@ func (r *Replica) maybeUnquiesce(ctx context.Context, wakeLeader, mayCampaign bo
 // to be dead when unquiescing, they can hold an election immediately despite
 // PreVote+CheckQuorum. Should typically be true, unless the caller wants to
 // avoid election ties.
-func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
+func (r *Replica) maybeUnquiesceLocked(ctx context.Context, wakeLeader, mayCampaign bool) bool {
 	if !r.canUnquiesceRLocked() {
 		return false
 	}
-	ctx := r.AnnotateCtx(context.TODO())
 	if log.V(3) {
 		log.Infof(ctx, "unquiescing r%d", r.RangeID)
 	}
@@ -102,7 +101,7 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 		}
 		data := raftlog.EncodeCommandBytes(
 			raftlog.EntryEncodingStandardWithoutAC, raftlog.MakeCmdIDKey(), nil, 0 /* pri */)
-		_ = r.mu.internalRaftGroup.Propose(data)
+		_ = r.mu.internalRaftGroup.Propose(ctx, data)
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 	}
 
@@ -481,7 +480,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.maybeUnquiesceLocked(false /* wakeLeader */, false /* mayCampaign */) // already leader
+			r.maybeUnquiesceLocked(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 			return false
 		}
 
