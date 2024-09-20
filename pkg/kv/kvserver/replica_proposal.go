@@ -216,6 +216,11 @@ type ProposalData struct {
 	lastReproposal *ProposalData
 }
 
+// Context implements rafttrace.withContext.
+func (proposal *ProposalData) Context() context.Context {
+	return proposal.ctx
+}
+
 // useReplicationAdmissionControl indicates whether this raft command should
 // be subject to replication admission control.
 func (proposal *ProposalData) useReplicationAdmissionControl() bool {

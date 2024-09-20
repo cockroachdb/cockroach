@@ -217,6 +217,9 @@ func (t *testProposer) campaignLocked(ctx context.Context) {
 	}
 }
 
+func (t *testProposer) maybeRegister(context.Context, []raftpb.Entry) {
+}
+
 func (t *testProposer) rejectProposalWithErrLocked(_ context.Context, _ *ProposalData, err error) {
 	if t.onRejectProposalWithErrLocked == nil {
 		panic(fmt.Sprintf("unexpected rejectProposalWithErrLocked call: err=%v", err))
