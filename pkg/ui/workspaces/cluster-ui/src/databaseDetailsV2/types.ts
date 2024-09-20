@@ -10,6 +10,8 @@
 
 import { Moment } from "moment-timezone";
 
+import { NodeID } from "src/types/clusterTypes";
+
 export type TableRow = {
   qualifiedNameWithSchema: string;
   name: string;
@@ -18,7 +20,7 @@ export type TableRow = {
   replicationSizeBytes: number;
   rangeCount: number;
   columnCount: number;
-  nodesByRegion: Record<string, number[]>;
+  nodesByRegion: Record<string, NodeID[]>;
   liveDataPercentage: number;
   liveDataBytes: number;
   totalDataBytes: number;

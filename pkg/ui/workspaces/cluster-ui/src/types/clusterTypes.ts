@@ -10,8 +10,8 @@
 
 // This explicit typing helps us differentiate between
 // node ids and store ids.
-export type NodeID = number;
-export type StoreID = number;
+export type NodeID = number & { readonly __brand: unique symbol };
+export type StoreID = number & { readonly __brand: unique symbol };
 
 export type Region = {
   code: string; // e.g. us-east-1
