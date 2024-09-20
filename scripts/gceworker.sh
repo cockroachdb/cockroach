@@ -38,9 +38,11 @@ EOF
 function refresh_ssh_config() {
     IP=$($0 ip)
     if ! grep -q "${FQNAME}" ~/.ssh/config; then
-      echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one now with the instance external ip."
+      USER_DOMAIN_SUFFIX=$(gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.]/_/g')
+      echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one for ${USER_DOMAIN_SUFFIX} now with the instance external ip."
       echo "Host ${FQNAME}
   HostName ${IP}
+  User ${USER_DOMAIN_SUFFIX}
   IdentityFile $HOME/.ssh/google_compute_engine
   UserKnownHostsFile=$HOME/.ssh/google_compute_known_hosts
   IdentitiesOnly=yes
@@ -118,13 +120,12 @@ case "${cmd}" in
     # SSH into the node, since that's probably why we started it.
     echo "****************************************"
     echo "Hint: you should also be able to directly invoke:"
-    echo "ssh <USERNAME_DOMAIN_SUFFIX>@${FQNAME}"
+    echo "ssh ${FQNAME}"
     echo "  or"
-    echo "mosh <USERNAME_DOMAIN_SUFFIX>@${FQNAME}"
-    echo "instead of '$0 ssh'."
-    echo "<USERNAME_DOMAIN_SUFFIX> refers to the gsuite account"
-    echo "you use when running `gcloud auth login`. An example"
-    echo "is christopher_cockroachlabs_com@gceworker-christopherye.us-east1-b.cockroach-workers"
+    echo "mosh ${FQNAME}"
+    echo "if needed instead of '$0 (ssh|mosh)'."
+    echo "If this does not work, try removing the section for your gceworker from ~/.ssh/config"
+    echo "and invoke '$0 start' again to recreate it."
     echo
     if [ -z "${GCEWORKER_START_SSH_COMMAND-}" ]; then
 	echo "Connecting via SSH."
