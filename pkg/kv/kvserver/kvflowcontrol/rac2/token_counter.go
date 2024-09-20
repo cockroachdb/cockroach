@@ -243,6 +243,11 @@ func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
 		b.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
+// Stream returns the flow control stream for which tokens are being adjusted.
+func (t *tokenCounter) Stream() kvflowcontrol.Stream {
+	return t.stream
+}
+
 func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
