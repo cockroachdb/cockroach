@@ -1890,39 +1890,36 @@ project
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,14)
  ├── group-by (hash)
- │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null true_agg:16
+ │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null canary_agg:15
  │    ├── grouping columns: bids0_.id:1!null
  │    ├── has-placeholder
  │    ├── key: (1)
- │    ├── fd: ()-->(4), (1)-->(2-4,16)
- │    ├── project
- │    │    ├── columns: true:15 bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
+ │    ├── fd: ()-->(4), (1)-->(2-4,15)
+ │    ├── right-join (hash)
+ │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null a.id:7 successfulbid:10
  │    │    ├── has-placeholder
- │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    ├── right-join (hash)
- │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
+ │    │    ├── key: (1,7)
+ │    │    ├── fd: ()-->(4), (1)-->(2,3), (7)-->(10)
+ │    │    ├── scan tauction2 [as=a]
+ │    │    │    ├── columns: a.id:7!null successfulbid:10
+ │    │    │    ├── key: (7)
+ │    │    │    └── fd: (7)-->(10)
+ │    │    ├── select
+ │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
  │    │    │    ├── has-placeholder
+ │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    │    ├── scan tauction2 [as=a]
- │    │    │    │    └── columns: successfulbid:10
- │    │    │    ├── select
- │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
- │    │    │    │    ├── has-placeholder
+ │    │    │    ├── scan tbid2 [as=bids0_]
+ │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    │    │    ├── scan tbid2 [as=bids0_]
- │    │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    └── fd: (1)-->(2-4)
- │    │    │    │    └── filters
- │    │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
+ │    │    │    │    └── fd: (1)-->(2-4)
  │    │    │    └── filters
- │    │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │    │    └── projections
- │    │         └── CASE successfulbid:10 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE true END [as=true:15, outer=(10)]
+ │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
+ │    │    └── filters
+ │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │    └── aggregations
- │         ├── const-not-null-agg [as=true_agg:16, outer=(15)]
- │         │    └── true:15
+ │         ├── const-not-null-agg [as=canary_agg:15, outer=(7)]
+ │         │    └── a.id:7
  │         ├── const-agg [as=amount:2, outer=(2)]
  │         │    └── amount:2
  │         ├── const-agg [as=createddatetime:3, outer=(3)]
@@ -1930,7 +1927,7 @@ project
  │         └── const-agg [as=auctionid:4, outer=(4)]
  │              └── auctionid:4
  └── projections
-      └── true_agg:16 IS NOT NULL [as=formula41_1_:14, outer=(16)]
+      └── canary_agg:15 IS NOT NULL [as=formula41_1_:14, outer=(15)]
 
 exec-ddl
 drop table TAuction2, TBid2;

@@ -1124,19 +1124,34 @@ func (r *subqueryHoister) constructConditionalExpr(scalar opt.ScalarExpr) opt.Sc
 // CONST_AGG which will need to be changed to a CONST_NOT_NULL_AGG (which is
 // defined to ignore those nulls so that its result will be unaffected).
 func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.RelExpr {
-	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
-	aggColID := r.f.Metadata().AddColumn("true_agg", types.Bool)
+	var canaryColTyp *types.T
+	var canaryColID opt.ColumnID
+	var subqueryWithCanary memo.RelExpr
+	if subquery.Relational().NotNullCols.Empty() {
+		canaryColTyp = types.Bool
+		canaryColID = r.f.Metadata().AddColumn("canary", types.Bool)
+		subqueryWithCanary = r.f.ConstructProject(
+			subquery,
+			memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, canaryColID)},
+			opt.ColSet{},
+		)
+	} else {
+		canaryColID, _ = subquery.Relational().NotNullCols.Next(0)
+		canaryColTyp = r.mem.Metadata().ColumnMeta(canaryColID).Type
+		subqueryWithCanary = r.f.ConstructProject(
+			subquery,
+			memo.ProjectionsExpr{},
+			opt.MakeColSet(canaryColID),
+		)
+	}
+	aggColID := r.f.Metadata().AddColumn("canary_agg", canaryColTyp)
 	existsColID := r.f.Metadata().AddColumn("exists", types.Bool)
 
 	return r.f.ConstructProject(
 		r.f.ConstructScalarGroupBy(
-			r.f.ConstructProject(
-				subquery,
-				memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, trueColID)},
-				opt.ColSet{},
-			),
+			subqueryWithCanary,
 			memo.AggregationsExpr{r.f.ConstructAggregationsItem(
-				r.f.ConstructConstAgg(r.f.ConstructVariable(trueColID)),
+				r.f.ConstructConstAgg(r.f.ConstructVariable(canaryColID)),
 				aggColID,
 			)},
 			memo.EmptyGroupingPrivate,
