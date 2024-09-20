@@ -118,10 +118,10 @@ type ProposalData struct {
 	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
 	// scope, i.e. outside of raft command application.
 	//
-	// The context may by updated during the proposal lifecycle but will never
+	// The context may be updated during the proposal lifecycle but will never
 	// be nil. To clear out the context, set it to context.Background().  It is
 	// protected by an atomic pointer because it can be read without holding the
-	// raftMu use ProposalData.Context() to read it.
+	// raftMu. Use ProposalData.Context() to read it.
 	//
 	// TODO(baptist): Track down all the places where we read and write ctx and
 	// determine whether we can convert this back to non-atomic field.
