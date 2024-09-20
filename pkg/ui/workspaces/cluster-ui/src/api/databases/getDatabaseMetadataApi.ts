@@ -23,9 +23,7 @@ export enum DatabaseSortOptions {
   NAME = "name",
   REPLICATION_SIZE = "replicationSize",
   RANGES = "ranges",
-  LIVE_DATA = "liveData",
-  COLUMNS = "columns",
-  INDEXES = "indexes",
+  TABLE_COUNT = "tableCount",
   LAST_UPDATED = "lastUpdated",
 }
 

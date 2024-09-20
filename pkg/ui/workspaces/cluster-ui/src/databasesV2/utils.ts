@@ -27,7 +27,7 @@ export const getSortKeyFromColTitle = (
     case DatabaseColName.RANGE_COUNT:
       return DatabaseSortOptions.RANGES;
     case DatabaseColName.TABLE_COUNT:
-      return DatabaseSortOptions.LIVE_DATA;
+      return DatabaseSortOptions.TABLE_COUNT;
     default:
       throw new Error(`Unsupported sort column ${col}`);
   }
@@ -43,7 +43,7 @@ export const getColTitleFromSortKey = (
       return DatabaseColName.SIZE;
     case DatabaseSortOptions.RANGES:
       return DatabaseColName.RANGE_COUNT;
-    case DatabaseSortOptions.LIVE_DATA:
+    case DatabaseSortOptions.TABLE_COUNT:
       return DatabaseColName.TABLE_COUNT;
     default:
       return DatabaseColName.NAME;
