@@ -66,6 +66,14 @@ describe("getEventDescription", function () {
       {
         event: {
           eventType: "alter_role",
+          info: '{"User": "abc", "RoleName": "123", "SetInfo": ["DEFAULTSETTINGS"]}',
+        },
+        expected:
+          "Role Altered: User abc altered default settings for role 123",
+      },
+      {
+        event: {
+          eventType: "alter_role",
           info: '{"User": "abc", "RoleName": "123", "Options": []}',
         },
         expected: "Role Altered: User abc altered role 123",
