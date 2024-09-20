@@ -56,6 +56,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/ts",
         "//pkg/util/leaktest",

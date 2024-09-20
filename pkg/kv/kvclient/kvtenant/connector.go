@@ -662,6 +662,17 @@ func (c *connector) Regions(
 	return
 }
 
+// Ranges implements the serverpb.TenantStatusServer interface
+func (c *connector) Ranges(
+	ctx context.Context, req *serverpb.RangesRequest,
+) (resp *serverpb.RangesResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Ranges(ctx, req)
+		return
+	})
+	return
+}
+
 // TenantRanges implements the serverpb.TenantStatusServer interface
 func (c *connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
