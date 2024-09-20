@@ -69,13 +69,13 @@ func (st *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
 	for id, supportEpoch := range st.fortification {
-		curEpoch, curExp, ok := st.storeLiveness.SupportFrom(id)
+		curEpoch, curExp := st.storeLiveness.SupportFrom(id)
 		// NB: We can't assert that supportEpoch <= curEpoch because there may be a
 		// race between a successful MsgFortifyLeaderResp and the store liveness
 		// heartbeat response that lets the leader know the follower's store is
 		// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
 		// message.
-		if ok && curEpoch == supportEpoch {
+		if curEpoch == supportEpoch {
 			supportExpMap[id] = curExp
 		}
 	}
