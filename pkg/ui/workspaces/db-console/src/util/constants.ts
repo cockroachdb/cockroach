@@ -21,6 +21,7 @@ export const {
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
+  databaseIDAttr,
   fingerprintIDAttr,
   executionIdAttr,
   implicitTxnAttr,
