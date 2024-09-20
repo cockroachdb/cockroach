@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -891,6 +892,10 @@ type Replica struct {
 		// MsgAppPull <=> LazyReplication.
 		// Updated with both raftMu and mu held.
 		currentRACv2Mode rac2.RaftMsgAppMode
+
+		// raftTracer is used to trace raft messages that are sent with a
+		// tracing context.
+		raftTracer rafttrace.RaftTracer
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
