@@ -4737,6 +4737,10 @@ logical_replication_options:
   {
     $$.val = &tree.LogicalReplicationOptions{IgnoreCDCIgnoredTTLDeletes: tree.MakeDBool(true)}
   }
+| SKIP SCHEMA CHECK
+  {
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+  }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
