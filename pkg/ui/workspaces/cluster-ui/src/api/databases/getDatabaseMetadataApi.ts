@@ -44,8 +44,9 @@ export type DatabaseMetadataRequest = {
   storeId?: number[];
 };
 
-export type DatabaseMetadataResponse =
-  APIV2ResponseWithPaginationState<DatabaseMetadata>;
+export type DatabaseMetadataResponse = APIV2ResponseWithPaginationState<
+  DatabaseMetadata[]
+>;
 
 export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
   const urlParams = new URLSearchParams();
