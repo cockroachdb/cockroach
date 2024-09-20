@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const (
@@ -263,6 +264,8 @@ type Config struct {
 	// CRDBVersion exposes the active version to Raft. This helps version-gating
 	// features.
 	CRDBVersion clusterversion.Handle
+
+	Tracer *tracing.Tracer
 }
 
 func (c *Config) validate() error {
@@ -333,7 +336,7 @@ type raft struct {
 	// other nodes.
 	//
 	// Messages in this list must target other nodes.
-	msgs []pb.Message
+	msgs []pb.ContextMessage
 	// msgsAfterAppend contains the list of messages that should be sent after
 	// the accumulated unstable state (e.g. term, vote, []entry, and snapshot)
 	// has been persisted to durable storage. This includes waiting for any
@@ -344,7 +347,7 @@ type raft struct {
 	//
 	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
 	// MsgPreVoteResp. See the comment in raft.send for details.
-	msgsAfterAppend []pb.Message
+	msgsAfterAppend []pb.ContextMessage
 
 	// the leader id
 	lead pb.PeerID
@@ -420,6 +423,22 @@ type raft struct {
 
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
+
+	ctxMap map[[2]uint64]context.Context
+}
+
+func (r *raft) storeContext(entry pb.Entry, ctx context.Context) {
+	r.ctxMap[[2]uint64{entry.Term, entry.Index}] = ctx
+}
+
+// TODO - add lookupContext with multiple entries
+func (r *raft) lookupContext(ctx context.Context, entry pb.Entry) context.Context {
+	mCtx := r.ctxMap[[2]uint64{entry.Term, entry.Index}]
+	if mCtx == nil {
+		return ctx
+	}
+	ctx = mCtx
+	return ctx
 }
 
 func newRaft(ctx context.Context, c *Config) *raft {
@@ -454,6 +473,7 @@ func newRaft(ctx context.Context, c *Config) *raft {
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
 	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
+	r.ctxMap = make(map[[2]uint64]context.Context)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -503,7 +523,7 @@ func (r *raft) hardState() pb.HardState {
 // send schedules persisting state to a stable storage and AFTER that
 // sending the message (as part of next Ready message processing).
 func (r *raft) send(ctx context.Context, m pb.Message) {
-	log.Eventf(ctx, "sending %s [term: %d]", m.Type, m.Term)
+	log.Eventf(ctx, "sending %s [term: %d] (%d -> %d)", m.Type, m.Term, m.From, m.To)
 	if m.From == None {
 		m.From = r.id
 	}
@@ -582,12 +602,12 @@ func (r *raft) send(ctx context.Context, m pb.Message) {
 		// because the safety of such behavior has not been formally verified,
 		// we err on the side of safety and omit a `&& !m.Reject` condition
 		// above.
-		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
+		r.msgsAfterAppend = append(r.msgsAfterAppend, pb.NewContextMessage(ctx, m))
 	} else {
 		if m.To == r.id {
 			log.Fatalf(ctx, "message should not be self-addressed when sending %s", m.Type)
 		}
-		r.msgs = append(r.msgs, m)
+		r.msgs = append(r.msgs, pb.NewContextMessage(ctx, m))
 	}
 }
 
@@ -900,6 +920,7 @@ func (r *raft) appendEntry(ctx context.Context, es ...pb.Entry) (accepted bool) 
 	for i := range es {
 		es[i].Term = r.Term
 		es[i].Index = last.index + 1 + uint64(i)
+		r.storeContext(es[i], ctx)
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(es) {

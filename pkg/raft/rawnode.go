@@ -24,6 +24,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ErrStepLocalMsg is returned when try to step a local raft message
@@ -43,7 +44,8 @@ type RawNode struct {
 	// Mutable fields.
 	prevSoftSt     *SoftState
 	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	stepsOnAdvance []pb.ContextMessage
+	tracer         *tracing.Tracer
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -56,7 +58,8 @@ type RawNode struct {
 func NewRawNode(ctx context.Context, config *Config) (*RawNode, error) {
 	r := newRaft(ctx, config)
 	rn := &RawNode{
-		raft: r,
+		raft:   r,
+		tracer: config.Tracer,
 	}
 	rn.asyncStorageWrites = config.AsyncStorageWrites
 	ss := r.softState()
@@ -79,6 +82,7 @@ func (rn *RawNode) Campaign(ctx context.Context) error {
 
 // Propose proposes data be appended to the raft log.
 func (rn *RawNode) Propose(ctx context.Context, data []byte) error {
+	log.Event(ctx, "RawNode.Propose")
 	return rn.raft.Step(ctx, pb.Message{
 		Type: pb.MsgProp,
 		From: rn.raft.id,
@@ -114,6 +118,7 @@ func (rn *RawNode) Step(ctx context.Context, m pb.Message) error {
 	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.trk.Progress(m.From) == nil {
 		return ErrStepPeerNotFound
 	}
+	log.Eventf(ctx, "RawNode.Step: %s - index %d, (%d -> %d)", m.Type.String(), m.Index, m.From, m.To)
 	return rn.raft.Step(ctx, m)
 }
 
@@ -145,6 +150,25 @@ func (rn *RawNode) Ready(ctx context.Context) Ready {
 	return rd
 }
 
+// NB: This uses an approach of attaching SOME context to the Ready that has a
+// SpanFromContext set. This could be done lazily instead but since we look this
+// up multiple times it is better to do it once at creation.
+func (rn *RawNode) tracedContext(ctx context.Context, rd Ready) context.Context {
+	if tracing.SpanFromContext(ctx) != nil {
+		return ctx
+	}
+	for _, msg := range rd.Messages {
+		return msg.Context
+	}
+	for _, e := range rd.CommittedEntries {
+		return rn.raft.lookupContext(ctx, e)
+	}
+	for _, e := range rd.Entries {
+		return rn.raft.lookupContext(ctx, e)
+	}
+	return ctx
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept(ctx context.Context) Ready {
@@ -168,6 +192,7 @@ func (rn *RawNode) readyWithoutAccept(ctx context.Context) Ready {
 	}
 	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
 
+	rd.Context = rn.tracedContext(ctx, rd)
 	if rn.asyncStorageWrites {
 		// If async storage writes are enabled, enqueue messages to
 		// local storage threads, where applicable.
@@ -176,7 +201,7 @@ func (rn *RawNode) readyWithoutAccept(ctx context.Context) Ready {
 			rd.Messages = append(rd.Messages, m)
 		}
 		if needStorageApplyMsg(rd) {
-			m := newStorageApplyMsg(ctx, r, rd)
+			m := newStorageApplyMsg(r, rd)
 			rd.Messages = append(rd.Messages, m)
 		}
 	} else {
@@ -230,7 +255,7 @@ func needStorageAppendRespMsg(rd Ready) bool {
 // state, and apply a snapshot. The message also carries a set of responses
 // that should be delivered after the rest of the message is processed. Used
 // with AsyncStorageWrites.
-func newStorageAppendMsg(ctx context.Context, r *raft, rd Ready) pb.Message {
+func newStorageAppendMsg(ctx context.Context, r *raft, rd Ready) pb.ContextMessage {
 	m := pb.Message{
 		Type:    pb.MsgStorageAppend,
 		To:      LocalAppendThread,
@@ -271,21 +296,32 @@ func newStorageAppendMsg(ctx context.Context, r *raft, rd Ready) pb.Message {
 	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
-	m.Responses = r.msgsAfterAppend
+	var mCtx context.Context
+	m.Responses, mCtx = stripContext(r.msgsAfterAppend)
 	// Warning: there is code outside raft package depending on the order of
 	// Responses, particularly MsgStorageAppendResp being last in this list.
 	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
-		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
+		m.Responses = append(m.Responses, newStorageAppendRespMsg(mCtx, r, rd).Message)
 	}
-	return m
+	return pb.NewContextMessage(rd.Context, m)
+}
+
+func stripContext(m []pb.ContextMessage) ([]pb.Message, context.Context) {
+	responses := make([]pb.Message, len(m))
+	var ctx context.Context
+	for i, resp := range m {
+		responses[i] = resp.Message
+		ctx = resp.Context
+	}
+	return responses, ctx
 }
 
 // newStorageAppendRespMsg creates the message that should be returned to node
 // after the unstable log entries, hard state, and snapshot in the current Ready
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
-func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
+func newStorageAppendRespMsg(ctx context.Context, r *raft, rd Ready) pb.ContextMessage {
 	m := pb.Message{
 		Type: pb.MsgStorageAppendResp,
 		To:   r.id,
@@ -344,13 +380,15 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
+		// TODO: Lookup all contexts until we find one that has tracing info.
+		ctx = r.lookupContext(ctx, rd.Entries[ln-1])
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
 		m.LogTerm = r.raftLog.accTerm()
 	}
-	return m
+	return pb.NewContextMessage(ctx, m)
 }
 
 func needStorageApplyMsg(rd Ready) bool     { return len(rd.CommittedEntries) > 0 }
@@ -360,18 +398,21 @@ func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
 // message is processed. Used with AsyncStorageWrites.
-func newStorageApplyMsg(ctx context.Context, r *raft, rd Ready) pb.Message {
+func newStorageApplyMsg(r *raft, rd Ready) pb.ContextMessage {
 	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
-		To:      LocalApplyThread,
-		From:    r.id,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
-		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, ents),
+	return pb.NewContextMessage(
+		rd.Context,
+		pb.Message{
+			Type:    pb.MsgStorageApply,
+			To:      LocalApplyThread,
+			From:    r.id,
+			Term:    0, // committed entries don't apply under a specific term
+			Entries: ents,
+			Responses: []pb.Message{
+				newStorageApplyRespMsg(r, ents),
+			},
 		},
-	}
+	)
 }
 
 // newStorageApplyRespMsg creates the message that should be returned to node
@@ -407,11 +448,12 @@ func (rn *RawNode) acceptReady(ctx context.Context, rd Ready) {
 			}
 		}
 		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(rn.raft, rd)
+			m := newStorageAppendRespMsg(ctx, rn.raft, rd)
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
+			// FIXME: Is this the right context?
+			m := pb.NewContextMessage(ctx, newStorageApplyRespMsg(rn.raft, rd.CommittedEntries))
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 	}
@@ -467,8 +509,8 @@ func (rn *RawNode) Advance(ctx context.Context, _ Ready) {
 		log.Fatalf(ctx, "Advance must not be called when using AsyncStorageWrites")
 	}
 	for i, m := range rn.stepsOnAdvance {
-		_ = rn.raft.Step(ctx, m)
-		rn.stepsOnAdvance[i] = pb.Message{}
+		_ = rn.raft.Step(m.Context, m.Message)
+		rn.stepsOnAdvance[i] = pb.ContextMessage{}
 	}
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }

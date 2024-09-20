@@ -331,7 +331,7 @@ type Replica struct {
 		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
 		// Scratch for populating RaftEvent for flowControlV2.
-		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
+		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.ContextMessage
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
@@ -345,7 +345,7 @@ type Replica struct {
 	// TODO(pav-kv): replace these with log marks for the latest completed write.
 	localMsgs struct {
 		syncutil.Mutex
-		active, recycled []raftpb.Message
+		active, recycled []raftpb.ContextMessage
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are

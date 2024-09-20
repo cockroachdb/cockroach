@@ -100,7 +100,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 	}
 	for i, m := range ready.Messages {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
-			i, raft.DescribeMessage(m, raftEntryFormatter))
+			i, raft.DescribeMessage(m.Message, raftEntryFormatter))
 	}
 	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 }
@@ -142,10 +142,7 @@ func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
 	}
 }
 
-// traceMessageSends records the provided event for all proposals contained in
-// in entries contained in msgs. The vmodule level for raft must be at
-// least 1.
-func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
+func (r *Replica) traceMessageSends(msgs []raftpb.ContextMessage, event string) {
 	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		var ids []kvserverbase.CmdIDKey
 		for _, m := range msgs {

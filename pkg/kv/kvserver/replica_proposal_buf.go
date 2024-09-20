@@ -439,6 +439,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// buffer and registering each of the proposals with the proposer, but we
 	// stop trying to propose commands to raftGroup.
 	var firstErr error
+	var tracedCtx context.Context
 	for i, p := range buf {
 		if p == nil {
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
@@ -513,7 +514,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+			propErr := proposeBatch(tracedCtx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -572,9 +573,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
+			ents = append(ents, raftpb.Entry{Data: p.encodedCommand})
+			// If we have a tracing span in the context, we want to keep it around.
+			tracedCtx = p.ctx
+
 			nextProp++
 			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
 
@@ -595,7 +597,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+	propErr := proposeBatch(tracedCtx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 	return used, propErr
 }
 

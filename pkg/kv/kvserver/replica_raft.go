@@ -873,8 +873,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	var hasReady bool
-	var outboundMsgs []raftpb.Message
-	var msgStorageAppend, msgStorageApply raftpb.Message
+	var outboundMsgs []raftpb.ContextMessage
+	var msgStorageAppend, msgStorageApply raftpb.ContextMessage
 	r.mu.Lock()
 	state := logstore.RaftState{ // used for append below
 		LastIndex: r.mu.lastIndexNotDurable,
@@ -953,7 +953,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	r.traceMessageSends(outboundMsgs, "sending messages")
-	r.sendRaftMessages(ctx, outboundMsgs, pausedFollowers, true /* willDeliverLocal */)
+	r.sendRaftMessages(outboundMsgs, pausedFollowers, true /* willDeliverLocal */)
 
 	// If the ready struct includes entries that have been committed, these
 	// entries will be applied to the Replica's replicated state machine down
@@ -1214,7 +1214,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 
 		// Send MsgStorageApply's responses.
-		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
+		r.sendRaftMessages(raftpb.NewContextMessages(msgStorageApply.Context, msgStorageApply.Responses), nil /* blocked */, true /* willDeliverLocal */)
 	}
 	stats.tApplicationEnd = timeutil.Now()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
@@ -1291,7 +1291,7 @@ type asyncReady struct {
 	//
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
-	Messages []raftpb.Message
+	Messages []raftpb.ContextMessage
 }
 
 // makeAsyncReady constructs an asyncReady from the provided Ready.
@@ -1303,13 +1303,13 @@ func makeAsyncReady(rd raft.Ready) asyncReady {
 
 // hasMsg returns whether the provided raftpb.Message is present.
 // It serves as a poor man's Optional[raftpb.Message].
-func hasMsg(m raftpb.Message) bool { return m.Type != 0 }
+func hasMsg(m raftpb.ContextMessage) bool { return m.Type != 0 }
 
 // splitLocalStorageMsgs filters out local storage messages from the provided
 // message slice and returns them separately.
 func splitLocalStorageMsgs(
-	msgs []raftpb.Message,
-) (otherMsgs []raftpb.Message, msgStorageAppend, msgStorageApply raftpb.Message) {
+	msgs []raftpb.ContextMessage,
+) (otherMsgs []raftpb.ContextMessage, msgStorageAppend, msgStorageApply raftpb.ContextMessage) {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		switch msgs[i].Type {
 		case raftpb.MsgStorageAppend:
@@ -1714,7 +1714,7 @@ func (r *replicaSyncCallback) OnLogSync(
 		fn(repl.ID())
 	}
 	// Send MsgStorageAppend's responses.
-	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, false /* willDeliverLocal */)
+	repl.sendRaftMessages(done.Responses(), nil /* blocked */, false /* willDeliverLocal */)
 	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
 		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
 	}
@@ -1724,7 +1724,7 @@ func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgS
 	repl := (*Replica)(r)
 	// NB: when storing snapshot, done always contains a non-zero log mark.
 	repl.flowControlV2.SyncedLogStorage(ctx, done.Mark())
-	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
+	repl.sendRaftMessages(done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
 }
 
 // sendRaftMessages sends a slice of Raft messages.
@@ -1739,12 +1739,9 @@ func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgS
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
 func (r *Replica) sendRaftMessages(
-	ctx context.Context,
-	messages []raftpb.Message,
-	blocked map[roachpb.ReplicaID]struct{},
-	willDeliverLocal bool,
+	messages []raftpb.ContextMessage, blocked map[roachpb.ReplicaID]struct{}, willDeliverLocal bool,
 ) {
-	var lastAppResp raftpb.Message
+	var lastAppResp raftpb.ContextMessage
 	for _, message := range messages {
 		switch message.To {
 		case raft.LocalAppendThread:
@@ -1790,17 +1787,17 @@ func (r *Replica) sendRaftMessages(
 					prevIndex := message.Index  // index of entry preceding the append
 					for j := range message.Entries {
 						ent := &message.Entries[j]
-						logstore.AssertSideloadedRaftCommandInlined(ctx, ent)
+						logstore.AssertSideloadedRaftCommandInlined(message.Context, ent)
 
 						if prevIndex+1 != ent.Index {
-							log.Fatalf(ctx,
+							log.Fatalf(message.Context,
 								"index gap in outgoing MsgApp: idx %d followed by %d",
 								prevIndex, ent.Index,
 							)
 						}
 						prevIndex = ent.Index
 						if prevTerm > ent.Term {
-							log.Fatalf(ctx,
+							log.Fatalf(message.Context,
 								"term regression in outgoing MsgApp: idx %d at term=%d "+
 									"appended with logterm=%d",
 								ent.Index, ent.Term, message.LogTerm,
@@ -1835,17 +1832,17 @@ func (r *Replica) sendRaftMessages(
 			}
 
 			if !drop {
-				r.sendRaftMessage(ctx, message)
+				r.sendRaftMessage(message.Context, message.Message)
 			}
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessage(lastAppResp.Context, lastAppResp.Message)
 	}
 }
 
 // sendLocalRaftMsg sends a message to the local raft state machine.
-func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
+func (r *Replica) sendLocalRaftMsg(msg raftpb.ContextMessage, willDeliverLocal bool) {
 	if msg.To != raftpb.PeerID(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
@@ -1888,9 +1885,9 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 	}
 
 	for i, m := range localMsgs {
-		if err := raftGroup.Step(ctx, m); err != nil {
+		if err := raftGroup.Step(m.Context, m.Message); err != nil {
 			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
-				raft.DescribeMessage(m, raftEntryFormatter), err)
+				raft.DescribeMessage(m.Message, raftEntryFormatter), err)
 		}
 		// NB: we can reset messages in the localMsgs.recycled slice without holding
 		// the localMsgs mutex because no-one ever writes to localMsgs.recycled and

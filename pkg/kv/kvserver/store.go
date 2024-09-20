@@ -385,6 +385,7 @@ func newRaftConfig(
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	storeLiveness raftstoreliveness.StoreLiveness,
+	tracer *tracing.Tracer,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -403,6 +404,7 @@ func newRaftConfig(
 		PreVote:                     true,
 		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
 		CRDBVersion:                 storeCfg.Settings.Version,
+		Tracer:                      tracer,
 	}
 }
 

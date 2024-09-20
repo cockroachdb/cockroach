@@ -63,10 +63,10 @@ var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 )
 
 // MsgStorageAppend is a raftpb.Message with type MsgStorageAppend.
-type MsgStorageAppend raftpb.Message
+type MsgStorageAppend raftpb.ContextMessage
 
 // MakeMsgStorageAppend constructs a MsgStorageAppend from a raftpb.Message.
-func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
+func MakeMsgStorageAppend(m raftpb.ContextMessage) MsgStorageAppend {
 	if m.Type != raftpb.MsgStorageAppend {
 		panic(fmt.Sprintf("unexpected message type %s", m.Type))
 	}
@@ -90,14 +90,16 @@ func (m *MsgStorageAppend) MustSync() bool {
 }
 
 // OnDone returns the storage write post-processing information.
-func (m *MsgStorageAppend) OnDone(ctx context.Context) MsgStorageAppendDone { return m.Responses }
+func (m *MsgStorageAppend) OnDone(ctx context.Context) MsgStorageAppendDone {
+	return raftpb.NewContextMessages(ctx, m.Responses)
+}
 
 // MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
 // done, such as sending messages back to raft node and its peers.
-type MsgStorageAppendDone []raftpb.Message
+type MsgStorageAppendDone []raftpb.ContextMessage
 
 // Responses returns the messages to send after the write/sync is completed.
-func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
+func (m MsgStorageAppendDone) Responses() []raftpb.ContextMessage { return m }
 
 // Mark returns the LogMark of the raft log in storage after the write/sync is
 // completed. Returns zero value if the write does not update the log mark.
@@ -318,9 +320,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// callback when the write completes.
 		waiterCallback := nonBlockingSyncWaiterCallbackPool.Get().(*nonBlockingSyncWaiterCallback)
 		*waiterCallback = nonBlockingSyncWaiterCallback{
-			ctx:            ctx,
+			ctx:            m.Context,
 			cb:             cb,
-			onDone:         m.OnDone(ctx),
+			onDone:         m.OnDone(m.Context),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -338,7 +340,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.OnDone(ctx), storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.OnDone(m.Context), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync

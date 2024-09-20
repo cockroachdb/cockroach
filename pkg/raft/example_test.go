@@ -23,10 +23,10 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
-func applyToStore(_ []pb.Entry)      {}
-func sendMessages(_ []pb.Message)    {}
-func saveStateToDisk(_ pb.HardState) {}
-func saveToDisk(_ []pb.Entry)        {}
+func applyToStore(_ []pb.Entry)          {}
+func sendMessages(_ []pb.ContextMessage) {}
+func saveStateToDisk(_ pb.HardState)     {}
+func saveToDisk(_ []pb.Entry)            {}
 
 func ExampleNode() {
 	ctx := context.Background()

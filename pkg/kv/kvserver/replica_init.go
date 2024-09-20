@@ -227,7 +227,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
-	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.ContextMessage{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
@@ -320,6 +320,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
 			(*replicaRLockedStoreLiveness)(r),
+			r.AmbientContext.Tracer,
 		))
 	if err != nil {
 		return err

@@ -26,12 +26,15 @@ go_library(
     srcs = [
         "confchange.go",
         "confstate.go",
+        "context_message.go",
         "raft.go",
     ],
     embed = [":raftpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/raftpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/log",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
     ],

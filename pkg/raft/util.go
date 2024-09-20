@@ -141,7 +141,7 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 	if len(rd.Messages) > 0 {
 		buf.WriteString("Messages:\n")
 		for _, msg := range rd.Messages {
-			fmt.Fprint(&buf, DescribeMessage(msg, f))
+			fmt.Fprint(&buf, DescribeMessage(msg.Message, f))
 			buf.WriteByte('\n')
 		}
 	}

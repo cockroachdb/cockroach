@@ -104,11 +104,15 @@ type Ready struct {
 	//
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
-	Messages []pb.Message
+	Messages []pb.ContextMessage
 
 	// MustSync indicates whether the HardState and Entries must be durably
 	// written to disk or if a non-durable write is permissible.
 	MustSync bool
+
+	// Context is the context used when this Ready was created. Typically is is
+	// extracted from one of the internal messages.
+	Context context.Context
 }
 
 func isHardStateEqual(a, b pb.HardState) bool {
@@ -277,17 +281,33 @@ func RestartNode(ctx context.Context, c *Config) Node {
 type msgWithResult struct {
 	m      pb.Message
 	result chan error
+	ctx    context.Context
+}
+
+type msgWithoutResult struct {
+	pb.Message
+	ctx context.Context
+}
+
+type confChange struct {
+	pb.ConfChangeV2
+	ctx context.Context
+}
+
+type ready struct {
+	rd  Ready
+	ctx context.Context
 }
 
 // node is the canonical implementation of the Node interface
 type node struct {
 	propc      chan msgWithResult
-	recvc      chan pb.Message
-	confc      chan pb.ConfChangeV2
+	recvc      chan msgWithoutResult
+	confc      chan confChange
 	confstatec chan pb.ConfState
 	readyc     chan Ready
-	advancec   chan struct{}
-	tickc      chan struct{}
+	advancec   chan context.Context
+	tickc      chan context.Context
 	done       chan struct{}
 	stop       chan struct{}
 	status     chan chan Status
@@ -298,15 +318,15 @@ type node struct {
 func newNode(rn *RawNode) node {
 	return node{
 		propc:      make(chan msgWithResult),
-		recvc:      make(chan pb.Message),
-		confc:      make(chan pb.ConfChangeV2),
+		recvc:      make(chan msgWithoutResult),
+		confc:      make(chan confChange),
 		confstatec: make(chan pb.ConfState),
 		readyc:     make(chan Ready),
-		advancec:   make(chan struct{}),
+		advancec:   make(chan context.Context),
 		// make tickc a buffered chan, so raft node can buffer some ticks when the node
 		// is busy processing raft messages. Raft node will resume process buffered
 		// ticks when it becomes idle.
-		tickc:  make(chan struct{}, 128),
+		tickc:  make(chan context.Context, 128),
 		done:   make(chan struct{}),
 		stop:   make(chan struct{}),
 		status: make(chan chan Status),
@@ -332,7 +352,7 @@ func (n *node) Stop() {
 func (n *node) run(ctx context.Context) {
 	var propc chan msgWithResult
 	var readyc chan Ready
-	var advancec chan struct{}
+	var advancec chan context.Context
 	var rd Ready
 
 	r := n.rn.raft
@@ -385,10 +405,10 @@ func (n *node) run(ctx context.Context) {
 				// Filter out response message from unknown From.
 				break
 			}
-			r.Step(ctx, m)
+			r.Step(m.ctx, m.Message)
 		case cc := <-n.confc:
 			okBefore := r.trk.Progress(r.id) != nil
-			cs := r.applyConfChange(ctx, cc)
+			cs := r.applyConfChange(cc.ctx, cc.ConfChangeV2)
 			// If the node was removed, block incoming proposals. Note that we
 			// only do this if the node was in the config before. Nodes may be
 			// a member of the group without knowing this (when they're catching
@@ -419,7 +439,7 @@ func (n *node) run(ctx context.Context) {
 			case n.confstatec <- cs:
 			case <-n.done:
 			}
-		case <-n.tickc:
+		case ctx := <-n.tickc:
 			n.rn.Tick(ctx)
 		case readyc <- rd:
 			n.rn.acceptReady(ctx, rd)
@@ -429,7 +449,7 @@ func (n *node) run(ctx context.Context) {
 				rd = Ready{}
 			}
 			readyc = nil
-		case <-advancec:
+		case ctx := <-advancec:
 			n.rn.Advance(ctx, rd)
 			rd = Ready{}
 			advancec = nil
@@ -446,7 +466,7 @@ func (n *node) run(ctx context.Context) {
 // and heartbeat timeouts are in units of ticks.
 func (n *node) Tick(ctx context.Context) {
 	select {
-	case n.tickc <- struct{}{}:
+	case n.tickc <- ctx:
 	case <-n.done:
 	default:
 		log.Warningf(ctx, "%x A tick missed to fire. Node blocks too long!", n.rn.raft.id)
@@ -497,7 +517,7 @@ func (n *node) stepWait(ctx context.Context, m pb.Message) error {
 func (n *node) stepWithWaitOption(ctx context.Context, m pb.Message, wait bool) error {
 	if m.Type != pb.MsgProp {
 		select {
-		case n.recvc <- m:
+		case n.recvc <- msgWithoutResult{m, ctx}:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -537,7 +557,7 @@ func (n *node) Ready() <-chan Ready { return n.readyc }
 
 func (n *node) Advance(ctx context.Context) {
 	select {
-	case n.advancec <- struct{}{}:
+	case n.advancec <- ctx:
 	case <-n.done:
 	}
 }
@@ -545,7 +565,7 @@ func (n *node) Advance(ctx context.Context) {
 func (n *node) ApplyConfChange(ctx context.Context, cc pb.ConfChangeI) *pb.ConfState {
 	var cs pb.ConfState
 	select {
-	case n.confc <- cc.AsV2():
+	case n.confc <- confChange{cc.AsV2(), ctx}:
 	case <-n.done:
 	}
 	select {
@@ -567,7 +587,7 @@ func (n *node) Status() Status {
 
 func (n *node) ReportUnreachable(ctx context.Context, id pb.PeerID) {
 	select {
-	case n.recvc <- pb.Message{Type: pb.MsgUnreachable, From: id}:
+	case n.recvc <- msgWithoutResult{pb.Message{Type: pb.MsgUnreachable, From: id}, ctx}:
 	case <-n.done:
 	}
 }
@@ -576,7 +596,7 @@ func (n *node) ReportSnapshot(ctx context.Context, id pb.PeerID, status Snapshot
 	rej := status == SnapshotFailure
 
 	select {
-	case n.recvc <- pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej}:
+	case n.recvc <- msgWithoutResult{pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej}, ctx}:
 	case <-n.done:
 	}
 }
@@ -584,7 +604,7 @@ func (n *node) ReportSnapshot(ctx context.Context, id pb.PeerID, status Snapshot
 func (n *node) TransferLeadership(ctx context.Context, lead, transferee pb.PeerID) {
 	select {
 	// manually set 'from' and 'to', so that leader can voluntarily transfers its leadership
-	case n.recvc <- pb.Message{Type: pb.MsgTransferLeader, From: transferee, To: lead}:
+	case n.recvc <- msgWithoutResult{pb.Message{Type: pb.MsgTransferLeader, From: transferee, To: lead}, ctx}:
 	case <-n.done:
 	case <-ctx.Done():
 	}

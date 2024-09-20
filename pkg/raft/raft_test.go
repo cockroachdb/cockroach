@@ -61,7 +61,7 @@ type stateMachine interface {
 	advanceMessagesAfterAppend(ctx context.Context)
 }
 
-func (r *raft) readMessages(ctx context.Context) []pb.Message {
+func (r *raft) readMessages(ctx context.Context) []pb.ContextMessage {
 	r.advanceMessagesAfterAppend(ctx)
 	msgs := r.msgs
 	r.msgs = nil
@@ -78,7 +78,7 @@ func (r *raft) advanceMessagesAfterAppend(ctx context.Context) {
 	}
 }
 
-func (r *raft) takeMessagesAfterAppend() []pb.Message {
+func (r *raft) takeMessagesAfterAppend() []pb.ContextMessage {
 	msgs := r.msgsAfterAppend
 	r.msgsAfterAppend = nil
 	return msgs
