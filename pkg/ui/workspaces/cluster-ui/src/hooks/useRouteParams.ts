@@ -5,10 +5,10 @@
 
 import { useParams } from "react-router";
 
-import { databaseIDAttr } from "src/util";
+import { databaseIDAttr, tableIdAttr } from "src/util";
 
 type Params = {
   [databaseIDAttr]: string;
-  // Add more as needed.
+  [tableIdAttr]: string;
 };
 export const useRouteParams = useParams<Params>;

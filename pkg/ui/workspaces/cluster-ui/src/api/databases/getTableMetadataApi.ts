@@ -39,6 +39,7 @@ export type TableMetadata = {
   total_data_bytes: number;
   store_ids: number[];
   last_updated: string;
+  last_update_error: string | null;
 };
 
 type TableMetadataResponse = APIV2ResponseWithPaginationState<TableMetadata[]>;

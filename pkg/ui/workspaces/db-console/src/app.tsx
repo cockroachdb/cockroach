@@ -9,6 +9,7 @@ import {
   ConfigProvider as ClusterUIConfigProvider,
   DatabasesPageV2,
   DatabaseDetailsPageV2,
+  TableDetailsPageV2,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -45,6 +46,7 @@ import {
   txnFingerprintIdAttr,
   viewAttr,
   idAttr,
+  tableIdAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
@@ -212,6 +214,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           exact
                           path={`/databases/:${databaseIDAttr}`}
                           component={DatabaseDetailsPageV2}
+                        />
+                        <Route
+                          exact
+                          path={`/table/:${tableIdAttr}`}
+                          component={TableDetailsPageV2}
                         />
                         <Route
                           exact
