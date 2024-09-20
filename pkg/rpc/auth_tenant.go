@@ -119,6 +119,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TenantRanges":
 		return a.authTenantRanges(tenID)
 
+	case "/cockroach.server.serverpb.Status/Ranges":
+		return a.authRanges(tenID)
+
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
@@ -304,6 +307,15 @@ var gossipSubscriptionPatternAllowlist = []string{
 func (a tenantAuthorizer) authTenantRanges(tenID roachpb.TenantID) error {
 	if !tenID.IsSet() {
 		return authErrorf("tenant ranges request with unspecified tenant not permitted.")
+	}
+	return nil
+}
+
+// authRanges authorizes the provided tenant to invoke the Ranges RPC with the
+// provided args. It requires that an authorized tenantID has been set.
+func (a tenantAuthorizer) authRanges(tenID roachpb.TenantID) error {
+	if !tenID.IsSet() {
+		return authErrorf("ranges request with unspecified tenant not permitted.")
 	}
 	return nil
 }
