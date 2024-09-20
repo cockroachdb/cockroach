@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -126,6 +128,7 @@ type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
+	registerForTracing(*ProposalData, raftpb.Entry)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -886,6 +889,16 @@ func proposeBatch(
 		//      slice of entries. See etcd-io/raft#57.
 		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
 	}
+
+	// If the context on the proposal is set up for tracing, register the
+	// proposal with rafttrace. This will add the trace to updates.
+	for i, e := range ents {
+		if s := tracing.SpanFromContext(props[i].Context()); s != nil && s.RecordingType() == tracingpb.RecordingVerbose {
+			p.registerForTracing(props[i], e)
+			// NB: Only trace the first entry in the batch.
+			break
+		}
+	}
 	return err
 }
 
@@ -1171,6 +1184,10 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 
 func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
+}
+
+func (rp *replicaProposer) registerForTracing(p *ProposalData, e raftpb.Entry) {
+	(*Replica)(rp).mu.raftTracer.Register(p, e)
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
