@@ -547,51 +547,40 @@ norm
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project
- ├── columns: "?column?":24!null
- ├── fd: ()-->(24)
+ ├── columns: "?column?":23!null
+ ├── fd: ()-->(23)
  ├── left-join-apply
- │    ├── columns: ref_0.s:4 exists:23
+ │    ├── columns: ref_0.s:4 exists:22
  │    ├── scan a [as=ref_0]
  │    │    └── columns: ref_0.s:4
  │    ├── project
- │    │    ├── columns: exists:23!null
+ │    │    ├── columns: exists:22!null
  │    │    ├── outer: (4)
  │    │    ├── group-by (hash)
- │    │    │    ├── columns: ref_1.k:7!null true_agg:22
+ │    │    │    ├── columns: ref_1.k:7!null canary_agg:21
  │    │    │    ├── grouping columns: ref_1.k:7!null
  │    │    │    ├── outer: (4)
  │    │    │    ├── key: (7)
- │    │    │    ├── fd: (7)-->(22)
+ │    │    │    ├── fd: (7)-->(21)
  │    │    │    ├── left-join (cross)
- │    │    │    │    ├── columns: ref_1.k:7!null true:21
+ │    │    │    │    ├── columns: ref_1.k:7!null a.s:16
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── scan a [as=ref_1]
  │    │    │    │    │    ├── columns: ref_1.k:7!null
  │    │    │    │    │    └── key: (7)
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:21!null
- │    │    │    │    │    ├── outer: (4)
- │    │    │    │    │    ├── fd: ()-->(21)
- │    │    │    │    │    ├── select
- │    │    │    │    │    │    ├── columns: a.s:16!null
- │    │    │    │    │    │    ├── outer: (4)
- │    │    │    │    │    │    ├── fd: ()-->(16)
- │    │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    │    └── columns: a.s:16
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── a.s:16 = ref_0.s:4 [outer=(4,16), constraints=(/4: (/NULL - ]; /16: (/NULL - ]), fd=(4)==(16), (16)==(4)]
- │    │    │    │    │    └── projections
- │    │    │    │    │         └── true [as=true:21]
- │    │    │    │    └── filters (true)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    └── columns: a.s:16
+ │    │    │    │    └── filters
+ │    │    │    │         └── a.s:16 = ref_0.s:4 [outer=(4,16), constraints=(/4: (/NULL - ]; /16: (/NULL - ]), fd=(4)==(16), (16)==(4)]
  │    │    │    └── aggregations
- │    │    │         └── const-not-null-agg [as=true_agg:22, outer=(21)]
- │    │    │              └── true:21
+ │    │    │         └── const-not-null-agg [as=canary_agg:21, outer=(16)]
+ │    │    │              └── a.s:16
  │    │    └── projections
- │    │         └── true_agg:22 IS NOT NULL [as=exists:23, outer=(22)]
+ │    │         └── canary_agg:21 IS NOT NULL [as=exists:22, outer=(21)]
  │    └── filters
- │         └── exists:23 [outer=(23), constraints=(/23: [/true - /true]; tight), fd=()-->(23)]
+ │         └── exists:22 [outer=(22), constraints=(/22: [/true - /true]; tight), fd=()-->(22)]
  └── projections
-      └── 1 [as="?column?":24]
+      └── 1 [as="?column?":23]
 
 # Use with multi-argument aggregate function.
 norm expect=RejectNullsGroupBy

@@ -1042,14 +1042,15 @@ project
  ├── columns: exists:14!null
  ├── immutable
  ├── group-by (hash)
- │    ├── columns: k:1!null true_agg:16
+ │    ├── columns: k:1!null canary_agg:15
  │    ├── grouping columns: k:1!null
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(16)
+ │    ├── fd: (1)-->(15)
  │    ├── left-join (cross)
- │    │    ├── columns: k:1!null expr:8!null true:15
+ │    │    ├── columns: k:1!null expr:8!null x:9
  │    │    ├── immutable
+ │    │    ├── key: (1,9)
  │    │    ├── fd: (1)-->(8)
  │    │    ├── project
  │    │    │    ├── columns: expr:8!null k:1!null
@@ -1061,19 +1062,16 @@ project
  │    │    │    │    └── key: (1)
  │    │    │    └── projections
  │    │    │         └── k:1 + 1 [as=expr:8, outer=(1), immutable]
- │    │    ├── project
- │    │    │    ├── columns: true:15!null
- │    │    │    ├── fd: ()-->(15)
- │    │    │    ├── scan xy
- │    │    │    └── projections
- │    │    │         └── true [as=true:15]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:9!null
+ │    │    │    └── key: (9)
  │    │    └── filters
  │    │         └── expr:8 < 0 [outer=(8), constraints=(/8: (/NULL - /-1]; tight)]
  │    └── aggregations
- │         └── const-not-null-agg [as=true_agg:16, outer=(15)]
- │              └── true:15
+ │         └── const-not-null-agg [as=canary_agg:15, outer=(9)]
+ │              └── x:9
  └── projections
-      └── true_agg:16 IS NOT NULL [as=exists:14, outer=(16)]
+      └── canary_agg:15 IS NOT NULL [as=exists:14, outer=(15)]
 
 # After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
 norm
