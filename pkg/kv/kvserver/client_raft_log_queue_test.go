@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
@@ -129,6 +132,65 @@ func TestRaftLogQueue(t *testing.T) {
 	if afterTruncationIndex > after2ndTruncationIndex {
 		t.Fatalf("second truncation destroyed state: afterTruncationIndex:%d after2ndTruncationIndex:%d",
 			afterTruncationIndex, after2ndTruncationIndex)
+	}
+}
+
+func TestRaftTracing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(baptist): Remove this once we change the default to be enabled.
+	st := cluster.MakeTestingClusterSettings()
+	rafttrace.MaxConcurrentRaftTraces.Override(context.Background(), &st.SV, 10)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				RangeLeaseDuration:       24 * time.Hour, // disable lease moves
+				RaftElectionTimeoutTicks: 1 << 30,        // disable elections
+			},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Write a single value to ensure we have a leader on n1.
+	key := tc.ScratchRange(t)
+	_, pErr := kv.SendWrapped(context.Background(), store.TestSender(), putArgs(key, []byte("value")))
+	require.NoError(t, pErr.GoError())
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	// Set to have 3 voters.
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	for i := 0; i < 100; i++ {
+		var finish func() tracingpb.Recording
+		ctx := context.Background()
+		if i == 50 {
+			// Trace a random request on a "client" tracer.
+			ctx, finish = tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "test")
+		}
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(key, []byte(fmt.Sprintf("value-%d", i))))
+		require.NoError(t, pErr.GoError())
+		// Note that this is the clients span, there may be additional logs created after the span is returned.
+		if finish != nil {
+			output := finish().String()
+			// NB: It is hard to get all the messages in an expected order. We
+			// simply ensure some of the key messages are returned. Also note
+			// that we want to make sure that the logs are not reported against
+			// the tracing library, but the line that called into it.
+			expectedMessages := []string{
+				`replica_proposal_buf.* flushing proposal to Raft`,
+				`replica_proposal_buf.* registering local trace`,
+				`replica_raft.* 1->2 MsgApp`,
+				`replica_raft.* 1->3 MsgApp`,
+				`replica_raft.* AppendThread->1 MsgStorageAppendResp`,
+				`ack-ing replication success to the client`,
+			}
+			require.NoError(t, testutils.MatchInOrder(output, expectedMessages...))
+		}
 	}
 }
 
