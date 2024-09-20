@@ -8,47 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {
-  DatabaseMetadata,
-  DatabaseSortOptions,
-} from "src/api/databases/getDatabaseMetadataApi";
+import { DatabaseMetadata } from "src/api/databases/getDatabaseMetadataApi";
 
-import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
-
-export const getSortKeyFromColTitle = (
-  col: DatabaseColName,
-): DatabaseSortOptions => {
-  switch (col) {
-    case DatabaseColName.NAME:
-      return DatabaseSortOptions.NAME;
-    case DatabaseColName.SIZE:
-      return DatabaseSortOptions.REPLICATION_SIZE;
-    case DatabaseColName.RANGE_COUNT:
-      return DatabaseSortOptions.RANGES;
-    case DatabaseColName.TABLE_COUNT:
-      return DatabaseSortOptions.TABLE_COUNT;
-    default:
-      throw new Error(`Unsupported sort column ${col}`);
-  }
-};
-
-export const getColTitleFromSortKey = (
-  sortKey: DatabaseSortOptions,
-): DatabaseColName => {
-  switch (sortKey) {
-    case DatabaseSortOptions.NAME:
-      return DatabaseColName.NAME;
-    case DatabaseSortOptions.REPLICATION_SIZE:
-      return DatabaseColName.SIZE;
-    case DatabaseSortOptions.RANGES:
-      return DatabaseColName.RANGE_COUNT;
-    case DatabaseSortOptions.TABLE_COUNT:
-      return DatabaseColName.TABLE_COUNT;
-    default:
-      return DatabaseColName.NAME;
-  }
-};
 
 export const rawDatabaseMetadataToDatabaseRows = (
   raw: DatabaseMetadata[],
