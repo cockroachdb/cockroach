@@ -1019,18 +1019,23 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	if p.destroyed {
 		return
 	}
+	// updates is left unset (so empty unallocated map) or refers to the map in
+	// p.leader.scratch, so can be read and written without holding
+	// pendingAdmittedMu.
 	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
-	// Swap the updates map with the empty scratch. This is an optimization to
+	// Swap the pendingAdmittedMu.updates map with the empty scratch if non-empty. This is an optimization to
 	// minimize the time we hold the pendingAdmittedMu lock.
-	func() {
+	if updatesEmpty := func() bool {
 		p.leader.pendingAdmittedMu.Lock()
 		defer p.leader.pendingAdmittedMu.Unlock()
-		if updates = p.leader.pendingAdmittedMu.updates; len(updates) != 0 {
+		if len(p.leader.pendingAdmittedMu.updates) > 0 {
+			updates = p.leader.pendingAdmittedMu.updates
 			p.leader.pendingAdmittedMu.updates = p.leader.scratch
 			p.leader.scratch = updates
+			return false
 		}
-	}()
-	if len(updates) == 0 {
+		return true
+	}(); updatesEmpty {
 		return
 	}
 	for replicaID, state := range updates {
