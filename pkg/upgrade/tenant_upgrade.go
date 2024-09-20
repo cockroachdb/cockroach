@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -46,6 +47,8 @@ type TenantDeps struct {
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor
+
+	TenantInfoAccessor mtinfo.ReadFromTenantInfoAccessor
 
 	TestingKnobs              *upgradebase.TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.

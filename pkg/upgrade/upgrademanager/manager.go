@@ -670,16 +670,17 @@ func (m *Manager) runMigration(
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
 			if err := upg.Run(ctx, v, upgrade.TenantDeps{
-				KVDB:             m.deps.DB.KV(),
-				DB:               m.deps.DB,
-				Codec:            m.codec,
-				Settings:         m.settings,
-				LeaseManager:     m.lm,
-				InternalExecutor: m.ie,
-				JobRegistry:      m.jr,
-				TestingKnobs:     &m.knobs,
-				ClusterID:        m.clusterID.Get(),
-				LicenseEnforcer:  m.le,
+				KVDB:               m.deps.DB.KV(),
+				DB:                 m.deps.DB,
+				Codec:              m.codec,
+				Settings:           m.settings,
+				LeaseManager:       m.lm,
+				InternalExecutor:   m.ie,
+				JobRegistry:        m.jr,
+				TestingKnobs:       &m.knobs,
+				ClusterID:          m.clusterID.Get(),
+				LicenseEnforcer:    m.le,
+				TenantInfoAccessor: m.deps.TenantInfoAccessor,
 			}); err != nil {
 				return err
 			}
@@ -850,14 +851,15 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			continue
 		}
 		if err := tm.Precondition(ctx, clusterversion.ClusterVersion{Version: v}, upgrade.TenantDeps{
-			DB:               m.deps.DB,
-			Codec:            m.codec,
-			Settings:         m.settings,
-			LeaseManager:     m.lm,
-			InternalExecutor: m.ie,
-			JobRegistry:      m.jr,
-			ClusterID:        m.clusterID.Get(),
-			LicenseEnforcer:  m.le,
+			DB:                 m.deps.DB,
+			Codec:              m.codec,
+			Settings:           m.settings,
+			LeaseManager:       m.lm,
+			InternalExecutor:   m.ie,
+			JobRegistry:        m.jr,
+			ClusterID:          m.clusterID.Get(),
+			LicenseEnforcer:    m.le,
+			TenantInfoAccessor: m.deps.TenantInfoAccessor,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
