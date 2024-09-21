@@ -501,10 +501,6 @@ type ieIteratorResult struct {
 type rowsIterator struct {
 	r ieResultReader
 
-	// depth tracks the current depth of recursion in Next(). Once it exceeds
-	// iteratorDepthLimit, an error is returned to prevent stack overflow.
-	depth int64
-
 	rowsAffected int
 	resultCols   colinfo.ResultColumns
 
@@ -537,94 +533,55 @@ type rowsIterator struct {
 var _ isql.Rows = &rowsIterator{}
 var _ eval.InternalRows = &rowsIterator{}
 
-// iteratorDepthLimit is maximum allowed depth of recursion in Next(). It is set
-// to be sufficiently large to not matter under normal circumstances while
-// preventing the possibility of the stack overflow (as we've seen in #109197).
-const iteratorDepthLimit = 1000
-
-var iteratorDepthLimitExceededErr = errors.New("rowsIterator exceeded recursion depth limit")
-
-func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
-	// Due to recursive calls to Next() below, this deferred function might get
-	// executed multiple times, yet it is not a problem because Close() is
-	// idempotent and we're unsetting the error callback.
-	defer func() {
-		// If the iterator has just reached its terminal state, we'll close it
-		// automatically.
-		if r.done {
-			// We can ignore the returned error because Close() will update
-			// r.lastErr if necessary.
-			_ /* err */ = r.Close()
+func (r *rowsIterator) Next(ctx context.Context) (bool, error) {
+	for !r.done && r.lastErr == nil {
+		var data ieIteratorResult
+		if r.first != nil {
+			// This is the very first call to Next() and we have already buffered
+			// up the first piece of data before returning rowsIterator to the caller.
+			data = *r.first
+			r.first = nil
+		} else {
+			nextItem, done, err := r.r.nextResult(ctx)
+			if err != nil || done {
+				r.lastErr = err
+				break
+			}
+			data = nextItem
 		}
-		if r.errCallback != nil {
-			r.lastErr = r.errCallback(r.lastErr)
-			r.errCallback = nil
-		}
-		retErr = r.lastErr
-		r.depth--
-	}()
 
-	r.depth++
-	if r.depth > iteratorDepthLimit {
-		r.lastErr = iteratorDepthLimitExceededErr
-		r.done = true
-		return false, r.lastErr
-	}
-
-	if r.done {
-		return false, r.lastErr
-	}
-
-	// handleDataObject processes a single object read from ieResultReader and
-	// returns the result to be returned by Next. It also might call Next
-	// recursively if the object is a piece of metadata.
-	handleDataObject := func(data ieIteratorResult) (bool, error) {
 		if data.row != nil {
 			r.rowsAffected++
-			// No need to make a copy because streamingCommandResult does that
-			// for us.
+			// No need to make a copy because streamingCommandResult does that for us.
 			r.lastRow = data.row
 			return true, nil
 		}
+
 		if data.rowsAffected != nil {
 			r.rowsAffected = *data.rowsAffected
-			return r.Next(ctx)
+			continue
 		}
+
+		// In "rows affected" execution mode we simply ignore the column schema
+		// since we always return the number of rows affected (i.e. a single
+		// integer column).
+		if r.mode == rowsAffectedIEExecutionMode && data.cols != nil {
+			continue
+		}
+
 		if data.cols != nil {
-			if r.mode == rowsAffectedIEExecutionMode {
-				// In "rows affected" execution mode we simply ignore the column
-				// schema since we always return the number of rows affected
-				// (i.e. a single integer column).
-				return r.Next(ctx)
-			}
-			// At this point we don't expect to see the columns - we should only
-			// return the rowsIterator to the caller of execInternal after the
-			// columns have been determined.
-			data.err = errors.AssertionFailedf("unexpectedly received non-nil cols in Next: %v", data)
+			r.lastErr = errors.AssertionFailedf("unexpectedly received non-nil cols in Next: %v", data)
+		} else if data.err == nil {
+			r.lastErr = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
+		} else {
+			r.lastErr = data.err
 		}
-		if data.err == nil {
-			data.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
-		}
-		r.lastErr = data.err
-		r.done = true
-		return false, r.lastErr
 	}
 
-	if r.first != nil {
-		// This is the very first call to Next() and we have already buffered
-		// up the first piece of data before returning rowsIterator to the
-		// caller.
-		first := r.first
-		r.first = nil
-		return handleDataObject(*first)
-	}
-
-	var next ieIteratorResult
-	next, r.done, r.lastErr = r.r.nextResult(ctx)
-	if r.done || r.lastErr != nil {
-		return false, r.lastErr
-	}
-	return handleDataObject(next)
+	r.done = true
+	// r.Close() is idempotent, so it's okay to call multiple times.
+	_ = r.Close()
+	return false, r.lastErr
 }
 
 func (r *rowsIterator) Cur() tree.Datums {
@@ -644,6 +601,11 @@ func (r *rowsIterator) Close() error {
 	// Close the ieResultReader to tell the writer that we're done.
 	if err := r.r.close(); err != nil && r.lastErr == nil {
 		r.lastErr = err
+	}
+
+	if r.lastErr != nil && r.errCallback != nil {
+		r.lastErr = r.errCallback(r.lastErr)
+		r.errCallback = nil
 	}
 	return r.lastErr
 }
