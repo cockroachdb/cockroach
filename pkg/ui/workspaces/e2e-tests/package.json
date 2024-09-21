@@ -2,7 +2,7 @@
   "name": "@cockroachlabs/e2e-tests",
   "version": "1.0.0",
   "description": "End-to-end tests for the CockroachDB UI",
-  "license": "BSL",
+  "license": "CockroachDB Software License",
   "private": true,
   "scripts": {
     "test": "./build/start-crdb-then.sh pnpm cy:run",
