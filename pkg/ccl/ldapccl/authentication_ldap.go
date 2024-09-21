@@ -270,6 +270,12 @@ var ConfigureLDAPAuth = func(
 	LDAPDomainCACertificate.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
+	LDAPClientTLSCertSetting.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	LDAPClientTLSKeySetting.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
 	return &authenticator
 }
 
