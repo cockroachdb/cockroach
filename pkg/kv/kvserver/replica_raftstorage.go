@@ -100,13 +100,16 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	return hs, cs, nil
 }
 
-// Entries implements the raft.Storage interface. Note that maxBytes is advisory
-// and this method will always return at least one entry even if it exceeds
-// maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
-// Entries requires that r.mu is held for writing because it requires exclusive
-// access to r.mu.stateLoader.
+// Entries implements the raft.Storage interface.
 //
-// Entries can return log entries that are not yet stable in durable storage.
+// NB: maxBytes is advisory, and this method returns at least one entry (unless
+// there are none in the requested interval), even if its size exceeds maxBytes.
+// Sideloaded entries count towards maxBytes with their payloads inlined.
+//
+// Entries can return log entries that are not yet durable / synced in storage.
+//
+// Requires that r.mu is held for writing.
+// TODO(pav-kv): make it possible to call with only raftMu held.
 func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
 	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
@@ -118,11 +121,37 @@ func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.E
 func (r *replicaRaftStorage) TypedEntries(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
-	ctx := r.AnnotateCtx(context.TODO())
-	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes, &r.raftMu.bytesAccount)
+	// The call is always initiated by RawNode, under r.mu. Need it locked for
+	// writes, for r.mu.stateLoader.
+	//
+	// TODO(pav-kv): we have a large class of cases when we would rather only hold
+	// raftMu while reading the entries. The r.mu lock should be narrow.
+	r.mu.AssertHeld()
+	// Writes to the storage engine and the sideloaded storage are made under
+	// raftMu only. Since we are holding r.mu, but may or may not be holding
+	// raftMu, this read could be racing with a write.
+	//
+	// Such races are prevented at a higher level, in RawNode. Raft never reads at
+	// a log index for which there is at least one in-flight entry (possibly
+	// multiple, issued at different leader terms) to storage. It always reads
+	// "stable" entries.
+	//
+	// NB: without this guarantee, there would be a concern with the sideloaded
+	// storage: it doesn't provide a consistent snapshot to the reader, unlike the
+	// storage engine. Its Put method writes / syncs a file sequentially, so a
+	// racing reader would be able to read partial entries.
+	//
+	// TODO(pav-kv): we need better safety guardrails here. The log storage type
+	// can remember the readable bounds, and assert that reads do not cross them.
+	// TODO(pav-kv): r.raftMu.bytesAccount is broken - can't rely on raftMu here.
+	entries, _, loadedSize, err := logstore.LoadEntries(
+		r.AnnotateCtx(context.TODO()),
+		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		&r.raftMu.bytesAccount,
+	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
-	return ents, err
+	return entries, err
 }
 
 // raftEntriesLocked requires that r.mu is held for writing.
