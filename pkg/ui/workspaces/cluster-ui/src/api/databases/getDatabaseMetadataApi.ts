@@ -41,7 +41,7 @@ export type DatabaseMetadataRequest = {
   sortBy?: string;
   sortOrder?: string;
   pagination: SimplePaginationState;
-  storeId?: number;
+  storeIds?: number[];
 };
 
 export type DatabaseMetadataResponse =
@@ -64,8 +64,8 @@ export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
   if (req.pagination.pageNum) {
     urlParams.append("pageNum", req.pagination.pageNum.toString());
   }
-  if (req.storeId) {
-    urlParams.append("storeId", req.storeId.toString());
+  if (req.storeIds?.length) {
+    req.storeIds.forEach(id => urlParams.append("storeId", id.toString()));
   }
 
   return fetchDataJSON<DatabaseMetadataResponse, DatabaseMetadataRequest>(
@@ -74,7 +74,7 @@ export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
 };
 
 const createKey = (req: DatabaseMetadataRequest) => {
-  const { name, sortBy, sortOrder, pagination, storeId } = req;
+  const { name, sortBy, sortOrder, pagination, storeIds } = req;
   return [
     "databaseMetadata",
     name,
@@ -82,7 +82,7 @@ const createKey = (req: DatabaseMetadataRequest) => {
     sortOrder,
     pagination.pageSize,
     pagination.pageNum,
-    storeId,
+    storeIds.map(sid => sid.toString()).join(","),
   ].join("|");
 };
 
