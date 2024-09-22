@@ -11,9 +11,14 @@ package amazon
 
 import (
 	"context"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -228,6 +234,63 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		q.Set(AssumeRoleParam, roleChainStr)
 		uri = fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
+	})
+}
+
+func TestKMSAgainstMockAWS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Setup a bogus credentials file so it doesn't try to use a metadata server.
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	credFile := filepath.Join(tempDir, "credentials")
+	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", credFile))
+	defer func() {
+		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+	}()
+	require.NoError(t, os.WriteFile(credFile, []byte(`[default]
+		aws_access_key_id = abc
+		aws_secret_access_key = xyz
+		`), 0644))
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		defer r.Body.Close()
+		// Default to replying with static placeholder "ciphertext", unless req is
+		// a decrypt req, in which case send static "decrypted" plaintext resp.
+		resp := `{"CiphertextBlob": "dW51c2Vk"}` // "unused".
+		if strings.Contains(string(body), "Ciphertext") {
+			resp = `{"Plaintext": "aGVsbG8gd29ybGQ="}` // base64 for 'hello world'
+		}
+		_, err = w.Write([]byte(resp))
+		require.NoError(t, err)
+	}))
+	defer srv.Close()
+
+	tEnv := &cloud.TestKMSEnv{Settings: cluster.MakeTestingClusterSettings(), ExternalIOConfig: &base.ExternalIODirConfig{}}
+
+	// Set the custom CA so testserver is trusted, and defer reset of it.
+	u := tEnv.Settings.MakeUpdater()
+	require.NoError(t, u.Set(ctx, "cloudstorage.http.custom_ca", settings.EncodedValue{
+		Type: "s", Value: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+	}))
+
+	t.Run("implicit", func(t *testing.T) {
+		q := url.Values{
+			KMSRegionParam: []string{"r"}, AWSEndpointParam: []string{srv.URL},
+			cloud.AuthParam: []string{"implicit"},
+		}
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("aws:///arn?%s", q.Encode()), tEnv)
+	})
+
+	t.Run("specified", func(t *testing.T) {
+		q := url.Values{
+			KMSRegionParam: []string{"r"}, AWSEndpointParam: []string{srv.URL},
+			AWSAccessKeyParam: []string{"k"}, AWSSecretParam: []string{"s"},
+		}
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("aws:///arn?%s", q.Encode()), tEnv)
 	})
 }
 
