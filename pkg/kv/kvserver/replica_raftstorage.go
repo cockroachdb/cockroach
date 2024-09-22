@@ -175,17 +175,23 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	return uint64(term), err
 }
 
-// TypedTerm requires that r.mu is held for writing because it requires exclusive
-// access to r.mu.stateLoader.
+// TypedTerm requires that r.mu is held for writing because it requires
+// exclusive access to r.mu.stateLoader.
+//
+// TODO(pav-kv): make it possible to read with only raftMu held.
 func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+	r.mu.AssertHeld()
 	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
 	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
+	// TODO(pav-kv): we should rather always remember the last entry term, and
+	// remove invalidLastTerm special case.
 	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
 		return r.mu.lastTermNotDurable, nil
 	}
-	ctx := r.AnnotateCtx(context.TODO())
-	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i)
+	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
+		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.store.raftEntryCache, i,
+	)
 }
 
 // raftTermLocked requires that r.mu is locked for writing.
