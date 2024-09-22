@@ -185,8 +185,9 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 
 	livePercentage := float64(0)
 	total := stats.TotalStats.Total()
+	liveBytes := stats.TotalStats.LiveBytes
 	if total > 0 {
-		livePercentage = float64(stats.ApproximateTotalStats.LiveBytes) / float64(total)
+		livePercentage = float64(liveBytes) / float64(total)
 	}
 
 	// TODO (xinhaoz): Get store ids from span stats after
@@ -197,20 +198,20 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 	}
 
 	args := []interface{}{
-		row.dbID,                              // db_id
-		row.tableID,                           // table_id
-		row.dbName,                            // db_name
-		row.schemaName,                        // schema_name,
-		row.tableName,                         // table_name
-		row.columnCount,                       // total_columns
-		row.indexCount,                        // total_indexes
-		row.tableType,                         // table_type
-		storeIds,                              // storeIds
-		stats.ApproximateDiskBytes,            // replication_size_bytes
-		stats.RangeCount,                      // total_ranges
-		stats.ApproximateTotalStats.LiveBytes, // total_live_data_bytes
-		total,                                 // total_data_bytes
-		livePercentage,                        // perc_live_data
+		row.dbID,                   // db_id
+		row.tableID,                // table_id
+		row.dbName,                 // db_name
+		row.schemaName,             // schema_name,
+		row.tableName,              // table_name
+		row.columnCount,            // total_columns
+		row.indexCount,             // total_indexes
+		row.tableType,              // table_type
+		storeIds,                   // storeIds
+		stats.ApproximateDiskBytes, // replication_size_bytes
+		stats.RangeCount,           // total_ranges
+		liveBytes,                  // total_live_data_bytes
+		total,                      // total_data_bytes
+		livePercentage,             // perc_live_data
 	}
 
 	if len(q.args) > 0 {
