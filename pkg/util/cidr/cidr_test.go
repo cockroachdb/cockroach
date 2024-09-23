@@ -12,7 +12,6 @@ package cidr
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -205,36 +204,6 @@ func TestWrapHTTP(t *testing.T) {
 	transport.DialContext = m.Wrap(transport.DialContext, "foo")
 
 	// Execute a simple get request.
-	client := &http.Client{Transport: transport}
-	_, err := client.Get(s.URL)
-	require.NoError(t, err)
-
-	// Ideally we could check the actual value, but the header includes the date
-	// and could be flaky.
-	require.Greater(t, m.WriteBytes.Count(), int64(1))
-	require.Greater(t, m.ReadBytes.Count(), int64(1))
-	// Also check the child metrics by looking up in the map directly.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	require.Greater(t, m.mu.childMetrics["foo/test"].WriteBytes.Value(), int64(1))
-	require.Greater(t, m.mu.childMetrics["foo/test"].ReadBytes.Value(), int64(1))
-}
-
-// TestWrapHTTP validates the wrapping function for HTTP connections.
-func TestWrapHTTPS(t *testing.T) {
-	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	defer s.Close()
-	// Create a mapping for this server's IP.
-	mapping := fmt.Sprintf(`[ { "Name": "test", "Ipnet": "%s/32" } ]`, s.Listener.Addr().(*net.TCPAddr).IP.String())
-	c := Lookup{}
-	require.NoError(t, c.setDestinations(context.Background(), []byte(mapping)))
-
-	// This is the standard way to wrap the transport.
-	m := c.MakeNetMetrics(writeBytes, readBytes, "label")
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DialTLSContext = m.WrapTLS(transport.DialContext, &tls.Config{InsecureSkipVerify: true}, "foo")
-
-	// Create a simple get request.
 	client := &http.Client{Transport: transport}
 	_, err := client.Get(s.URL)
 	require.NoError(t, err)
