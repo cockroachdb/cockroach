@@ -1228,3 +1228,432 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
 	}
 }
+
+func TestConstructRaftEventForReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		startingIndex uint64 = 10
+		startingTerm  uint64 = 1
+		tokenMult            = 100
+		defaultPri           = raftpb.NormalPri
+		defaultUseFC         = true
+	)
+
+	makeEntry := func(t *testing.T, info entryInfo) raftpb.Entry {
+		if info.pri == 0 {
+			info.pri = raftpb.NormalPri
+		}
+		if info.enc == raftlog.EntryEncodingEmpty {
+			info.enc = raftlog.EntryEncodingStandardWithACAndPriority
+		}
+		return testingCreateEntry(t, info)
+	}
+
+	makeEntries := func(t *testing.T, n int) []raftpb.Entry {
+		var entries []raftpb.Entry
+		for i := 0; i < n; i++ {
+			entries = append(entries, makeEntry(t, entryInfo{
+				index:  startingIndex + uint64(i),
+				term:   startingTerm,
+				tokens: kvflowcontrol.Tokens((i + 1) * tokenMult)}))
+		}
+		return entries
+
+	}
+
+	makeEntryFCStates := func(t *testing.T, n int) []entryFCState {
+		var entries []entryFCState
+		for i := 0; i < n; i++ {
+			entries = append(entries, entryFCState{
+				term:            startingTerm,
+				index:           startingIndex + uint64(i),
+				usesFlowControl: defaultUseFC,
+				tokens:          kvflowcontrol.Tokens((i + 1) * tokenMult),
+				pri:             defaultPri,
+			})
+		}
+		return entries
+	}
+
+	ctx := context.Background()
+	testCases := []struct {
+		name                     string
+		raftEventAppendState     raftEventAppendState
+		latestReplicaStateInfo   ReplicaStateInfo
+		existingSendStreamState  existingSendStreamState
+		msgApps                  []raftpb.Message
+		scratchSendingEntries    []entryFCState
+		expectedRaftEventReplica raftEventForReplica
+		expectedScratchEntries   []entryFCState
+		expectFatal              bool
+	}{
+		{
+			name: "new entries existing send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "no new entries recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: false,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "inconsistent msgapps recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
+						// Inconsistent index.
+						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 200}),
+					},
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "next in the past recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 15,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: false,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      15,
+				recreateSendStream: true,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "existing send stream with no msgapps",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				recreateSendStream: false,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "msgapps with entries before new entries",
+			raftEventAppendState: raftEventAppendState{
+				newEntries: []entryFCState{
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+				},
+				rewoundNextRaftIndex: 12,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  14,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 4),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex: 12,
+				newEntries: []entryFCState{
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+				},
+				sendingEntries:     makeEntryFCStates(t, 4),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: makeEntryFCStates(t, 4),
+		},
+		{
+			name: "regression in send-queue",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               11, // Regression
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "forward jump in send-queue",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				// Forward jump.
+				indexToSend: 9,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "next greater than rewound next raft index",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectFatal:           true,
+		},
+		{
+			name: "multiple msgapps",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 3),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  13,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
+					},
+				},
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 11, term: 1, tokens: 200}),
+						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 300}),
+					},
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 3),
+				sendingEntries:     makeEntryFCStates(t, 3),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.expectFatal {
+				require.Panics(t, func() {
+					constructRaftEventForReplica(
+						ctx,
+						tc.raftEventAppendState,
+						tc.latestReplicaStateInfo,
+						tc.existingSendStreamState,
+						tc.msgApps,
+						tc.scratchSendingEntries,
+					)
+				})
+			} else {
+				gotRaftEventReplica, gotScratch := constructRaftEventForReplica(
+					ctx,
+					tc.raftEventAppendState,
+					tc.latestReplicaStateInfo,
+					tc.existingSendStreamState,
+					tc.msgApps,
+					tc.scratchSendingEntries,
+				)
+				require.Equal(t, tc.expectedRaftEventReplica, gotRaftEventReplica)
+				require.Equal(t, tc.expectedScratchEntries, gotScratch)
+			}
+		})
+	}
+}
