@@ -340,15 +340,20 @@ type streamerStatistics struct {
 	enqueuedSingleRangeRequests int
 }
 
+const (
+	// The default scaling factor for the number of asynchronous requests per
+	// Streamer per vCPU. The value for this setting is chosen arbitrarily as
+	// 1/4th of the default value for the DefaultSenderStreamsPerVCPU.
+	defaultStreamerStreamsPerVCPU = kvcoord.DefaultSenderStreamsPerVCPU / 4
+)
+
 // streamerConcurrencyLimit is an upper bound on the number of asynchronous
-// requests that a single Streamer can have in flight. The default value for
-// this setting is chosen arbitrarily as 1/8th of the default value for the
-// senderConcurrencyLimit.
+// requests that a single Streamer can have in flight.
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
-	max(128, int64(8*runtime.GOMAXPROCS(0))),
+	defaultStreamerStreamsPerVCPU*max(kvcoord.MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
 )
 
