@@ -95,11 +95,15 @@ func (b *BoolSetting) Validate(sv *Values, v bool) error {
 }
 
 func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) error {
+	if err := b.Validate(sv, v); err != nil {
+		return err
+	}
 	vInt := int64(0)
 	if v {
 		vInt = 1
 	}
 	sv.setInt64(ctx, b.slot, vInt)
+	return nil
 }
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
