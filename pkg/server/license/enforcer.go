@@ -13,6 +13,7 @@ package license
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,10 @@ type Enforcer struct {
 	// licenseRequiresTelemetry will be true if the license requires that we send
 	// periodic telemetry data.
 	licenseRequiresTelemetry atomic.Bool
+
+	// licenseExpiryTS tracks the license expiration time, valid only if a license
+	// is installed. The value represents the number of seconds since the Unix epoch.
+	licenseExpiryTS atomic.Int64
 
 	// gracePeriodEndTS tracks when the grace period ends and throttling begins.
 	// For licenses without throttling, this value will be 0. The value stored
@@ -311,11 +316,12 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 	if gracePeriodEnd, ok := e.GetGracePeriodEndTS(); ok && now.After(gracePeriodEnd) {
 		if e.GetHasLicense() {
 			err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
-				"License expired. The maximum number of open transactions has been reached."),
+				"License expired on %s. The maximum number of concurrently open transactions has been reached.",
+				timeutil.Unix(e.licenseExpiryTS.Load(), 0)),
 				"Obtain and install a new license to continue.")
 		} else {
 			err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
-				"No license installed. The maximum number of open transactions has been reached."),
+				"No license installed. The maximum number of concurrently open transactions has been reached."),
 				"Obtain and install a valid license to continue.")
 		}
 		e.maybeLogError(ctx, err, &e.lastLicenseThrottlingLogTime,
@@ -325,7 +331,7 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 
 	if deadlineTS, lastPingTS, ok := e.GetTelemetryDeadline(); ok && now.After(deadlineTS) {
 		err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
-			"The maximum number of open transactions has been reached because the license requires "+
+			"The maximum number of concurrently open transactions has been reached because the license requires "+
 				"diagnostic reporting, but none has been received by Cockroach Labs."),
 			"Ensure diagnostic reporting is enabled and verify that nothing is blocking network access to the "+
 				"Cockroach Labs reporting server. You can also consider changing your license to one that doesn't "+
@@ -345,6 +351,7 @@ func (e *Enforcer) RefreshForLicenseChange(
 	ctx context.Context, licType LicType, licenseExpiry time.Time,
 ) {
 	e.hasLicense.Store(licType != LicTypeNone)
+	e.licenseExpiryTS.Store(licenseExpiry.Unix())
 
 	switch licType {
 	case LicTypeNone:
@@ -364,9 +371,18 @@ func (e *Enforcer) RefreshForLicenseChange(
 		e.licenseRequiresTelemetry.Store(false)
 	}
 
+	var sb strings.Builder
+	sb.WriteString("enforcer license updated: ")
 	gpEnd, _ := e.GetGracePeriodEndTS()
-	log.Infof(ctx, "enforcer license updated: grace period ends at %q, telemetry required: %t",
-		gpEnd, e.licenseRequiresTelemetry.Load())
+	if !gpEnd.IsZero() {
+		sb.WriteString(fmt.Sprintf("grace period ends at %q, ", gpEnd))
+	}
+	expiry := timeutil.Unix(e.licenseExpiryTS.Load(), 0)
+	if !expiry.IsZero() {
+		sb.WriteString(fmt.Sprintf("expiration at %q, ", expiry))
+	}
+	sb.WriteString(fmt.Sprintf("telemetry required: %t", e.licenseRequiresTelemetry.Load()))
+	log.Infof(ctx, "%s", sb.String())
 }
 
 // Disable turns off all license enforcement for the lifetime of this object.
