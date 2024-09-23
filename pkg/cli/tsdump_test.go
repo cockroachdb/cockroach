@@ -13,7 +13,6 @@ package cli
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"math/rand"
@@ -149,6 +148,48 @@ func parseTSInput(t *testing.T, input string, w tsWriter) {
 	require.NoError(t, err)
 }
 
+func parseDDInput(t *testing.T, input string, w *datadogWriter) {
+	var data *DatadogSeries
+	var source, storeNodeKey string
+
+	for _, s := range strings.Split(input, "\n") {
+		nameValueTimestamp := strings.Split(s, " ")
+		sl := reCrStoreNode.FindStringSubmatch(nameValueTimestamp[0])
+		if len(sl) != 0 {
+			storeNodeKey = sl[1]
+			if storeNodeKey == "node" {
+				storeNodeKey += "_id"
+			}
+		}
+		metricName := sl[2]
+
+		// Advance to a new struct anytime name or source changes
+		if data == nil ||
+			(data != nil && data.Metric != metricName ||
+				(data != nil && source != nameValueTimestamp[1])) {
+			if data != nil {
+				err := w.emitDataDogMetrics([]DatadogSeries{*data})
+				require.NoError(t, err)
+			}
+			data = &DatadogSeries{
+				Metric: metricName,
+			}
+			source = nameValueTimestamp[1]
+			data.Tags = append(data.Tags, fmt.Sprintf("%s:%s", storeNodeKey, nameValueTimestamp[1]))
+		}
+		value, err := strconv.ParseFloat(nameValueTimestamp[2], 64)
+		require.NoError(t, err)
+		ts, err := strconv.ParseInt(nameValueTimestamp[3], 10, 64)
+		require.NoError(t, err)
+		data.Points = append(data.Points, DatadogPoint{
+			Value:     value,
+			Timestamp: ts,
+		})
+	}
+	err := w.emitDataDogMetrics([]DatadogSeries{*data})
+	require.NoError(t, err)
+}
+
 func TestTsDumpFormatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -165,12 +206,12 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				var testReqs []*http.Request
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
-				w = makeDatadogWriter(context.Background(), "https://example.com/data", false, "api-key", series, func(req *http.Request) error {
+				var ddwriter = makeDatadogWriter("https://example.com/data", false, "api-key", series, func(req *http.Request) error {
 					testReqs = append(testReqs, req)
 					return nil
 				})
 
-				parseTSInput(t, d.Input, w)
+				parseDDInput(t, d.Input, ddwriter)
 
 				out := strings.Builder{}
 				for _, tr := range testReqs {
