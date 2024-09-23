@@ -181,14 +181,18 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	// This is IO work, so override the usesTokens value.
 	opts.usesTokens = true
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
-	granters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
+	granters := [admissionpb.NumStoreWorkTypes]granterWithStoreReplicatedWorkAdmitted{
 		&kvStoreTokenChildGranter{
-			workClass: admissionpb.RegularWorkClass,
-			parent:    kvg,
+			workType: admissionpb.RegularStoreWorkType,
+			parent:   kvg,
 		},
 		&kvStoreTokenChildGranter{
-			workClass: admissionpb.ElasticWorkClass,
-			parent:    kvg,
+			workType: admissionpb.SnapshotIngestStoreWorkType,
+			parent:   kvg,
+		},
+		&kvStoreTokenChildGranter{
+			workType: admissionpb.ElasticStoreWorkType,
+			parent:   kvg,
 		},
 	}
 
@@ -375,7 +379,7 @@ type makeRequesterFunc func(
 	metrics *WorkQueueMetrics, opts workQueueOptions) requester
 
 type makeStoreRequesterFunc func(
-	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
+	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumStoreWorkTypes]granterWithStoreReplicatedWorkAdmitted,
 	settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
 	onLogEntryAdmitted OnLogEntryAdmitted, ioTokensBypassedMetric *metric.Counter, coordMu *syncutil.Mutex,
 ) storeRequester

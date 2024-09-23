@@ -755,6 +755,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
+
+				// TODO(aaditya): Should the snapshot "pacer" integration go here? Is
+				// this the smallest unit of write work we do for ingesting a snapshot?
 				ek, err := batchReader.EngineKey()
 				if err != nil {
 					return noSnap, err
