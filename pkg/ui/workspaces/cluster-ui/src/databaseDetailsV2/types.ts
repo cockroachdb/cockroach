@@ -24,7 +24,6 @@ export type TableRow = {
   liveDataPercentage: number;
   liveDataBytes: number;
   totalDataBytes: number;
-  autoStatsCollectionEnabled: boolean;
   statsLastUpdated: Moment;
   key: string;
 };

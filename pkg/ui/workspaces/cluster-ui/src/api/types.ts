@@ -43,6 +43,6 @@ export type APIV2PaginationResponse = {
 };
 
 export type APIV2ResponseWithPaginationState<T> = {
-  results: T[];
+  results: T;
   pagination_info: APIV2PaginationResponse;
 };
