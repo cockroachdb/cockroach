@@ -26,7 +26,7 @@ var tableMetadataCacheAutoUpdatesEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
-var tableMetadataCacheValidDuration = settings.RegisterDurationSetting(
+var DataValidDurationSetting = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"obs.tablemetadata.data_valid_duration",
 	"the duration for which the data in system.table_metadata is considered valid",
