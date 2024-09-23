@@ -5450,6 +5450,60 @@ Support status: [reserved](#support-status)
 
 
 
+## GetThrottlingMetadata
+
+`GET /_status/throttling`
+
+GetThrottlingMetadata is used by the DB Console to retrieve
+information regarding current or upcoming throttling the cluster
+may experience.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.GetThrottlingMetadataRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+GetThrottlingMetadataResponse contains all information necessary to
+show throttling warnings and alerts in DB Console.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| throttled | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | throttled is true if at least one node in the cluster is actively being throttled. | [reserved](#support-status) |
+| throttleExplanation | [string](#cockroach.server.serverpb.GetThrottlingMetadataResponse-string) |  | if throttled is true, this will contain a string explaning why, generated from the SQL enforcer. | [reserved](#support-status) |
+| hasGracePeriod | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | hasGracePeriod is true if the cluster has an active grace period before throttling kicks in after license expiry. Enterprise licenses do not have grace periods when they expire. | [reserved](#support-status) |
+| gracePeriodEndSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | gracePeriodEndSeconds is the unix timestamp when the grace period ends. | [reserved](#support-status) |
+| hasTelemetryDeadline | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | hasTelemetryDeadline is true if this cluster requires telemetry to be delivered. | [reserved](#support-status) |
+| telemetryDeadlineSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | telemetryDeadlineSeconds is the unix timestamp when the telemetry deadline must be met. After this the cluster will be throttled. | [reserved](#support-status) |
+| lastTelemetryReceivedSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | lastTelemetryReceivedSeconds is the unix timestamp when we last delivered telemetry. | [reserved](#support-status) |
+| nodeIdsWithTelemetryProblems | [string](#cockroach.server.serverpb.GetThrottlingMetadataResponse-string) | repeated | nodeIdsWithTelemetryProblems collects a list of nodes that are delinquent with telemetry. This is useful for reporting because the cluster could have partial telemetry delivery failure and it's helpful to surface this in DB Console. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
