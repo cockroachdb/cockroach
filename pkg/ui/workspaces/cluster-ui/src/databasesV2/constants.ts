@@ -11,7 +11,7 @@
 export enum DatabaseColName {
   NAME = "Name",
   SIZE = "Size",
-  RANGE_COUNT = "Range Count",
   TABLE_COUNT = "Table Count",
   NODE_REGIONS = "Regions / Nodes",
+  SCHEMA_INSIGHTS = "Schema Insights",
 }
