@@ -62,24 +62,29 @@ func prefixAll(params map[string]string) map[string]string {
 }
 
 func TestShouldPost(t *testing.T) {
+	preemptionFailure := []failure{
+		{errors: []error{vmPreemptionError("vm1")}},
+	}
 	testCases := []struct {
 		disableIssues     bool
 		nodeCount         int
 		envGithubAPIToken string
 		envTcBuildBranch  string
-		expectedPost      bool
+		failures          []failure
 		expectedReason    string
 	}{
 		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
-		{true, 1, "token", "master", false, "issue posting was disabled via command line flag"},
+		{true, 1, "token", "master", nil, "issue posting was disabled via command line flag"},
 		// nodeCount
-		{false, 0, "token", "master", false, "Cluster.NodeCount is zero"},
+		{false, 0, "token", "master", nil, "Cluster.NodeCount is zero"},
 		// apiToken
-		{false, 1, "", "master", false, "GitHub API token not set"},
+		{false, 1, "", "master", nil, "GitHub API token not set"},
 		// branch
-		{false, 1, "token", "", false, `not a release branch: "branch-not-found-in-env"`},
-		{false, 1, "token", "master", true, ""},
+		{false, 1, "token", "", nil, `not a release branch: "branch-not-found-in-env"`},
+		// VM preemtion while test ran
+		{false, 1, "token", "master", preemptionFailure, "non-reportable: preempted VMs: vm1 [owner=test-eng]"},
+		{false, 1, "token", "master", nil, ""},
 	}
 
 	reg := makeTestRegistry()
@@ -98,10 +103,10 @@ func TestShouldPost(t *testing.T) {
 		}
 
 		ti := &testImpl{spec: testSpec}
+		ti.mu.failures = c.failures
 		github := &githubIssues{disable: c.disableIssues}
 
-		doPost, skipReason := github.shouldPost(ti)
-		require.Equal(t, c.expectedPost, doPost)
+		skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedReason, skipReason)
 	}
 }
