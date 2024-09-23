@@ -384,7 +384,7 @@ run error
 scan k=a end=d ts=3 failOnMoreRecent
 ----
 scan: "a"-"d" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
 run error
 scan k=a end=d ts=4 failOnMoreRecent
