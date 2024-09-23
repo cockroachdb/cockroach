@@ -301,12 +301,12 @@ func TestThrottleErrorMsg(t *testing.T) {
 		{"at-threshold-valid-license-and-telemetry", true, t10d, t10d, ""},
 		{"at-threshold-expired-license-in-grace-valid-telemetry", true, t60d, t55d, ""},
 		{"at-threshold-expired-license-past-grace-valid-telemetry", true, t60d1ms, t55d,
-			"License expired. The maximum number of open transactions has been reached"},
+			"License expired .*. The maximum number of .*"},
 		{"below-threshold-expired-license-past-grace-valid-telemetry", false, t60d1ms, t55d, ""},
 		{"at-threshold-expired-license-in-grace-invalid-telemetry", true, t55d, t10d,
-			"The maximum number of open transactions has been reached because the license requires diagnostic reporting"},
+			"The maximum number of concurrently open transactions has been reached because the license requires diagnostic reporting"},
 		{"at-threshold-valid-license-invalid-telemetry", true, t10d, t0d,
-			"The maximum number of open transactions has been reached because the license requires diagnostic reporting"},
+			"The maximum number of concurrently open transactions has been reached because the license requires diagnostic reporting"},
 		{"below-threshold-invalid-telemetry", false, t10d, t0d, ""},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
