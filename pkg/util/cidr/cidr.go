@@ -12,7 +12,6 @@ package cidr
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	io "io"
@@ -402,42 +401,6 @@ func (m *NetMetrics) Wrap(dial DialContext, labels ...string) DialContext {
 		// m can be nil in tests.
 		if m != nil {
 			conn = m.track(conn, labels...)
-		}
-		return conn, nil
-	}
-}
-
-// WrapTLS is like Wrap, but can be used if the underlying library doesn't
-// expose a way to plug in a dialer for TLS connections. This is unfortunately
-// pretty ugly... Copied from tls.Dial and kgo.DialTLS because they don't expose
-// a dial call with a DialContext. Ideally you don't have to use this if the
-// third party API does a sensible thing and exposes the ability to replace the
-// "DialContext" directly.
-func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...string) DialContext {
-	return func(ctx context.Context, network, host string) (net.Conn, error) {
-		c := tlsCfg.Clone()
-		if c.ServerName == "" {
-			server, _, err := net.SplitHostPort(host)
-			if err != nil {
-				return nil, fmt.Errorf("unable to split host:port for dialing: %w", err)
-			}
-			c.ServerName = server
-		}
-
-		rawConn, err := dial(ctx, network, host)
-		if err != nil {
-			return nil, err
-		}
-		scopedConn := rawConn
-		// m can be nil in tests.
-		if m != nil {
-			scopedConn = m.track(rawConn, labels...)
-		}
-
-		conn := tls.Client(scopedConn, c)
-		if err := conn.HandshakeContext(ctx); err != nil {
-			scopedConn.Close()
-			return nil, err
 		}
 		return conn, nil
 	}
