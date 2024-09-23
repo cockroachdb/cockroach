@@ -701,6 +701,7 @@ func (r *Replica) applySnapshot(
 			writeBytes = uint64(inSnap.SSTSize)
 		}
 	}
+	// TODO(aaditya): Maybe we should remove this?
 	if r.store.cfg.KVAdmissionController != nil {
 		r.store.cfg.KVAdmissionController.SnapshotIngestedOrWritten(
 			r.store.StoreID(), ingestStats, writeBytes)

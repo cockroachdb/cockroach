@@ -1888,6 +1888,7 @@ type StoreWorkQueue struct {
 	q       [admissionpb.NumWorkClasses]WorkQueue
 	// Only calls storeReplicatedWorkAdmittedLocked. The rest of the interface is used by
 	// WorkQueue.
+
 	granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted
 	coordMu  *syncutil.Mutex
 	mu       struct {
@@ -2148,6 +2149,7 @@ type LogEntryAdmittedCallbackState struct {
 // upfront, with just an estimate of the write size, and after the write is
 // done, invoke AdmittedWorkDone with the now-known size.
 func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkDoneInfo) error {
+	// TODO(aaditya): Update this or make equivalent for snapshots.
 	if !h.UseAdmittedWorkDone() {
 		return nil // nothing to do
 	}
