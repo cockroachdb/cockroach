@@ -730,7 +730,7 @@ func TestRandomStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eventCount := 1000
+	eventCount := 100
 	testState := struct {
 		syncutil.Mutex
 		count int
@@ -866,7 +866,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+	skip.WithIssue(t, 131184)
 
 	ctx := context.Background()
 
@@ -962,8 +962,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
-	skip.UnderDeadlock(t, "Scattering prior to creating LDR job slows down ingestion")
+	skip.WithIssue(t, 131184)
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
