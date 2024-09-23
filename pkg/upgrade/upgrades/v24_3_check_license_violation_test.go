@@ -48,10 +48,10 @@ func TestCheckLicenseViolations(t *testing.T) {
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				ClusterVersionOverride:         v1,
-				LicenseTestingKnobs: license.TestingKnobs{
-					Enable:      true,
-					SkipDisable: true,
-				},
+			},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				Enable:      true,
+				SkipDisable: true,
 			},
 			// Make the upgrade faster by accelerating jobs.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
