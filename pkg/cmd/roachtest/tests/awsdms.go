@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	dms "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice"
 	dmstypes "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice/types"
@@ -267,8 +268,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err := tearDownAWSDMS(ctx, t, rdsCli, dmsCli, &dmsTasks); err != nil {
 		t.Fatal(err)
 	}
-
-	// Attempt a clean-up of old instances on shutdown.
+	//Attempt a clean-up of old instances on shutdown.
 	defer func() {
 		if t.IsDebug() {
 			t.L().Printf("not deleting old instances as --debug is set")
@@ -782,7 +782,7 @@ func setupDMSEndpointsAndTask(
 				DatabaseName:       proto.String(awsdmsDatabase),
 				Username:           rdsClusterLarge.MasterUsername,
 				Password:           proto.String(rdsPasswordLarge),
-				Port:               &rdsClusterLarge.Endpoint.Port,
+				Port:               rdsClusterLarge.Endpoint.Port,
 				ServerName:         rdsClusterLarge.Endpoint.Address,
 			},
 			endpoint: dmsEndpoints.largeSource,
@@ -1091,7 +1091,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 					&rds.DeleteDBInstanceInput{
 						DBInstanceIdentifier:   rdsInstance.DBInstanceIdentifier,
 						DeleteAutomatedBackups: proto.Bool(true),
-						SkipFinalSnapshot:      true,
+						SkipFinalSnapshot:      aws.Bool(true),
 					},
 				); err != nil {
 					return err
@@ -1118,7 +1118,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 					ctx,
 					&rds.DeleteDBClusterInput{
 						DBClusterIdentifier: rdsCluster.DBClusterIdentifier,
-						SkipFinalSnapshot:   true,
+						SkipFinalSnapshot:   aws.Bool(true),
 					},
 				); err != nil {
 					return err
