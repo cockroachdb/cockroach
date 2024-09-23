@@ -151,6 +151,9 @@ func setupMetamorphic(p perturbation) variations {
 	v.partitionSite = rng.Intn(2) == 0
 	v.cleanRestart = rng.Intn(2) == 0
 	v.cloud = cloudSets[rng.Intn(len(cloudSets))]
+	// TODO(baptist): Temporarily disable the metamorphic tests on other clouds
+	// as they have limitations on configurations that can run.
+	v.cloud = registry.OnlyGCE
 	v.perturbation = p
 	return v
 }
@@ -314,8 +317,12 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 	db := v.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	cmd := fmt.Sprintf("ALTER DATABASE backfill CONFIGURE ZONE USING constraints = '[+node%d]', lease_preferences='[[-node%d]]'", target, target)
+	cmd := fmt.Sprintf(`ALTER DATABASE backfill CONFIGURE ZONE USING constraints='{"+node%d":1}', lease_preferences='[[-node%d]]', num_replicas=3`, target, target)
 	_, err := db.ExecContext(ctx, cmd)
+	require.NoError(t, err)
+
+	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
+	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING bulkio.index_backfill.batch_size = 5000")
 	require.NoError(t, err)
 
 	t.L().Printf("waiting for replicas to be in place")
@@ -757,10 +764,6 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 	}
 }
 
-// minAcceptableLatencyThreshold is the threshold below which we consider the
-// latency acceptable regardless of any relative change from the baseline.
-const minAcceptableLatencyThreshold = 10 * time.Millisecond
-
 // isAcceptableChange determines if a change from the baseline is acceptable.
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
@@ -778,7 +781,7 @@ func isAcceptableChange(
 		baseStat := baseline[name]
 		otherStat := other[name]
 		increase := float64(otherStat.score) / float64(baseStat.score)
-		if float64(otherStat.P99) > float64(minAcceptableLatencyThreshold) && increase > acceptableChange {
+		if increase > acceptableChange {
 			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
 			allPassed = false
 		} else {
