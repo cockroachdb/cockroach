@@ -283,7 +283,7 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 	if err := json.Unmarshal(contents, &destinations); err != nil {
 		return err
 	}
-	// TODO(baptist): This only handles IPv4. We could change to 128 if we want
+	// TODO(#130814): This only handles IPv4. We could change to 128 if we want
 	// to handle IPv6.
 	byLength := make([]map[string]string, 33)
 	for i := 0; i < 33; i++ {
@@ -295,6 +295,9 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 			return err
 		}
 		lenBits, _ := cidr.Mask.Size()
+		if lenBits > 32 {
+			return fmt.Errorf("invalid mask size: %d", lenBits)
+		}
 		mask := net.CIDRMask(lenBits, 32)
 		val := hexString(cidr.IP.Mask(mask))
 		byLength[lenBits][val] = d.Name
@@ -334,6 +337,10 @@ func (c *Lookup) onChange(ctx context.Context) {
 func (c *Lookup) LookupIP(ip net.IP) string {
 	byLength := *c.byLength.Load()
 	ip = ip.To4()
+	// Don't map IPv6 addresses.
+	if ip == nil {
+		return ""
+	}
 	for i := len(byLength) - 1; i >= 0; i-- {
 		m := (byLength)[i]
 		if len(m) == 0 {
