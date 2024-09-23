@@ -237,7 +237,9 @@ func newLogicalReplicationWriterProcessor(
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				log.Infof(lrw.Ctx(), "logical replication writer processor closing")
 				lrw.close()
+				log.Infof(lrw.Ctx(), "logical replication writer processor closed")
 				return nil
 			},
 		},
@@ -319,6 +321,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	lrw.subscription = sub
 	lrw.workerGroup.GoCtx(func(_ context.Context) error {
 		if err := sub.Subscribe(subscriptionCtx); err != nil {
+			log.Infof(lrw.Ctx(), "subscription completed. Error: %s", err)
 			lrw.sendError(errors.Wrap(err, "subscription"))
 		}
 		return nil
@@ -326,6 +329,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
 		if err := lrw.consumeEvents(ctx); err != nil {
+			log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
 			lrw.sendError(errors.Wrap(err, "consume events"))
 		}
 		return nil
@@ -443,11 +447,18 @@ func (lrw *logicalReplicationWriterProcessor) sendError(err error) {
 // the event channel has closed.
 func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context) error {
 	before := timeutil.Now()
+	lastLog := timeutil.Now()
 	for event := range lrw.subscription.Events() {
 		lrw.debug.RecordRecv(timeutil.Since(before))
 		before = timeutil.Now()
 		if err := lrw.handleEvent(ctx, event); err != nil {
 			return err
+		}
+		if timeutil.Since(lastLog) > 5*time.Minute {
+			lastLog = timeutil.Now()
+			if !lrw.frontier.Frontier().GoTime().After(timeutil.Now().Add(-5 * time.Minute)) {
+				log.Infof(lrw.Ctx(), "lagging frontier: %s with span %s", lrw.frontier.Frontier(), lrw.frontier.PeekFrontierSpan())
+			}
 		}
 	}
 	return lrw.subscription.Err()
