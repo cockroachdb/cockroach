@@ -1455,6 +1455,7 @@ func TestFlushErrorHandling(t *testing.T) {
 	lrw.purgatory.flush = lrw.flushBuffer
 	lrw.purgatory.bytesGauge = lrw.metrics.RetryQueueBytes
 	lrw.purgatory.eventsGauge = lrw.metrics.RetryQueueEvents
+	lrw.purgatory.debug = &streampb.DebugLogicalConsumerStatus{}
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
 
