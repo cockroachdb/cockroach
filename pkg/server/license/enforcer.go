@@ -129,6 +129,9 @@ type TestingKnobs struct {
 	OverwriteClusterInitGracePeriodTS bool
 }
 
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
+
 // TelemetryStatusReporter is the interface we use to find the last ping
 // time for telemetry reporting.
 type TelemetryStatusReporter interface {

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -47,10 +46,8 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				LicenseTestingKnobs: license.TestingKnobs{
-					OverrideStartTime: &ts1,
-				},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				OverrideStartTime: &ts1,
 			},
 		},
 	})
@@ -92,10 +89,8 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				LicenseTestingKnobs: license.TestingKnobs{
-					OverrideStartTime: &ts1,
-				},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				OverrideStartTime: &ts1,
 			},
 		},
 	})
@@ -343,19 +338,17 @@ func TestThrottleErrorMsg(t *testing.T) {
 
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				LicenseTestingKnobs: license.TestingKnobs{
-					// The mock server we bring up is single-node, which disables all
-					// throttling checks. We need to avoid that for this test to verify
-					// the throttle message.
-					SkipDisable: true,
-					// We are going to modify the throttle check timestamp in each test
-					// unit.
-					OverrideThrottleCheckTime: throttleCheckTS,
-					// And we will modify what is the max open transactions to force us
-					// over the limit.
-					OverrideMaxOpenTransactions: &maxOpenTransactions,
-				},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				// The mock server we bring up is single-node, which disables all
+				// throttling checks. We need to avoid that for this test to verify
+				// the throttle message.
+				SkipDisable: true,
+				// We are going to modify the throttle check timestamp in each test
+				// unit.
+				OverrideThrottleCheckTime: throttleCheckTS,
+				// And we will modify what is the max open transactions to force us
+				// over the limit.
+				OverrideMaxOpenTransactions: &maxOpenTransactions,
 			},
 		},
 	})

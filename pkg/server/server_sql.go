@@ -1916,7 +1916,7 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 		opts = append(opts, license.WithMetadataAccessor(s.tenantConnect))
 	}
 	if knobs.Server != nil {
-		opts = append(opts, license.WithTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs))
+		opts = append(opts, license.WithTestingKnobs(knobs.LicenseTestingKnobs.(*license.TestingKnobs)))
 	}
 	err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 		func(ctx context.Context) error {

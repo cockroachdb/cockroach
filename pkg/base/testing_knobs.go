@@ -55,4 +55,5 @@ type TestingKnobs struct {
 	TenantCapabilitiesTestingKnobs ModuleTestingKnobs
 	AutoConfig                     ModuleTestingKnobs
 	TableStatsKnobs                ModuleTestingKnobs
+	LicenseTestingKnobs            ModuleTestingKnobs
 }
