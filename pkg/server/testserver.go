@@ -572,7 +572,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	params.TestingKnobs.Server = &TestingKnobs{}
 
 	if ts.params.Knobs.Server != nil {
-		params.TestingKnobs.Server.(*TestingKnobs).LicenseTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
 	tenant, err := ts.StartTenant(ctx, params)
 	if err != nil {
