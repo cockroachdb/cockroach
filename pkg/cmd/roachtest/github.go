@@ -231,7 +231,7 @@ func (g *githubIssues) createPostRequest(
 		labels = append(labels, issues.TestFailureLabel)
 		if !spec.NonReleaseBlocker {
 			// TODO(radu): remove this check once these build types are stabilized.
-			if !coverageBuild && !runtimeAssertionsBuild {
+			if !coverageBuild {
 				labels = append(labels, issues.ReleaseBlockerLabel)
 			}
 		}
@@ -328,7 +328,7 @@ func (g *githubIssues) createPostRequest(
 		TestName:        issueName,
 		Labels:          labels,
 		// Keep issues separate unless the if these labels don't match.
-		AdoptIssueLabelMatchSet: []string{infraFlakeLabel, coverageLabel, runtimeAssertionsLabel},
+		AdoptIssueLabelMatchSet: []string{infraFlakeLabel, coverageLabel},
 		TopLevelNotes:           topLevelNotes,
 		Message:                 issueMessage,
 		Artifacts:               artifacts,
