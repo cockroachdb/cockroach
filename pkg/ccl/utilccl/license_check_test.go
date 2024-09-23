@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -275,12 +274,10 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 		// We are changing a cluster setting that can only be done at the system tenant.
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				LicenseTestingKnobs: license.TestingKnobs{
-					Enable:            true,
-					SkipDisable:       true,
-					OverrideStartTime: &ts1,
-				},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				Enable:            true,
+				SkipDisable:       true,
+				OverrideStartTime: &ts1,
 			},
 		},
 	})

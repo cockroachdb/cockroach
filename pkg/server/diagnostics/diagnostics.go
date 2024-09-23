@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
@@ -76,6 +77,7 @@ type ClusterInfo struct {
 	TenantID         roachpb.TenantID
 	IsInsecure       bool
 	IsInternal       bool
+	License          *licenseccl.License
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If
@@ -99,10 +101,27 @@ func addInfoToURL(
 		q.Set("nodeid", strconv.Itoa(int(nodeID)))
 	}
 
+	environment := ""
+	licenseExpiry := ""
+	organizationID := ""
+	licenseID := ""
+	if clusterInfo.License != nil {
+		license := clusterInfo.License
+		if license.Environment != licenseccl.License_Environment(0) {
+			environment = license.Environment.String()
+		}
+		if license.OrganizationId != nil {
+			organizationID = (*uuid.UUID)(license.OrganizationId).String()
+		}
+		if license.LicenseId != nil {
+			licenseID = (*uuid.UUID)(license.LicenseId).String()
+			licenseExpiry = strconv.Itoa(int(license.ValidUntilUnixSec))
+		}
+	}
+
 	b := env.Build
 	q.Set("sqlid", strconv.Itoa(int(sqlInfo.SQLInstanceID)))
 	q.Set("uptime", strconv.Itoa(int(sqlInfo.Uptime)))
-	q.Set("licensetype", env.LicenseType)
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", clusterInfo.StorageClusterID.String())
@@ -112,6 +131,12 @@ func addInfoToURL(
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
+	// license type must come from the environment because it uses the base package.
+	q.Set("licensetype", env.LicenseType)
+	q.Set("organization_id", organizationID)
+	q.Set("license_id", licenseID)
+	q.Set("license_expiry", licenseExpiry)
+	q.Set("environment", environment)
 	result.RawQuery = q.Encode()
 	return &result
 }
