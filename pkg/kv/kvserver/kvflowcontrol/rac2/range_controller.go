@@ -531,35 +531,35 @@ func constructRaftEventForReplica(
 	// the replicaSendStream and base the computation of sendingEntries only on
 	// the latest Next and the newEntries.
 	var createSendStream bool
-	// [msgAppFirstIndex, msgAppLastIndex) are being sent.
-	var msgAppFirstIndex, msgAppLastIndex uint64
+	// [msgAppFirstIndex, msgAppUBIndex) are being sent.
+	var msgAppFirstIndex, msgAppUBIndex uint64
 	if existingSendStreamState.existsAndInStateReplicate {
 		initialized := false
 		for i := range msgApps {
 			for _, entry := range msgApps[i].Entries {
 				if !initialized {
 					msgAppFirstIndex = entry.Index
-					msgAppLastIndex = msgAppFirstIndex + 1
+					msgAppUBIndex = msgAppFirstIndex + 1
 					initialized = true
 				} else {
-					if entry.Index != msgAppLastIndex {
+					if entry.Index != msgAppUBIndex {
 						createSendStream = true
 					} else {
-						msgAppLastIndex++
+						msgAppUBIndex++
 					}
 				}
 			}
 		}
 		if !createSendStream {
-			if msgAppFirstIndex < msgAppLastIndex {
+			if msgAppFirstIndex < msgAppUBIndex {
 				// First disjunct is true if there is a regression or forward jump in
 				// the send-queue.
 				if existingSendStreamState.indexToSend != msgAppFirstIndex ||
 					// Unclear if the following can ever occur, but we are being
 					// defensive.
-					latestReplicaStateInfo.Next != msgAppLastIndex ||
+					latestReplicaStateInfo.Next != msgAppUBIndex ||
 					msgAppFirstIndex > raftEventAppendState.rewoundNextRaftIndex ||
-					msgAppLastIndex > lastNewEntryIndex {
+					msgAppUBIndex > lastNewEntryIndex {
 					createSendStream = true
 				}
 			} else {
@@ -579,22 +579,22 @@ func constructRaftEventForReplica(
 			next = raftEventAppendState.rewoundNextRaftIndex
 			// At least one entry is "sent".
 			msgAppFirstIndex = next
-			msgAppLastIndex = latestReplicaStateInfo.Next
+			msgAppUBIndex = latestReplicaStateInfo.Next
 		} else {
 			// next is in the past. No need to change it. Nothing is "sent".
 			msgAppFirstIndex = 0
-			msgAppLastIndex = 0
+			msgAppUBIndex = 0
 		}
 	} else {
 		next = existingSendStreamState.indexToSend
 	}
 	scratch = scratchSendingEntries
 	var sendingEntries []entryFCState
-	if msgAppFirstIndex < msgAppLastIndex {
+	if msgAppFirstIndex < msgAppUBIndex {
 		if msgAppFirstIndex == firstNewEntryIndex {
 			// Common case. Sub-slice and don't use scratch.
-			// We've already ensured that msgAppLastIndex is <= lastNewEntryIndex.
-			sendingEntries = raftEventAppendState.newEntries[0 : msgAppLastIndex-msgAppFirstIndex]
+			// We've already ensured that msgAppUBIndex is <= lastNewEntryIndex.
+			sendingEntries = raftEventAppendState.newEntries[0 : msgAppUBIndex-msgAppFirstIndex]
 		} else {
 			sendingEntries = scratchSendingEntries[:0]
 			// We've already ensured that msgAppFirstIndex <= firstNewEntryIndex.
