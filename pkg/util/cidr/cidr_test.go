@@ -54,6 +54,7 @@ func TestCIDRLookup(t *testing.T) {
 		{"10.0.0.2", "CIDR3"},
 		{"10.0.0.1", "CIDR4"},
 		{"172.16.0.1", ""},
+		{"2001:0db8:0a0b:12f0:0000:0000:0000:0001", ""},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.ip, func(t *testing.T) {
@@ -92,6 +93,7 @@ func TestInvalidCIDR(t *testing.T) {
 		{"int name ", `[ { "Name":  1, "Ipnet": "192.168.0.0/24" } ]`},
 		{"missing cidr", `[ { Name:  "CIDR1" } ]`},
 		{"malformed cidr", `[ { "Name":  "CIDR1", "Ipnet": "192.168.0.0.1/24" } ]`},
+		{"ipv6", `[ { "Name":  "CIDR1", "Ipnet": "2001:db8::/40" } ]`},
 	}
 	c := Lookup{}
 	for _, tc := range testCases {
