@@ -211,7 +211,7 @@ func (r *logicalReplicationResumer) ingest(
 	execPlan := func(ctx context.Context) error {
 
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
+			log.VInfof(ctx, 2, "received producer meta: %v", meta)
 			return nil
 		}
 		rh := rowHandler{
