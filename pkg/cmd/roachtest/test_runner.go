@@ -77,11 +77,17 @@ var (
 	// *and* VMs were preempted. These errors are directed to Test Eng
 	// instead of owning teams.
 	vmPreemptionError = func(preemptedVMs string) error {
-		return registry.ErrorWithOwner(
+		infraFlakeErr := registry.ErrorWithOwner(
 			registry.OwnerTestEng, fmt.Errorf("preempted VMs: %s", preemptedVMs),
 			registry.WithTitleOverride("vm_preemption"),
 			registry.InfraFlake,
 		)
+
+		// The returned error is marked as non-reportable to avoid the
+		// noise, as we get dozens of preemptions on each nightly run.  We
+		// have dashboards that can be used to check how often we get
+		// preemptions in test runs.
+		return registry.NonReportable(infraFlakeErr)
 	}
 
 	// vmHostError is the error that indicates that a test failed
@@ -1074,14 +1080,6 @@ func (r *testRunner) runTest(
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
-					// Reset failures in the test so that the VM preemption
-					// error is the one that is taken into account when
-					// reporting the failure. Note any other failures that
-					// happened during the test will be present in the
-					// `failureMsg` used when reporting the issue. In addition,
-					// `failure_N.log` files should also already exist at this
-					// point.
-					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
