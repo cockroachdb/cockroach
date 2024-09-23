@@ -48,6 +48,27 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// scpTimeout is the timeout enforced on every `scp` command performed
+// by roachprod. The default of 10 minutes should be more than
+// sufficient for roachtests and common roachprod operations.
+//
+// Callers can customize the timeout using the ROACHPROD_SCP_TIMEOUT
+// environment variable.
+var scpTimeout = func() time.Duration {
+	var defaultTimeout = 10 * time.Minute
+
+	if durStr := os.Getenv("ROACHPROD_SCP_TIMEOUT"); durStr != "" {
+		dur, err := time.ParseDuration(durStr)
+		if err != nil {
+			panic(fmt.Errorf("invalid scp timeout %q: %w", durStr, err))
+		}
+
+		return dur
+	}
+
+	return defaultTimeout
+}()
+
 // A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
 // components.
@@ -193,8 +214,11 @@ func runWithMaybeRetry(
 func scpWithRetry(
 	ctx context.Context, l *logger.Logger, src, dest string,
 ) (*RunResultDetails, error) {
+	scpCtx, cancel := context.WithTimeout(ctx, scpTimeout)
+	defer cancel()
+
 	return runWithMaybeRetry(ctx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
-		func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
+		func(ctx context.Context) (*RunResultDetails, error) { return scp(scpCtx, l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -2762,7 +2786,7 @@ func sshVersion3() bool {
 // scp return type conforms to what runWithMaybeRetry expects. A nil error
 // is always returned here since the only error that can happen is an scp error
 // which we do want to be able to retry.
-func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
+func scp(ctx context.Context, l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args := []string{
 		// Enable recursive copies, compression.
 		"scp", "-r", "-C",
@@ -2776,7 +2800,7 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
