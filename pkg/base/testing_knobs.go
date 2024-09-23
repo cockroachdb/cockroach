@@ -56,4 +56,5 @@ type TestingKnobs struct {
 	TableStatsKnobs                ModuleTestingKnobs
 	Insights                       ModuleTestingKnobs
 	TableMetadata                  ModuleTestingKnobs
+	LicenseTestingKnobs            ModuleTestingKnobs
 }
