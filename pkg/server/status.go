@@ -4255,3 +4255,93 @@ WHERE id = $1
 func (s *statusServer) GetUpdateTableMetadataCacheSignal() chan struct{} {
 	return s.updateTableMetadataJobSignal
 }
+
+func (s *statusServer) GetThrottlingMetadata(
+	ctx context.Context, req *serverpb.GetThrottlingMetadataRequest,
+) (*serverpb.GetThrottlingMetadataResponse, error) {
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.getThrottlingMetadataLocal(ctx)
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.GetThrottlingMetadata(ctx, req)
+	}
+
+	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.GetThrottlingMetadataResponse, error) {
+		return statusClient.GetThrottlingMetadata(ctx, &serverpb.GetThrottlingMetadataRequest{
+			NodeID: "local",
+		})
+	}
+
+	resp := &serverpb.GetThrottlingMetadataResponse{}
+
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "throttling metadata for node",
+		noTimeout,
+		s.dialNode,
+		rpcCallFn,
+		func(nodeID roachpb.NodeID, nodeResp *serverpb.GetThrottlingMetadataResponse) {
+			if !resp.Throttled && nodeResp.Throttled {
+				resp.Throttled = true
+				resp.ThrottleExplanation = nodeResp.ThrottleExplanation
+			}
+			if !resp.HasGracePeriod && nodeResp.HasGracePeriod {
+				resp.HasGracePeriod = true
+				resp.GracePeriodEndSeconds = nodeResp.GracePeriodEndSeconds
+			}
+			if !resp.HasTelemetryDeadline && nodeResp.HasTelemetryDeadline {
+				resp.HasTelemetryDeadline = true
+				resp.TelemetryDeadlineSeconds = nodeResp.TelemetryDeadlineSeconds
+				resp.LastTelemetryReceivedSeconds = nodeResp.LastTelemetryReceivedSeconds
+			}
+			// Telemetry deadlines can vary from node to node based on timing
+			// issues or firewalls (as opposed to license expiry which is a
+			// global cluster state). For that reason we will accumulate all
+			// nodeIDs which haven't sent telemetry in a day.
+			if nodeResp.HasTelemetryDeadline && nodeResp.LastTelemetryReceivedSeconds < timeutil.Now().Add(-24*time.Hour).Unix() {
+				resp.NodeIdsWithTelemetryProblems = append(resp.NodeIdsWithTelemetryProblems, nodeID.String())
+			}
+		},
+		func(nodeID roachpb.NodeID, nodeFnError error) {
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (s *statusServer) getThrottlingMetadataLocal(
+	ctx context.Context,
+) (*serverpb.GetThrottlingMetadataResponse, error) {
+	e := s.sqlServer.execCfg.LicenseEnforcer
+
+	// We use 100 here as a number that's definitely more than what's
+	// allowed to trigger the throttling error if possible.
+	// TODO(davidh): consider saving the pg notice here as an explanation if err is nil
+	_, err := e.MaybeFailIfThrottled(ctx, 100 /* txnsOpened */)
+	throttleExplanation := ""
+	if err != nil {
+		throttleExplanation = err.Error()
+	}
+	gpe, okGrace := e.GetGracePeriodEndTS()
+	deadline, lastPing, okTelem := e.GetTelemetryDeadline()
+	return &serverpb.GetThrottlingMetadataResponse{
+			Throttled:                    err != nil,
+			ThrottleExplanation:          throttleExplanation,
+			HasGracePeriod:               okGrace,
+			GracePeriodEndSeconds:        gpe.Unix(),
+			TelemetryDeadlineSeconds:     deadline.Unix(),
+			LastTelemetryReceivedSeconds: lastPing.Unix(),
+			HasTelemetryDeadline:         okTelem,
+		},
+		nil
+}
