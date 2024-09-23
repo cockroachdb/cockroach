@@ -61,6 +61,7 @@ go_test(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/username",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
