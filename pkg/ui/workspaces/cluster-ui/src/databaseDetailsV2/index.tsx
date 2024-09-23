@@ -17,6 +17,7 @@ import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageLayout } from "src/layouts";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
+import { DbGrantsView } from "./dbGrantsView";
 import { TablesPageV2 } from "./tablesView";
 
 const { TabPane } = Tabs;
@@ -55,7 +56,9 @@ export const DatabaseDetailsPageV2 = () => {
         <TabPane tab="Tables" key={TabKeys.TABLES}>
           <TablesPageV2 />
         </TabPane>
-        <TabPane tab="Grants" key={TabKeys.GRANTS}></TabPane>
+        <TabPane tab="Grants" key={TabKeys.GRANTS}>
+          <DbGrantsView dbName={name} />
+        </TabPane>
       </Tabs>
     </PageLayout>
   );
