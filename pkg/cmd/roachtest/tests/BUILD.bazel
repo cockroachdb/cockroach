@@ -293,6 +293,7 @@ go_library(
         "//pkg/workload/tpcds",
         "//pkg/workload/tpch",
         "@com_github_aws_aws_sdk_go//aws",
+        "@com_github_aws_aws_sdk_go_v2//aws",
         "@com_github_aws_aws_sdk_go_v2_config//:config",
         "@com_github_aws_aws_sdk_go_v2_service_databasemigrationservice//:databasemigrationservice",
         "@com_github_aws_aws_sdk_go_v2_service_databasemigrationservice//types",
