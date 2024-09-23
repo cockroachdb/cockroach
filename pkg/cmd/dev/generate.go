@@ -309,7 +309,7 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 
 	args := []string{
 		"build",
-		"//pkg/ui/workspaces/eslint-plugin-crdb:eslint-plugin-crdb-lib",
+		"//pkg/ui/workspaces/eslint-plugin-crdb:ts_project",
 		"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
 		"//pkg/ui/workspaces/cluster-ui:ts_project",
 	}
