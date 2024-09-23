@@ -95,7 +95,7 @@ type logicalReplicationWriterProcessor struct {
 
 	logBufferEvery log.EveryN
 
-	debug streampb.DebugLogicalConsumerStatus
+	debug *streampb.DebugLogicalConsumerStatus
 
 	dlqClient DeadLetterQueueClient
 
@@ -216,7 +216,7 @@ func newLogicalReplicationWriterProcessor(
 		checkpointCh:   make(chan []jobspb.ResolvedSpan),
 		errCh:          make(chan error, 1),
 		logBufferEvery: log.Every(30 * time.Second),
-		debug: streampb.DebugLogicalConsumerStatus{
+		debug: &streampb.DebugLogicalConsumerStatus{
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
@@ -231,6 +231,7 @@ func newLogicalReplicationWriterProcessor(
 		checkpoint:  lrw.checkpoint,
 		bytesGauge:  lrw.metrics.RetryQueueBytes,
 		eventsGauge: lrw.metrics.RetryQueueEvents,
+		debug:       lrw.debug,
 	}
 
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
@@ -266,7 +267,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
 	ctx = logtags.AddTag(ctx, "src-node", lrw.spec.PartitionSpec.PartitionID)
 	ctx = logtags.AddTag(ctx, "proc", lrw.ProcessorID)
-	streampb.RegisterActiveLogicalConsumerStatus(&lrw.debug)
+	streampb.RegisterActiveLogicalConsumerStatus(lrw.debug)
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
 
@@ -394,7 +395,7 @@ func (lrw *logicalReplicationWriterProcessor) ConsumerClosed() {
 }
 
 func (lrw *logicalReplicationWriterProcessor) close() {
-	streampb.UnregisterActiveLogicalConsumerStatus(&lrw.debug)
+	streampb.UnregisterActiveLogicalConsumerStatus(lrw.debug)
 
 	if lrw.Closed {
 		return
@@ -427,6 +428,7 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	lrw.purgatory.bytesGauge.Dec(lrw.purgatory.bytes)
 	for _, i := range lrw.purgatory.levels {
 		lrw.purgatory.eventsGauge.Dec(int64(len(i.events)))
+		lrw.purgatory.debug.RecordPurgatory(-int64(len(i.events)))
 	}
 
 	lrw.InternalClose()
@@ -446,11 +448,10 @@ func (lrw *logicalReplicationWriterProcessor) sendError(err error) {
 // consumeEvents handles processing events on the event queue and returns once
 // the event channel has closed.
 func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context) error {
-	before := timeutil.Now()
 	lastLog := timeutil.Now()
+	lrw.debug.RecordRecvStart()
 	for event := range lrw.subscription.Events() {
-		lrw.debug.RecordRecv(timeutil.Since(before))
-		before = timeutil.Now()
+		lrw.debug.RecordRecv()
 		if err := lrw.handleEvent(ctx, event); err != nil {
 			return err
 		}
@@ -460,6 +461,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 				log.Infof(lrw.Ctx(), "lagging frontier: %s with span %s", lrw.frontier.Frontier(), lrw.frontier.PeekFrontierSpan())
 			}
 		}
+		lrw.debug.RecordRecvStart()
 	}
 	return lrw.subscription.Err()
 }
@@ -545,6 +547,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 		return nil
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
+	lrw.debug.RecordCheckpoint(lrw.frontier.Frontier().GoTime())
 	return nil
 }
 
