@@ -285,6 +285,10 @@ func EvalShardBucketCount(
 		if paramVal != nil {
 			shardBuckets = paramVal
 		}
+		// Check if shardBuckets is NULL
+		if shardBuckets == tree.DNull {
+			return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, "NULL")
+		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
 		)
