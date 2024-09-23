@@ -75,6 +75,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
+        "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
