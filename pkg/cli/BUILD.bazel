@@ -57,6 +57,7 @@ go_library(
         "statement_diag.go",
         "testutils.go",
         "tsdump.go",
+        "tsdump_upload.go",
         "userfile.go",
         "zip.go",
         "zip_cluster_wide.go",
