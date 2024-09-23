@@ -76,6 +76,10 @@ type ClusterInfo struct {
 	TenantID         roachpb.TenantID
 	IsInsecure       bool
 	IsInternal       bool
+	OrganizationID   uuid.UUID
+	LicenseID        uuid.UUID
+	LicenseExpiry    int64
+	Environment      string
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If
@@ -112,6 +116,10 @@ func addInfoToURL(
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
+	q.Set("organization_id", clusterInfo.OrganizationID.String())
+	q.Set("license_id", clusterInfo.LicenseID.String())
+	q.Set("license_expiry", strconv.Itoa(int(clusterInfo.LicenseExpiry)))
+	q.Set("environment", clusterInfo.Environment)
 	result.RawQuery = q.Encode()
 	return &result
 }

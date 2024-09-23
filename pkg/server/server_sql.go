@@ -1920,8 +1920,8 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 	// is shared to provide access to the values cached from the KV read.
 	if s.execCfg.Codec.ForSystemTenant() {
 		licenseEnforcer := s.execCfg.LicenseEnforcer
-		if knobs.Server != nil {
-			s.execCfg.LicenseEnforcer.SetTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs)
+		if knobs.LicenseTestingKnobs != nil {
+			s.execCfg.LicenseEnforcer.SetTestingKnobs(knobs.LicenseTestingKnobs.(*license.TestingKnobs))
 		}
 		licenseEnforcer.SetTelemetryStatusReporter(s.diagnosticsReporter)
 		// TODO(spilchen): we need to tell the license enforcer about the
