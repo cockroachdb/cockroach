@@ -9,12 +9,16 @@
 // licenses/APL.txt.
 
 import { Tabs } from "antd";
-import React, { useState } from "react";
+import React from "react";
+import { useHistory, useLocation } from "react-router";
 
 import { commonStyles } from "src/common";
 import { PageLayout } from "src/layouts";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
+import { queryByName, tabAttr } from "../util";
+
+import { DbGrantsView } from "./dbGrantsView";
 import { TablesPageV2 } from "./tablesView";
 
 enum TabKeys {
@@ -22,7 +26,22 @@ enum TabKeys {
   GRANTS = "grants",
 }
 export const DatabaseDetailsPageV2 = () => {
-  const [currentTab, setCurrentTab] = useState(TabKeys.TABLES);
+  const history = useHistory();
+  const location = useLocation();
+  const tab = queryByName(location, tabAttr) ?? TabKeys.TABLES;
+
+  const onTabChange = (key: string) => {
+    if (tab === key) {
+      return;
+    }
+    const searchParams = new URLSearchParams();
+    if (key) {
+      searchParams.set(tabAttr, key);
+    }
+    history.push({
+      search: searchParams.toString(),
+    });
+  };
 
   // TODO (xinhaoz) #131119 - Populate db name here.
   const tabItems = [
@@ -34,7 +53,7 @@ export const DatabaseDetailsPageV2 = () => {
     {
       key: TabKeys.GRANTS,
       label: "Grants",
-      children: <div />,
+      children: <DbGrantsView />,
     },
   ];
 
@@ -44,8 +63,8 @@ export const DatabaseDetailsPageV2 = () => {
       <Tabs
         defaultActiveKey={TabKeys.TABLES}
         className={commonStyles("cockroach--tabs")}
-        onChange={setCurrentTab}
-        activeKey={currentTab}
+        onChange={onTabChange}
+        activeKey={tab}
         destroyInactiveTabPane
         items={tabItems}
       />
