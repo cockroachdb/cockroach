@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,14 +25,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gorilla/mux"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+type JobStatusMessage string
 
 const (
 	dbIdKey         = "dbId"
@@ -44,14 +49,13 @@ const (
 	onlyIfStaleKey  = "onlyIfStale"
 	defaultPageSize = 10
 	defaultPageNum  = 1
-)
 
-type JobStatusMessage string
-
-const (
 	MetadataNotStale JobStatusMessage = "Not enough time has elapsed since last job run"
 	JobRunning       JobStatusMessage = "Job is already running"
 	JobTriggered     JobStatusMessage = "Job triggered successfully"
+
+	TableNotFound  string = "table not found"
+	InvalidTableId string = "invalid table ID"
 )
 
 // GetTableMetadata returns a paginated response of table metadata and statistics. This is not a live view of
@@ -128,7 +132,7 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	// TODO (kyle): build http method handling directly into route registration
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -226,6 +230,110 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// GetTableMetadataWithDetails fetches table metadata for a specific table id.
+//
+// The user making the request must have the CONNECT database grant for the tables database, or the admin privilege.
+//
+// ---
+// parameters:
+//
+//   - name: table_id
+//     type: integer
+//     description: The id of the table to fetch table metadata.
+//     in: path
+//     required: false
+//
+// produces:
+// - application/json
+//
+// responses:
+//
+//	"200":
+//	  description: A tableMetadataWithDetailsResponse containing the table metadata and table create statement.
+//	"404":
+//		description: If the table for the provided id doesn't exist or the user doesn't have necessary permissions
+//								 to access the table
+func (a *apiV2Server) GetTableMetadataWithDetails(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := a.sqlServer.AnnotateCtx(r.Context())
+	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
+	pathVars := mux.Vars(r)
+	tableId, err := strconv.Atoi(pathVars["table_id"])
+	if err != nil {
+		http.Error(w, InvalidTableId, http.StatusBadRequest)
+		return
+	}
+	tmd, err := a.getTableMetadataForId(ctx, sqlUser, tableId)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	// No table id means table couldn't be found or user doesn't have access to the table
+	if tmd.TableId == 0 {
+		http.Error(w, TableNotFound, http.StatusNotFound)
+		return
+	}
+
+	createStatement, err := a.getTableCreateStatement(ctx, tmd.DbName, tmd.TableName)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	resp := tableMetadataWithDetailsResponse{
+		Metadata:        tmd,
+		CreateStatement: createStatement,
+	}
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
+}
+
+func (a *apiV2Server) getTableMetadataForId(
+	ctx context.Context, sqlUser username.SQLUsername, tableId int,
+) (tableMetadata, error) {
+	query := getTableMetadataBaseQuery(sqlUser.Normalized())
+	query.Append("AND table_id = $", tableId)
+
+	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-table-metadata-for-id", nil,
+		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
+
+	if err != nil {
+		return tableMetadata{}, err
+	}
+
+	if row == nil {
+		return tableMetadata{}, nil
+	}
+
+	scanner := makeResultScanner(types)
+	return rowToTableMetadata(scanner, row)
+}
+
+func (a *apiV2Server) getTableCreateStatement(
+	ctx context.Context, dbName, tableName string,
+) (string, error) {
+	escTableName := tree.NameString(tableName)
+	escDbName := tree.NameString(dbName)
+	query := safesql.NewQuery()
+	query.Append(fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s.%s]`, escDbName, escTableName))
+	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-table-create-statement", nil,
+		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
+	if err != nil {
+		return "", err
+	}
+	scanner := makeResultScanner(types)
+	var createStatement string
+	if err = scanner.Scan(row, "create_statement", &createStatement); err != nil {
+		return "", err
+	}
+
+	return createStatement, nil
+}
+
 func (a *apiV2Server) getTableMetadata(
 	ctx context.Context,
 	sqlUser username.SQLUsername,
@@ -237,39 +345,7 @@ func (a *apiV2Server) getTableMetadata(
 	limit int,
 	offset int,
 ) (tms []tableMetadata, totalRowCount int64, retErr error) {
-	sqlUserStr := sqlUser.Normalized()
-	query := safesql.NewQuery()
-	// Base query fetches from system.table_metadata, but only returns a metadata for tables
-	// in which the sql user has the `CONNECT` database privilege for or if the sql user is an
-	// admin.
-	query.Append(`SELECT
-  		tbm.db_id,
-  		tbm.db_name,
-  		tbm.table_id,
-  		tbm.schema_name,
-			tbm.table_name,
-			tbm.replication_size_bytes, 
-			tbm.total_ranges, 
-			tbm.total_columns, 
-			tbm.total_indexes, 
-			tbm.perc_live_data,
-			tbm.total_live_data_bytes,
-			tbm.total_data_bytes,
-			tbm.store_ids, 
-			COALESCE(tbm.last_update_error, '') as last_update_error,
-			tbm.last_updated,
-			count(*) OVER() as total_row_count
-		FROM system.table_metadata tbm
-		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
-		WHERE (rm.role = 'admin' OR tbm.db_name in (
-	  			SELECT cdp.database_name
-	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE grantee = $
-	  			AND privilege_type = 'CONNECT'
-	  		))
-		AND tbm.table_type = 'TABLE'
-		`, sqlUserStr, sqlUserStr)
-
+	query := getTableMetadataBaseQuery(sqlUser.Normalized())
 	// Add filter for db id if one  is provided
 	if dbId > 0 {
 		query.Append("AND tbm.db_id = $ ", dbId)
@@ -337,7 +413,6 @@ func (a *apiV2Server) getTableMetadata(
 		// If ok == false, the query returned 0 rows.
 		scanner := makeResultScanner(it.Types())
 		for ; ok; ok, err = it.Next(ctx) {
-			var tmd tableMetadata
 			row := it.Cur()
 			if setTotalRowCount {
 				if err := scanner.Scan(row, "total_row_count", &totalRowCount); err != nil {
@@ -345,49 +420,9 @@ func (a *apiV2Server) getTableMetadata(
 				}
 				setTotalRowCount = false
 			}
-			if err := scanner.Scan(row, "db_id", &tmd.DbId); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "db_name", &tmd.DbName); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "table_id", &tmd.TableId); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "schema_name", &tmd.SchemaName); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "table_name", &tmd.TableName); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "store_ids", &tmd.StoreIds); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "replication_size_bytes", &tmd.ReplicationSizeBytes); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "total_ranges", &tmd.RangeCount); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "total_columns", &tmd.ColumnCount); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "total_indexes", &tmd.IndexCount); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "perc_live_data", &tmd.PercentLiveData); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "total_live_data_bytes", &tmd.TotalLiveDataBytes); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "total_data_bytes", &tmd.TotalDataBytes); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "last_update_error", &tmd.LastUpdateError); err != nil {
-				return nil, totalRowCount, err
-			}
-			if err := scanner.Scan(row, "last_updated", &tmd.LastUpdated); err != nil {
+
+			tmd, err := rowToTableMetadata(scanner, row)
+			if err != nil {
 				return nil, totalRowCount, err
 			}
 			tms = append(tms, tmd)
@@ -398,6 +433,89 @@ func (a *apiV2Server) getTableMetadata(
 	}
 
 	return tms, totalRowCount, nil
+}
+
+func getTableMetadataBaseQuery(userName string) *safesql.Query {
+	query := safesql.NewQuery()
+	query.Append(`SELECT
+  		tbm.db_id,
+  		tbm.db_name,
+  		tbm.table_id,
+  		tbm.schema_name,
+			tbm.table_name,
+			tbm.replication_size_bytes, 
+			tbm.total_ranges, 
+			tbm.total_columns, 
+			tbm.total_indexes, 
+			tbm.perc_live_data,
+			tbm.total_live_data_bytes,
+			tbm.total_data_bytes,
+			tbm.store_ids, 
+			COALESCE(tbm.last_update_error, '') as last_update_error,
+			tbm.last_updated,
+			count(*) OVER() as total_row_count
+		FROM system.table_metadata tbm
+		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
+		WHERE (rm.role = 'admin' OR tbm.db_name in (
+	  			SELECT cdp.database_name
+	  			FROM "".crdb_internal.cluster_database_privileges cdp
+	  			WHERE grantee = $
+	  			AND privilege_type = 'CONNECT'
+	  		))
+		AND tbm.table_type = 'TABLE'
+		`, userName, userName)
+
+	return query
+}
+
+func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetadata, err error) {
+	if err = scanner.Scan(row, "db_id", &tmd.DbId); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "db_name", &tmd.DbName); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "table_id", &tmd.TableId); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "schema_name", &tmd.SchemaName); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "table_name", &tmd.TableName); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "store_ids", &tmd.StoreIds); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "replication_size_bytes", &tmd.ReplicationSizeBytes); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "total_ranges", &tmd.RangeCount); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "total_columns", &tmd.ColumnCount); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "total_indexes", &tmd.IndexCount); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "perc_live_data", &tmd.PercentLiveData); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "total_live_data_bytes", &tmd.TotalLiveDataBytes); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "total_data_bytes", &tmd.TotalDataBytes); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "last_update_error", &tmd.LastUpdateError); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "last_updated", &tmd.LastUpdated); err != nil {
+		return tmd, err
+	}
+
+	return tmd, nil
 }
 
 // GetDBMetadata returns a paginated response of database metadata and statistics. This is not a live view of
@@ -461,7 +579,7 @@ func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -714,7 +832,7 @@ func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
 		}
 		resp, err = a.triggerTableMetadataUpdateJob(ctx, onlyIfStale)
 	default:
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -887,4 +1005,9 @@ type tmUpdateJobStatusResponse struct {
 type tmJobTriggeredResponse struct {
 	JobTriggered bool             `json:"job_triggered"`
 	Message      JobStatusMessage `json:"message"`
+}
+
+type tableMetadataWithDetailsResponse struct {
+	Metadata        tableMetadata `json:"metadata"`
+	CreateStatement string        `json:"create_statement"`
 }

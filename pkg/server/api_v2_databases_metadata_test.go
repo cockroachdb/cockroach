@@ -75,7 +75,7 @@ func TestGetTableMetadata(t *testing.T) {
 		require.Equal(t, 405, resp.StatusCode)
 		respBytes, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		require.Contains(t, string(respBytes), "Method Not Allowed")
+		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
 	})
 	t.Run("unknown db id", func(t *testing.T) {
 		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/?dbId=1000").String(), http.MethodGet)
@@ -321,6 +321,88 @@ func TestGetTableMetadata(t *testing.T) {
 		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		require.Equal(t, int64(0), mdResp.PaginationInfo.TotalResults)
+	})
+}
+
+func TestGetTableMetadataForId(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+	defer conn.Close()
+	runner := sqlutils.MakeSQLRunner(conn)
+	var (
+		db1Name   = "new_test_db_1"
+		db2Name   = "new_test_db_2"
+		myTable1  = "myTable1"
+		myTable11 = "myTable11"
+	)
+	setupTest(t, conn, db1Name, db2Name)
+
+	ts := testCluster.Server(0)
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+	createTableStatement1 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db1Name, myTable1)
+	createTableStatement2 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db1Name, myTable11)
+	runner.Exec(t, createTableStatement1)
+	runner.Exec(t, createTableStatement2)
+
+	t.Run("get table metadata", func(t *testing.T) {
+		resp := makeApiRequest[tableMetadataWithDetailsResponse](
+			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, myTable1)
+	})
+	t.Run("authorization", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		failed := makeApiRequest[string](
+			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+		require.Equal(t, TableNotFound, failed)
+
+		// grant connect access to db1 to allow request to succeed
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		resp := makeApiRequest[tableMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, myTable1)
+
+		// revoke access to db1.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+		failed = makeApiRequest[string](
+			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+		require.Equal(t, TableNotFound, failed)
+
+		// grant admin access to the user
+		runner.Exec(t, fmt.Sprintf("GRANT ADMIN TO %s", sessionUsername.Normalized()))
+		resp = makeApiRequest[tableMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, myTable1)
+	})
+
+	t.Run("non GET method 405 error", func(t *testing.T) {
+		req, err := http.NewRequest("POST", ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, 405, resp.StatusCode)
+		respBytes, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
+	})
+
+	t.Run("table doesnt exist", func(t *testing.T) {
+		failed := makeApiRequest[string](
+			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/1000000000/").String(), http.MethodGet)
+		require.Equal(t, TableNotFound, failed)
 	})
 }
 
