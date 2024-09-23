@@ -76,6 +76,12 @@ type ClusterInfo struct {
 	TenantID         roachpb.TenantID
 	IsInsecure       bool
 	IsInternal       bool
+	// Both organization and license ID match the []byte type specified by licenseccl
+	// to handle for zero values.
+	OrganizationID []byte
+	LicenseID      []byte
+	LicenseExpiry  int64
+	Environment    string
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If
@@ -99,6 +105,11 @@ func addInfoToURL(
 		q.Set("nodeid", strconv.Itoa(int(nodeID)))
 	}
 
+	licenseExpiry := ""
+	if clusterInfo.LicenseExpiry != int64(0) {
+		licenseExpiry = strconv.Itoa(int(clusterInfo.LicenseExpiry))
+	}
+
 	b := env.Build
 	q.Set("sqlid", strconv.Itoa(int(sqlInfo.SQLInstanceID)))
 	q.Set("uptime", strconv.Itoa(int(sqlInfo.Uptime)))
@@ -112,6 +123,10 @@ func addInfoToURL(
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
+	q.Set("organization_id", string(clusterInfo.OrganizationID))
+	q.Set("license_id", string(clusterInfo.LicenseID))
+	q.Set("license_expiry", licenseExpiry)
+	q.Set("environment", clusterInfo.Environment)
 	result.RawQuery = q.Encode()
 	return &result
 }
