@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,16 +56,14 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	serverutils.SetClusterSetting(t, c.DestCluster, "bulkio.stream_ingestion.standby_read_ts_poll_interval", pollInterval)
 
 	registry := c.ReaderTenantServer.JobRegistry().(*jobs.Registry)
-	jobRecord := makeStandbyReadTSPollerJobRecord(registry, username.MakeSQLUsernameFromPreNormalizedString("user"))
-	sqlDB := c.ReaderTenantServer.InternalDB().(isql.DB)
 
-	err := sqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := registry.CreateJobWithTxn(ctx, jobRecord, jobRecord.JobID, txn)
-		return err
+	testutils.SucceedsSoon(t, func() error {
+		runningJobs := registry.CurrentlyRunningJobs()
+		if len(runningJobs) != 1 {
+			return errors.Errorf("expected 1 running job, got %d", len(runningJobs))
+		}
+		return nil
 	})
-
-	require.NoError(t, err)
-	jobutils.WaitForJobToRun(t, c.ReaderTenantSQL, jobRecord.JobID)
 
 	c.SrcTenantSQL.Exec(t, `
 USE defaultdb;
