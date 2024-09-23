@@ -128,10 +128,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	region := kmsURIParams.region
-	awsConfig := &aws.Config{
-		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
-			kmsURIParams.secret, kmsURIParams.tempToken),
-	}
+	awsConfig := &aws.Config{}
 	awsConfig.Logger = newLogAdapter(ctx)
 	if kmsURIParams.verbose {
 		awsConfig.LogLevel = awsVerboseLogging
@@ -178,7 +175,8 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				AWSSecretParam,
 			)
 		}
-		opts.Config.MergeIn(awsConfig)
+		awsConfig.Credentials = credentials.NewStaticCredentials(kmsURIParams.accessKey, kmsURIParams.secret, kmsURIParams.tempToken)
+
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
@@ -188,6 +186,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
+	opts.Config.MergeIn(awsConfig)
 
 	sess, err := session.NewSessionWithOptions(opts)
 	if err != nil {
