@@ -1,4 +1,4 @@
- // Copyright 2016 The Cockroach Authors.
+// Copyright 2016 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -2168,33 +2168,75 @@ message RequestJobProfilerExecutionDetailsRequest {
 
 message RequestJobProfilerExecutionDetailsResponse {}
 
- message GetJobProfilerExecutionDetailRequest {
-   int64 job_id = 1;
-   string filename = 2;
- }
-
- message GetJobProfilerExecutionDetailResponse {
-   bytes data = 1;
- }
-
- message ListJobProfilerExecutionDetailsRequest {
+message GetJobProfilerExecutionDetailRequest {
   int64 job_id = 1;
- }
+  string filename = 2;
+}
 
- message ListJobProfilerExecutionDetailsResponse {
-   repeated string files = 1;
- }
+message GetJobProfilerExecutionDetailResponse {
+  bytes data = 1;
+}
 
- message UpdateTableMetadataCacheRequest {
+message ListJobProfilerExecutionDetailsRequest {
+  int64 job_id = 1;
+}
+
+message ListJobProfilerExecutionDetailsResponse {
+  repeated string files = 1;
+}
+
+message UpdateTableMetadataCacheRequest {
   // If true, the server will attempt to send a signal to the
-   // table metadata job by notifying the channel set on the
-   // status server.
-   bool local = 1;
- }
+  // table metadata job by notifying the channel set on the
+  // status server.
+  bool local = 1;
+}
 
- message UpdateTableMetadataCacheResponse {
- }
+message UpdateTableMetadataCacheResponse {
+}
 
+
+message GetThrottlingMetadataRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// GetThrottlingMetadataResponse contains all information necessary to
+// show throttling warnings and alerts in DB Console.
+message GetThrottlingMetadataResponse {
+  // throttled is true if at least one node in the cluster is actively
+  // being throttled.
+  bool throttled = 1;
+  // if throttled is true, this will contain a string explaning why,
+  // generated from the SQL enforcer.
+  string throttleExplanation = 2;
+
+  // hasGracePeriod is true if the cluster has an active grace period
+  // before throttling kicks in after license expiry. Enterprise
+  // licenses do not have grace periods when they expire.
+  bool hasGracePeriod = 3;
+
+  // gracePeriodEndSeconds is the unix timestamp when the grace period
+  // ends.
+  int64 gracePeriodEndSeconds = 4;
+
+  // hasTelemetryDeadline is true if this cluster requires telemetry to
+  // be delivered.
+  bool hasTelemetryDeadline = 5;
+
+  // telemetryDeadlineSeconds is the unix timestamp when the telemetry
+  // deadline must be met. After this the cluster will be throttled.
+  int64 telemetryDeadlineSeconds = 6;
+
+  // lastTelemetryReceivedSeconds is the unix timestamp when we last
+  // delivered telemetry.
+  int64 lastTelemetryReceivedSeconds = 7;
+
+  // nodeIdsWithTelemetryProblems collects a list of nodes that are
+  // delinquent with telemetry. This is useful for reporting because
+  // the cluster could have partial telemetry delivery failure and it's
+  // helpful to surface this in DB Console.
+  repeated string nodeIdsWithTelemetryProblems = 8;
+}
 
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
@@ -2685,5 +2727,14 @@ service Status {
   }
 
   rpc UpdateTableMetadataCache(UpdateTableMetadataCacheRequest) returns (UpdateTableMetadataCacheResponse) {
+  }
+
+  // GetThrottlingMetadata is used by the DB Console to retrieve
+  // information regarding current or upcoming throttling the cluster
+  // may experience.
+  rpc GetThrottlingMetadata(GetThrottlingMetadataRequest) returns (GetThrottlingMetadataResponse) {
+    option (google.api.http) = {
+      get: "/_status/throttling"
+    };
   }
 }
