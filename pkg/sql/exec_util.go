@@ -108,6 +108,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
+	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -1309,6 +1310,7 @@ type ExecutorConfig struct {
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
 	EventLogTestingKnobs                 *EventLogTestingKnobs
 	InsightsTestingKnobs                 *insights.TestingKnobs
+	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration

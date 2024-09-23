@@ -2288,6 +2288,7 @@ GO_TARGETS = [
     "//pkg/sql/syntheticprivilege:syntheticprivilege",
     "//pkg/sql/syntheticprivilege:syntheticprivilege_test",
     "//pkg/sql/syntheticprivilegecache:syntheticprivilegecache",
+    "//pkg/sql/tablemetadatacache/util:util",
     "//pkg/sql/tablemetadatacache:tablemetadatacache",
     "//pkg/sql/tablemetadatacache:tablemetadatacache_test",
     "//pkg/sql/tests:tests",
