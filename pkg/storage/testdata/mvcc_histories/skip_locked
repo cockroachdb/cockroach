@@ -764,13 +764,13 @@ run error
 scan ts=10 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
 scan ts=10 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
 get ts=11 k=k1 skipLocked failOnMoreRecent str=shared
@@ -812,13 +812,13 @@ run error
 scan ts=11 k=k1 end=k9 skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
 scan ts=11 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
 get ts=12 k=k1 skipLocked failOnMoreRecent str=shared
@@ -865,7 +865,7 @@ run error
 scan ts=12 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
 get ts=12 t=A k=k1 skipLocked failOnMoreRecent str=shared
@@ -912,7 +912,7 @@ run error
 scan ts=12 t=A k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
 get ts=13 k=k1 skipLocked failOnMoreRecent str=shared
@@ -959,7 +959,7 @@ run error
 scan ts=13 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
 get ts=13 t=B k=k1 skipLocked failOnMoreRecent str=shared
@@ -1005,7 +1005,7 @@ run error
 scan ts=13 t=B k=k1 end=k9 reverse skipLocked failOnMoreRecent str=shared
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k6" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; must write at or above 17.000000000,1
 
 run ok
 get ts=14 k=k1 skipLocked failOnMoreRecent str=shared
@@ -1424,7 +1424,7 @@ run error
 scan ts=10 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
 scan ts=10 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive
@@ -1472,7 +1472,7 @@ run error
 scan ts=11 k=k1 end=k9 skipLocked failOnMoreRecent str=exclusive
 ----
 scan: "k1"-"k9" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; must write at or above 17.000000000,1
 
 run error
 scan ts=11 k=k1 end=k9 reverse skipLocked failOnMoreRecent str=exclusive

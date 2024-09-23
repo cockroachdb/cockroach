@@ -850,9 +850,8 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 				// timestamp with the maximum timestamp we've seen so we know to
 				// return an error, but then keep scanning so that we can return
 				// the largest possible time.
-				p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
-				if len(p.mostRecentKey) == 0 {
-					p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
+				if p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp) {
+					p.mostRecentKey = append(p.mostRecentKey[:0], p.curUnsafeKey.Key...)
 				}
 				return true /* ok */, false
 			}
@@ -883,9 +882,8 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// timestamp with the maximum timestamp we've seen so we know to
 			// return an error, but then keep scanning so that we can return
 			// the largest possible time.
-			p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
-			if len(p.mostRecentKey) == 0 {
-				p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
+			if p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp) {
+				p.mostRecentKey = append(p.mostRecentKey[:0], p.curUnsafeKey.Key...)
 			}
 			return true /* ok */, false
 		}
@@ -1521,8 +1519,7 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 			if p.failOnMoreRecent {
 				if key := p.parent.UnsafeKey(); !hasPoint || !key.Timestamp.IsEmpty() {
 					if newest := p.curRangeKeys.Newest(); p.ts.LessEq(newest) {
-						p.mostRecentTS.Forward(newest)
-						if len(p.mostRecentKey) == 0 {
+						if p.mostRecentTS.Forward(newest) {
 							p.mostRecentKey = append(p.mostRecentKey[:0], key.Key...)
 						}
 					}
