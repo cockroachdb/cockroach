@@ -277,6 +277,7 @@ type testingRCRange struct {
 	// snapshots contain snapshots of the tracker state for different replicas,
 	// at various points in time. It is used in TestUsingSimulation.
 	snapshots []testingTrackerSnapshot
+	entries   []raftpb.Entry
 
 	mu struct {
 		syncutil.Mutex
@@ -537,6 +538,112 @@ func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 	}
 }
 
+type testingEntryRange struct {
+	fromIndex, toIndex uint64
+}
+
+type testingRaftEvent struct {
+	rangeID           roachpb.RangeID
+	entries           []entryInfo
+	sendingEntryRange map[roachpb.ReplicaID]testingEntryRange
+}
+
+func parseRaftEvents(t *testing.T, input string) []testingRaftEvent {
+	var eventBuf []testingRaftEvent
+	n := 0
+	for _, line := range strings.Split(input, "\n") {
+		var (
+			rangeID, term, index              int
+			replicaID, fromIndex, toIndexExcl int
+			size                              int64
+			err                               error
+			pri                               admissionpb.WorkPriority
+		)
+
+		parts := strings.Fields(line)
+		parts[0] = strings.TrimSpace(parts[0])
+		switch {
+		case strings.HasPrefix(parts[0], "range_id="):
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+			rangeID, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+			eventBuf = append(eventBuf, testingRaftEvent{
+				rangeID: roachpb.RangeID(rangeID),
+			})
+			n++
+		case strings.HasPrefix(parts[0], "entries"):
+			// Skip the first line, which is the header.
+			eventBuf[n-1].entries = make([]entryInfo, 0)
+			continue
+		case strings.HasPrefix(parts[0], "term="):
+			require.True(t, strings.HasPrefix(parts[0], "term="))
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
+			term, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+
+			parts[1] = strings.TrimSpace(parts[1])
+			require.True(t, strings.HasPrefix(parts[1], "index="))
+			parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
+			index, err = strconv.Atoi(parts[1])
+			require.NoError(t, err)
+
+			parts[2] = strings.TrimSpace(parts[2])
+			require.True(t, strings.HasPrefix(parts[2], "pri="))
+			parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
+			pri = parsePriority(t, parts[2])
+
+			parts[3] = strings.TrimSpace(parts[3])
+			require.True(t, strings.HasPrefix(parts[3], "size="))
+			parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
+			size, err = humanizeutil.ParseBytes(parts[3])
+			require.NoError(t, err)
+
+			eventBuf[n-1].entries = append(eventBuf[n-1].entries, entryInfo{
+				term:   uint64(term),
+				index:  uint64(index),
+				enc:    raftlog.EntryEncodingStandardWithACAndPriority,
+				tokens: kvflowcontrol.Tokens(size),
+				pri:    AdmissionToRaftPriority(pri),
+			})
+		case strings.HasPrefix(parts[0], "sending"):
+			// Skip the first line, which is the header.
+			eventBuf[n-1].sendingEntryRange = make(map[roachpb.ReplicaID]testingEntryRange)
+			continue
+		case strings.HasPrefix(parts[0], "replica_id="):
+			require.True(t, strings.HasPrefix(parts[0], "replica_id="))
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "replica_id=")
+			replicaID, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+
+			// Line has format: [%d,%d) corresponding to [from,to).
+			parts[1] = strings.TrimSpace(parts[1])
+			bounds := strings.Split(parts[1], ",")
+			require.Len(t, bounds, 2)
+
+			bounds[0] = strings.TrimSpace(bounds[0])
+			require.True(t, strings.HasPrefix(bounds[0], "["))
+			bounds[0] = strings.TrimPrefix(strings.TrimSpace(bounds[0]), "[")
+			fromIndex, err = strconv.Atoi(bounds[0])
+			require.NoError(t, err)
+
+			bounds[1] = strings.TrimSpace(bounds[1])
+			require.True(t, strings.HasSuffix(bounds[1], ")"))
+			bounds[1] = strings.TrimSuffix(strings.TrimSpace(bounds[1]), ")")
+			toIndexExcl, err = strconv.Atoi(bounds[1])
+			require.NoError(t, err)
+
+			eventBuf[n-1].sendingEntryRange[roachpb.ReplicaID(replicaID)] = testingEntryRange{
+				fromIndex: uint64(fromIndex),
+				// Subtract 1 to make the range exclusive.
+				toIndex: uint64(toIndexExcl - 1),
+			}
+		default:
+			require.Failf(t, "unknown line", "%v", line)
+		}
+	}
+	return eventBuf
+}
+
 type entryInfo struct {
 	term   uint64
 	index  uint64
@@ -658,7 +765,12 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 //   - raft_event: Simulates a raft event on the given range, calling
 //     HandleRaftEvent.
 //     range_id=<range_id>
+//     entries
 //     term=<term> index=<index> pri=<pri> size=<size>
+//     ...
+//     sending
+//     replica_id=<replica_id> [from,to)
+//     ...
 //     ...
 //
 //   - stream_state: Prints the state of the stream(s) for the given range's
@@ -691,8 +803,10 @@ func TestRangeController(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				var regularInitString, elasticInitString string
-				var regularLimitString, elasticLimitString string
+				var (
+					regularInitString, elasticInitString   string
+					regularLimitString, elasticLimitString string
+				)
 				d.MaybeScanArgs(t, "regular_init", &regularInitString)
 				d.MaybeScanArgs(t, "elastic_init", &elasticInitString)
 				d.MaybeScanArgs(t, "regular_limit", &regularLimitString)
@@ -885,103 +999,52 @@ func TestRangeController(t *testing.T) {
 				return state.tokenCountsString()
 
 			case "raft_event":
-				var lastRangeID roachpb.RangeID
-				init := false
-				var buf []entryInfo
-
-				propRangeEntries := func() {
-					event := RaftEvent{
-						Entries: make([]raftpb.Entry, len(buf)),
+				for _, event := range parseRaftEvents(t, d.Input) {
+					raftEvent := RaftEvent{
+						Entries: make([]raftpb.Entry, len(event.entries)),
+						MsgApps: map[roachpb.ReplicaID][]raftpb.Message{},
 					}
-					for i, state := range buf {
-						event.Entries[i] = testingCreateEntry(t, state)
+					for i, entry := range event.entries {
+						raftEvent.Entries[i] = testingCreateEntry(t, entry)
 					}
-					// TODO(sumeer): all replicas are getting MsgApps for all the new
-					// entries, which does not sufficiently test the code paths. Enhance
-					// the test to include a prefix of the new entries, and entries that
-					// were appended previously.
 					msgApp := raftpb.Message{
-						Type:    raftpb.MsgApp,
-						To:      0,
-						Entries: event.Entries,
+						Type: raftpb.MsgApp,
+						To:   0,
+						// We will selectively include a prefix of the new entries, and a
+						// suffix of entries that were previously appended, down below.
+						Entries: nil,
 					}
-					msgApps := map[roachpb.ReplicaID][]raftpb.Message{}
-					testRC := state.ranges[lastRangeID]
+					testRC := state.ranges[event.rangeID]
+					testRC.entries = append(testRC.entries, raftEvent.Entries...)
 					func() {
 						testRC.mu.Lock()
 						defer testRC.mu.Unlock()
-						for k, testR := range testRC.mu.r.replicaSet {
-							msgApp.To = raftpb.PeerID(k)
-							msgApps[k] = append([]raftpb.Message(nil), msgApp)
-							if n := len(event.Entries); n > 0 {
-								testR.info.Next = event.Entries[n-1].Index + 1
-								testRC.mu.r.replicaSet[k] = testR
+
+						for replicaID, testR := range testRC.mu.r.replicaSet {
+							msgApp.Entries = nil
+							msgApp.To = raftpb.PeerID(replicaID)
+							if event.sendingEntryRange == nil ||
+								testingFirst(0, event.sendingEntryRange[replicaID]) == nil {
+								// When sendingEntryRange is not specified, include all
+								// entries for this replica.
+								msgApp.Entries = raftEvent.Entries
+							} else {
+								fromIndex := event.sendingEntryRange[replicaID].fromIndex
+								toIndex := event.sendingEntryRange[replicaID].toIndex
+								for _, entry := range testRC.entries {
+									if entry.Index >= fromIndex && entry.Index <= toIndex {
+										msgApp.Entries = append(msgApp.Entries, entry)
+									}
+								}
+							}
+							raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
+							if len(msgApp.Entries) > 0 {
+								testR.info.Next = msgApp.Entries[len(msgApp.Entries)-1].Index + 1
+								testRC.mu.r.replicaSet[replicaID] = testR
 							}
 						}
 					}()
-					event.MsgApps = msgApps
-					err := testRC.rc.HandleRaftEventRaftMuLocked(ctx, event)
-					require.NoError(t, err)
-				}
-
-				for _, line := range strings.Split(d.Input, "\n") {
-					var (
-						rangeID, term, index int
-						size                 int64
-						err                  error
-						pri                  admissionpb.WorkPriority
-					)
-
-					parts := strings.Fields(line)
-					parts[0] = strings.TrimSpace(parts[0])
-					if strings.HasPrefix(parts[0], "range_id=") {
-						if init {
-							// We are moving to another range, if a previous range has entries
-							// created then create the raft event and call handle raft ready
-							// using all the entries added so far.
-							propRangeEntries()
-							init = false
-						}
-
-						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
-						rangeID, err = strconv.Atoi(parts[0])
-						require.NoError(t, err)
-						lastRangeID = roachpb.RangeID(rangeID)
-					} else {
-						require.True(t, strings.HasPrefix(parts[0], "term="))
-						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
-						term, err = strconv.Atoi(parts[0])
-						require.NoError(t, err)
-
-						parts[1] = strings.TrimSpace(parts[1])
-						require.True(t, strings.HasPrefix(parts[1], "index="))
-						parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
-						index, err = strconv.Atoi(parts[1])
-						require.NoError(t, err)
-
-						parts[2] = strings.TrimSpace(parts[2])
-						require.True(t, strings.HasPrefix(parts[2], "pri="))
-						parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
-						pri = parsePriority(t, parts[2])
-
-						parts[3] = strings.TrimSpace(parts[3])
-						require.True(t, strings.HasPrefix(parts[3], "size="))
-						parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
-						size, err = humanizeutil.ParseBytes(parts[3])
-						require.NoError(t, err)
-
-						init = true
-						buf = append(buf, entryInfo{
-							term:   uint64(term),
-							index:  uint64(index),
-							enc:    raftlog.EntryEncodingStandardWithACAndPriority,
-							tokens: kvflowcontrol.Tokens(size),
-							pri:    AdmissionToRaftPriority(pri),
-						})
-					}
-				}
-				if init {
-					propRangeEntries()
+					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, raftEvent))
 				}
 				return state.tokenCountsString()
 
