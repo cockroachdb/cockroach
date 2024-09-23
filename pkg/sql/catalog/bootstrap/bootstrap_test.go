@@ -103,11 +103,11 @@ func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
 		roundTripInitialValuesStringRepresentation(t, 0 /* tenantID */)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		const dummyTenantID = 54321
+		const dummyTenantID = 109
 		roundTripInitialValuesStringRepresentation(t, dummyTenantID)
 	})
 	t.Run("tenants", func(t *testing.T) {
-		const dummyTenantID1, dummyTenantID2 = 54321, 12345
+		const dummyTenantID1, dummyTenantID2 = 109, 255
 		require.Equal(t,
 			InitialValuesToString(makeMetadataSchema(dummyTenantID1)),
 			InitialValuesToString(makeMetadataSchema(dummyTenantID2)),
