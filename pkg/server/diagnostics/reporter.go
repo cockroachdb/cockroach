@@ -107,6 +107,9 @@ type Reporter struct {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
+	// Prior to starting the periodic report job, we store the current
+	// timestamp to initialize to a valid value.
+	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
