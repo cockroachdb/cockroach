@@ -22,3 +22,13 @@ func getDefaultHost() string {
 	}
 	return ""
 }
+
+// getEnvOrDefault is a helper function that returns the value of an environment
+// variable or a default value if the environment variable is not set.
+func getEnvOrDefault(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+
+	return def
+}
