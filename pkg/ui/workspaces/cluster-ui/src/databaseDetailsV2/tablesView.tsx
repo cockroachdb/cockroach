@@ -8,216 +8,252 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Badge, BadgeIntent } from "@cockroachlabs/ui-components";
-import moment from "moment-timezone";
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
-import Select, { OptionsType } from "react-select";
 
+import { useNodeStatuses } from "src/api";
+import {
+  TableMetadataRequest,
+  TableSortOption,
+  useTableMetadata,
+} from "src/api/databases/getTableMetadataApi";
+import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
+import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
+import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
-import { Table, TableColumnProps } from "src/sharedFromCloud/table";
-import useTable from "src/sharedFromCloud/useTable";
-import { NodeID } from "src/types/clusterTypes";
-import { ReactSelectOption } from "src/types/selectTypes";
+import {
+  SortDirection,
+  Table,
+  TableChangeFn,
+  TableColumnProps,
+} from "src/sharedFromCloud/table";
+import useTable, { TableParams } from "src/sharedFromCloud/useTable";
+import { StoreID } from "src/types/clusterTypes";
 import { Bytes, EncodeDatabaseTableUri } from "src/util";
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
+import { rawTableMetadataToRows } from "./utils";
 
-const mockRegionOptions = [
-  { label: "US East (N. Virginia)", value: "us-east-1" },
-  { label: "US East (Ohio)", value: "us-east-2" },
-];
+const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
+  [
+    {
+      title: TableColName.NAME,
+      width: "15%",
+      sorter: true,
+      render: (t: TableRow) => {
+        // This linking is just temporary. We'll need to update it to the correct path
+        // using db ID and table ID once we have the table details page.
+        const encodedDBPath = EncodeDatabaseTableUri(t.dbName, t.name);
+        return <Link to={encodedDBPath}>{t.qualifiedNameWithSchema}</Link>;
+      },
+      sortKey: TableSortOption.NAME,
+    },
+    {
+      title: TableColName.REPLICATION_SIZE,
+      width: "fit-content",
+      sorter: true,
+      render: (t: TableRow) => {
+        return Bytes(t.replicationSizeBytes);
+      },
+      sortKey: TableSortOption.REPLICATION_SIZE,
+    },
+    {
+      title: TableColName.RANGE_COUNT,
+      width: "fit-content",
+      sorter: true,
+      render: (t: TableRow) => {
+        return t.rangeCount;
+      },
+      sortKey: TableSortOption.RANGES,
+    },
+    {
+      title: TableColName.COLUMN_COUNT,
+      width: "fit-content",
+      sorter: true,
+      render: (t: TableRow) => {
+        return t.columnCount;
+      },
+      sortKey: TableSortOption.COLUMNS,
+    },
+    {
+      title: TableColName.NODE_REGIONS,
+      width: "20%",
+      render: (t: TableRow) => (
+        <div>
+          {Object.entries(t.nodesByRegion ?? {}).map(([region, nodes]) => (
+            <RegionNodesLabel
+              key={region}
+              nodes={nodes}
+              region={{ label: region, code: region }}
+            />
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: TableColName.LIVE_DATA_PERCENTAGE,
+      sorter: true,
+      width: "fit-content",
+      sortKey: TableSortOption.LIVE_DATA,
+      render: (t: TableRow) => {
+        return (
+          <div>
+            <div>{t.liveDataPercentage * 100}%</div>
+            <div>
+              {Bytes(t.liveDataBytes)} / {Bytes(t.totalDataBytes)}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      title: TableColName.STATS_LAST_UPDATED,
+      sorter: true,
+      render: (t: TableRow) => {
+        return t.statsLastUpdated.format("YYYY-MM-DD HH:mm:ss");
+      },
+    },
+  ];
 
-const mockLastUpdated = moment.utc();
-const mockData: TableRow[] = new Array(20).fill(1).map((_, i) => ({
-  name: `myDB-${i}`,
-  qualifiedNameWithSchema: `public.table-${i}`,
-  dbName: `myDB-${i}`,
-  dbID: i,
-  replicationSizeBytes: i * 100,
-  rangeCount: i,
-  columnCount: i,
-  nodesByRegion:
-    i % 2 === 0
-      ? {
-          [mockRegionOptions[0].value]: [1, 2] as NodeID[],
-          [mockRegionOptions[1].value]: [3] as NodeID[],
-        }
-      : null,
-  liveDataPercentage: 1,
-  liveDataBytes: i * 100,
-  totalDataBytes: i * 100,
-  autoStatsCollectionEnabled: i % 2 === 0,
-  statsLastUpdated: mockLastUpdated,
-  key: i.toString(),
-}));
+const createTableMetadataRequestFromParams = (
+  dbID: string,
+  params: TableParams,
+): TableMetadataRequest => {
+  return {
+    pagination: {
+      pageSize: params.pagination.pageSize,
+      pageNum: params.pagination.page,
+    },
+    sortBy: params.sort?.field ?? "name",
+    sortOrder: params.sort?.order,
+    dbId: parseInt(dbID, 10),
+    storeIds: params.filters.storeIDs.map(sid => parseInt(sid, 10) as StoreID),
+    name: params.search,
+  };
+};
 
-const filters = {};
-
-const initialParams = {
-  filters,
+const initialParams: TableParams = {
+  filters: { storeIDs: [] as string[] },
   pagination: {
     page: 1,
     pageSize: 10,
   },
   search: "",
   sort: {
-    field: "name",
-    order: "asc" as const,
+    field: TableSortOption.NAME,
+    order: "asc",
   },
 };
 
-const columns: TableColumnProps<TableRow>[] = [
-  {
-    title: TableColName.NAME,
-    width: "15%",
-    sorter: true,
-    render: (t: TableRow) => {
-      // This linking is just temporary. We'll need to update it to the correct path
-      // using db ID and table ID once we have the table details page.
-      const encodedDBPath = EncodeDatabaseTableUri(t.dbName, t.name);
-      return <Link to={encodedDBPath}>{t.qualifiedNameWithSchema}</Link>;
-    },
-  },
-  {
-    title: TableColName.REPLICATION_SIZE,
-    width: "fit-content",
-    sorter: true,
-    render: (t: TableRow) => {
-      return Bytes(t.replicationSizeBytes);
-    },
-  },
-  {
-    title: TableColName.RANGE_COUNT,
-    width: "fit-content",
-    sorter: true,
-    render: (t: TableRow) => {
-      return t.rangeCount;
-    },
-  },
-  {
-    title: TableColName.COLUMN_COUNT,
-    width: "fit-content",
-    sorter: true,
-    render: (t: TableRow) => {
-      return t.columnCount;
-    },
-  },
-  {
-    title: TableColName.NODE_REGIONS,
-    width: "20%",
-    render: (t: TableRow) => (
-      <div>
-        {Object.entries(t.nodesByRegion ?? {}).map(([region, nodes]) => (
-          <RegionNodesLabel
-            key={region}
-            nodes={nodes}
-            region={{ label: region, code: region }}
-          />
-        ))}
-      </div>
-    ),
-  },
-  {
-    title: TableColName.LIVE_DATA_PERCENTAGE,
-    sorter: true,
-    render: (t: TableRow) => {
-      return (
-        <div>
-          <div>{t.liveDataPercentage * 100}%</div>
-          <div>
-            {Bytes(t.liveDataBytes)} / {Bytes(t.totalDataBytes)}
-          </div>
-        </div>
-      );
-    },
-  },
-  {
-    title: TableColName.AUTO_STATS_COLLECTION,
-    sorter: true,
-    render: (t: TableRow) => {
-      let intent: BadgeIntent = "success";
-      let text = "Enabled";
-      if (!t.autoStatsCollectionEnabled) {
-        intent = "warning";
-        text = "Disabled";
-      }
-      return (
-        <Badge intent={intent} transformCase={"uppercase"}>
-          {text}
-        </Badge>
-      );
-    },
-  },
-  {
-    title: TableColName.STATS_LAST_UPDATED,
-    sorter: true,
-    render: (t: TableRow) => {
-      return t.statsLastUpdated.format("YYYY-MM-DD HH:mm:ss");
-    },
-  },
-];
-
 export const TablesPageV2 = () => {
-  const { params, setSearch } = useTable({
+  const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
-  const data = mockData;
 
-  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption<string>[]>(
-    [],
+  // Get db id from the URL.
+  const { dbID } = useRouteParams();
+  const { data, error, isLoading } = useTableMetadata(
+    createTableMetadataRequestFromParams(dbID, params),
   );
-  const onNodeRegionsChange = (
-    selected: OptionsType<ReactSelectOption<string>>,
-  ) => {
-    setNodeRegions((selected ?? []).map(v => v));
+  const nodesResp = useNodeStatuses();
+  const paginationState = data?.pagination_info;
+
+  const onNodeRegionsChange = (storeIDs: StoreID[]) => {
+    setFilters({
+      storeIDs: storeIDs.map(sid => sid.toString()),
+    });
   };
+
+  const tableData = useMemo(
+    () =>
+      rawTableMetadataToRows(data?.results ?? [], {
+        nodeIDToRegion: nodesResp.nodeIDToRegion,
+        storeIDToNodeID: nodesResp.storeIDToNodeID,
+        isLoading: nodesResp.isLoading,
+      }),
+    [data, nodesResp],
+  );
+
+  const onTableChange: TableChangeFn<TableRow> = (pagination, sorter) => {
+    setPagination({ page: pagination.current, pageSize: pagination.pageSize });
+    if (sorter) {
+      const colKey = sorter.columnKey;
+      if (typeof colKey !== "number") {
+        // CockroachDB table component sets the col idx as the column key.
+        return;
+      }
+      setSort({
+        field: COLUMNS[colKey].sortKey,
+        order: sorter.order === "descend" ? "desc" : "asc",
+      });
+    }
+  };
+
+  const nodeRegionsValue = params.filters.storeIDs.map(
+    sid => parseInt(sid, 10) as StoreID,
+  );
+
+  const sort = params.sort;
+  const colsWithSort = useMemo(
+    () =>
+      COLUMNS.map((col, i) => {
+        const colInd = COLUMNS.findIndex(c => c.sortKey === sort.field);
+        const sortOrder: SortDirection =
+          sort?.order === "desc" ? "descend" : "ascend";
+        return {
+          ...col,
+          sortOrder: colInd === i && col.sorter ? sortOrder : null,
+        };
+      }),
+    [sort],
+  );
 
   return (
     <>
       <PageSection>
         <PageConfig>
           <PageConfigItem>
-            <Search placeholder="Search tables" onSubmit={setSearch} />
+            <Search
+              defaultValue={params.search}
+              placeholder="Search tables"
+              onSubmit={setSearch}
+            />
           </PageConfigItem>
           <PageConfigItem minWidth={"200px"}>
-            <Select
-              placeholder={"Regions"}
-              name="nodeRegions"
-              options={mockRegionOptions}
-              clearable={true}
-              isMulti
-              value={nodeRegions}
+            <NodeRegionsSelector
+              value={nodeRegionsValue}
               onChange={onNodeRegionsChange}
             />
           </PageConfigItem>
         </PageConfig>
       </PageSection>
       <PageSection>
-        <PageCount
-          page={1}
-          pageSize={params.pagination.pageSize}
-          total={data.length}
-          entity="tables"
-        />
-        <Table
-          columns={columns}
-          dataSource={data}
-          pagination={{
-            size: "small",
-            current: params.pagination.page,
-            pageSize: params.pagination.pageSize,
-            showSizeChanger: false,
-            position: ["bottomCenter"],
-            total: data.length,
-          }}
-          onChange={(_pagination, _sorter) => {}}
-        />
+        <Loading page="TablesV2" loading={isLoading} error={error}>
+          <PageCount
+            page={params.pagination.page}
+            pageSize={params.pagination.pageSize}
+            total={data?.pagination_info?.total_results ?? 0}
+            entity="tables"
+          />
+          <Table
+            columns={colsWithSort}
+            dataSource={tableData}
+            pagination={{
+              size: "small",
+              current: params.pagination.page,
+              pageSize: params.pagination.pageSize,
+              showSizeChanger: false,
+              position: ["bottomCenter"],
+              total: paginationState?.total_results,
+            }}
+            onChange={onTableChange}
+          />
+        </Loading>
       </PageSection>
     </>
   );

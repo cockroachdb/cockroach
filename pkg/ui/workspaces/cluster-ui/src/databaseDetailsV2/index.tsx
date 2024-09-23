@@ -26,6 +26,7 @@ enum TabKeys {
 export const DatabaseDetailsPageV2 = () => {
   const [currentTab, setCurrentTab] = useState(TabKeys.TABLES);
 
+  // TODO (xinhaoz) #131119 - Populate db name here.
   return (
     <PageLayout>
       <PageHeader title="myDB" />
