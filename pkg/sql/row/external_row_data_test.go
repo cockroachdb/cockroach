@@ -12,6 +12,7 @@ package row_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -105,7 +106,10 @@ func TestExternalRowData(t *testing.T) {
 				expected: [][]string{{"2", "2", "-2"}},
 			},
 		} {
-			require.Equal(t, tc.expected, r.QueryStr(t, tc.query))
+
+			require.Equal(t, tc.expected, r.QueryStrMeta(
+				t, fmt.Sprintf("vectorize=%v", vectorize), tc.query,
+			))
 		}
 	}
 }
