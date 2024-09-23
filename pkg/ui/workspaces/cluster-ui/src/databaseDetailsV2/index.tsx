@@ -31,9 +31,20 @@ export const DatabaseDetailsPageV2 = () => {
   const { dbID } = useRouteParams();
   const { name } = useDbIdToName(parseInt(dbID, 10));
 
+  const breadcrumbs = [
+    {
+      name: "Databases",
+      link: "/v2/databases",
+    },
+    {
+      name: name,
+      link: null,
+    },
+  ];
+
   return (
     <PageLayout>
-      <PageHeader title={name} />
+      <PageHeader title={name} breadcrumbItems={breadcrumbs} />
       <Tabs
         defaultActiveKey={TabKeys.TABLES}
         className={commonStyles("cockroach--tabs")}
