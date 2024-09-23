@@ -187,7 +187,7 @@ var GetLicenseTTL = func(
 	st *cluster.Settings,
 	ts timeutil.TimeSource,
 ) int64 {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		log.Errorf(ctx, "unable to find license: %v", err)
 		return 0
@@ -209,7 +209,7 @@ func checkEnterpriseEnabledAt(
 	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return err
 	}
@@ -240,10 +240,10 @@ func checkEnterpriseEnabledAt(
 	return nil
 }
 
-// getLicense fetches the license from the given settings, using Settings.Cache
+// GetLicense fetches the license from the given settings, using Settings.Cache
 // to cache the decoded license (if any). The returned license must not be
 // modified by the caller.
-func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
+func GetLicense(st *cluster.Settings) (*licenseccl.License, error) {
 	str := enterpriseLicense.Get(&st.SV)
 	if str == "" {
 		return nil, nil
@@ -263,7 +263,7 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 
 // GetLicenseType returns the license type.
 func GetLicenseType(st *cluster.Settings) (string, error) {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
@@ -274,7 +274,7 @@ func GetLicenseType(st *cluster.Settings) (string, error) {
 
 // GetLicenseEnvironment returns the license environment.
 func GetLicenseEnvironment(st *cluster.Settings) (string, error) {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
@@ -354,7 +354,7 @@ func RegisterCallbackOnLicenseChange(
 	// The isChange parameter indicates whether the license is actually being updated,
 	// as opposed to merely refreshing the current license.
 	refreshFunc := func(ctx context.Context, isChange bool) {
-		lic, err := getLicense(st)
+		lic, err := GetLicense(st)
 		if err != nil {
 			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
 			return
