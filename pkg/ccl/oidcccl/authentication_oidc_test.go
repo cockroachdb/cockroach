@@ -126,22 +126,17 @@ func TestOIDCEnabled(t *testing.T) {
 		NewOIDCManager = realNewManager
 	}()
 
-	// Set minimum settings to successfully enable the OIDC client
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s with password 'unused'`, usernameUnderTest))
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.provider_url = "providerURL"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
-	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
-	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
-	sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.http.base_path = "%s"`, basePath))
-	// Setting the `server.oidc_authentication.enabled` cluster setting through
-	// SQL command adds an overhead in updating the `OIDCEnabled` var.
-	// This fails the test under stress as the value of `OIDCEnabled` var
-	// determines the response to the `/oidc/v1/login` API handler.
-	// Hence, it is recommended to override the value directly.
-	// TODO(pritesh-lahoti): Refactor the above OIDC cluster setting statements.
+
+	// Set minimum settings to successfully enable the OIDC client
+	OIDCProviderURL.Override(ctx, &s.ClusterSettings().SV, "providerURL")
+	OIDCClientID.Override(ctx, &s.ClusterSettings().SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &s.ClusterSettings().SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
 	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
