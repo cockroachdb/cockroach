@@ -1275,3 +1275,18 @@ build
 SELECT * FROM t_vector ORDER BY v
 ----
 error (0A000): unimplemented: can't order by column type VECTOR
+
+# TODO(#129956): Handle non-default NULL ordering that references a projected
+# expression that contains a subquery.
+exec-ddl
+CREATE TABLE t129956 (i INT)
+----
+
+build
+SELECT * FROM t129956 AS t0
+WHERE EXISTS(
+  SELECT (SELECT t0.i FROM t129956) AS tmp
+  ORDER BY tmp NULLS LAST
+)
+----
+error (0A000): subqueries in ORDER BY with non-default NULLS ordering is not supported
