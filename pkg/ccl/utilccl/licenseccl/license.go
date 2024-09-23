@@ -44,3 +44,17 @@ func Decode(s string) (*License, error) {
 	}
 	return &lic, nil
 }
+func (u License_Environment) String() string {
+	switch u {
+	case Unspecified:
+		return ""
+	case Production:
+		return "production"
+	case PreProduction:
+		return "pre-production"
+	case Development:
+		return "development"
+	default:
+		return "other"
+	}
+}
