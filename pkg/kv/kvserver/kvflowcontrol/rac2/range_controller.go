@@ -850,7 +850,7 @@ func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
 
 func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	// Return all tokens.
-	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll())
+	rss.onDisconnectReturnTokens(ctx)
 	rss.mu.closed = true
 }
 
@@ -866,7 +866,7 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 		ctx, rss.parent.parent.opts.RangeID, probeRecentlyReplicateDuration())
 	// Return all tokens since other ranges may need them, and it may be some
 	// time before this replica transitions back to StateReplicate.
-	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll())
+	rss.onDisconnectReturnTokens(ctx)
 }
 
 func (rss *replicaSendStream) makeConsistentInStateReplicate(
@@ -892,6 +892,30 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
 	}
 	return shouldWaitChange
+}
+
+// onDisconnectReturnTokens returns all tokens tracked by the tracker and
+// returns them to the eval and send token counters. For use when all tokens
+// are being returned due to a disconnect, snapshot or probe. It additionally
+// updates metrics based on the tokens returned.
+func (rss *replicaSendStream) onDisconnectReturnTokens(ctx context.Context) {
+	tracked := rss.mu.tracker.UntrackAll()
+	var perWorkClass tokensPerWorkClass
+	for pri, tokens := range tracked {
+		pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
+		if tokens > 0 {
+			switch pri {
+			case admissionpb.ElasticWorkClass:
+				perWorkClass.elastic += tokens
+			case admissionpb.RegularWorkClass:
+				perWorkClass.regular += tokens
+			default:
+				log.Fatalf(ctx, "%v", errors.AssertionFailedf("unexpected priority %v", pri))
+			}
+		}
+	}
+	rss.parent.evalTokenCounter.metrics.onDisconnectReturn(perWorkClass)
+	rss.returnTokens(ctx, tracked)
 }
 
 // returnTokens takes the tokens untracked by the tracker and returns them to
