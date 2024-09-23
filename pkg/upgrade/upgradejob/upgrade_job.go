@@ -87,17 +87,18 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		err = m.Run(ctx, v, mc.SystemDeps())
 	case *upgrade.TenantUpgrade:
 		tenantDeps := upgrade.TenantDeps{
-			Codec:            execCtx.ExecCfg().Codec,
-			Settings:         execCtx.ExecCfg().Settings,
-			DB:               execCtx.ExecCfg().InternalDB,
-			KVDB:             execCtx.ExecCfg().DB,
-			LeaseManager:     execCtx.ExecCfg().LeaseManager,
-			LicenseEnforcer:  execCtx.ExecCfg().LicenseEnforcer,
-			InternalExecutor: ex,
-			JobRegistry:      execCtx.ExecCfg().JobRegistry,
-			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,
-			SessionData:      execCtx.SessionData(),
-			ClusterID:        execCtx.ExtendedEvalContext().ClusterID,
+			Codec:              execCtx.ExecCfg().Codec,
+			Settings:           execCtx.ExecCfg().Settings,
+			DB:                 execCtx.ExecCfg().InternalDB,
+			KVDB:               execCtx.ExecCfg().DB,
+			LeaseManager:       execCtx.ExecCfg().LeaseManager,
+			LicenseEnforcer:    execCtx.ExecCfg().LicenseEnforcer,
+			InternalExecutor:   ex,
+			JobRegistry:        execCtx.ExecCfg().JobRegistry,
+			TestingKnobs:       execCtx.ExecCfg().UpgradeTestingKnobs,
+			SessionData:        execCtx.SessionData(),
+			ClusterID:          execCtx.ExtendedEvalContext().ClusterID,
+			TenantInfoAccessor: mc.SystemDeps().TenantInfoAccessor,
 		}
 
 		tenantDeps.SchemaResolverConstructor = func(

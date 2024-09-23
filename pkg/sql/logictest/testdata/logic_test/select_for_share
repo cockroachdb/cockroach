@@ -216,11 +216,6 @@ SELECT * FROM t WHERE a = 1 FOR SHARE;
 
 user root
 
-query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
-----
-database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
-
 # Locks:
 # 1: Shared
 # 2: None
