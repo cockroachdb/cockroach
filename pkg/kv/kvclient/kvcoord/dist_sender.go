@@ -345,6 +345,8 @@ var CanSendToFollower = func(
 const (
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 1024
+	// The default scaling factor for the number of async ops per vCPU
+	defaultSenderStreamsPerVCPU = 256
 	// RangeLookupPrefetchCount is the maximum number of range descriptors to prefetch
 	// during range lookups.
 	RangeLookupPrefetchCount = 8
@@ -368,7 +370,7 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
-	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
+	max(defaultSenderConcurrency, int64(defaultSenderStreamsPerVCPU*runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
 )
 
