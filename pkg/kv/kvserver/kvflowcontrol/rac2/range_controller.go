@@ -708,7 +708,7 @@ func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 		rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
+	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted), false /* disconnect */)
 }
 
 func (rs *replicaState) createReplicaSendStream(ctx context.Context) {
@@ -850,7 +850,7 @@ func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
 
 func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	// Return all tokens.
-	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll())
+	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
 	rss.mu.closed = true
 }
 
@@ -868,7 +868,7 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 		ctx, rss.parent.parent.opts.RangeID, probeRecentlyReplicateDuration())
 	// Return all tokens since other ranges may need them, and it may be some
 	// time before this replica transitions back to StateReplicate.
-	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll())
+	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
 }
 
 func (rss *replicaSendStream) makeConsistentInStateReplicate(
@@ -899,13 +899,13 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 // returnTokens takes the tokens untracked by the tracker and returns them to
 // the eval and send token counters.
 func (rss *replicaSendStream) returnTokens(
-	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
+	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens, disconnect bool,
 ) {
 	for pri, tokens := range returned {
 		if tokens > 0 {
 			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
-			rss.parent.evalTokenCounter.Return(ctx, pri, tokens)
-			rss.parent.sendTokenCounter.Return(ctx, pri, tokens)
+			rss.parent.evalTokenCounter.Return(ctx, pri, tokens, disconnect)
+			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, disconnect)
 		}
 	}
 }

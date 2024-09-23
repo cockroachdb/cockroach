@@ -101,7 +101,7 @@ func TestTokenAdjustment(t *testing.T) {
 					if !isPositive {
 						delta = -delta
 					}
-					counter.adjust(ctx, wc, delta)
+					counter.adjust(ctx, wc, delta, false /* disconnect */)
 					adjustments = append(adjustments, adjustment{
 						wc:    wc,
 						delta: delta,
@@ -239,7 +239,7 @@ func TestTokenCounter(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 		require.False(t, available)
 		require.NotNil(t, handle)
-		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular)
+		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, false /* disconnect */)
 		assertStateReset(t)
 	})
 
@@ -251,7 +251,7 @@ func TestTokenCounter(t *testing.T) {
 		granted := counter.TryDeduct(ctx, admissionpb.ElasticWorkClass, 50)
 		require.Equal(t, kvflowcontrol.Tokens(0), granted)
 		// Return tokens to bring the counter out of debt.
-		counter.Return(ctx, admissionpb.ElasticWorkClass, limits.elastic+50)
+		counter.Return(ctx, admissionpb.ElasticWorkClass, limits.elastic+50, false /* disconnect */)
 		assertStateReset(t)
 	})
 
@@ -266,7 +266,7 @@ func TestTokenCounter(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 		require.False(t, available)
 		require.NotNil(t, handle)
-		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular)
+		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, false /* disconnect */)
 		// Wait on the handle to be unblocked and expect that there are tokens
 		// available when the wait channel is signaled.
 		<-handle.WaitChannel()
@@ -279,7 +279,7 @@ func TestTokenCounter(t *testing.T) {
 		haveTokens = handle.ConfirmHaveTokensAndUnblockNextWaiter()
 		require.False(t, haveTokens)
 		// Return the tokens deducted from the first wait above.
-		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular)
+		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, false /* disconnect */)
 		assertStateReset(t)
 	})
 
@@ -320,7 +320,7 @@ func TestTokenCounter(t *testing.T) {
 				// Ensure all requested tokens are granted eventually and return the
 				// tokens back to the counter.
 				require.Equal(t, kvflowcontrol.Tokens(0), remaining)
-				counter.Return(ctx, admissionpb.RegularWorkClass, tokensRequested)
+				counter.Return(ctx, admissionpb.RegularWorkClass, tokensRequested, false /* disconnect */)
 			}()
 		}
 		wg.Wait()
@@ -387,6 +387,7 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 		tc.adjust(context.Background(),
 			admissionpb.RegularWorkClass,
 			-kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&ts.settings.SV)),
+			false, /* disconnect */
 		)
 		ts.mu.counters[stream] = tc
 	}
@@ -429,9 +430,9 @@ func (ts *evalTestState) setCounterTokens(stream string, positive bool) {
 
 	wasPositive := tc.tokens(admissionpb.RegularWorkClass) > 0
 	if !wasPositive && positive {
-		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, +1)
+		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, +1, false /* disconnect */)
 	} else if wasPositive && !positive {
-		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, -1)
+		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, -1, false /* disconnect */)
 	}
 }
 

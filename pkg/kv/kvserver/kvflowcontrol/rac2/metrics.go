@@ -52,6 +52,12 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	flowTokensDisconnectReturn = metric.Metadata{
+		Name:        "kvflowcontrol.tokens.%s.%s.disconnected",
+		Help:        "Flow %s tokens returned early by %s due disconnects, across all replication stream, this is a subset of returned tokens",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	totalStreamCount = metric.Metadata{
 		Name:        "kvflowcontrol.streams.%s.%s.total_count",
 		Help:        "Total number of %s replication streams for %s requests",
@@ -167,9 +173,10 @@ func NewTokenMetrics() *TokenMetrics {
 }
 
 type TokenCounterMetrics struct {
-	Deducted    [admissionpb.NumWorkClasses]*metric.Counter
-	Returned    [admissionpb.NumWorkClasses]*metric.Counter
-	Unaccounted [admissionpb.NumWorkClasses]*metric.Counter
+	Deducted     [admissionpb.NumWorkClasses]*metric.Counter
+	Returned     [admissionpb.NumWorkClasses]*metric.Counter
+	Unaccounted  [admissionpb.NumWorkClasses]*metric.Counter
+	Disconnected [admissionpb.NumWorkClasses]*metric.Counter
 }
 
 var _ metric.Struct = &TokenCounterMetrics{}
@@ -192,20 +199,29 @@ func newTokenCounterMetrics(t flowControlMetricType) *TokenCounterMetrics {
 		m.Unaccounted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensUnaccounted, t),
 		)
+		m.Disconnected[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDisconnectReturn, t),
+		)
 	}
 	return m
 }
 
-func (m *TokenCounterMetrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
+func (m *TokenCounterMetrics) onTokenAdjustment(adjustment tokensPerWorkClass, disconnect bool) {
 	if adjustment.regular < 0 {
 		m.Deducted[regular].Inc(-int64(adjustment.regular))
 	} else if adjustment.regular > 0 {
 		m.Returned[regular].Inc(int64(adjustment.regular))
+		if disconnect {
+			m.Disconnected[regular].Inc(int64(adjustment.regular))
+		}
 	}
 	if adjustment.elastic < 0 {
 		m.Deducted[elastic].Inc(-int64(adjustment.elastic))
 	} else if adjustment.elastic > 0 {
 		m.Returned[elastic].Inc(int64(adjustment.elastic))
+		if disconnect {
+			m.Disconnected[elastic].Inc(int64(adjustment.elastic))
+		}
 	}
 }
 
