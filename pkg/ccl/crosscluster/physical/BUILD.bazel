@@ -46,7 +46,6 @@ go_library(
         "//pkg/repstream",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
