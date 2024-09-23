@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -97,19 +96,6 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 				log.Warningf(ctx, "failed to advance replicated timestamp for reader tenant {%d}: %v", tenantID, err)
 			}
 		}
-	}
-}
-
-func makeStandbyReadTSPollerJobRecord(
-	registry *jobs.Registry, usrname username.SQLUsername,
-) jobs.Record {
-	return jobs.Record{
-		JobID:         registry.MakeJobID(),
-		Description:   "standby read-only timestamp poller job",
-		Username:      usrname,
-		Details:       jobspb.StandbyReadTSPollerDetails{},
-		Progress:      jobspb.StandbyReadTSPollerProgress{},
-		NonCancelable: true,
 	}
 }
 
