@@ -80,7 +80,7 @@ var maxDecrease = settings.RegisterFloatSetting(
 	"sql.stats.forecasts.max_decrease",
 	"the most a prediction is allowed to decrease, expressed as the minimum ratio of the prediction "+
 		"to the lowest prior observation",
-	0,
+	1.0/3.0,
 	settings.WithPublic,
 	settings.Fraction,
 )

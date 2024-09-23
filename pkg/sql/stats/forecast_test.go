@@ -607,7 +607,6 @@ func TestForecastColumnStatistics(t *testing.T) {
 	}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	maxDecrease.Override(ctx, &st.SV, 1.0/3.0)
 	var fullStatID, partialStatID uint64
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {

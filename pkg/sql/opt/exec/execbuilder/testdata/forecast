@@ -13,9 +13,6 @@ statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = true
 
 statement ok
-SET CLUSTER SETTING sql.stats.forecasts.max_decrease = 0.3333333333333333
-
-statement ok
 CREATE TABLE g (a INT PRIMARY KEY)
 
 statement ok
