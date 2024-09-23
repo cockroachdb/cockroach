@@ -17,6 +17,7 @@ import {
   DatabaseSortOptions,
   useDatabaseMetadata,
 } from "src/api/databases/getDatabaseMetadataApi";
+import { ColumnTitle } from "src/components/columnTitle";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { PageLayout, PageSection } from "src/layouts";
 import { Loading } from "src/loading";
@@ -45,7 +46,14 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   sortKey?: DatabaseSortOptions;
 })[] = [
   {
-    title: DatabaseColName.NAME,
+    title: (
+      <ColumnTitle
+        title={DatabaseColName.NAME}
+        withToolTip={{
+          tooltipText: "The name of the database.",
+        }}
+      />
+    ),
     sorter: (a, b) => a.name.localeCompare(b.name),
     sortKey: DatabaseSortOptions.NAME,
     render: (db: DatabaseRow) => {
@@ -53,7 +61,15 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     },
   },
   {
-    title: DatabaseColName.SIZE,
+    title: (
+      <ColumnTitle
+        title={DatabaseColName.SIZE}
+        withToolTip={{
+          tooltipText:
+            "The approximate total disk size across all table replicas in the database.",
+        }}
+      />
+    ),
     sortKey: DatabaseSortOptions.REPLICATION_SIZE,
     sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
     render: (db: DatabaseRow) => {
@@ -61,7 +77,14 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     },
   },
   {
-    title: DatabaseColName.TABLE_COUNT,
+    title: (
+      <ColumnTitle
+        title={DatabaseColName.TABLE_COUNT}
+        withToolTip={{
+          tooltipText: "The total number of tables in the database.",
+        }}
+      />
+    ),
     sortKey: DatabaseSortOptions.TABLE_COUNT,
     sorter: true,
     render: (db: DatabaseRow) => {
@@ -69,15 +92,15 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     },
   },
   {
-    title: DatabaseColName.RANGE_COUNT,
-    sortKey: DatabaseSortOptions.RANGES,
-    sorter: true,
-    render: (db: DatabaseRow) => {
-      return db.rangeCount;
-    },
-  },
-  {
-    title: DatabaseColName.NODE_REGIONS,
+    title: (
+      <ColumnTitle
+        title={DatabaseColName.NODE_REGIONS}
+        withToolTip={{
+          tooltipText:
+            "Regions/Nodes on which the database tables are located.",
+        }}
+      />
+    ),
     render: (db: DatabaseRow) => (
       <Skeleton loading={db.nodesByRegion.isLoading}>
         <div>
@@ -91,12 +114,6 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
         </div>
       </Skeleton>
     ),
-  },
-  {
-    title: "Schema insights",
-    render: (db: DatabaseRow) => {
-      return db.schemaInsightsCount;
-    },
   },
 ];
 
