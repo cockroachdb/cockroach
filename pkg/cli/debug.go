@@ -1574,11 +1574,11 @@ func init() {
 		"tenant IDs to filter logs by")
 
 	f = debugZipUploadCmd.Flags()
-	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", "",
+	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
 		"Datadog API key to use to send debug.zip artifacts to datadog")
-	f.StringVar(&debugZipUploadOpts.ddAPPKey, "dd-app-key", "",
+	f.StringVar(&debugZipUploadOpts.ddAPPKey, "dd-app-key", getEnvOrDefault(datadogAPPKeyEnvVar, ""),
 		"Datadog APP key to use to send debug.zip artifacts to datadog")
-	f.StringVar(&debugZipUploadOpts.ddSite, "dd-site", defaultDDSite,
+	f.StringVar(&debugZipUploadOpts.ddSite, "dd-site", getEnvOrDefault(datadogSiteEnvVar, defaultDDSite),
 		"Datadog site to use to send debug.zip artifacts to datadog")
 	f.StringSliceVar(&debugZipUploadOpts.include, "include", nil,
 		"The debug zip artifacts to include. Possible values: "+strings.Join(zipArtifactTypes, ", "))
@@ -1621,9 +1621,10 @@ func init() {
 		"", "prometheus label for cluster name")
 	f.StringVar(&debugTimeSeriesDumpOpts.yaml, "yaml", debugTimeSeriesDumpOpts.yaml, "full path to create the tsdump.yaml with storeID: nodeID mappings (raw format only). This file is required when loading the raw tsdump for troubleshooting.")
 	f.StringVar(&debugTimeSeriesDumpOpts.targetURL, "target-url", "", "target URL to send openmetrics data over HTTP")
-	f.StringVar(&debugTimeSeriesDumpOpts.ddSite, "dd-site", "us5",
+	f.StringVar(&debugTimeSeriesDumpOpts.ddSite, "dd-site", getEnvOrDefault(datadogSiteEnvVar, defaultDDSite),
 		"Datadog site to use to send tsdump artifacts to datadog")
-	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", "", "Datadog API key to use to send to the datadog formatter")
+	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
+		"Datadog API key to use to send to the datadog formatter")
 	f.StringVar(&debugTimeSeriesDumpOpts.httpToken, "http-token", "", "HTTP header to use with the json export format")
 
 	f = debugSendKVBatchCmd.Flags()

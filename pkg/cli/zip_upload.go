@@ -59,6 +59,11 @@ const (
 	defaultDDSite       = "us5"
 	defaultGCPProjectID = "arjun-sandbox-424904" // TODO: change this project ID
 
+	// datadog env vars
+	datadogSiteEnvVar   = "DD_SITE"
+	datadogAPIKeyEnvVar = "DD_API_KEY"
+	datadogAPPKeyEnvVar = "DD_APP_KEY"
+
 	// datadog HTTP headers
 	datadogAPIKeyHeader = "DD-API-KEY"
 	datadogAppKeyHeader = "DD-APPLICATION-KEY"
