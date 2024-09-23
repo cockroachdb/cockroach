@@ -11,7 +11,9 @@
 import { Tabs } from "antd";
 import React, { useState } from "react";
 
+import { useDbIdToName } from "src/api/databaseIdsToNamesApi";
 import { commonStyles } from "src/common";
+import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageLayout } from "src/layouts";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
@@ -23,13 +25,15 @@ enum TabKeys {
   TABLES = "tables",
   GRANTS = "grants",
 }
+
 export const DatabaseDetailsPageV2 = () => {
   const [currentTab, setCurrentTab] = useState(TabKeys.TABLES);
+  const { dbID } = useRouteParams();
+  const { name } = useDbIdToName(parseInt(dbID, 10));
 
-  // TODO (xinhaoz) #131119 - Populate db name here.
   return (
     <PageLayout>
-      <PageHeader title="myDB" />
+      <PageHeader title={name} />
       <Tabs
         defaultActiveKey={TabKeys.TABLES}
         className={commonStyles("cockroach--tabs")}
