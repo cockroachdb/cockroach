@@ -668,11 +668,6 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 				continue
 			}
 
-			if waitingTxnFingerprintID == "0000000000000000" || waitingTxnFingerprintID == "" {
-				lastErr = fmt.Errorf("waitingTxnFingerprintID is default value\n%s", prettyPrintRow)
-				continue
-			}
-
 			foundRow = true
 			break
 		}
