@@ -57,6 +57,9 @@ const (
 const (
 	TableNotFound  string = "table not found"
 	InvalidTableId string = "invalid table ID"
+
+	DatabaseNotFound  string = "database not found"
+	InvalidDatabaseId string = "invalid database ID"
 )
 
 // GetTableMetadata returns a paginated response of table metadata and statistics. This is not a live view of
@@ -520,7 +523,7 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 	return tmd, nil
 }
 
-// GetDBMetadata returns a paginated response of database metadata and statistics. This is not a live view of
+// GetDbMetadata returns a paginated response of database metadata and statistics. This is not a live view of
 // the database data but instead is cached data that had been precomputed at an earlier time.
 //
 // The user making the request will receive database metadata based on the CONNECT database grant and admin privilege.
@@ -578,7 +581,7 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 //	  description: A paginated response of dbMetadata results.
 //	"400":
 //		description: Bad request. If the provided query parameters are invalid.
-func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
+func (a *apiV2Server) GetDbMetadata(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
@@ -648,7 +651,7 @@ func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 		dbNameFilter = fmt.Sprintf("%%%s%%", dbName)
 	}
 
-	dbm, totalRowCount, err := a.getDBMetadata(ctx, sqlUser, dbNameFilter, storeIds, sortBy, sortOrder, pageSize, offset)
+	dbm, totalRowCount, err := a.getDbMetadata(ctx, sqlUser, dbNameFilter, storeIds, sortBy, sortOrder, pageSize, offset)
 
 	if err != nil {
 		srverrors.APIV2InternalError(ctx, err, w)
@@ -666,7 +669,61 @@ func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
-func (a *apiV2Server) getDBMetadata(
+// GetDbMetadataForId fetches database metadata for a specific database id.
+//
+// The user making the request must have the CONNECT database grant for the database, or the admin privilege.
+//
+// ---
+// parameters:
+//
+//   - name: database_id
+//     type: integer
+//     description: The id of the database to fetch database metadata.
+//     in: path
+//     required: false
+//
+// produces:
+// - application/json
+//
+// responses:
+//
+//	"200":
+//	  description: A dbMetadataWithDetailsResponse containing the database metadata.
+//	"404":
+//		description: If the database for the provided id doesn't exist or the user doesn't have necessary permissions
+//								 to access the database
+func (a *apiV2Server) GetDbMetadataForId(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := a.sqlServer.AnnotateCtx(r.Context())
+	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
+	pathVars := mux.Vars(r)
+	databaseId, err := strconv.Atoi(pathVars["database_id"])
+	if err != nil {
+		http.Error(w, InvalidDatabaseId, http.StatusBadRequest)
+		return
+	}
+	dbm, err := a.getDbMetadataForId(ctx, sqlUser, databaseId)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	// No db id means table couldn't be found or user doesn't have access to the table
+	if dbm.DbId == 0 {
+		http.Error(w, DatabaseNotFound, http.StatusNotFound)
+		return
+	}
+	resp := dbMetadataWithDetailsResponse{
+		Metadata: dbm,
+	}
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
+}
+
+func (a *apiV2Server) getDbMetadata(
 	ctx context.Context,
 	sqlUser username.SQLUsername,
 	dbName string,
@@ -706,7 +763,7 @@ func (a *apiV2Server) getDBMetadata(
 	query.Append("LIMIT $ ", limit)
 	query.Append("OFFSET $ ", offset)
 
-	it, err := a.admin.internalExecutor.QueryIteratorEx(
+	it, err := a.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "get-database-metadata", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		query.String(), query.QueryArguments()...,
@@ -749,6 +806,28 @@ func (a *apiV2Server) getDBMetadata(
 	}
 
 	return dbms, totalRowCount, nil
+}
+
+func (a *apiV2Server) getDbMetadataForId(
+	ctx context.Context, sqlUser username.SQLUsername, dbId int,
+) (dbMetadata, error) {
+	query := getDatabaseMetadataBaseQuery(sqlUser.Normalized())
+	query.Append("AND n.id = $ ", dbId)
+	query.Append("GROUP BY n.id, n.name, s.store_ids ")
+
+	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-db-metadata-for-id", nil,
+		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
+
+	if err != nil {
+		return dbMetadata{}, err
+	}
+
+	if row == nil {
+		return dbMetadata{}, nil
+	}
+
+	scanner := makeResultScanner(types)
+	return rowToDatabaseMetadata(scanner, row)
 }
 
 func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
@@ -1035,4 +1114,8 @@ type tmJobTriggeredResponse struct {
 type tableMetadataWithDetailsResponse struct {
 	Metadata        tableMetadata `json:"metadata"`
 	CreateStatement string        `json:"create_statement"`
+}
+
+type dbMetadataWithDetailsResponse struct {
+	Metadata dbMetadata `json:"metadata"`
 }

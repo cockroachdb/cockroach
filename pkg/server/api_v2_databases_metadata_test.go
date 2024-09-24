@@ -407,7 +407,7 @@ func TestGetTableMetadataForId(t *testing.T) {
 	})
 }
 
-func TestGetDBMetadata(t *testing.T) {
+func TestGetDbMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
@@ -616,6 +616,90 @@ func TestGetDBMetadata(t *testing.T) {
 	})
 }
 
+func TestGetDbMetadataForId(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+	defer conn.Close()
+	runner := sqlutils.MakeSQLRunner(conn)
+	db1Name := "new_test_db_1"
+	db1Id, _ := setupTest(t, conn, db1Name, "new_test_db_2")
+
+	ts := testCluster.Server(0)
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	t.Run("get database metadata", func(t *testing.T) {
+		uri := fmt.Sprintf("/api/v2/database_metadata/%d/", db1Id)
+		resp := makeApiRequest[dbMetadataWithDetailsResponse](
+			t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+	})
+
+	t.Run("no tables in db", func(t *testing.T) {
+		runner.Exec(t, "CREATE DATABASE empty_db")
+		row := runner.QueryRow(t, "SELECT crdb_internal.get_database_id('empty_db') AS database_id;")
+		var emptyDbId int64
+		row.Scan(&emptyDbId)
+		uri := fmt.Sprintf("/api/v2/database_metadata/%d/", emptyDbId)
+		resp := makeApiRequest[dbMetadataWithDetailsResponse](
+			t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, emptyDbId, resp.Metadata.DbId)
+	})
+
+	t.Run("authorization", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		uri := fmt.Sprintf("/api/v2/database_metadata/%d/", db1Id)
+		failed := makeApiRequest[string](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed)
+
+		// grant connect access to db1 to allow request to succeed
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		resp := makeApiRequest[dbMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+
+		// revoke access to db1.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+		failed = makeApiRequest[string](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed)
+
+		// grant admin access to the user
+		runner.Exec(t, fmt.Sprintf("GRANT ADMIN TO %s", sessionUsername.Normalized()))
+		resp = makeApiRequest[dbMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+	})
+
+	t.Run("non GET method 405 error", func(t *testing.T) {
+		req, err := http.NewRequest("POST", ts.AdminURL().WithPath("/api/v2/database_metadata/1/").String(), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, 405, resp.StatusCode)
+		respBytes, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
+	})
+
+	t.Run("database doesnt exist", func(t *testing.T) {
+		failed := makeApiRequest[string](
+			t, client, ts.AdminURL().WithPath("/api/v2/database_metadata/1000000000/").String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed)
+	})
+}
+
 func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -777,29 +861,18 @@ func assertJobTriggered(t *testing.T, client http.Client, url string, c chan int
 }
 
 func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int, dbId2 int) {
-	_, err := conn.Exec(`CREATE DATABASE IF NOT EXISTS ` + db1)
-	require.NoError(t, err)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db1)
 
-	_, err = conn.Exec(`CREATE DATABASE IF NOT EXISTS ` + db2)
-	require.NoError(t, err)
-	result, err := conn.Query(fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db1))
-	require.NoError(t, err)
-	if result.Next() {
-		err = result.Scan(&dbId1)
-		require.NoError(t, err)
-	} else {
-		t.Fail()
-	}
+	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db2)
 
-	result, err = conn.Query(fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db2))
-	require.NoError(t, err)
-	if result.Next() {
-		err = result.Scan(&dbId2)
-		require.NoError(t, err)
-	} else {
-		t.Fail()
-	}
-	_, err = conn.Exec(fmt.Sprintf(`
+	row := runner.QueryRow(t, fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db1))
+	row.Scan(&dbId1)
+
+	row = runner.QueryRow(t, fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db2))
+	row.Scan(&dbId2)
+
+	runner.Exec(t, fmt.Sprintf(`
 		INSERT INTO system.table_metadata
 			(db_id,
 			db_name,
@@ -833,7 +906,6 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 		(%[2]d, '%[4]s', 13, 'mySchema', 'myTable13', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z'),
 		(%[1]d, '%[3]s', 14, 'mySchema1', 'myView1', 'VIEW', 0, 0, 0, 0, 0, 11, 0, ARRAY[], null, '2025-06-20T00:00:00Z')
 `, dbId1, dbId2, db1, db2))
-	require.NoError(t, err)
 
 	return dbId1, dbId2
 }
