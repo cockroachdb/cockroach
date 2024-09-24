@@ -131,7 +131,7 @@ func getStatus(r *raft) Status {
 	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.
-	s.LeadSupportUntil = r.supportTracker.LeadSupportUntil()
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil()
 	return s
 }
 
@@ -155,7 +155,7 @@ func getSparseStatus(r *raft) SparseStatus {
 func getLeadSupportStatus(r *raft) LeadSupportStatus {
 	var s LeadSupportStatus
 	s.BasicStatus = getBasicStatus(r)
-	s.LeadSupportUntil = r.supportTracker.LeadSupportUntil()
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil()
 	return s
 }
 

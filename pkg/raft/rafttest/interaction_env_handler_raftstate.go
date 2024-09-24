@@ -54,10 +54,12 @@ func (env *InteractionEnv) handleRaftState() error {
 	return nil
 }
 
-// handlePrintSupportState pretty-prints the support map being tracked by a raft
+// handlePrintFortificationState pretty-prints the support map being tracked by a raft
 // peer.
-func (env *InteractionEnv) handlePrintSupportState(t *testing.T, d datadriven.TestData) error {
+func (env *InteractionEnv) handlePrintFortificationState(
+	t *testing.T, d datadriven.TestData,
+) error {
 	idx := firstAsNodeIdx(t, d)
-	fmt.Fprint(env.Output, env.Nodes[idx].TestingSupportStateString())
+	fmt.Fprint(env.Output, env.Nodes[idx].TestingFortificationStateString())
 	return nil
 }
