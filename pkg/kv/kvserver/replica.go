@@ -316,7 +316,6 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. Always non-nil.
-		// TODO(pavelkalinnikov): remove sideloaded == nil checks.
 		sideloaded logstore.SideloadStorage
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
