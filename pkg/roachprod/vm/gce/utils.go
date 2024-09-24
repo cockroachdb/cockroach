@@ -50,7 +50,7 @@ function setup_disks() {
 	mount_opts="defaults,nofail"
 	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 	{{ end }}
-	
+
 	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
 	mount_prefix="/mnt/data"
@@ -148,7 +148,7 @@ function setup_disks() {
 	{{ end }}
 		chmod 777 ${mountpoint}
 	fi
-	
+
 	# Print the block device and FS usage output. This is useful for debugging.
 	lsblk
 	df -h
@@ -287,7 +287,11 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings
 
 {{ if .EnableFIPS }}
-sudo ua enable fips --assume-yes
+sudo apt-get install -yq ubuntu-advantage-tools jq
+# Enable FIPS (in practice, it's often already enabled at this point).
+if [ $(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status') != '"enabled"' ]; then
+  sudo ua enable fips --assume-yes
+fi
 {{ end }}
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
