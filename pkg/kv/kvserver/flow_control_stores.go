@@ -174,7 +174,7 @@ func (sh *storeForFlowControl) LookupReplicationAdmissionHandle(
 	}
 	// NB: Admit is called soon after this lookup.
 	level := repl.flowControlV2.GetEnabledWhenLeader()
-	useV1 := level == replica_rac2.NotEnabledWhenLeader
+	useV1 := level == kvflowcontrol.V2NotEnabledWhenLeader
 	var v1Handle kvflowcontrol.ReplicationAdmissionHandle
 	if useV1 {
 		repl.mu.Lock()
@@ -453,7 +453,7 @@ func (h admissionDemuxHandle) Admit(
 		// can cause either value of admitted. See the comment in
 		// ReplicationAdmissionHandle.
 		level := h.r.flowControlV2.GetEnabledWhenLeader()
-		if level == replica_rac2.NotEnabledWhenLeader {
+		if level == kvflowcontrol.V2NotEnabledWhenLeader {
 			return admitted, err
 		}
 		// Transition from v1 => v2 happened while waiting. Fall through to wait

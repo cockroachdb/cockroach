@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -464,6 +465,13 @@ func processFullBackupRecurrence(
 		s.incStmt = &tree.Backup{}
 		*s.incStmt = *s.fullStmt
 		s.incStmt.AppendToLatest = true
+		// Pre 23.2 schedules did not have a cluster ID, so if we are altering a
+		// schedule that was created before 23.2, we need to set the cluster ID on
+		// the newly created incremental manually.
+		schedDetails := *s.fullJob.ScheduleDetails()
+		if schedDetails.ClusterID.Equal(uuid.Nil) {
+			schedDetails.ClusterID = p.ExtendedEvalContext().ClusterID
+		}
 
 		rec := s.fullJob.ScheduleExpr()
 		incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), &rec)
@@ -476,7 +484,7 @@ func processFullBackupRecurrence(
 			p.User(),
 			s.fullJob.ScheduleLabel(),
 			incRecurrence,
-			*s.fullJob.ScheduleDetails(),
+			schedDetails,
 			jobspb.InvalidScheduleID,
 			s.fullArgs.UpdatesLastBackupMetric,
 			s.incStmt,

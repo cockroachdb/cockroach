@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/redact"
@@ -117,6 +118,58 @@ var validateTokenRange = settings.WithValidateInt(func(b int64) error {
 	}
 	return nil
 })
+
+// V2EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
+// this replica is the leader.
+//
+// State transitions are V2NotEnabledWhenLeader =>
+// V2EnabledWhenLeaderV1Encoding => V2EnabledWhenLeaderV2Encoding, i.e., the
+// level will never regress.
+type V2EnabledWhenLeaderLevel = uint32
+
+const (
+	V2NotEnabledWhenLeader V2EnabledWhenLeaderLevel = iota
+	V2EnabledWhenLeaderV1Encoding
+	V2EnabledWhenLeaderV2Encoding
+)
+
+// GetV2EnabledWhenLeaderLevel returns the level at which RACV2 is enabled when
+// this replica is the leader.
+//
+// The level is determined by the cluster version, and is ratcheted up as the
+// cluster version advances. The level is used to determine:
+//
+//  1. Whether the leader should use the RACv2 protocol.
+//  2. Whether the leader should use the V1 or V2 entry encoding iff (1) is
+//     true.
+//
+// Upon the leader first seeing V24_3_UseRACV2WithV1EntryEncoding, it will
+// create a RangeController and use the V1 entry encoding, operating in Push
+// mode. Upon the leader first seeing V24_3_UseRACV2Full, it will continue
+// using the RACV2 protocol, but will switch to the V2 entry encoding. Note the
+// necessary migration for V2NotEnabledWhenLeader =>
+// V2EnabledWhenLeaderV1Encoding occurs before anything else in
+// kvserver.handleRaftReadyRaftMuLocked.
+//
+// TODO(kvoli,sumeerbhola,pav-kv): When we introduce pull mode (and associated
+// cluster setting), update this comment to mention that the cluster setting is
+// only relevant when at V2EnabledWhenLeaderV2Encoding level.
+func GetV2EnabledWhenLeaderLevel(
+	ctx context.Context, st *cluster.Settings, knobs *TestingKnobs,
+) V2EnabledWhenLeaderLevel {
+	if knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
+		return knobs.OverrideV2EnabledWhenLeaderLevel()
+	}
+	// TODO(kvoli): Enable once #130619 merges and tests affected by enabling v2
+	// are addressed:
+	// if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) {
+	// 	return V2EnabledWhenLeaderV2Encoding
+	// }
+	// if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2WithV1EntryEncoding) {
+	// 	return V2EnabledWhenLeaderV1Encoding
+	// }
+	return V2NotEnabledWhenLeader
+}
 
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
