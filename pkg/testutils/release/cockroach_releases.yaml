@@ -14,18 +14,20 @@
   - 22.2.8
   predecessor: "22.1"
 "23.1":
-  latest: 23.1.25
+  latest: 23.1.26
   withdrawn:
   - 23.1.0
   predecessor: "22.2"
 "23.2":
-  latest: 23.2.10
+  latest: 23.2.11
   predecessor: "23.1"
 "24.1":
   latest: 24.1.4
   predecessor: "23.2"
 "24.2":
-  latest: 24.2.1
+  latest: 24.2.2
+  withdrawn:
+  - 24.2.1
   predecessor: "24.1"
 "24.3":
   predecessor: "24.2"
