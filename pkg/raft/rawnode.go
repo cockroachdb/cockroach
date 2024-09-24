@@ -549,6 +549,6 @@ func (rn *RawNode) TestingStepDown() error {
 	return rn.raft.testingStepDown()
 }
 
-func (rn *RawNode) TestingSupportStateString() string {
-	return rn.raft.supportTracker.String()
+func (rn *RawNode) TestingFortificationStateString() string {
+	return rn.raft.fortificationTracker.String()
 }
