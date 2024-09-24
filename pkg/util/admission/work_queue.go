@@ -759,9 +759,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
+			q.mu.Lock()
+			queueLen := tenant.waitingWorkHeap.Len()
+			q.mu.Unlock()
+
 			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				tenant.waitingWorkHeap.Len(),
-				tenant.id, info.Priority,
+				queueLen, tenant.id, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.Origin,
 				info.ReplicatedWorkInfo.LogPosition,
@@ -919,9 +922,12 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		// NB: We don't use grant chains for store tokens, so they don't apply
 		// to replicated writes.
 		if log.V(1) {
+			q.mu.Lock()
+			queueLen := tenant.waitingWorkHeap.Len()
+			q.mu.Unlock()
+
 			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				tenant.waitingWorkHeap.Len(),
-				tenant.id, item.priority,
+				queueLen, tenant.id, item.priority,
 				item.replicated.RangeID,
 				item.replicated.Origin,
 				item.replicated.LogPosition,
