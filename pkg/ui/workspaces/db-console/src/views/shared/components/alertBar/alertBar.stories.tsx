@@ -20,8 +20,9 @@ storiesOf("AlertBar", module)
       license={"None"}
       numNodes={3}
       throttled={false}
-      telemetrySuccessful={true}
-      throttleDate={moment("2025-01-04")}
+      hasTelemetryDeadline={true}
+      gracePeriodEnd={moment("2025-01-04")}
+      hasGracePeriod={true}
     />
   ))
   .add(`3.4.2 [pre-license] license key required, cluster throttled`, () => (
@@ -29,8 +30,9 @@ storiesOf("AlertBar", module)
       license={"None"}
       numNodes={3}
       throttled={true}
-      telemetrySuccessful={true}
-      throttleDate={moment("2023-01-04")}
+      hasTelemetryDeadline={true}
+      gracePeriodEnd={moment("2024-01-04")}
+      hasGracePeriod={true}
     />
   ))
   .add(
@@ -40,9 +42,10 @@ storiesOf("AlertBar", module)
         license={"Free"}
         numNodes={3}
         throttled={false}
-        telemetrySuccessful={true}
+        hasGracePeriod={true}
+        hasTelemetryDeadline={true}
         licenseExpiryDate={moment().subtract(1, "month")}
-        throttleDate={moment().add(3, "day")}
+        gracePeriodEnd={moment().add(3, "day")}
       />
     ),
   )
@@ -53,9 +56,10 @@ storiesOf("AlertBar", module)
         license={"Free"}
         numNodes={3}
         throttled={true}
-        telemetrySuccessful={true}
+        hasGracePeriod={true}
+        hasTelemetryDeadline={true}
         licenseExpiryDate={moment().subtract(1, "month")}
-        throttleDate={moment().subtract(1, "day")}
+        gracePeriodEnd={moment().subtract(3, "day")}
       />
     ),
   )
@@ -66,10 +70,13 @@ storiesOf("AlertBar", module)
         license={"Free"}
         numNodes={3}
         throttled={false}
-        telemetrySuccessful={false}
-        licenseExpiryDate={moment().add(6, "month")}
-        lastSuccessfulTelemetryDate={moment().subtract(3, "day")}
-        throttleDate={moment().add(3, "day")}
+        hasGracePeriod={true}
+        hasTelemetryDeadline={true}
+        licenseExpiryDate={moment().add(1, "month")}
+        gracePeriodEnd={moment().add(2, "month")}
+        lastSuccessfulTelemetryDate={moment().subtract(2, "day")}
+        telemetryDeadline={moment().add(2, "day")}
+        nodesMissingTelemetry={["1", "2", "3"]}
       />
     ),
   )
@@ -80,10 +87,13 @@ storiesOf("AlertBar", module)
         license={"Free"}
         numNodes={3}
         throttled={true}
-        telemetrySuccessful={false}
-        licenseExpiryDate={moment().add(6, "month")}
-        lastSuccessfulTelemetryDate={moment().subtract(1, "month")}
-        throttleDate={moment().subtract(3, "day")}
+        hasGracePeriod={true}
+        hasTelemetryDeadline={true}
+        licenseExpiryDate={moment().add(1, "month")}
+        gracePeriodEnd={moment().add(2, "month")}
+        lastSuccessfulTelemetryDate={moment().subtract(9, "day")}
+        telemetryDeadline={moment().subtract(2, "day")}
+        nodesMissingTelemetry={["1", "2", "3"]}
       />
     ),
   );
