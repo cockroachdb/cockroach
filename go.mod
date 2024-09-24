@@ -111,7 +111,7 @@ require (
 	github.com/apache/pulsar-client-go v0.12.0
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.16
-	github.com/aws/aws-sdk-go-v2/service/kafka v1.21.0
+	github.com/aws/aws-sdk-go-v2/service/kafka v1.37.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.35.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.61.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.33.0
