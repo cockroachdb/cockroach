@@ -321,6 +321,14 @@ var (
 		Name:  "global-seed",
 		Usage: `The global random seed used for all tests.`,
 	})
+
+	AlwaysCollectArtifacts bool = false
+	_                           = registerRunFlag(&AlwaysCollectArtifacts, FlagInfo{
+		Name: "always-collect-artifacts",
+		Usage: `
+						Always collect artifacts during test teardown, even if the test did not
+						time out or fail.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
