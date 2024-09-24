@@ -2843,8 +2843,6 @@ func handleTruncatedStateBelowRaftPreApply(
 // storage engine. This will iterate over the Raft log and sideloaded files, so
 // depending on the size of these it can be mildly to extremely expensive and
 // thus should not be called frequently.
-//
-// The sideloaded storage may be nil, in which case it is treated as empty.
 func ComputeRaftLogSize(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
@@ -2857,15 +2855,11 @@ func ComputeRaftLogSize(
 	if err != nil {
 		return 0, err
 	}
-	var totalSideloaded int64
-	if sideloaded != nil {
-		var err error
-		// The remaining bytes if one were to truncate [0, 0) gives us the total
-		// number of bytes in sideloaded files.
-		_, totalSideloaded, err = sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
-		if err != nil {
-			return 0, err
-		}
+	// The remaining bytes if one were to truncate [0, 0) gives us the total
+	// number of bytes in sideloaded files.
+	_, totalSideloaded, err := sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
+	if err != nil {
+		return 0, err
 	}
 	return ms.SysBytes + totalSideloaded, nil
 }

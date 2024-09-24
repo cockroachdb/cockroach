@@ -56,8 +56,8 @@ type SideloadStorage interface {
 	// files that remain, or an error.
 	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed, retained int64, _ error)
 	// BytesIfTruncatedFromTo returns the number of bytes that would be freed,
-	// if one were to truncate [from, to). Additionally, it returns the the
-	// number of bytes that would be retained >= to.
+	// if one were to truncate [from, to). Additionally, it returns the number
+	// of bytes that would be retained >= to.
 	BytesIfTruncatedFromTo(_ context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
