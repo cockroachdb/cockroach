@@ -103,9 +103,10 @@ const createKey = (req: TableMetadataRequest) => {
 
 export const useTableMetadata = (req: TableMetadataRequest) => {
   const key = createKey(req);
-  const { data, error, isLoading } = useSWR<TableMetadataResponse>(key, () =>
-    getTableMetadata(req),
+  const { data, error, isLoading, mutate } = useSWR<TableMetadataResponse>(
+    key,
+    () => getTableMetadata(req),
   );
 
-  return { data, error, isLoading };
+  return { data, error, isLoading, refreshTables: mutate };
 };
