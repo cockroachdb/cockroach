@@ -35,6 +35,7 @@ type LogicalReplicationOptions struct {
 	Mode                       Expr
 	DefaultFunction            Expr
 	IgnoreCDCIgnoredTTLDeletes *DBool
+	SkipSchemaCheck            *DBool
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -129,6 +130,10 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("IGNORE_CDC_IGNORED_TTL_DELETES")
 	}
+	if lro.SkipSchemaCheck != nil && *lro.SkipSchemaCheck {
+		maybeAddSep()
+		ctx.WriteString("SKIP SCHEMA CHECK")
+	}
 }
 
 func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions) error {
@@ -175,6 +180,13 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 	} else {
 		o.IgnoreCDCIgnoredTTLDeletes = other.IgnoreCDCIgnoredTTLDeletes
 	}
+	if o.SkipSchemaCheck != nil {
+		if other.SkipSchemaCheck != nil {
+			return errors.New("SKIP SCHEMA CHECK option specified multiple times")
+		}
+	} else {
+		o.SkipSchemaCheck = other.SkipSchemaCheck
+	}
 
 	return nil
 }
@@ -186,5 +198,6 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.Mode == options.Mode &&
 		o.DefaultFunction == options.DefaultFunction &&
 		o.UserFunctions == nil &&
-		o.IgnoreCDCIgnoredTTLDeletes == options.IgnoreCDCIgnoredTTLDeletes
+		o.IgnoreCDCIgnoredTTLDeletes == options.IgnoreCDCIgnoredTTLDeletes &&
+		o.SkipSchemaCheck == options.SkipSchemaCheck
 }

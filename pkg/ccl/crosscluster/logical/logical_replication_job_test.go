@@ -1991,6 +1991,14 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: destination table tab CHECK constraints do not match source table tab`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	// Allos user to create LDR stream with mismatched CHECK via SKIP SCHEMA CHECK.
+	var jobIDSkipSchemaCheck jobspb.JobID
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
+		dbBURL.String(),
+	).Scan(&jobIDSkipSchemaCheck)
+	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
+	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
 
 	// Add missing CHECK constraints, and verify that the stream can be created.
 	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (length(payload) > 1)")
@@ -2014,6 +2022,13 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: destination table tab column enum_col has user-defined type USER DEFINED ENUM: public.mytype`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	// Allows user to create LDR stream with UDT via SKIP SCHEMA CHECK.
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
+		dbBURL.String(),
+	).Scan(&jobIDSkipSchemaCheck)
+	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
+	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
 
 	// Check that UNIQUE indexes match.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN enum_col")

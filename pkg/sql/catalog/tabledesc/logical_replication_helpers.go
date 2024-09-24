@@ -22,14 +22,17 @@ import (
 )
 
 // CheckLogicalReplicationCompatibility verifies that the destination table
-// descriptor is a valid target for logical replication from the source table.
-func CheckLogicalReplicationCompatibility(src, dst *descpb.TableDescriptor) error {
+// descriptor is a valid target for logical replication and is equivalent to the
+// source table.
+func CheckLogicalReplicationCompatibility(
+	src, dst *descpb.TableDescriptor, skipTableEquivalenceCheck bool,
+) error {
 	const cannotLDRMsg = "cannot create logical replication stream"
-
-	if err := checkSrcDstColsMatch(src, dst); err != nil {
-		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+	if !skipTableEquivalenceCheck {
+		if err := checkSrcDstColsMatch(src, dst); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+		}
 	}
-
 	if err := checkColumnFamilies(dst); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
@@ -41,13 +44,14 @@ func CheckLogicalReplicationCompatibility(src, dst *descpb.TableDescriptor) erro
 	if err := checkExpressionEvaluation(dst); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
+	if !skipTableEquivalenceCheck {
+		if err := checkUniqueIndexesMatch(src, dst); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+		}
 
-	if err := checkUniqueIndexesMatch(src, dst); err != nil {
-		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
-	}
-
-	if err := checkCheckConstraintsMatch(src, dst); err != nil {
-		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+		if err := checkCheckConstraintsMatch(src, dst); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+		}
 	}
 
 	return nil
