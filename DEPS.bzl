@@ -657,10 +657,10 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go_v2_service_kafka",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/kafka",
-        sha256 = "6bcabd3e2d2abad2e21d01ee0a43a80bf2ec1b42506ce3ed7e3c5312cbdbaa2f",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/kafka@v1.21.0",
+        sha256 = "df6c15bfd59e4381d7a09557c886ca6b2f190a1949ba3afe19d6260eb8e146ba",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/kafka@v1.37.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/kafka/com_github_aws_aws_sdk_go_v2_service_kafka-v1.21.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/kafka/com_github_aws_aws_sdk_go_v2_service_kafka-v1.37.1.zip",
         ],
     )
     go_repository(
