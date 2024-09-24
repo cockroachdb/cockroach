@@ -38,7 +38,10 @@ const (
 )
 
 //go:embed snowflake_query.sql
-var preparedQuery string
+var PreparedQuery string
+
+// SqlConnectorFunc is the function to get a sql connector
+var SqlConnectorFunc = gosql.Open
 
 // supported suites
 var suites = map[string]string{
@@ -87,10 +90,11 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		return nil, err
 	}
 	defer func() { _ = db.Close() }()
-	statement, err := db.Prepare(preparedQuery)
+	statement, err := db.Prepare(PreparedQuery)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = statement.Close() }()
 	// get the current branch from the teamcity environment
 	currentBranch := os.Getenv("TC_BUILD_BRANCH")
 	if currentBranch == "" {
@@ -103,6 +107,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	// All the column headers
 	colHeaders, err := rows.Columns()
 	if err != nil {
@@ -146,13 +151,26 @@ func getDuration(durationStr string) int64 {
 }
 
 // getConnect makes connection to snowflake and returns the connection.
-func getConnect(ctx context.Context) (*gosql.DB, error) {
-	username, password, err := getSFCreds()
+func getConnect(_ context.Context) (*gosql.DB, error) {
+	dsn, err := getDSN()
 	if err != nil {
 		return nil, err
 	}
+	db, err := SqlConnectorFunc("snowflake", dsn)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
-	dsn, err := sf.DSN(&sf.Config{
+// getDSN returns the dataSource name for snowflake driver
+func getDSN() (string, error) {
+	username, password, err := getSFCreds()
+	if err != nil {
+		return "", err
+	}
+
+	return sf.DSN(&sf.Config{
 		Account:   account,
 		Database:  database,
 		Schema:    schema,
@@ -160,14 +178,6 @@ func getConnect(ctx context.Context) (*gosql.DB, error) {
 		Password:  password,
 		User:      username,
 	})
-	if err != nil {
-		return nil, err
-	}
-	db, err := gosql.Open("snowflake", dsn)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
 }
 
 // getSFCreds gets the snowflake credentials from the secrets manager
