@@ -1533,8 +1533,6 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	// columns. If there are any duplicates, then a pgcode.DuplicateColumn error
 	// is expected on execution.
 	opStmt := makeOpStmt(OpStmtDDL)
-	uniqueColumnNames := map[string]bool{}
-	duplicateColumns := false
 	for i := 0; i < numSourceTables; i++ {
 		tableName := sourceTableNames[i]
 		tableExists := sourceTableExistence[i]
@@ -1557,13 +1555,14 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
 					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
-				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
-
-				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
-					duplicateColumns = true
-				} else {
-					uniqueColumnNames[columnNamesForTable[j]] = true
-				}
+				selectStatement.Exprs = append(selectStatement.Exprs,
+					tree.SelectExpr{
+						Expr: &colItem,
+						// Always map the column name to a unique name specific to the view.
+						// This prevents collisions if the column name is already part of the view
+						// or references an internal system column like crdb_internal_mvcc_timestamp.
+						As: tree.UnrestrictedName(fmt.Sprintf("col_%s", og.newUniqueSeqNumSuffix())),
+					})
 			}
 		} else {
 			opStmt.expectedExecErrors.add(pgcode.UndefinedTable)
@@ -1592,7 +1591,6 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DuplicateRelation, condition: viewExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
-		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
