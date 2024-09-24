@@ -855,6 +855,8 @@ func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 }
 
 func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.Time) {
+	log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
+		rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
 	// This is the first time we've seen the replica change to StateProbe,
 	// update the connected state and start time. If the state doesn't
 	// change within probeRecentlyReplicateDuration, we will close the
