@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1717,4 +1719,140 @@ func TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration(t *testing.T)
 	// If we disable the `expToEpochPromo` branch in replica_range_lease.go, this
 	// assertion fails.
 	require.True(t, expLease.Expiration().Less(epochLease.Expiration()))
+}
+
+func TestLeaseRequestFromExpirationToEpochRegressionLosesWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true) // override metamorphism
+	ts.TimeseriesStorageEnabled.Override(ctx, &st.SV, false)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DisableLeaderFollowsLeaseholder: true,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	s1 := tc.GetFirstStoreFromServer(t, 0)
+	//s2 := tc.GetFirstStoreFromServer(t, 1)
+	s3 := tc.GetFirstStoreFromServer(t, 2)
+
+	// Create a pair of scratch ranges.
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	tc.SplitRangeOrFatal(t, keyA)
+	lhsDesc, rhsDesc := tc.SplitRangeOrFatal(t, keyB)
+
+	// Upreplicate both ranges.
+	t.Logf("split and upreplicated ranges")
+	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	// Transfer the lease of the left-hand range to n2.
+	tc.TransferRangeLeaseOrFatal(t, lhsDesc, tc.Target(1))
+	// Transfer the lease of the right-hand range to n3.
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
+
+	// Perform a read of the right-hand range from n2 to prepare its range cache.
+	t.Logf("teach n2 about n3's lease")
+	_, pErr := tc.Server(1).DB().Get(ctx, keyB)
+	require.Nil(t, pErr)
+
+	// Pause n3's node liveness heartbeats, to allow its liveness expiration to
+	// fall behind.
+	l3 := tc.Server(2).NodeLiveness().(*liveness.NodeLiveness)
+	l3.PauseHeartbeatLoopForTest()
+	l, ok := l3.GetLiveness(tc.Server(2).NodeID())
+	require.True(t, ok)
+
+	t.Logf("waiting for liveness %v to expire", l)
+	require.NoError(t, s3.Clock().SleepUntil(ctx, l.Expiration.ToTimestamp()))
+	t.Logf("liveness expired")
+
+	// Make sure n3 has an expiration-based lease.
+	rhsRepl3 := s3.LookupReplica(rhsDesc.StartKey)
+	require.NotNil(t, rhsRepl3)
+	expLease := rhsRepl3.CurrentLeaseStatus(ctx)
+	require.True(t, expLease.IsValid())
+	require.Equal(t, roachpb.LeaseExpiration, expLease.Lease.Type())
+
+	// Wait for the expiration-based lease to have a later expiration than the
+	// expiration timestamp in n3's liveness record.
+	testutils.SucceedsSoon(t, func() error {
+		expLease = rhsRepl3.CurrentLeaseStatus(ctx)
+		if expLease.Expiration().Less(l.Expiration.ToTimestamp()) {
+			return errors.Errorf("lease %v not extended beyond liveness %v", expLease, l)
+		}
+		return nil
+	})
+
+	// Start dropping all incoming Raft messages to n3 on the right-hand side
+	// range to prevent it from hearing about the lease promotion, even after
+	// it has succeeded.
+	t.Logf("stall n3's incoming raft traffic")
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s3.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    rhsDesc.RangeID,
+		IncomingRaftMessageHandler: s3,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+				return true
+			},
+		},
+	})
+
+	// Enable epoch-based leases. This will cause automatic lease renewal to try
+	// to promote the expiration-based lease to an epoch-based lease.
+	//
+	// Since we have disabled the background node liveness heartbeat loop, it is
+	// critical that this lease promotion synchronously heartbeats node liveness
+	// before acquiring the epoch-based lease.
+	t.Logf("enabling epoch-based lease promotion")
+	kvserver.ExpirationLeasesOnly.Override(ctx, &s3.ClusterSettings().SV, false)
+
+	// Wait for that lease promotion to occur, which then causes the lease to
+	// quickly expire and be grabbed by another node.
+	t.Logf("waiting for lease to fail over")
+	testutils.SucceedsSoon(t, func() error {
+		rhsRepl1 := s1.LookupReplica(rhsDesc.StartKey)
+		require.NotNil(t, rhsRepl3)
+		lease := rhsRepl1.CurrentLeaseStatus(ctx)
+		if lease.OwnedBy(s3.StoreID()) {
+			return errors.Errorf("lease %v not yet failed over", lease)
+		}
+		return nil
+	})
+
+	// n3 still thinks it holds a valid expiration-based lease, but it doesn't.
+	expLease = rhsRepl3.CurrentLeaseStatus(ctx)
+	t.Logf("lease on n3 is %+v", expLease)
+
+	// Read from n1 to show that it can read from the failed over range.
+	t.Logf("reading from n1 after lease failover")
+	tc.Server(0).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
+	_, pErr = tc.Server(0).DB().Get(ctx, keyB)
+	require.Nil(t, pErr)
+
+	// Perform a transaction that writes to both ranges.
+	t.Logf("writing across ranges")
+	txn := kv.NewTxn(ctx, tc.Server(0).DB(), 0 /* gatewayNodeID */)
+	txn.SetDebugName("test txn")
+	require.NoError(t, txn.Put(ctx, keyA, "valA (not lost"))
+	require.NoError(t, txn.Put(ctx, keyB, "valB (lost)"))
+	require.NoError(t, txn.Commit(ctx))
+
+	// Wait for async intent resolution and transaction record cleanup.
+	time.Sleep(2 * time.Second)
+
+	// Scan across the two ranges.
+	t.Logf("scanning across ranges")
+	res, err := tc.Server(0).DB().Scan(ctx, keyA, keyB.Next(), 0)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(res), "expected 2 keys, got %+v", res)
 }

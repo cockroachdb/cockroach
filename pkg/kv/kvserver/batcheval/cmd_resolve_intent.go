@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -101,6 +102,9 @@ func ResolveIntent(
 		ctx, readWriter, ms, update, storage.MVCCResolveWriteIntentOptions{TargetBytes: h.TargetBytes})
 	if err != nil {
 		return result.Result{}, err
+	}
+	if !ok {
+		log.Infof(ctx, "unable to resolve intent %s; not found", args.IntentTxn)
 	}
 	reply := resp.(*kvpb.ResolveIntentResponse)
 	reply.NumBytes = numBytes

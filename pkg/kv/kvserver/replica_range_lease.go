@@ -505,7 +505,7 @@ func (p *pendingLeaseRequest) requestLease(
 	// work because the liveness record interval and the expiration-based lease
 	// interval are the same.
 	expToEpochPromo := extension && status.Lease.Type() == roachpb.LeaseExpiration && reqLease.Type() == roachpb.LeaseEpoch
-	if expToEpochPromo && reqLeaseLiveness.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
+	if expToEpochPromo && reqLeaseLiveness.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) && false {
 		curLiveness := reqLeaseLiveness
 		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
