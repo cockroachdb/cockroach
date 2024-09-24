@@ -290,7 +290,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now)
+	t.adjustLocked(ctx, wc, -adjust, now, false /* disconnect */)
 	return adjust
 }
 
@@ -300,14 +300,17 @@ func (t *tokenCounter) TryDeduct(
 func (t *tokenCounter) Deduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
-	t.adjust(ctx, wc, -tokens)
+	t.adjust(ctx, wc, -tokens, false /* disconnect */)
 }
 
-// Return returns flow tokens for the given work class.
+// Return returns flow tokens for the given work class. When disconnect is
+// true, the tokens being returned are not associated with admission of any
+// specific request, rather the leader returning tracked tokens for a replica
+// it doesn't expect to hear from again.
 func (t *tokenCounter) Return(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, disconnect bool,
 ) {
-	t.adjust(ctx, wc, tokens)
+	t.adjust(ctx, wc, tokens, disconnect)
 }
 
 // waitHandle is a handle for waiting for tokens to become available from a
@@ -474,13 +477,13 @@ func WaitForEval(
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
 func (t *tokenCounter) adjust(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
+	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, disconnect bool,
 ) {
 	now := t.clock.PhysicalTime()
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now)
+		t.adjustLocked(ctx, class, delta, now, disconnect)
 	}()
 
 	if log.V(2) {
@@ -495,7 +498,11 @@ func (t *tokenCounter) adjust(
 }
 
 func (t *tokenCounter) adjustLocked(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, now time.Time,
+	ctx context.Context,
+	class admissionpb.WorkClass,
+	delta kvflowcontrol.Tokens,
+	now time.Time,
+	disconnect bool,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -515,7 +522,7 @@ func (t *tokenCounter) adjustLocked(
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
 	if adjustment.regular != 0 || adjustment.elastic != 0 {
-		t.metrics.onTokenAdjustment(adjustment)
+		t.metrics.onTokenAdjustment(adjustment, disconnect)
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)

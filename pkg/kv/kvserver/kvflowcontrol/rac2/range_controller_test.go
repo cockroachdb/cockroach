@@ -755,7 +755,9 @@ func TestRangeController(t *testing.T) {
 						TenantID: roachpb.SystemTenantID,
 					}).adjust(ctx,
 						admissionpb.WorkClassFromPri(pri),
-						kvflowcontrol.Tokens(tokens))
+						kvflowcontrol.Tokens(tokens),
+						false, /* disconnect */
+					)
 				}
 
 				return state.tokenCountsString()
