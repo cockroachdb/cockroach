@@ -258,13 +258,12 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":          "false",
 			}),
 		},
-		// 7. Verify that release-blocker label is not applied on runtime assertion builds
-		// (for now).
+		// 7. Verify that release-blocker label is applied on runtime assertion builds
 		{
 			runtimeAssertionsBuild: true,
 			failures:               []failure{createFailure(errors.New("other"))},
 			expectedPost:           true,
-			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled"},
+			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled", "release-blocker"},
 			expectedTeam:           "@cockroachdb/unowned",
 			expectedName:           testName,
 			expectedParams: prefixAll(map[string]string{

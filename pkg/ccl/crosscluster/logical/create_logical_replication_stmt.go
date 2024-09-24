@@ -258,7 +258,7 @@ func createLogicalReplicationStreamPlanHook(
 			}
 		}
 		for i := range srcTableDescs {
-			err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc())
+			err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc(), options.SkipSchemaCheck())
 			if err != nil {
 				return err
 			}
@@ -321,6 +321,7 @@ func createLogicalReplicationStreamTypeCheck(
 		},
 		exprutil.Bools{
 			stmt.Options.IgnoreCDCIgnoredTTLDeletes,
+			stmt.Options.SkipSchemaCheck,
 		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
@@ -339,6 +340,7 @@ type resolvedLogicalReplicationOptions struct {
 	// Mapping of table name to function descriptor
 	userFunctions              map[string]int32
 	ignoreCDCIgnoredTTLDeletes bool
+	skipSchemaCheck            bool
 }
 
 func evalLogicalReplicationOptions(
@@ -416,6 +418,9 @@ func evalLogicalReplicationOptions(
 	if options.IgnoreCDCIgnoredTTLDeletes == tree.DBoolTrue {
 		r.ignoreCDCIgnoredTTLDeletes = true
 	}
+	if options.SkipSchemaCheck == tree.DBoolTrue {
+		r.skipSchemaCheck = true
+	}
 	return r, nil
 }
 
@@ -473,4 +478,11 @@ func (r *resolvedLogicalReplicationOptions) IgnoreCDCIgnoredTTLDeletes() bool {
 		return false
 	}
 	return r.ignoreCDCIgnoredTTLDeletes
+}
+
+func (r *resolvedLogicalReplicationOptions) SkipSchemaCheck() bool {
+	if r == nil {
+		return false
+	}
+	return r.skipSchemaCheck
 }
