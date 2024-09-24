@@ -88,7 +88,7 @@ const createKey = (req: DatabaseMetadataRequest) => {
 };
 
 export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
-  const { data, error, isLoading } = useSWR<DatabaseMetadataResponse>(
+  const { data, error, isLoading, mutate } = useSWR<DatabaseMetadataResponse>(
     createKey(req),
     () => getDatabaseMetadata(req),
     {
@@ -101,5 +101,6 @@ export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
     data,
     error,
     isLoading,
+    refreshDatabases: mutate,
   };
 };

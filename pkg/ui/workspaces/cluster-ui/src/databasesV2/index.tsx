@@ -12,12 +12,15 @@ import { Skeleton } from "antd";
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 
+import { useNodeStatuses } from "src/api";
 import {
   DatabaseMetadataRequest,
   DatabaseSortOptions,
   useDatabaseMetadata,
 } from "src/api/databases/getDatabaseMetadataApi";
+import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
+import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { PageLayout, PageSection } from "src/layouts";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -31,11 +34,8 @@ import {
   TableColumnProps,
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
+import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
-
-import { useNodeStatuses } from "../api";
-import { NodeRegionsSelector } from "../components/nodeRegionsSelector/nodeRegionsSelector";
-import { StoreID } from "../types/clusterTypes";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
@@ -134,11 +134,11 @@ export const DatabasesPageV2 = () => {
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
-
-  const { data, error, isLoading } = useDatabaseMetadata(
+  const { data, error, isLoading, refreshDatabases } = useDatabaseMetadata(
     createDatabaseMetadataRequestFromParams(params),
   );
   const nodesResp = useNodeStatuses();
+
   const paginationState = data?.pagination_info;
 
   const onNodeRegionsChange = (storeIDs: StoreID[]) => {
@@ -216,6 +216,9 @@ export const DatabasesPageV2 = () => {
             entity="databases"
           />
           <Table
+            actionButton={
+              <TableMetadataJobControl onDataUpdated={refreshDatabases} />
+            }
             columns={colsWithSort}
             dataSource={tableData}
             pagination={{
