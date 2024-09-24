@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -327,7 +328,7 @@ type Replica struct {
 		// being applied to the state machine.
 		bytesAccount logstore.BytesAccount
 
-		flowControlLevel replica_rac2.EnabledWhenLeaderLevel
+		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
 		// Scratch for populating RaftEvent for flowControlV2.
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
@@ -2524,13 +2525,6 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 // GetMutexForTesting returns the replica's mutex, for use in tests.
 func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
-}
-
-func racV2EnabledWhenLeaderLevel(
-	ctx context.Context, st *cluster.Settings,
-) replica_rac2.EnabledWhenLeaderLevel {
-	// TODO(sumeer): implement fully, once all the dependencies are implemented.
-	return replica_rac2.NotEnabledWhenLeader
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
