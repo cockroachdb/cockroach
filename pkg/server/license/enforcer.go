@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,15 +76,9 @@ type Enforcer struct {
 	// hasLicense is true if any license is installed.
 	hasLicense atomic.Bool
 
-	// lastLicenseThrottlingLogTime keeps track of the last time we logged a
-	// message because we had to throttle due to a license issue. The value
-	// stored is the number of seconds since the unix epoch.
-	lastLicenseThrottlingLogTime atomic.Int64
-
-	// lastTelemetryThrottlingLogTime keeps track of the last time we logged a
-	// message because we had to throttle due to a telemetry issue. The value
-	// stored is the number of seconds since the unix epoch.
-	lastTelemetryThrottlingLogTime atomic.Int64
+	// throttleLogger is a logger for throttle-related messages. It is used to
+	// emit logs only every few minutes to avoid spamming the logs.
+	throttleLogger log.EveryN
 
 	// isDisabled is a global override that completely disables license enforcement.
 	// When enabled, all checks, including telemetry and expired license validation,
@@ -147,7 +142,8 @@ func GetEnforcerInstance() *Enforcer {
 // newEnforcer creates a new Enforcer object.
 func newEnforcer() *Enforcer {
 	e := &Enforcer{
-		startTime: timeutil.Now(),
+		startTime:      timeutil.Now(),
+		throttleLogger: log.Every(5 * time.Minute),
 	}
 	e.isDisabled.Store(true) // Start disabled until Start() is called
 	return e
@@ -305,7 +301,13 @@ func (e *Enforcer) GetTelemetryDeadline() (deadline, lastPing time.Time, ok bool
 // returning an error if throttling conditions are met. Throttling may be triggered
 // if the maximum number of open transactions is exceeded and the grace period has
 // ended or if required diagnostic reporting has not been received.
-func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (err error) {
+//
+// If throttling hasn't occurred yet but may soon, a notice is returned for the client.
+// The notice is only returned if no throttling is detected. Callers should always
+// check the error first.
+func (e *Enforcer) MaybeFailIfThrottled(
+	ctx context.Context, txnsOpened int64,
+) (notice pgnotice.Notice, err error) {
 	// Early out if the number of transactions is below the max allowed or
 	// everything has been disabled.
 	if txnsOpened <= e.getMaxOpenTransactions() || e.isDisabled.Load() {
@@ -313,7 +315,17 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 	}
 
 	now := e.getThrottleCheckTS()
-	if gracePeriodEnd, ok := e.GetGracePeriodEndTS(); ok && now.After(gracePeriodEnd) {
+	expiryTS, hasExpiry := e.getLicenseExpiryTS()
+
+	// If the license doesn't require telemetry and hasn't expired,
+	// we can exit without any further checks.
+	if !e.licenseRequiresTelemetry.Load() && hasExpiry && expiryTS.After(now) {
+		return
+	}
+
+	// Throttle if the license has expired, is missing, and the grace period has ended.
+	gracePeriodEnd, hasGracePeriod := e.GetGracePeriodEndTS()
+	if hasGracePeriod && now.After(gracePeriodEnd) {
 		if e.GetHasLicense() {
 			err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
 				"License expired on %s. The maximum number of concurrently open transactions has been reached.",
@@ -324,22 +336,53 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 				"No license installed. The maximum number of concurrently open transactions has been reached."),
 				"Obtain and install a valid license to continue.")
 		}
-		e.maybeLogError(ctx, err, &e.lastLicenseThrottlingLogTime,
-			fmt.Sprintf(", license expired with a grace period that ended at %s", gracePeriodEnd))
+		if e.throttleLogger.ShouldLog() {
+			log.Infof(ctx, "throttling for license enforcement is active, license expired with a grace period "+
+				"that ended at %s", gracePeriodEnd)
+		}
 		return
 	}
 
-	if deadlineTS, lastPingTS, ok := e.GetTelemetryDeadline(); ok && now.After(deadlineTS) {
+	// For cases where the license requires telemetry, throttle if we are past the deadline
+	deadlineTS, lastPingTS, requiresTelemetry := e.GetTelemetryDeadline()
+	if requiresTelemetry && now.After(deadlineTS) {
 		err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
 			"The maximum number of concurrently open transactions has been reached because the license requires "+
 				"diagnostic reporting, but none has been received by Cockroach Labs."),
 			"Ensure diagnostic reporting is enabled and verify that nothing is blocking network access to the "+
 				"Cockroach Labs reporting server. You can also consider changing your license to one that doesn't "+
 				"require diagnostic reporting to be emitted.")
-		e.maybeLogError(ctx, err, &e.lastTelemetryThrottlingLogTime,
-			fmt.Sprintf("due to no telemetry data received, last received at %s", lastPingTS))
+		if e.throttleLogger.ShouldLog() {
+			log.Infof(ctx, "throttling for license enforcement is active, due to no telemetry data received, "+
+				"last received at %s", lastPingTS)
+		}
 		return
 	}
+
+	// Emit a warning if throttling is imminent. This could mean the license is expired but within
+	// the grace period, or that required telemetry data hasn't been sent recently.
+	if hasGracePeriod && now.After(expiryTS) {
+		if e.GetHasLicense() {
+			notice = pgnotice.Newf(
+				"Your license expired on %s. Throttling will begin after %s. Please install a new license to prevent this.",
+				expiryTS, gracePeriodEnd)
+		} else {
+			notice = pgnotice.Newf(
+				"No license is installed. Throttling will begin after %s unless a license is installed before then.",
+				gracePeriodEnd)
+		}
+	} else if requiresTelemetry && e.addThrottleWarningDelayForNoTelemetry(lastPingTS).Before(now) {
+		notice = pgnotice.Newf(
+			"Your license requires diagnostic reporting, but no data has been sent since %s. Throttling will begin "+
+				"after %s unless the data is sent.",
+			lastPingTS, deadlineTS)
+	}
+	if notice != nil {
+		if e.throttleLogger.ShouldLog() {
+			log.Infof(ctx, "throttling will happen soon: %s", notice.Error())
+		}
+	}
+
 	return
 }
 
@@ -458,23 +501,6 @@ func (e *Enforcer) getMaxTelemetryInterval() time.Duration {
 	return newTimeframe
 }
 
-// maybeLogError logs a throttling error message if one hasn't been logged
-// recently. This helps alert about throttling issues without flooding the
-// CockroachDB log. It also serves as a useful breadcrumb for debugging,
-// particularly in automated test runs where client responses may not be fully
-// examined.
-func (e *Enforcer) maybeLogError(
-	ctx context.Context, err error, lastLogTimestamp *atomic.Int64, additionalMsg string,
-) {
-	nextLogMessage := timeutil.Unix(lastLogTimestamp.Load(), 0).Add(5 * time.Minute)
-
-	now := timeutil.Now()
-	if now.After(nextLogMessage) {
-		lastLogTimestamp.Store(now.Unix())
-		log.Infof(ctx, "throttling for license enforcement is active %s: %s", additionalMsg, err.Error())
-	}
-}
-
 // maybeLogActiveOverrides is a debug tool to indicate any env var overrides.
 func (e *Enforcer) maybeLogActiveOverrides(ctx context.Context) {
 	maxOpenTxns := e.getMaxOpenTransactions()
@@ -543,4 +569,21 @@ func (e *Enforcer) getIsNewClusterEstimate(ctx context.Context, txn isql.Txn) (b
 	}
 	log.Infof(ctx, "cluster init is not within the bounds of the enforcer start time: %v", ts)
 	return false, nil
+}
+
+// getLicenseExpiryTS returns the license expiration timestamp.
+// If no license is installed, it returns false for the second parameter.
+func (e *Enforcer) getLicenseExpiryTS() (ts time.Time, ok bool) {
+	if !e.hasLicense.Load() {
+		return
+	}
+	ts = timeutil.Unix(e.licenseExpiryTS.Load(), 0)
+	ok = true
+	return
+}
+
+// addThrottleWarningDelayForNoTelemetry will return the time when we should start emitting
+// a notice that we haven't received telemetry and we will throttle soon.
+func (e *Enforcer) addThrottleWarningDelayForNoTelemetry(t time.Time) time.Time {
+	return t.Add(3 * 24 * time.Hour)
 }

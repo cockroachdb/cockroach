@@ -200,6 +200,7 @@
 /pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/intent_*.go                  @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/key_vis*                     @cockroachdb/obs-prs
+/pkg/server/license/                     @cockroachdb/sql-foundations
 /pkg/server/load_endpoint*               @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/loss_of_quorum*.go           @cockroachdb/kv-prs
 /pkg/server/migration*                   @cockroachdb/sql-foundations
