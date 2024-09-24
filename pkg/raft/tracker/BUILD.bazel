@@ -4,11 +4,11 @@ go_library(
     name = "tracker",
     srcs = [
         "electiontracker.go",
+        "fortificationtracker.go",
         "inflights.go",
         "progress.go",
         "progresstracker.go",
         "state.go",
-        "supporttracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
     visibility = ["//visibility:public"],
@@ -23,9 +23,9 @@ go_library(
 go_test(
     name = "tracker_test",
     srcs = [
+        "fortificationtracker_test.go",
         "inflights_test.go",
         "progress_test.go",
-        "supporttracker_test.go",
     ],
     embed = [":tracker"],
     deps = [

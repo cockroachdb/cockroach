@@ -1,4 +1,4 @@
-# Test to ensure that leaders correctly track fortification support.
+# Test to ensure that leaders correctly track fortification.
 
 log-level debug
 ----
@@ -142,7 +142,7 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
-print-support-state 1
+print-fortification-state 1
 ----
 1 : 1
 
@@ -274,7 +274,7 @@ stabilize
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
-print-support-state 2
+print-fortification-state 2
 ----
 1 : 2
 2 : 3
