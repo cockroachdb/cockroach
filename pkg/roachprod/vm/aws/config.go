@@ -108,16 +108,6 @@ func (c *awsConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (c *awsConfig) getRegion(name string) *AWSRegion {
-	i := sort.Search(len(c.Regions), func(i int) bool {
-		return c.Regions[i].Name >= name
-	})
-	if i < len(c.Regions) && c.Regions[i].Name == name {
-		return &c.Regions[i]
-	}
-	return nil
-}
-
 func (c *awsConfig) regionNames() (names []string) {
 	for _, r := range c.Regions {
 		names = append(names, r.Name)

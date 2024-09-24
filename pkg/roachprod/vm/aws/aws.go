@@ -15,7 +15,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -657,7 +656,11 @@ func (p *Provider) Create(
 	}
 
 	if len(expandedZones) == 0 {
-		expandedZones = DefaultZones
+		if opts.GeoDistributed {
+			expandedZones = DefaultZones
+		} else {
+			expandedZones = DefaultZones[:1]
+		}
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -673,25 +676,11 @@ func (p *Provider) Create(
 		return errors.Errorf("Please specify a valid region.")
 	}
 
-	var zones []string // contains an az corresponding to each entry in names
-	if opts.GeoDistributed {
-		// Distribute the nodes amongst availability zones if geo distributed.
-		nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
-		zones = make([]string, len(nodeZones))
-		for i, z := range nodeZones {
-			zones[i] = expandedZones[z]
-		}
-	} else {
-		// Only use one zone in the region if we're not creating a geo cluster.
-		regionZones, err := p.regionZones(regions[0], expandedZones)
-		if err != nil {
-			return err
-		}
-		// Select a random AZ from the first region.
-		zone := regionZones[rand.Intn(len(regionZones))]
-		for range names {
-			zones = append(zones, zone)
-		}
+	// Distribute the nodes amongst availability zones.
+	nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
+	zones := make([]string, len(nodeZones))
+	for i, z := range nodeZones {
+		zones[i] = expandedZones[z]
 	}
 
 	var g errgroup.Group
@@ -943,24 +932,6 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 		}
 	}
 	return regions, nil
-}
-
-// regionZones returns all AWS availability zones which have been correctly
-// configured within the given region.
-func (p *Provider) regionZones(region string, allZones []string) (zones []string, _ error) {
-	r := p.Config.getRegion(region)
-	if r == nil {
-		return nil, fmt.Errorf("region %s not found", region)
-	}
-	for _, z := range allZones {
-		for _, az := range r.AvailabilityZones {
-			if az.Name == z {
-				zones = append(zones, z)
-				break
-			}
-		}
-	}
-	return zones, nil
 }
 
 func (p *Provider) getVolumesForInstance(
