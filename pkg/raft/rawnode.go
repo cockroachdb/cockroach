@@ -550,5 +550,5 @@ func (rn *RawNode) TestingStepDown() error {
 }
 
 func (rn *RawNode) TestingSupportStateString() string {
-	return rn.raft.supportTracker.String()
+	return rn.raft.fortificationTracker.String()
 }

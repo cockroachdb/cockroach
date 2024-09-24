@@ -1,4 +1,4 @@
-# Test to ensure that leaders correctly track fortification support.
+# Test to ensure that leaders correctly track fortification.
 
 log-level debug
 ----
