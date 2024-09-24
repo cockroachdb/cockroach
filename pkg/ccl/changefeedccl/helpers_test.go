@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
@@ -412,6 +413,10 @@ func startTestFullServer(
 		Settings:          options.settings,
 	}
 
+	if options.debugUseAfterFinish {
+		args.Tracer = tracing.NewTracerWithOpt(context.Background(), tracing.WithUseAfterFinishOpt(true, true))
+	}
+
 	if options.argsFn != nil {
 		options.argsFn(&args)
 	}
@@ -522,6 +527,10 @@ func startTestTenant(
 		Settings:      options.settings,
 	}
 
+	if options.debugUseAfterFinish {
+		tenantArgs.Tracer = tracing.NewTracerWithOpt(context.Background(), tracing.WithUseAfterFinishOpt(true, true))
+	}
+
 	tenantServer, tenantDB := serverutils.StartTenant(t, systemServer, tenantArgs)
 	// Re-run setup on the tenant as well
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
@@ -552,6 +561,7 @@ type feedTestOptions struct {
 	disableSyntheticTimestamps   bool
 	settings                     *cluster.Settings
 	additionalSystemPrivs        []string
+	debugUseAfterFinish          bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -623,6 +633,10 @@ func withKnobsFn(fn updateKnobsFn) feedTestOption {
 
 // Silence the linter.
 var _ = withKnobsFn(nil /* fn */)
+
+var withDebugUseAfterFinish feedTestOption = func(opts *feedTestOptions) {
+	opts.debugUseAfterFinish = true
+}
 
 func newTestOptions() feedTestOptions {
 	// percentTenant is the percentage of tests that will be run against
