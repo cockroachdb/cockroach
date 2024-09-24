@@ -213,6 +213,10 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
 	versionLen := int(b[len(b)-1])
+	if versionLen == 1 {
+		// The key encodes an empty version, which is not valid.
+		return EngineKey{}, false
+	}
 	// keyPartEnd points to the sentinel byte.
 	keyPartEnd := len(b) - 1 - versionLen
 	if keyPartEnd < 0 || b[keyPartEnd] != 0x00 {
