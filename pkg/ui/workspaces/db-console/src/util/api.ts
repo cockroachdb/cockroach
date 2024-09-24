@@ -211,6 +211,11 @@ export type NetworkConnectivityRequest =
 export type NetworkConnectivityResponse =
   protos.cockroach.server.serverpb.NetworkConnectivityResponse;
 
+export type GetThrottlingMetadataRequest =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataRequest;
+export type GetThrottlingMetadataResponse =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -857,6 +862,17 @@ export function getNetworkConnectivity(
     serverpb.NetworkConnectivityResponse,
     `${STATUS_PREFIX}/connectivity`,
     req as any,
+    timeout,
+  );
+}
+
+export function getThrottlingMetadata(
+  timeout?: moment.Duration,
+): Promise<GetThrottlingMetadataResponse> {
+  return timeoutFetch(
+    serverpb.GetThrottlingMetadataResponse,
+    `${STATUS_PREFIX}/throttling`,
+    null,
     timeout,
   );
 }
