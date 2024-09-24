@@ -505,11 +505,16 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		// Enforce license policies. Throttling can occur if there is no valid
-		// license or if it has expired.
-		if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
-			return makeErrEvent(err)
-		} else if notice != nil {
-			res.BufferNotice(notice)
+		// license or if the existing one has expired. However, we do not throttle
+		// the SET CLUSTER command, as this is how a new license would be installed
+		// to disable throttling. We want to avoid the situation where the action
+		// to disable throttling is itself throttled.
+		if _, ok := ast.(*tree.SetClusterSetting); !ok {
+			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+				return makeErrEvent(err)
+			} else if notice != nil {
+				res.BufferNotice(notice)
+			}
 		}
 	}
 
