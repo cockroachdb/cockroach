@@ -253,7 +253,7 @@ func TestStreamTokenCounterProviderInspect(t *testing.T) {
 	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
 	record("Single stream with 1 MiB of elastic+regular (send+eval) tokens deducted.")
 
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
 	p.Eval(stream(2)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
 	p.Eval(stream(3)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
 	record("Three streams, with 1 MiB of regular tokens deducted each.")
@@ -263,11 +263,11 @@ func TestStreamTokenCounterProviderInspect(t *testing.T) {
 	p.Send(stream(3)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
 	record("Three streams, with 1 MiB of elastic send tokens deducted from each.")
 
-	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
-	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
-	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
-	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
-	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
 	record("Three streams, all tokens returned.")
 }
