@@ -11,10 +11,13 @@
 package builtins
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -198,4 +201,40 @@ func TestGetSSTableMetricsSingleNode(t *testing.T) {
 		count++
 	}
 	require.GreaterOrEqual(t, count, 1)
+}
+
+func TestScanStorageInternalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const numNodes = 3
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	sqlDB.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY, v INT)`)
+	sqlDB.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 1000) AS g(i)`)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randKey := func() []byte {
+		k := make([]byte, 1+rng.Intn(5))
+		for i := range k {
+			k[i] = byte(rng.Intn(256))
+		}
+		return k
+	}
+	for i := 0; i < 10000; i++ {
+		a := randKey()
+		b := a
+		for bytes.Equal(a, b) {
+			b = randKey()
+		}
+		if bytes.Compare(a, b) < 0 {
+			a, b = b, a
+		}
+		n := 1 + rng.Intn(numNodes)
+		sqlDB.QueryStr(t, `SELECT crdb_internal.scan_storage_internal_keys($1, $2, $3, $4, 100)`, n, n, a, b)
+	}
 }
