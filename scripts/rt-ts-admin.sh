@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # if you have a roachtest that save tsdump files you can run this from the artifacts dir and it
 # will try to start a admin for each tsdump-gob-run.sh it finds.   It prints out the adminurl.
 # Requirements:

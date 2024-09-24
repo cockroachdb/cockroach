@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # This script runs microbenchmarks across a roachprod cluster. It will build microbenchmark binaries
 # for the given revisions if they do not already exist in the BENCH_BUCKET. It will then create a
