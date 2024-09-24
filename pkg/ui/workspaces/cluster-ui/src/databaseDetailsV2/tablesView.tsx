@@ -19,6 +19,7 @@ import {
 } from "src/api/databases/getTableMetadataApi";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
+import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
 import { Loading } from "src/loading";
@@ -157,7 +158,7 @@ export const TablesPageV2 = () => {
 
   // Get db id from the URL.
   const { dbID } = useRouteParams();
-  const { data, error, isLoading } = useTableMetadata(
+  const { data, error, isLoading, refreshTables } = useTableMetadata(
     createTableMetadataRequestFromParams(dbID, params),
   );
   const nodesResp = useNodeStatuses();
@@ -241,6 +242,9 @@ export const TablesPageV2 = () => {
             entity="tables"
           />
           <Table
+            actionButton={
+              <TableMetadataJobControl onDataUpdated={refreshTables} />
+            }
             columns={colsWithSort}
             dataSource={tableData}
             pagination={{
