@@ -73,6 +73,7 @@ type AggMetrics struct {
 	AggregatorProgress        *aggmetric.AggGauge
 	CheckpointProgress        *aggmetric.AggGauge
 	LaggingRanges             *aggmetric.AggGauge
+	TotalRanges               *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -136,6 +137,7 @@ type sliMetrics struct {
 	AggregatorProgress        *aggmetric.Gauge
 	CheckpointProgress        *aggmetric.Gauge
 	LaggingRanges             *aggmetric.Gauge
+	TotalRanges               *aggmetric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -718,9 +720,15 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
-	metaLaggingRangePercentage := metric.Metadata{
+	metaLaggingRanges := metric.Metadata{
 		Name:        "changefeed.lagging_ranges",
 		Help:        "The number of ranges considered to be lagging behind",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalRanges := metric.Metadata{
+		Name:        "changefeed.total_ranges",
+		Help:        "The total number of ranges being watched by changefeed aggregators",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -798,7 +806,8 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
 		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
-		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
+		LaggingRanges:             b.Gauge(metaLaggingRanges),
+		TotalRanges:               b.Gauge(metaTotalRanges),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -859,6 +868,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:             a.LaggingRanges.AddChild(scope),
+		TotalRanges:               a.TotalRanges.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
@@ -891,7 +901,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 // getLaggingRangesCallback returns a function which can be called to update the
 // lagging ranges metric. It should be called with the current number of lagging
 // ranges.
-func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
+func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -908,13 +918,18 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
 	last := struct {
 		syncutil.Mutex
-		v int64
+		lagging int64
+		total   int64
 	}{}
-	return func(i int64) {
+	return func(lagging int64, total int64) {
 		last.Lock()
 		defer last.Unlock()
-		s.LaggingRanges.Dec(last.v - i)
-		last.v = i
+
+		s.LaggingRanges.Dec(last.lagging - lagging)
+		last.lagging = lagging
+
+		s.TotalRanges.Dec(last.total - total)
+		last.total = total
 	}
 }
 

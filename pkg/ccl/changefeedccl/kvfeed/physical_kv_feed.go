@@ -30,7 +30,7 @@ type rangeFeedConfig struct {
 	Frontier      hlc.Timestamp
 	Spans         []kvcoord.SpanTimePair
 	WithDiff      bool
-	RangeObserver func(fn kvcoord.ForEachRangeFn)
+	RangeObserver kvcoord.RangeObserver
 	Knobs         TestingKnobs
 	UseMux        bool
 }

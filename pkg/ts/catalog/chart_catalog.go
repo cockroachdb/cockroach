@@ -1687,6 +1687,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Changefeed Total Ranges",
+				Metrics: []string{
+					"changefeed.total_ranges",
+				},
+			},
+			{
 				Title: "Changefeed Usage Bytes",
 				Metrics: []string{
 					"changefeed.usage.table_bytes",
