@@ -3688,7 +3688,7 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 				},
 			},
 			ClientAuthentication: &msktypes.ServerlessClientAuthentication{
-				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: true}},
+				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
 			},
 		},
 	}
