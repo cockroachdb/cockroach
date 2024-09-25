@@ -60,6 +60,7 @@ func TestPurgatory(t *testing.T) {
 			resolved = int(sp[0].Timestamp.WallTime)
 			return nil
 		},
+		debug: &streampb.DebugLogicalConsumerStatus{},
 	}
 
 	sz := int64((&streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: roachpb.Key("a")}}).Size())

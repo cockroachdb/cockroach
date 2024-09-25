@@ -185,7 +185,9 @@ func (t *descriptorState) upsertLeaseLocked(
 	// is subsumed we have nothing to delete. In dual-write mode clearing
 	// this guarantees only the old expiry based lease is cleaned up. In
 	// Session only clearing this means the release is a no-op.
-	toRelease.sessionID = nil
+	if toRelease != nil {
+		toRelease.sessionID = nil
+	}
 	return nil, toRelease, nil
 }
 

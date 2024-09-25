@@ -60,6 +60,7 @@ go_library(
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/changefeedccl/timers",
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",

@@ -291,7 +291,7 @@ CREATE USER testuser4
 statement ok
 REVOKE SELECT ON crdb_internal.tables FROM public
 
-query B
+query B retry
 SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
 ----
 false
