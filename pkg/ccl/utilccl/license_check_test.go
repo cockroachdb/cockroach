@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -293,7 +294,7 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 
 	// Test to ensure that the state is correctly registered on startup before
 	// changing the license.
-	enforcer := license.GetEnforcerInstance()
+	enforcer := srv.SystemLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer
 	require.Equal(t, false, enforcer.GetHasLicense())
 	gracePeriodTS, hasGracePeriod := enforcer.GetGracePeriodEndTS()
 	require.True(t, hasGracePeriod)
