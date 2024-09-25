@@ -262,17 +262,17 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Explanation:
 		// 1 (from_store) grants support for 2 (for_store) at a higher epoch.
 		err = env.handleGrantSupport(t, d)
-	case "print-support-state":
-		// Prints the support state being tracked by a raft leader. Empty on a
+	case "print-fortification-state":
+		// Prints the fortification state being tracked by a raft leader. Empty on a
 		// follower.
 		//
-		// print-support-state id
+		// print-fortification-state id
 		// Arguments are:
-		//    id - id of the raft peer whose support map to print.
+		//    id - id of the raft peer whose fortification map to print.
 		//
 		// Example:
-		// print-support-state 1
-		err = env.handlePrintSupportState(t, d)
+		// print-fortification-state 1
+		err = env.handlePrintFortificationState(t, d)
 
 	default:
 		err = fmt.Errorf("unknown command")
