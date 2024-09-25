@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
 
@@ -85,8 +86,8 @@ func NewSupportManager(
 
 // HandleMessage implements the MessageHandler interface. It appends incoming
 // messages to a queue and does not block on processing the messages.
-func (sm *SupportManager) HandleMessage(msg *slpb.Message) {
-	sm.receiveQueue.Append(msg)
+func (sm *SupportManager) HandleMessage(msg *slpb.Message) error {
+	return sm.receiveQueue.Append(msg)
 }
 
 var _ MessageHandler = (*SupportManager)(nil)
@@ -342,6 +343,13 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
 }
 
+// maxReceiveQueueSize is the maximum number of messages the receive queue can
+// store. If message consumption is slow (e.g. due to a disk stall) and the
+// queue reaches maxReceiveQueueSize, incoming messages will be dropped.
+const maxReceiveQueueSize = 10000
+
+var receiveQueueSizeLimitReachedErr = errors.Errorf("store liveness receive queue is full")
+
 // receiveQueue stores all received messages from the MessageHandler and allows
 // them to be processed async and in batch.
 type receiveQueue struct {
@@ -358,14 +366,19 @@ func newReceiveQueue() receiveQueue {
 	}
 }
 
-func (q *receiveQueue) Append(msg *slpb.Message) {
+func (q *receiveQueue) Append(msg *slpb.Message) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	// Drop messages if maxReceiveQueueSize is reached.
+	if len(q.mu.msgs) >= maxReceiveQueueSize {
+		return receiveQueueSizeLimitReachedErr
+	}
 	q.mu.msgs = append(q.mu.msgs, msg)
 	select {
 	case q.sig <- struct{}{}:
 	default:
 	}
+	return nil
 }
 
 func (q *receiveQueue) Sig() <-chan struct{} {

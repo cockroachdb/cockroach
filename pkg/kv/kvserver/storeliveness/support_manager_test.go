@@ -79,7 +79,7 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 		Epoch:      slpb.Epoch(1),
 		Expiration: requestedExpiration,
 	}
-	sm.HandleMessage(heartbeatResp)
+	require.NoError(t, sm.HandleMessage(heartbeatResp))
 
 	// Ensure support is provided as seen by SupportFrom.
 	testutils.SucceedsSoon(
@@ -122,7 +122,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 		Epoch:      slpb.Epoch(1),
 		Expiration: sm.clock.Now().AddDuration(time.Second),
 	}
-	sm.HandleMessage(heartbeat)
+	require.NoError(t, sm.HandleMessage(heartbeat))
 
 	// Ensure a response is sent.
 	testutils.SucceedsSoon(
@@ -257,6 +257,8 @@ func TestSupportManagerRestart(t *testing.T) {
 	require.True(t, withdrawalTime.Less(now))
 }
 
+// TestSupportManagerDiskStall tests that the SupportManager continues to
+// respond to SupportFrom and SupportFor calls when its disk is stalled.
 func TestSupportManagerDiskStall(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -326,6 +328,42 @@ func TestSupportManagerDiskStall(t *testing.T) {
 
 	// Ensure the heartbeat is unblocked and sent out.
 	ensureHeartbeats(t, sender, 1)
+}
+
+// TestSupportManagerReceiveQueueLimit tests that the receive queue returns
+// errors when the queue size limit is reached.
+func TestSupportManagerReceiveQueueLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	// Initialize the SupportManager without starting the main goroutine.
+	require.NoError(t, sm.onRestart(ctx))
+
+	heartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+	}
+
+	for i := 0; i < maxReceiveQueueSize; i++ {
+		require.NoError(t, sm.HandleMessage(heartbeat))
+	}
+
+	// Nothing is consuming messages from the queue, so the next HandleMessage
+	// should result in an error.
+	require.Regexp(t, sm.HandleMessage(heartbeat), "store liveness receive queue is full")
 }
 
 func ensureHeartbeats(t *testing.T, sender *testMessageSender, expectedNum int) []slpb.Message {
