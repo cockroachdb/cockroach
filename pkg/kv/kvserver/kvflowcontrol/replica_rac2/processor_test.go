@@ -142,8 +142,8 @@ func (rn *testRaftNode) FollowerStateRaftMuLocked(
 	return rac2.FollowerStateInfo{}
 }
 
-func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
-	fmt.Fprintf(rn.b, " RaftNode.SendPingRaftMuLocked(%d)\n", to)
+func (rn *testRaftNode) SendPingLocked(to roachpb.ReplicaID) bool {
+	fmt.Fprintf(rn.b, " RaftNode.SendPingLocked(%d)\n", to)
 	return true
 }
 
@@ -250,8 +250,8 @@ func (c *testRangeController) AdmitRaftMuLocked(
 	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
 }
 
-func (c *testRangeController) MaybeSendPingsRaftMuLocked() {
-	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsRaftMuLocked()\n")
+func (c *testRangeController) MaybeSendPingsLocked() {
+	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsLocked()\n")
 }
 
 func (c *testRangeController) SetReplicasRaftMuLocked(

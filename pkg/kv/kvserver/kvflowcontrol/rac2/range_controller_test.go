@@ -305,7 +305,7 @@ func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) 
 	return replica.info
 }
 
-func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
+func (r *testingRCRange) SendPingLocked(roachpb.ReplicaID) bool {
 	return false
 }
 

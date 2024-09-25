@@ -1444,7 +1444,7 @@ func (r *Replica) tick(
 
 	// NB: since we are returning true below, there will be a Ready handling
 	// immediately after this call, so any pings stashed in raft will be sent.
-	r.flowControlV2.MaybeSendPingsRaftMuLocked()
+	r.flowControlV2.MaybeSendPingsLocked()
 	return true, nil
 }
 

@@ -59,6 +59,7 @@ func (rn raftNodeForRACv2) FollowerStateRaftMuLocked(
 	return rac2.FollowerStateInfo{State: tracker.StateProbe}
 }
 
-func (rn raftNodeForRACv2) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+// SendPingLocked implements rac2.RaftInterface.
+func (rn raftNodeForRACv2) SendPingLocked(to roachpb.ReplicaID) bool {
 	return rn.RawNode.SendPing(raftpb.PeerID(to))
 }
