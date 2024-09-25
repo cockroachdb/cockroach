@@ -94,18 +94,6 @@ type RangeController interface {
 // TODO(pav-kv): This interface a placeholder for the interface containing raft
 // methods. Replace this as part of #128019.
 type RaftInterface interface {
-	// FollowerStateRaftMuLocked returns the current state of a follower. The
-	// value of Match, Next are populated iff in StateReplicate. All entries >=
-	// Next have not had MsgApps constructed during the lifetime of this
-	// StateReplicate (they may have been constructed previously).
-	//
-	// When a follower transitions from {StateProbe,StateSnapshot} =>
-	// StateReplicate, we start trying to send MsgApps. We should
-	// notice such transitions both in HandleRaftEvent and
-	// SetReplicasRaftMuLocked.
-	//
-	// Requires Replica.raftMu to be held, Replica.mu is not held.
-	FollowerStateRaftMuLocked(roachpb.ReplicaID) FollowerStateInfo
 	// SendPingRaftMuLocked sends a MsgApp ping to the given raft peer if there
 	// wasn't a recent MsgApp to this peer. The message is added to raft's message
 	// queue, and will be extracted and sent during the next Ready processing.
@@ -116,7 +104,7 @@ type RaftInterface interface {
 	SendPingRaftMuLocked(roachpb.ReplicaID) bool
 }
 
-type FollowerStateInfo struct {
+type ReplicaStateInfo struct {
 	State tracker.StateType
 
 	// Remaining only populated in StateReplicate.
@@ -160,6 +148,11 @@ type RaftEvent struct {
 	// A key can map to an empty slice, in order to reuse already allocated
 	// slice memory.
 	MsgApps map[roachpb.ReplicaID][]raftpb.Message
+	// ReplicasStateInfo contains the state of all replicas. This is used to
+	// determine if the state of a replica has changed, and if so, to update the
+	// flow control state. It also informs the RangeController of a replica's
+	// Match and Next.
+	ReplicasStateInfo map[roachpb.ReplicaID]ReplicaStateInfo
 }
 
 // RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
@@ -460,8 +453,7 @@ retry:
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
 	shouldWaitChange := false
 	for r, rs := range rc.replicaMap {
-		info := rc.opts.RaftInterface.FollowerStateRaftMuLocked(r)
-		shouldWaitChange = rs.handleReadyState(ctx, info) || shouldWaitChange
+		shouldWaitChange = rs.handleReadyState(ctx, e.ReplicasStateInfo[r]) || shouldWaitChange
 	}
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.
@@ -824,7 +816,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 // provided follower state information. If the state changes in a way that
 // affects requests waiting for evaluation, returns true.
 func (rs *replicaState) handleReadyState(
-	ctx context.Context, info FollowerStateInfo,
+	ctx context.Context, info ReplicaStateInfo,
 ) (shouldWaitChange bool) {
 	switch info.State {
 	case tracker.StateProbe:
