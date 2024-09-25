@@ -25,7 +25,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type RPCListenerFactory func(ctx context.Context, addr, advertiseAddr *string, connName string) (net.Listener, error)
+type RPCListenerFactory func(
+	ctx context.Context,
+	addr, advertiseAddr *string,
+	connName string,
+	acceptProxyProtocolHeaders bool,
+) (net.Listener, error)
 
 // startListenRPCAndSQL starts the RPC and SQL listeners. It returns:
 //   - The listener for pgwire connections coming over the network. This will be used
@@ -43,6 +48,7 @@ func startListenRPCAndSQL(
 	grpc *grpcServer,
 	rpcListenerFactory RPCListenerFactory,
 	enableSQLListener bool,
+	acceptProxyProtocolHeaders bool,
 ) (
 	sqlListener net.Listener,
 	pgLoopbackListener *netutil.LoopbackListener,
@@ -61,7 +67,7 @@ func startListenRPCAndSQL(
 	}
 	if ln == nil {
 		var err error
-		ln, err = rpcListenerFactory(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName)
+		ln, err = rpcListenerFactory(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName, acceptProxyProtocolHeaders)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -71,7 +77,7 @@ func startListenRPCAndSQL(
 	var pgL net.Listener
 	if cfg.SplitListenSQL && enableSQLListener {
 		if cfg.SQLAddrListener == nil {
-			pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
+			pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql", acceptProxyProtocolHeaders)
 		} else {
 			pgL = cfg.SQLAddrListener
 		}
