@@ -124,7 +124,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 // where it is important that all the data that goes into the snapshot comes
 // from a consistent view of the database, and not the replica's in-memory state
 // or via a reference to Replica.store.Engine().
-type replicaRaftStorage Replica
+type replicaRaftStorage = replicaLogStorage
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
 
