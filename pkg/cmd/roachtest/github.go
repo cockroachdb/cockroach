@@ -312,8 +312,8 @@ func (g *githubIssues) createPostRequest(
 	if runtimeAssertionsBuild {
 		topLevelNotes = append(topLevelNotes,
 			"This build has runtime assertions enabled. If the same failure was hit in a run without assertions "+
-				"enabled, there should be a similar issue without the "+runtimeAssertionsLabel+" label. If there "+
-				"isn't one, then this failure is likely due to an assertion violation or (assertion) timeout.")
+				"enabled, there should be a similar failure without this message. If there isn't one, "+
+				"then this failure is likely due to an assertion violation or (assertion) timeout.")
 	}
 
 	sideEyeMsg := ""
