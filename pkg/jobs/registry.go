@@ -770,25 +770,24 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		}
 		typ := j.mu.payload.Type().String()
 
-		nCols := 7
-		cols := []string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
-		placeholders := []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
+		nCols := 8
+		cols := []string{"id", "created", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
+		placeholders := []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5", "$6", "$7"}
 		values := []interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
 		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
 			nCols -= 1
 		}
 		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
-			cols = []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
-			placeholders = []string{"$1", "$2", "$3", "$4", "$5"}
+			cols = []string{"id", "created", "status", "created_by_type", "created_by_id", "job_type"}
+			placeholders = []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5"}
 			values = []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
-			nCols = 5
+			nCols = 6
 		}
-		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
 		// be adopted by the node which next runs the adoption loop.
 		stmt := fmt.Sprintf(
 			`INSERT INTO system.jobs (%s) VALUES (%s);`,
-			strings.Join(cols[:nCols], ","), strings.Join(placeholders[:nCols], ","),
+			strings.Join(cols, ","), strings.Join(placeholders, ","),
 		)
 		_, err = txn.ExecEx(ctx, "job-insert", txn.KV(), sessiondata.InternalExecutorOverride{
 			User:     username.NodeUserName(),
