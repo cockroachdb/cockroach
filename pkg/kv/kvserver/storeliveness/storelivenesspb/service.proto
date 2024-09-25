@@ -52,9 +52,24 @@ message Message {
 // streaming Store Liveness RPC service.
 message MessageBatch {
   repeated Message messages = 1 [(gogoproto.nullable) = false];
-  // Now is used to update the HLC clock of the message recipient; this is not
-  // necessary for the correctness of the Store Liveness algorithm but it helps
-  // keep the stores' clocks more tightly synchronized, which allows them to
+  // Now is used to update the HLC clock of the message recipient. This is
+  // necessary to ensure the Support Disjointness Invariant of Store Liveness.
+  // Without propagating this timestamp, the following scenario is possible:
+  // - At time 5, according to its own clock, store A has support from store B
+  //   with epoch 1 and expiration 10.
+  // - Store B withdraws support when its clock reaches time 10 and bumps store
+  //   A's epoch to 2.
+  // - Store A's clock is still at time 6, and it requests to extend support
+  //   for epoch 1 until time 12.
+  // - Store B responds with the bumped epoch 2 (essentially a nack).
+  // - Store A, whose clock is at time 7, receives that message (does not update
+  //   its clock to match store B's) and requests support for epoch 2 and
+  //   expiration 13.
+  // - Store B agrees and store A receives that response at time 8.
+  // Now Store A has two overlapping periods of support for epochs 1 and 2:
+  // [5, 10) and [8, 12).
+  //
+  // Keeping the stores' clocks more tightly synchronized also allows them to
   // provide/withdraw support promptly.
   util.hlc.Timestamp now    = 2 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
