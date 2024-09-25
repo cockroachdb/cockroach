@@ -161,6 +161,8 @@ TABLE t
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── j_inverted_key encodedkey not null [inverted]
  ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
  ├── PRIMARY INDEX t_pkey

@@ -588,13 +588,13 @@ vectorized: true
 │ columns: (a, b, n, sq)
 │
 └── • hash join (inner)
-    │ columns: (column10, a, b, n, sq)
+    │ columns: (column14, a, b, n, sq)
     │ estimated row count: 990 (missing stats)
-    │ equality: (column10) = (sq)
+    │ equality: (column14) = (sq)
     │
     ├── • render
-    │   │ columns: (column10, a, b)
-    │   │ render column10: a + b
+    │   │ columns: (column14, a, b)
+    │   │ render column14: a + b
     │   │ render a: a
     │   │ render b: b
     │   │
@@ -661,13 +661,13 @@ vectorized: true
 │ columns: (a, b, n, sq)
 │
 └── • hash join (full outer)
-    │ columns: (column10, a, b, n, sq)
+    │ columns: (column14, a, b, n, sq)
     │ estimated row count: 1,000 (missing stats)
-    │ equality: (column10) = (sq)
+    │ equality: (column14) = (sq)
     │
     ├── • render
-    │   │ columns: (column10, a, b)
-    │   │ render column10: a + b
+    │   │ columns: (column14, a, b)
+    │   │ render column14: a + b
     │   │ render a: a
     │   │ render b: b
     │   │
@@ -693,18 +693,18 @@ vectorized: true
 │ columns: (a, b, n, sq)
 │
 └── • filter
-    │ columns: (column10, a, b, n, sq)
+    │ columns: (column14, a, b, n, sq)
     │ estimated row count: 333 (missing stats)
     │ filter: (b % 2) != (sq % 2)
     │
     └── • hash join (full outer)
-        │ columns: (column10, a, b, n, sq)
+        │ columns: (column14, a, b, n, sq)
         │ estimated row count: 1,000 (missing stats)
-        │ equality: (column10) = (sq)
+        │ equality: (column14) = (sq)
         │
         ├── • render
-        │   │ columns: (column10, a, b)
-        │   │ render column10: a + b
+        │   │ columns: (column14, a, b)
+        │   │ render column14: a + b
         │   │ render a: a
         │   │ render b: b
         │   │

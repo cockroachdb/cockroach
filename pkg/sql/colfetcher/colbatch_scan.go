@@ -328,6 +328,7 @@ func NewColBatchScan(
 		flowCtx.Txn,
 		bsHeader,
 		spec.Reverse,
+		tableArgs.RequiresRawMVCCValues(),
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.LockingDurability,

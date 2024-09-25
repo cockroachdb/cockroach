@@ -100,6 +100,18 @@ DROP OWNED BY r
   {columnId: 4.294967294e+09, name: tableoid, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 109, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 109, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 109}
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 109}
 - [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
@@ -176,6 +188,18 @@ DROP OWNED BY r
   {columnId: 4.294967294e+09, name: tableoid, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 108}
+- [[ColumnName:{DescID: 108, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 108}
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 108}
+- [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 108}
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 108}
 - [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
@@ -220,6 +244,18 @@ DROP OWNED BY r
   {columnId: 4.294967294e+09, name: tableoid, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 110, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 111, name: typ, schemaId: 105}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
@@ -286,3 +322,15 @@ DROP OWNED BY r
   {columnId: 4.294967294e+09, name: tableoid, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 113, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 113, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 113, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 113, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}

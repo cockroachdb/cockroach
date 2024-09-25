@@ -122,8 +122,8 @@ vectorized: true
     │ exec mode: one row
     │
     └── • render
-        │ columns: (column17)
-        │ render column17: true
+        │ columns: (column23)
+        │ render column23: true
         │
         └── • limit
             │ columns: (a, c)
@@ -324,7 +324,7 @@ vectorized: true
 • hash join (semi)
 │ columns: (x, y)
 │ estimated row count: 1,000 (missing stats)
-│ equality: (x) = (column10)
+│ equality: (x) = (column14)
 │ left cols are key
 │
 ├── • scan
@@ -334,8 +334,8 @@ vectorized: true
 │     spans: FULL SCAN
 │
 └── • render
-    │ columns: (column10)
-    │ render column10: x - 1
+    │ columns: (column14)
+    │ render column14: x - 1
     │
     └── • scan
           columns: (x)
@@ -380,7 +380,7 @@ vectorized: true
 • hash join (anti)
 │ columns: (x, z)
 │ estimated row count: 0 (missing stats)
-│ equality: (x) = (column10)
+│ equality: (x) = (column14)
 │ left cols are key
 │
 ├── • scan
@@ -390,8 +390,8 @@ vectorized: true
 │     spans: FULL SCAN
 │
 └── • render
-    │ columns: (column10)
-    │ render column10: x - 1
+    │ columns: (column14)
+    │ render column14: x - 1
     │
     └── • scan
           columns: (x)
@@ -590,7 +590,7 @@ SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2;
 • hash join (semi)
 │ columns: (a, b)
 │ estimated row count: 1,000 (missing stats)
-│ equality: (a, b) = (column15, column16)
+│ equality: (a, b) = (column19, column20)
 │
 ├── • scan
 │     columns: (a, b)
@@ -599,9 +599,9 @@ SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2;
 │     spans: FULL SCAN
 │
 └── • render
-    │ columns: (column16, column15)
-    │ render column16: y + 1
-    │ render column15: x + 1
+    │ columns: (column20, column19)
+    │ render column20: y + 1
+    │ render column19: x + 1
     │
     └── • scan
           columns: (x, y)
@@ -630,8 +630,8 @@ SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
 │   │ exec mode: any rows
 │   │
 │   └── • render
-│       │ columns: (column9)
-│       │ render column9: (x + 1, y + 1)
+│       │ columns: (column11)
+│       │ render column11: (x + 1, y + 1)
 │       │
 │       └── • scan
 │             columns: (x, y)
@@ -645,7 +645,7 @@ SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
     │ exec mode: one row
     │
     └── • values
-          columns: (column10)
+          columns: (column12)
           size: 1 column, 1 row
           row 0, expr 0: (2, 2)
 
@@ -668,8 +668,8 @@ SELECT (2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
     │ exec mode: any rows
     │
     └── • render
-        │ columns: (column8)
-        │ render column8: (x + 1, y + 1)
+        │ columns: (column10)
+        │ render column10: (x + 1, y + 1)
         │
         └── • scan
               columns: (x, y)

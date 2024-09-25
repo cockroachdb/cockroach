@@ -94,6 +94,22 @@ type cTableInfo struct {
 	// the value for the tableoid system column.
 	oidOutputIdx int
 
+	// originIDOutputIdx controls at what column ordinal in the output batch
+	// to write the value for the OriginID system column.
+	originIDOutputIdx int
+	rowLastOriginID   int
+
+	// originIDOutputIdx controls at what column ordinal in the output batch
+	// to write the value for the OriginTimestamp system column.
+	originTimestampOutputIdx int
+	rowLastOriginTimestamp   hlc.Timestamp
+	// rowLastModifiedWithoutOriginTimestamp is the largest MVCC
+	// timestamp seen for any column family that _doesn't_ have an
+	// OriginTimestamp set. If this is greater than the
+	// rowLastOriginTimestamp field, we output NULL for origin
+	// timestamp.
+	rowLastModifiedWithoutOriginTimestamp hlc.Timestamp
+
 	da tree.DatumAlloc
 }
 
@@ -292,6 +308,11 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
+		// originIDCol is the same as timestampCol but for the OriginID system column.
+		originIDCol coldata.Int32s
+		// originTimetampCol is the same as timestapCol but for the
+		// OriginTimestamp system column.
+		originTimestampCol []apd.Decimal
 	}
 
 	scratch struct {
@@ -339,6 +360,13 @@ func (cf *cFetcher) resetBatch() {
 		if cf.table.oidOutputIdx != noOutputColumn {
 			cf.machine.tableoidCol = cf.machine.colvecs.DatumCols[cf.machine.colvecs.ColsMap[cf.table.oidOutputIdx]]
 		}
+		if cf.table.originIDOutputIdx != noOutputColumn {
+			cf.machine.originIDCol = cf.machine.colvecs.Int32Cols[cf.machine.colvecs.ColsMap[cf.table.originIDOutputIdx]]
+		}
+		if cf.table.originTimestampOutputIdx != noOutputColumn {
+			cf.machine.originTimestampCol = cf.machine.colvecs.DecimalCols[cf.machine.colvecs.ColsMap[cf.table.originTimestampOutputIdx]]
+		}
+
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
 		cf.table.da.DefaultAllocSize = cf.machine.batch.Capacity()
@@ -368,12 +396,14 @@ func (cf *cFetcher) Init(
 	}
 	sort.Sort(table.orderedColIdxMap)
 	*table = cTableInfo{
-		cFetcherTableArgs:   tableArgs,
-		orderedColIdxMap:    table.orderedColIdxMap,
-		indexColOrdinals:    table.indexColOrdinals[:0],
-		extraValColOrdinals: table.extraValColOrdinals[:0],
-		timestampOutputIdx:  noOutputColumn,
-		oidOutputIdx:        noOutputColumn,
+		cFetcherTableArgs:        tableArgs,
+		orderedColIdxMap:         table.orderedColIdxMap,
+		indexColOrdinals:         table.indexColOrdinals[:0],
+		extraValColOrdinals:      table.extraValColOrdinals[:0],
+		timestampOutputIdx:       noOutputColumn,
+		oidOutputIdx:             noOutputColumn,
+		originIDOutputIdx:        noOutputColumn,
+		originTimestampOutputIdx: noOutputColumn,
 	}
 
 	if nCols > 0 {
@@ -393,6 +423,14 @@ func (cf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
+				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+				table.neededValueColsByIdx.Remove(idx)
+			case catpb.SystemColumnKind_ORIGINID:
+				table.originIDOutputIdx = idx
+				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+				table.neededValueColsByIdx.Remove(idx)
+			case catpb.SystemColumnKind_ORIGINTIMESTAMP:
+				table.originTimestampOutputIdx = idx
 				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
 			case catpb.SystemColumnKind_TABLEOID:
@@ -725,6 +763,9 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
+			cf.table.rowLastOriginID = 0
+			cf.table.rowLastOriginTimestamp = hlc.Timestamp{}
+			cf.table.rowLastModifiedWithoutOriginTimestamp = hlc.Timestamp{}
 			cf.machine.firstKeyOfRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
@@ -825,6 +866,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			if cf.table.rowLastModified.Less(cf.machine.nextKV.Value.Timestamp) {
 				cf.table.rowLastModified = cf.machine.nextKV.Value.Timestamp
 			}
+
+			if vh, err := cf.machine.nextKV.Value.GetMVCCValueHeader(); err == nil {
+				if cf.table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
+					cf.table.rowLastOriginID = int(vh.OriginID)
+					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
+				}
+				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
+					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
+				}
+			}
+
 			// If the index has only one column family, then the next KV will
 			// always belong to a different row than the current KV.
 			if cf.table.spec.MaxKeysPerRow == 1 {
@@ -893,6 +945,16 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				cf.table.rowLastModified = cf.machine.nextKV.Value.Timestamp
 			}
 
+			if vh, err := kv.Value.GetMVCCValueHeader(); err == nil {
+				if cf.table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
+					cf.table.rowLastOriginID = int(vh.OriginID)
+					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
+				}
+				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
+					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
+				}
+			}
+
 			if familyID == cf.table.spec.MaxFamilyID {
 				// We know the row can't have any more keys, so finalize the row.
 				cf.machine.state[0] = stateFinalizeRow
@@ -908,6 +970,16 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// time.
 			if cf.table.timestampOutputIdx != noOutputColumn {
 				cf.machine.timestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastModified)
+			}
+			if cf.table.originIDOutputIdx != noOutputColumn {
+				cf.machine.originIDCol.Set(cf.machine.rowIdx, int32(cf.table.rowLastOriginID))
+			}
+			if cf.table.originTimestampOutputIdx != noOutputColumn {
+				if cf.table.rowLastOriginTimestamp.IsSet() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.table.rowLastOriginTimestamp) {
+					cf.machine.originTimestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastOriginTimestamp)
+				} else {
+					cf.machine.colvecs.Nulls[cf.table.originTimestampOutputIdx].SetNull(cf.machine.rowIdx)
+				}
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
@@ -1155,7 +1227,7 @@ func (cf *cFetcher) processValueSingle(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
 		}
 		val := cf.machine.nextKV.Value
-		if len(val.RawBytes) == 0 {
+		if !val.IsPresent() {
 			return prettyKey, "", nil
 		}
 		typ := cf.table.spec.FetchedColumns[idx].Type

@@ -43,6 +43,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -90,6 +92,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -159,6 +163,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -271,6 +277,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -328,6 +336,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -439,6 +449,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null

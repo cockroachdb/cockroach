@@ -23,6 +23,12 @@ enum SystemColumnKind {
   MVCCTIMESTAMP = 1;
   // A system column containing the OID of the table that the row came from.
   TABLEOID = 2;
+  // A system column containing the value of the OriginID field of the
+  // MVCCValueHeader associated with the kv's corresponding to the row.
+  ORIGINID = 3;
+  // A system column containing the value of the OriginTimestamp field of the
+  // MVCCValueHeader associated with the KV's coressponding to the row.
+  ORIGINTIMESTAMP = 4;
 }
 
 // InvertedIndexColumnKind is the kind of the inverted index on a column. The

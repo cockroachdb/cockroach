@@ -1021,15 +1021,15 @@ query T
 EXPLAIN (opt,verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 ----
 group-by (streaming)
- ├── columns: b:2 count:5
+ ├── columns: b:2 count:7
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
  ├── stats: [rows=9.561793, distinct(2)=9.56179, null(2)=0]
  ├── cost: 29.145618
  ├── key: (2)
- ├── fd: (2)-->(5)
+ ├── fd: (2)-->(7)
  ├── distribution: test
- ├── prune: (5)
+ ├── prune: (7)
  ├── scan data2
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/2: [/1 - /1]
@@ -1042,7 +1042,7 @@ group-by (streaming)
  │    ├── prune: (2)
  │    └── interesting orderings: (+2 opt(1))
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:7]
 
 query T
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b

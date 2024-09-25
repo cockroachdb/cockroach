@@ -182,13 +182,13 @@ project
  ├── distribution: test
  ├── prune: (1)
  └── inner-join (merge)
-      ├── columns: c.a:1 d.b:8
+      ├── columns: c.a:1 d.b:10
       ├── flags: force merge join
       ├── left ordering: +1
-      ├── right ordering: +8
-      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+      ├── right ordering: +10
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(10)=1, null(10)=0]
       ├── cost: 1129.869
-      ├── fd: (1)==(8), (8)==(1)
+      ├── fd: (1)==(10), (10)==(1)
       ├── distribution: test
       ├── scan c
       │    ├── columns: c.a:1
@@ -198,16 +198,16 @@ project
       │    ├── distribution: test
       │    ├── prune: (1)
       │    ├── interesting orderings: (+1)
-      │    └── unfiltered-cols: (1-6)
+      │    └── unfiltered-cols: (1-8)
       ├── scan d
-      │    ├── columns: d.b:8
-      │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
+      │    ├── columns: d.b:10
+      │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
       │    ├── cost: 1088.62
-      │    ├── ordering: +8
+      │    ├── ordering: +10
       │    ├── distribution: test
-      │    ├── prune: (8)
-      │    ├── interesting orderings: (+8)
-      │    └── unfiltered-cols: (7-10)
+      │    ├── prune: (10)
+      │    ├── interesting orderings: (+10)
+      │    └── unfiltered-cols: (9-14)
       └── filters (true)
 
 query T

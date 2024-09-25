@@ -64,6 +64,8 @@ TABLE t
  ├── v int as (a + b) virtual
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_a (a)
  ├── FAMILY fam_1_b (b)
  └── PRIMARY INDEX t_pkey

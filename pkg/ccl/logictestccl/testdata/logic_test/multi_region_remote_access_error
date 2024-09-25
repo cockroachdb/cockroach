@@ -640,10 +640,10 @@ EXPLAIN (OPT) SELECT * FROM parent LIMIT 1
 ----
 locality-optimized-search
  ├── scan parent
- │    ├── constraint: /7/6: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    ├── constraint: /9/8: [/'ap-southeast-2' - /'ap-southeast-2']
  │    └── limit: 1
  └── scan parent
-      ├── constraint: /11/10: [/'ca-central-1' - /'us-east-1']
+      ├── constraint: /15/14: [/'ca-central-1' - /'us-east-1']
       └── limit: 1
 
 # Static checking should not error this query out, because we now generate a
@@ -658,9 +658,9 @@ project
       ├── inner-join (lookup orders@orders_cust_id_idx [as=o])
       │    ├── locality-optimized-search
       │    │    ├── scan customers [as=c]
-      │    │    │    └── constraint: /15/13: [/'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    │    │    └── constraint: /19/17: [/'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
       │    │    └── scan customers [as=c]
-      │    │         └── constraint: /20/18
+      │    │         └── constraint: /26/24
       │    │              ├── [/'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
       │    │              └── [/'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
       │    └── filters
@@ -839,10 +839,10 @@ inner-join (lookup messages_global_2 [as=g3])
  │    ├── lookup columns are key
  │    ├── locality-optimized-search
  │    │    ├── scan messages_rbr
- │    │    │    ├── constraint: /33/30: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │    │    ├── constraint: /43/40: [/'ap-southeast-2' - /'ap-southeast-2']
  │    │    │    └── limit: 1
  │    │    └── scan messages_rbr
- │    │         ├── constraint: /39/36: [/'ca-central-1' - /'us-east-1']
+ │    │         ├── constraint: /51/48: [/'ca-central-1' - /'us-east-1']
  │    │         └── limit: 1
  │    └── filters (true)
  └── filters (true)
@@ -1056,52 +1056,52 @@ EXPLAIN (OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN j
 AND t1.crdb_region = 'ap-southeast-2' LIMIT 1
 ----
 project
- ├── columns: k:7
+ ├── columns: k:9
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
  ├── cost: 4309.15778
  ├── key: ()
- ├── fd: ()-->(7)
+ ├── fd: ()-->(9)
  ├── distribution: ap-southeast-2
- ├── prune: (7)
+ ├── prune: (9)
  └── limit
-      ├── columns: t2.j:3 t1.k:7 t1.j:9 crdb_region:11
+      ├── columns: t2.j:3 t1.k:9 t1.j:11 crdb_region:13
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── stats: [rows=1]
       ├── cost: 4309.13778
       ├── key: ()
-      ├── fd: ()-->(3,7,9,11)
+      ├── fd: ()-->(3,9,11,13)
       ├── distribution: ap-southeast-2
       ├── inner-join (lookup json_arr1_rbr [as=t1])
-      │    ├── columns: t2.j:3 t1.k:7 t1.j:9 crdb_region:11
-      │    ├── key columns: [22 18] = [11 7]
+      │    ├── columns: t2.j:3 t1.k:9 t1.j:11 crdb_region:13
+      │    ├── key columns: [26 22] = [13 9]
       │    ├── lookup columns are key
       │    ├── immutable
       │    ├── stats: [rows=3333.333]
       │    ├── cost: 4309.11778
-      │    ├── fd: ()-->(11), (7)-->(9)
+      │    ├── fd: ()-->(13), (9)-->(11)
       │    ├── limit hint: 1.00
       │    ├── distribution: ap-southeast-2
       │    ├── lookup table distribution: ap-southeast-2
-      │    ├── prune: (7)
+      │    ├── prune: (9)
       │    ├── inner-join (inverted json_arr1_rbr@j_idx,inverted [as=t1])
-      │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22
+      │    │    ├── columns: t2.j:3 t1.k:22 crdb_region:26
       │    │    ├── flags: force inverted join (into right side)
-      │    │    ├── prefix key columns: [17] = [22]
+      │    │    ├── prefix key columns: [21] = [26]
       │    │    ├── inverted-expr
-      │    │    │    └── t1.j:20 @> t2.j:3
-      │    │    ├── stats: [rows=3333.333, distinct(17)=1, null(17)=0, distinct(18)=964.524, null(18)=0, distinct(22)=1, null(22)=0]
+      │    │    │    └── t1.j:24 @> t2.j:3
+      │    │    ├── stats: [rows=3333.333, distinct(21)=1, null(21)=0, distinct(22)=964.524, null(22)=0, distinct(26)=1, null(26)=0]
       │    │    ├── cost: 3837.19889
-      │    │    ├── fd: ()-->(22)
+      │    │    ├── fd: ()-->(26)
       │    │    ├── limit hint: 100.00
       │    │    ├── distribution: ap-southeast-2
       │    │    ├── project
-      │    │    │    ├── columns: "inverted_join_const_col_@11":17 t2.j:3
-      │    │    │    ├── stats: [rows=1000, distinct(17)=1, null(17)=0]
+      │    │    │    ├── columns: "inverted_join_const_col_@13":21 t2.j:3
+      │    │    │    ├── stats: [rows=1000, distinct(21)=1, null(21)=0]
       │    │    │    ├── cost: 1136.62333
-      │    │    │    ├── fd: ()-->(17)
+      │    │    │    ├── fd: ()-->(21)
       │    │    │    ├── distribution: ap-southeast-2
       │    │    │    ├── scan json_arr2_rbt [as=t2]
       │    │    │    │    ├── columns: t2.j:3
@@ -1109,12 +1109,12 @@ project
       │    │    │    │    ├── cost: 1116.60333
       │    │    │    │    ├── distribution: ap-southeast-2
       │    │    │    │    ├── prune: (3)
-      │    │    │    │    └── unfiltered-cols: (1-6)
+      │    │    │    │    └── unfiltered-cols: (1-8)
       │    │    │    └── projections
-      │    │    │         └── 'ap-southeast-2' [as="inverted_join_const_col_@11":17]
+      │    │    │         └── 'ap-southeast-2' [as="inverted_join_const_col_@13":21]
       │    │    └── filters (true)
       │    └── filters
-      │         └── t1.j:9 @> t2.j:3 [outer=(3,9), immutable]
+      │         └── t1.j:11 @> t2.j:3 [outer=(3,11), immutable]
       └── 1
 
 statement ok

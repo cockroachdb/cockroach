@@ -304,15 +304,15 @@ vectorized: true
         │ columns: (fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max, bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
         │
         └── • lookup join (left outer)
-            │ columns: ("lookup_join_const_col_@58", bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+            │ columns: ("lookup_join_const_col_@62", bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
             │ estimated row count: 27,778
             │ table: statement_activity@primary
-            │ equality: (max, fingerprint_id, lookup_join_const_col_@58, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
+            │ equality: (max, fingerprint_id, lookup_join_const_col_@62, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
             │ equality cols are key
             │
             └── • render
-                │ columns: ("lookup_join_const_col_@58", bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max)
-                │ render lookup_join_const_col_@58: '\x307830303030303030303030303030303030'
+                │ columns: ("lookup_join_const_col_@62", bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max)
+                │ render lookup_join_const_col_@62: '\x307830303030303030303030303030303030'
                 │ render bytea: '\x307830303030303030303030303030303030'
                 │ render idx_rec: jsonb_array_to_string_array(merge_statement_stats->'index_recommendations')
                 │ render int8: ((merge_statement_stats->'statistics')->>'cnt')::INT8
@@ -546,15 +546,15 @@ vectorized: true
         │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
         │
         └── • lookup join (left outer)
-            │ columns: ("lookup_join_const_col_@99", txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+            │ columns: ("lookup_join_const_col_@105", txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
             │ estimated row count: 3
             │ table: statement_activity@primary
-            │ equality: (aggregated_ts, fingerprint_id, lookup_join_const_col_@99, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
+            │ equality: (aggregated_ts, fingerprint_id, lookup_join_const_col_@105, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
             │ equality cols are key
             │
             └── • render
-                │ columns: ("lookup_join_const_col_@99", txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats)
-                │ render lookup_join_const_col_@99: '\x307830303030303030303030303030303030'
+                │ columns: ("lookup_join_const_col_@105", txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats)
+                │ render lookup_join_const_col_@105: '\x307830303030303030303030303030303030'
                 │ render txn_fingerprint_id: '\x307830303030303030303030303030303030'
                 │ render idx_rec: jsonb_array_to_string_array(merge_statement_stats->'index_recommendations')
                 │ render int8: ((merge_statement_stats->'statistics')->>'cnt')::INT8

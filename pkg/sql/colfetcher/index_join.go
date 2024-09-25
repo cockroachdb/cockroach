@@ -561,12 +561,14 @@ func NewColIndexJoin(
 			),
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
+			tableArgs.RequiresRawMVCCValues(),
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
 			txn,
 			nil,   /* bsHeader */
 			false, /* reverse */
+			tableArgs.RequiresRawMVCCValues(),
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
 			spec.LockingDurability,

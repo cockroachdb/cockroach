@@ -543,7 +543,7 @@ quality of service: regular
     │ KV gRPC calls: 0
     │ estimated max memory allocated: 0 B
     │ table: t@t_t_idx
-    │ equality: (column9) = (t)
+    │ equality: (column11) = (t)
     │
     └── • values
           sql nodes: <hidden>
@@ -593,7 +593,7 @@ quality of service: regular
     │ KV gRPC calls: 0
     │ estimated max memory allocated: 0 B
     │ table: t@t_t_idx
-    │ equality: (column9) = (t)
+    │ equality: (column11) = (t)
     │
     └── • values
           sql nodes: <hidden>
