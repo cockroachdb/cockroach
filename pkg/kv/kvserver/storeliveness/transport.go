@@ -44,7 +44,7 @@ const (
 	connClass = rpc.SystemClass
 )
 
-var logSendQueueFullEvery = log.Every(1 * time.Second)
+var logQueueFullEvery = log.Every(1 * time.Second)
 
 // MessageHandler is the interface that must be implemented by
 // arguments to Transport.ListenMessages.
@@ -53,7 +53,7 @@ type MessageHandler interface {
 	// block (e.g. do a synchronous disk write) to prevent a single store with a
 	// problem (e.g. a stalled disk) from affecting message receipt by other
 	// stores on the same node.
-	HandleMessage(msg *slpb.Message)
+	HandleMessage(msg *slpb.Message) error
 }
 
 // sendQueue is a queue of outgoing Messages.
@@ -74,11 +74,15 @@ type Transport struct {
 	stopper *stop.Stopper
 	clock   *hlc.Clock
 	dialer  *nodedialer.Dialer
+	metrics *TransportMetrics
 
 	// queues stores outgoing message queues keyed by the destination node ID.
 	queues syncutil.Map[roachpb.NodeID, sendQueue]
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
+
+	// TransportTestingKnobs includes all knobs for testing.
+	knobs *TransportTestingKnobs
 }
 
 var _ MessageSender = (*Transport)(nil)
@@ -90,17 +94,28 @@ func NewTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
+	knobs *TransportTestingKnobs,
 ) *Transport {
+	if knobs == nil {
+		knobs = &TransportTestingKnobs{}
+	}
 	t := &Transport{
 		AmbientContext: ambient,
 		stopper:        stopper,
 		clock:          clock,
 		dialer:         dialer,
+		metrics:        newTransportMetrics(),
+		knobs:          knobs,
 	}
 	if grpcServer != nil {
 		slpb.RegisterStoreLivenessServer(grpcServer, t)
 	}
 	return t
+}
+
+// Metrics returns metrics tracking this transport.
+func (t *Transport) Metrics() *TransportMetrics {
+	return t.metrics
 }
 
 // ListenMessages registers a MessageHandler to receive proxied messages.
@@ -163,8 +178,17 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 		)
 		return
 	}
-
-	(*handler).HandleMessage(msg)
+	if err := (*handler).HandleMessage(msg); err != nil {
+		if logQueueFullEvery.ShouldLog() {
+			log.Warningf(
+				t.AnnotateCtx(context.Background()),
+				"error handling message to store %v: %v", msg.To, err,
+			)
+		}
+		t.metrics.MessagesReceiveDropped.Inc(1)
+		return
+	}
+	t.metrics.MessagesReceived.Inc(1)
 }
 
 // SendAsync implements the MessageSender interface. It sends a message to the
@@ -174,13 +198,14 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false
 // the message definitely was not sent.
-func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (sent bool) {
+func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued bool) {
 	toNodeID := msg.To.NodeID
 	fromNodeID := msg.From.NodeID
 	// If this is a message from one local store to another local store, do not
 	// dial the node and go through GRPC; instead, handle the message directly
 	// using the corresponding message handler.
 	if toNodeID == fromNodeID {
+		t.metrics.MessagesSent.Inc(1)
 		// Make a copy of the message to avoid escaping the function argument
 		// msg to the heap.
 		msgCopy := msg
@@ -188,6 +213,7 @@ func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
 		return true
 	}
 	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, connClass); ok && b.Signal().Err() != nil {
+		t.metrics.MessagesSendDropped.Inc(1)
 		return false
 	}
 
@@ -202,14 +228,17 @@ func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
 
 	select {
 	case q.messages <- msg:
+		t.metrics.SendQueueSize.Inc(1)
+		t.metrics.SendQueueBytes.Inc(int64(msg.Size()))
 		return true
 	default:
-		if logSendQueueFullEvery.ShouldLog() {
+		if logQueueFullEvery.ShouldLog() {
 			log.Warningf(
 				t.AnnotateCtx(context.Background()),
 				"store liveness send queue to n%d is full", toNodeID,
 			)
 		}
+		t.metrics.MessagesSendDropped.Inc(1)
 		return false
 	}
 }
@@ -234,14 +263,31 @@ func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
 func (t *Transport) startProcessNewQueue(
 	ctx context.Context, toNodeID roachpb.NodeID,
 ) (started bool) {
+	cleanup := func() {
+		q, ok := t.getQueue(toNodeID)
+		t.queues.Delete(toNodeID)
+		// Account for all remaining messages in the queue. SendAsync may be
+		// writing to the queue concurrently, so it's possible that we won't
+		// account for a few messages below.
+		if ok {
+			for {
+				select {
+				case m := <-q.messages:
+					t.metrics.MessagesSendDropped.Inc(1)
+					t.metrics.SendQueueSize.Dec(1)
+					t.metrics.SendQueueBytes.Dec(int64(m.Size()))
+				default:
+					return
+				}
+			}
+		}
+	}
 	worker := func(ctx context.Context) {
 		q, existingQueue := t.getQueue(toNodeID)
 		if !existingQueue {
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
-		defer func() {
-			t.queues.Delete(toNodeID)
-		}()
+		defer cleanup()
 		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
@@ -269,7 +315,7 @@ func (t *Transport) startProcessNewQueue(
 		},
 	)
 	if err != nil {
-		t.queues.Delete(toNodeID)
+		cleanup()
 		return false
 	}
 	return true
@@ -285,25 +331,33 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 		err = errors.Join(err, closeErr)
 	}()
 
+	getIdleTimeout := func() time.Duration {
+		if overrideFn := t.knobs.OverrideIdleTimeout; overrideFn != nil {
+			return overrideFn()
+		} else {
+			return idleTimeout
+		}
+	}
 	var idleTimer timeutil.Timer
 	defer idleTimer.Stop()
 	var batchTimer timeutil.Timer
 	defer batchTimer.Stop()
 	batch := &slpb.MessageBatch{}
 	for {
-		idleTimer.Reset(idleTimeout)
+		idleTimer.Reset(getIdleTimeout())
 		select {
 		case <-t.stopper.ShouldQuiesce():
 			return nil
 
-			// TODO(mira): add a metric for idle queues (as part of #125067) and a
-			// unit test.
 		case <-idleTimer.C:
 			idleTimer.Read = true
+			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
 		case msg := <-q.messages:
 			batch.Messages = append(batch.Messages, msg)
+			t.metrics.SendQueueSize.Dec(1)
+			t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
 
 			// Pull off as many queued requests as possible within batchDuration.
 			batchTimer.Reset(batchDuration)
@@ -311,6 +365,8 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 				select {
 				case msg = <-q.messages:
 					batch.Messages = append(batch.Messages, msg)
+					t.metrics.SendQueueSize.Dec(1)
+					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
 				case <-batchTimer.C:
 					batchTimer.Read = true
 				}
@@ -318,8 +374,10 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 
 			batch.Now = t.clock.NowAsClockTimestamp()
 			if err = stream.Send(batch); err != nil {
+				t.metrics.MessagesSendDropped.Inc(int64(len(batch.Messages)))
 				return err
 			}
+			t.metrics.MessagesSent.Inc(int64(len(batch.Messages)))
 
 			// Reuse the Messages slice, but zero out the contents to avoid delaying
 			// GC of memory referenced from within.
@@ -330,4 +388,12 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 			batch.Now = hlc.ClockTimestamp{}
 		}
 	}
+}
+
+// TransportTestingKnobs includes all knobs that facilitate testing Transport.
+type TransportTestingKnobs struct {
+	// OverrideIdleTimeout overrides the idleTimeout, which controls how
+	// long until an instance of processQueue winds down after not observing any
+	// messages.
+	OverrideIdleTimeout func() time.Duration
 }

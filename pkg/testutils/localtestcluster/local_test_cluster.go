@@ -185,7 +185,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	storeLivenessTransport := storeliveness.NewTransport(
-		cfg.AmbientCtx, ltc.stopper, ltc.Clock, nil, nil,
+		cfg.AmbientCtx, ltc.stopper, ltc.Clock,
+		nil /* dialer */, nil /* grpcServer */, nil, /* knobs */
 	)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
