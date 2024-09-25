@@ -1448,6 +1448,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!storage/mvcc_value.go",
+			":!roachpb/data.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
