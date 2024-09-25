@@ -199,10 +199,7 @@ func TestUploadZipEndToEnd(t *testing.T) {
 			require.NoError(t, err)
 
 			lines := strings.Split(finaloutput.String(), "\n")
-			// if d.Cmd == "upload-profiles" {
-			// sort the lines to avoid flakiness in the test
 			sort.Strings(lines)
-			// }
 
 			// replace the debugDir with a constant string to avoid flakiness in the test
 			return strings.ReplaceAll(strings.TrimSpace(strings.Join(lines, "\n")), debugDir, "debugDir")
@@ -274,6 +271,9 @@ func uploadProfileHook(t *testing.T, req *http.Request) ([]byte, error) {
 	_, params, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
 	reader := multipart.NewReader(req.Body, params["boundary"])
 
+	// validate the headers
+	require.Equal(t, "dd-api-key", req.Header.Get("DD-API-KEY"))
+
 	// find the "event" part in the multipart request and copy it to the final output
 	for {
 		part, err := reader.NextPart()
@@ -316,6 +316,10 @@ func uploadProfileHook(t *testing.T, req *http.Request) ([]byte, error) {
 
 func setupDDArchiveHook(t *testing.T, req *http.Request) ([]byte, error) {
 	t.Helper()
+
+	// validate the headers
+	require.Equal(t, "dd-api-key", req.Header.Get("DD-API-KEY"))
+	require.Equal(t, "dd-app-key", req.Header.Get("DD-APPLICATION-KEY"))
 
 	var body bytes.Buffer
 	_, err := body.ReadFrom(req.Body)
