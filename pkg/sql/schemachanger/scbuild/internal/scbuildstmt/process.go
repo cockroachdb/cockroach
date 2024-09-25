@@ -70,6 +70,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CreateDatabase)(nil)):      {fn: CreateDatabase, statementTags: []string{tree.CreateDatabaseTag}, on: true, checks: isV241Active},
 	reflect.TypeOf((*tree.SetZoneConfig)(nil)):       {fn: SetZoneConfig, statementTags: []string{tree.ConfigureZoneTag}, on: true, checks: isV242Active},
 	reflect.TypeOf((*tree.CreateTrigger)(nil)):       {fn: CreateTrigger, statementTags: []string{tree.CreateTriggerTag}, on: true, checks: nil /* isV243Active */},
+	reflect.TypeOf((*tree.DropTrigger)(nil)):         {fn: DropTrigger, statementTags: []string{tree.DropTriggerTag}, on: true, checks: nil /* isV243Active */},
 }
 
 // supportedStatementTags tracks statement tags which are implemented
