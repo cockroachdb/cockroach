@@ -685,7 +685,11 @@ func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossi
 			}
 			t.Fatal(err)
 		case <-time.After(testutils.DefaultSucceedsSoonDuration):
-			t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
+			func() {
+				storesMu.Lock()
+				defer storesMu.Unlock()
+				t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
+			}()
 		}
 	}
 }
