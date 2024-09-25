@@ -9214,6 +9214,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	spans INT,
 	initial_ts DECIMAL,
 	prev_ts DECIMAL,
+	state STRING,
 
 	batches INT,
 	checkpoints INT,
@@ -9261,11 +9262,31 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 			return d
 		}
 
+		dur := func(nanos int64) tree.Datum {
+			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+
 		for _, s := range sm.DebugGetProducerStatuses(ctx) {
 			resolved := time.UnixMicro(s.RF.ResolvedMicros.Load())
 			resolvedDatum := tree.DNull
 			if resolved.Unix() != 0 {
 				resolvedDatum = shortenLogical(eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()}))
+			}
+
+			curState := streampb.ProducerState(s.State.Load())
+			currentWait := duration.Age(now, time.UnixMicro(s.LastPolledMicros.Load())).Nanos()
+
+			curOrLast := func(currentNanos int64, lastNanos int64, statePredicate streampb.ProducerState) tree.Datum {
+				if curState == statePredicate {
+					return dur(currentNanos)
+				}
+				return dur(lastNanos)
+			}
+			currentWaitWithState := func(statePredicate streampb.ProducerState) int64 {
+				if curState == statePredicate {
+					return currentWait
+				}
+				return 0
 			}
 
 			if err := addRow(
@@ -9274,28 +9295,17 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
 				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),
 				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),
+				tree.NewDString(curState.String()),
 
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
 				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
 				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
 
-				tree.NewDInterval(
-					duration.MakeDuration(s.Flushes.ProduceWaitNanos.Load(), 0, 0),
-					types.DefaultIntervalTypeMetadata,
-				),
-				tree.NewDInterval(
-					duration.MakeDuration(s.Flushes.EmitWaitNanos.Load(), 0, 0),
-					types.DefaultIntervalTypeMetadata,
-				),
-				tree.NewDInterval(
-					duration.MakeDuration(s.Flushes.LastProduceWaitNanos.Load(), 0, 0),
-					types.DefaultIntervalTypeMetadata,
-				),
-				tree.NewDInterval(
-					duration.MakeDuration(s.Flushes.LastEmitWaitNanos.Load(), 0, 0),
-					types.DefaultIntervalTypeMetadata,
-				),
+				dur(s.Flushes.ProduceWaitNanos.Load()+currentWaitWithState(streampb.Producing)),
+				dur(s.Flushes.EmitWaitNanos.Load()+currentWaitWithState(streampb.Emitting)),
+				curOrLast(currentWait, s.Flushes.LastProduceWaitNanos.Load(), streampb.Producing),
+				curOrLast(currentWait, s.Flushes.LastEmitWaitNanos.Load(), streampb.Emitting),
 
 				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),
 				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),
