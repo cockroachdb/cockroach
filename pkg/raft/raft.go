@@ -326,10 +326,10 @@ type raft struct {
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
 
-	config          quorum.Config
-	trk             tracker.ProgressTracker
-	electionTracker tracker.ElectionTracker
-	supportTracker  tracker.SupportTracker
+	config               quorum.Config
+	trk                  tracker.ProgressTracker
+	electionTracker      tracker.ElectionTracker
+	fortificationTracker tracker.FortificationTracker
 
 	state StateType
 
@@ -462,7 +462,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
-	r.supportTracker = tracker.MakeSupportTracker(&r.config, r.storeLiveness)
+	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -555,7 +555,7 @@ func (r *raft) send(m pb.Message) {
 		// synced to stable storage locally. Similarly, it would be incorrect to
 		// acknowledge a log append to the leader before that entry has been synced
 		// to stable storage locally. Similarly, it would also be incorrect to
-		// promise fortification support to a leader without durably persisting the
+		// promise fortification to a leader without durably persisting the
 		// leader's epoch being supported.
 		//
 		// Per the Raft thesis, section 3.8 Persisted state and server restarts:
@@ -853,7 +853,7 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.electionTracker.ResetVotes()
-	r.supportTracker.Reset()
+	r.fortificationTracker.Reset()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:       0,
@@ -1276,8 +1276,8 @@ func (r *raft) Step(m pb.Message) error {
 				r.id, r.Term, m.Type, m.From, m.Term)
 			if IsMsgFromLeader(m.Type) {
 				// We've just received a message from the new leader which was elected
-				// at a higher term. The old leader's fortification support has expired,
-				// so it's safe to defortify at this point.
+				// at a higher term. The old leader is no longer fortified, so it's
+				// safe to defortify at this point.
 				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
 			} else {
@@ -1422,7 +1422,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		return nil
 	case pb.MsgCheckQuorum:
 		quorumActiveByHeartbeats := r.trk.QuorumActive()
-		quorumActiveByFortification := r.supportTracker.QuorumActive()
+		quorumActiveByFortification := r.fortificationTracker.QuorumActive()
 		if !quorumActiveByHeartbeats {
 			r.logger.Debugf(
 				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
@@ -2109,16 +2109,16 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 		// tickHeartbeat.
 		return
 	}
-	r.supportTracker.RecordSupport(m.From, m.LeadEpoch)
+	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
 }
 
-// deFortify (conceptually) revokes previously provided fortification support to
-// a leader.
+// deFortify (conceptually) revokes previously provided fortification to a
+// leader.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
 	assertTrue(term > r.Term ||
 		(term == r.Term && from == r.lead) ||
 		(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
-		"can only defortify at current term if told by the leader or if fortification support has expired",
+		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
 	r.leadEpoch = 0
 }
