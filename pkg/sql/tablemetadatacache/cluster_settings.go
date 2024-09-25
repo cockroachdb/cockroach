@@ -19,7 +19,7 @@ import (
 
 const defaultDataValidDuration = time.Minute * 20
 
-var tableMetadataCacheAutoUpdatesEnabled = settings.RegisterBoolSetting(
+var AutomaticCacheUpdatesEnabledSetting = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"obs.tablemetadata.automatic_updates.enabled",
 	"enables automatic updates of the table metadata cache system.table_metadata",

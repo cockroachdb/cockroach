@@ -66,7 +66,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	settings := execCtx.ExecCfg().Settings
 	// Register callbacks to signal the job to reset the timer when timer related settings change.
 	scheduleSettingsCh := make(chan struct{})
-	tableMetadataCacheAutoUpdatesEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
+	AutomaticCacheUpdatesEnabledSetting.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
 		case scheduleSettingsCh <- struct{}{}:
 		default:
@@ -84,7 +84,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		onJobReady()
 	}
 	for {
-		if tableMetadataCacheAutoUpdatesEnabled.Get(&settings.SV) {
+		if AutomaticCacheUpdatesEnabledSetting.Get(&settings.SV) {
 			timer.Reset(DataValidDurationSetting.Get(&settings.SV))
 		}
 		select {
