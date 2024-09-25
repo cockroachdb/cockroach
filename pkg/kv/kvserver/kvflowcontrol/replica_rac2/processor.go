@@ -364,6 +364,16 @@ type Processor interface {
 	// raftMu is held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, rac2.AdmittedVector)
 
+	// MaybeSendPingsRaftMuLocked sends a MsgApp ping to each raft peer whose
+	// admitted vector is lagging, and there wasn't a recent MsgApp to this peer.
+	// The messages are added to raft's message queue, and will be extracted from
+	// raft and sent during the next Ready processing.
+	//
+	// If the replica is not the leader, this call does nothing.
+	//
+	// raftMu is held.
+	MaybeSendPingsRaftMuLocked()
+
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
 	//
@@ -1087,6 +1097,14 @@ func (p *processorImpl) AdmitRaftMuLocked(
 	// NB: rc is always updated while raftMu is held.
 	if rc := p.leader.rc; rc != nil {
 		rc.AdmitRaftMuLocked(ctx, replicaID, av)
+	}
+}
+
+// MaybeSendPingsRaftMuLocked implements Processor.
+func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
+	p.opts.Replica.RaftMuAssertHeld()
+	if rc := p.leader.rc; rc != nil {
+		rc.MaybeSendPingsRaftMuLocked()
 	}
 }
 
