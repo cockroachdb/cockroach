@@ -198,6 +198,14 @@ type tableInfo struct {
 	tableOid     tree.Datum
 	oidOutputIdx int
 
+	// Fields for outputting the OriginID system column.
+	rowLastOriginID   int
+	originIDOutputIdx int
+
+	// Fields for outputting the OriginTimestamp system column.
+	rowLastOriginTimestamp   hlc.Timestamp
+	originTimestampOutputIdx int
+
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
@@ -234,6 +242,8 @@ type Fetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched.
 	mvccDecodeStrategy storage.MVCCDecodingStrategy
+
+	shouldRequestRawMVCCKeys bool
 
 	// -- Fields updated during a scan --
 
@@ -362,11 +372,13 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
-		indexColIdx:        rf.table.indexColIdx[:0],
-		keyVals:            rf.table.keyVals[:0],
-		extraVals:          rf.table.extraVals[:0],
-		timestampOutputIdx: noOutputColumn,
-		oidOutputIdx:       noOutputColumn,
+		indexColIdx:              rf.table.indexColIdx[:0],
+		keyVals:                  rf.table.keyVals[:0],
+		extraVals:                rf.table.extraVals[:0],
+		timestampOutputIdx:       noOutputColumn,
+		oidOutputIdx:             noOutputColumn,
+		originIDOutputIdx:        noOutputColumn,
+		originTimestampOutputIdx: noOutputColumn,
 	}
 
 	for idx := range args.Spec.FetchedColumns {
@@ -381,6 +393,16 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 				table.tableOid = tree.NewDOid(oid.Oid(args.Spec.TableID))
+
+			case catpb.SystemColumnKind_ORIGINID:
+				table.originIDOutputIdx = idx
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+				rf.shouldRequestRawMVCCKeys = true
+
+			case catpb.SystemColumnKind_ORIGINTIMESTAMP:
+				table.originTimestampOutputIdx = idx
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+				rf.shouldRequestRawMVCCKeys = true
 			}
 		}
 	}
@@ -465,6 +487,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			lockTimeout:                args.LockTimeout,
 			deadlockTimeout:            args.DeadlockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
+			rawMVCCValues:              rf.shouldRequestRawMVCCKeys,
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
@@ -871,6 +894,8 @@ func (rf *Fetcher) processKV(
 		// As kvs are iterated for this row, it keeps track of the greatest
 		// timestamp seen.
 		table.rowLastModified = hlc.Timestamp{}
+		table.rowLastOriginID = 0
+		table.rowLastOriginTimestamp = hlc.Timestamp{}
 		// All row encodings (both before and after column families) have a
 		// sentinel kv (column family 0) that is always present when a row is
 		// present, even if that row is all NULLs. Thus, a row is deleted if and
@@ -880,6 +905,14 @@ func (rf *Fetcher) processKV(
 
 	if table.rowLastModified.Less(kv.Value.Timestamp) {
 		table.rowLastModified = kv.Value.Timestamp
+	}
+	if vh, err := kv.Value.GetMVCCValueHeader(); err == nil {
+		if table.rowLastOriginID < int(vh.OriginID) {
+			table.rowLastOriginID = int(vh.OriginID)
+		}
+		if table.rowLastOriginTimestamp.Less(vh.OriginTimestamp) {
+			table.rowLastOriginTimestamp = vh.OriginTimestamp
+		}
 	}
 
 	if len(table.spec.FetchedColumns) == 0 {
@@ -1287,6 +1320,15 @@ func (rf *Fetcher) finalizeRow() error {
 	}
 	if table.oidOutputIdx != noOutputColumn {
 		table.row[table.oidOutputIdx] = rowenc.EncDatum{Datum: table.tableOid}
+	}
+
+	if table.originIDOutputIdx != noOutputColumn {
+		table.row[table.originIDOutputIdx] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(rf.table.rowLastOriginID))}
+	}
+
+	if table.originTimestampOutputIdx != noOutputColumn {
+		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastOriginTimestamp)})
+		table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 
 	// Fill in any missing values with NULLs

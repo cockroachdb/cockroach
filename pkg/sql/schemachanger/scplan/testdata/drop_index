@@ -690,7 +690,7 @@ DROP INDEX idx3 CASCADE
 ops
 DROP INDEX idx4 CASCADE
 ----
-StatementPhase stage 1 of 1 with 20 MutationType ops
+StatementPhase stage 1 of 1 with 28 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -708,6 +708,12 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
     [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
@@ -739,6 +745,20 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 105
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
@@ -766,6 +786,12 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 105
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 105
@@ -774,6 +800,12 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
       TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
+      TableID: 105
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
       TableID: 105
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
@@ -793,10 +825,16 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 105, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 105, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 23 MutationType ops
+PreCommitPhase stage 2 of 2 with 31 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -814,6 +852,12 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
     [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
@@ -845,6 +889,20 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 105
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
@@ -872,6 +930,12 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 105
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 105
@@ -880,6 +944,12 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
       TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
+      TableID: 105
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 105
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
       TableID: 105
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -971,6 +1041,30 @@ DROP INDEX idx4 CASCADE
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
@@ -1011,6 +1105,22 @@ DROP INDEX idx4 CASCADE
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1024,6 +1134,22 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1120,6 +1246,14 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: relation dropped before dependent column
 - from: [View:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [View:{DescID: 105}, DROPPED]
   to:   [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
@@ -1136,11 +1270,27 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
   to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
@@ -1183,7 +1333,7 @@ DROP INDEX idx4 CASCADE
 ops
 DROP INDEX v2@idx CASCADE;
 ----
-StatementPhase stage 1 of 1 with 34 MutationType ops
+StatementPhase stage 1 of 1 with 42 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -1207,6 +1357,12 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
     [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1245,6 +1401,20 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 107
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
       TableID: 107
@@ -1282,6 +1452,12 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 107
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
       TableID: 107
@@ -1297,6 +1473,12 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
       TableID: 107
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
@@ -1348,6 +1530,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 107, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 107, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -1355,7 +1543,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 37 MutationType ops
+PreCommitPhase stage 2 of 2 with 45 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -1379,6 +1567,12 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
     [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 107, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1417,6 +1611,20 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 4294967293
+      Name: crdb_internal_column_4294967293_name_placeholder
+      TableID: 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967292
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 4294967292
+      Name: crdb_internal_column_4294967292_name_placeholder
+      TableID: 107
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
       TableID: 107
@@ -1454,6 +1662,12 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967292
+      TableID: 107
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
       TableID: 107
@@ -1469,6 +1683,12 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
       TableID: 107
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967293
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967292
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1

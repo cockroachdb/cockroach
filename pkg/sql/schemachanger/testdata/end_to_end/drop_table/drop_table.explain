@@ -11,7 +11,7 @@ EXPLAIN (DDL) DROP TABLE db.sc.t;
 Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 30 elements transitioning toward ABSENT
+ │         ├── 36 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -37,12 +37,18 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         └── 38 Mutation operations
+ │         └── 46 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
@@ -55,6 +61,10 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
@@ -66,11 +76,15 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":107}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":107}
@@ -83,7 +97,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 30 elements transitioning toward ABSENT
+ │    │    ├── 36 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 107 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -109,6 +123,12 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 107 (t-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 107 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 107 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 107 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 107 (t-), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
@@ -117,7 +137,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 30 elements transitioning toward ABSENT
+ │         ├── 36 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -143,12 +163,18 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         └── 40 Mutation operations
+ │         └── 48 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
@@ -161,6 +187,10 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
@@ -172,11 +202,15 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":107}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":107}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":107}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":107}

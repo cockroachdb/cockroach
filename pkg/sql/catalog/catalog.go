@@ -101,7 +101,7 @@ func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
 // NumSystemColumns defines the number of supported system columns and must be
 // equal to colinfo.numSystemColumns (enforced in colinfo package to avoid an
 // import cycle).
-const NumSystemColumns = 2
+const NumSystemColumns = 4
 
 // SmallestSystemColumnColumnID is a descpb.ColumnID with the smallest value
 // among all system columns (enforced in colinfo package to avoid an import

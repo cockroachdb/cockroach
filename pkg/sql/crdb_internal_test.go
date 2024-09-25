@@ -1893,3 +1893,41 @@ func TestVirtualPTSTable(t *testing.T) {
 		require.Equal(t, ts, virtualRow.lastUpdated)
 	})
 }
+
+// TestMVCCValueHeaderSystemColumns tests that the system columns that read MVCCValueHeaders data.
+func TestMVCCValueHeaderSystemColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	internalDB := srv.ApplicationLayer().InternalDB().(isql.DB)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.foo (pk int primary key)")
+
+	_, err := internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{OriginIDForLogicalDataReplication: 42},
+		"INSERT INTO test.foo VALUES (1), (2)")
+	require.NoError(t, err)
+
+	_, err = internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{},
+		"INSERT INTO test.foo VALUES (3)")
+	require.NoError(t, err)
+
+	query := "SELECT pk, crdb_internal_origin_id FROM test.foo"
+	exp := [][]string{
+		{"1", "42"},
+		{"2", "42"},
+		{"3", "0"}}
+	sqlDB.Exec(t, "SET vectorize=on")
+	sqlDB.CheckQueryResults(t, query, exp)
+	sqlDB.Exec(t, "SET vectorize=off")
+	sqlDB.CheckQueryResults(t, query, exp)
+}
