@@ -293,7 +293,7 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
-	t.Run("422 unprocessable", func(t *testing.T) {
+	t.Run("400 bad request", func(t *testing.T) {
 		var unprocessableTest = []struct {
 			name        string
 			queryString string
@@ -303,6 +303,7 @@ func TestGetTableMetadata(t *testing.T) {
 			{"pageSize", "?pageSize=a"},
 			{"storeId", "?storeId=a"},
 			{"multiple storeIds", "?storeId=1&storeId=a"},
+			{"invalid sort order", "?sortBy=name&sortOrder=ascending"},
 		}
 		for _, tt := range unprocessableTest {
 			t.Run(tt.name, func(t *testing.T) {
@@ -312,7 +313,7 @@ func TestGetTableMetadata(t *testing.T) {
 				resp, err := client.Do(req)
 				require.NoError(t, err)
 				defer resp.Body.Close()
-				require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			})
 		}
 	})
@@ -575,7 +576,7 @@ func TestGetDBMetadata(t *testing.T) {
 			})
 		}
 	})
-	t.Run("422 unprocessable", func(t *testing.T) {
+	t.Run("400 bad request", func(t *testing.T) {
 		var unprocessableTest = []struct {
 			name        string
 			queryString string
@@ -584,6 +585,7 @@ func TestGetDBMetadata(t *testing.T) {
 			{"pageSize", "?pageSize=a"},
 			{"storeId", "?storeId=a"},
 			{"multiple storeIds", "?storeId=1&storeId=a"},
+			{"invalid sort order", "?sortBy=name&sortOrder=ascending"},
 		}
 		for _, tt := range unprocessableTest {
 			t.Run(tt.name, func(t *testing.T) {
@@ -593,7 +595,7 @@ func TestGetDBMetadata(t *testing.T) {
 				resp, err := client.Do(req)
 				require.NoError(t, err)
 				defer resp.Body.Close()
-				require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			})
 		}
 	})
