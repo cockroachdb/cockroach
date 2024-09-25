@@ -19,7 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
-// Entries implements the raft.Storage interface.
+// replicaLogStorage implements the raft.LogStorage interface.
+type replicaLogStorage Replica
+
+// Entries implements the raft.LogStorage interface.
 //
 // NB: maxBytes is advisory, and this method returns at least one entry (unless
 // there are none in the requested interval), even if its size exceeds maxBytes.
@@ -29,7 +32,7 @@ import (
 //
 // Requires that r.mu is held for writing.
 // TODO(pav-kv): make it possible to call with only raftMu held.
-func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
 	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
 		r.reportRaftStorageError(err)
@@ -37,7 +40,7 @@ func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.E
 	return entries, err
 }
 
-func (r *replicaRaftStorage) TypedEntries(
+func (r *replicaLogStorage) TypedEntries(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	// The call is always initiated by RawNode, under r.mu. Need it locked for
@@ -77,11 +80,11 @@ func (r *replicaRaftStorage) TypedEntries(
 func (r *Replica) raftEntriesLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
-	return (*replicaRaftStorage)(r).TypedEntries(lo, hi, maxBytes)
+	return (*replicaLogStorage)(r).TypedEntries(lo, hi, maxBytes)
 }
 
-// Term implements the raft.Storage interface.
-func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
+// Term implements the raft.LogStorage interface.
+func (r *replicaLogStorage) Term(i uint64) (uint64, error) {
 	term, err := r.TypedTerm(kvpb.RaftIndex(i))
 	if err != nil {
 		r.reportRaftStorageError(err)
@@ -93,7 +96,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 // exclusive access to r.mu.stateLoader.
 //
 // TODO(pav-kv): make it possible to read with only raftMu held.
-func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (r *replicaLogStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.AssertHeld()
 	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
 	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
@@ -110,7 +113,7 @@ func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 
 // raftTermLocked requires that r.mu is locked for writing.
 func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return (*replicaRaftStorage)(r).TypedTerm(i)
+	return (*replicaLogStorage)(r).TypedTerm(i)
 }
 
 // GetTerm returns the term of the given index in the raft log. It requires that
@@ -126,13 +129,13 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 	return r.mu.lastIndexNotDurable
 }
 
-// LastIndex implements the raft.Storage interface.
+// LastIndex implements the raft.LogStorage interface.
 // LastIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) LastIndex() uint64 {
+func (r *replicaLogStorage) LastIndex() uint64 {
 	return uint64(r.TypedLastIndex())
 }
 
-func (r *replicaRaftStorage) TypedLastIndex() kvpb.RaftIndex {
+func (r *replicaLogStorage) TypedLastIndex() kvpb.RaftIndex {
 	return (*Replica)(r).raftLastIndexRLocked()
 }
 
@@ -149,13 +152,13 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 	return r.mu.state.TruncatedState.Index + 1
 }
 
-// FirstIndex implements the raft.Storage interface.
+// FirstIndex implements the raft.LogStorage interface.
 // FirstIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) FirstIndex() uint64 {
+func (r *replicaLogStorage) FirstIndex() uint64 {
 	return uint64(r.TypedFirstIndex())
 }
 
-func (r *replicaRaftStorage) TypedFirstIndex() kvpb.RaftIndex {
+func (r *replicaLogStorage) TypedFirstIndex() kvpb.RaftIndex {
 	return (*Replica)(r).raftFirstIndexRLocked()
 }
 
@@ -167,7 +170,7 @@ func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 }
 
 // LogSnapshot returns an immutable point-in-time snapshot of the log storage.
-func (r *replicaRaftStorage) LogSnapshot() raft.LogStorageSnapshot {
+func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
 	r.raftMu.AssertHeld()
 	r.mu.AssertRHeld()
 	// TODO(pav-kv): return a wrapper which, in all methods, checks that the log
