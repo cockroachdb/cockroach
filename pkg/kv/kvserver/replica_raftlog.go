@@ -179,19 +179,97 @@ func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
 	r.raftMu.AssertHeld()
 	r.mu.AssertRHeld()
-	// TODO(pav-kv): return a wrapper which, in all methods, checks that the log
-	// storage hasn't been written to. A more relaxed version of it should assert
-	// that only the relevant part of the log hasn't been overwritten, e.g. a new
-	// term leader hasn't appended a log slice that truncated the log, or the log
-	// hasn't been wiped.
-	//
-	// This would require auditing and integrating with the write paths. Today,
-	// this type implements only reads, and writes are in various places like the
-	// logstore.LogStore type, or the code in the split handler which creates an
-	// empty range state.
-	//
-	// We don't need a fully fledged Pebble snapshot here. For our purposes, we
-	// can also make sure that raftMu is held for the entire period of using the
-	// LogSnapshot - this should guarantee its immutability.
+	return (*replicaLogSnap)(r)
+}
+
+// replicaLogSnap implements the raft.LogStorageSnapshot interface.
+//
+// The type implements a limited version of a raft log storage snapshot, without
+// needing a storage engine snapshot. It relies on the fact that all raft writes
+// are blocked while r.raftMu is held.
+//
+// TODO(pav-kv): equip this wrapper with correctness checks, e.g. that the log
+// storage hasn't been written to while we hold a snapshot. A more relaxed
+// version of it should assert that only the relevant part of the log hasn't
+// been overwritten, e.g. a new term leader hasn't appended a log slice that
+// truncates the log and overwrites log indices in our snapshot.
+//
+// This would require auditing and integrating with the write paths. Today, this
+// type implements only reads, and writes are in various places like the
+// logstore.LogStore type, or applySnapshot.
+type replicaLogSnap replicaLogStorage
+
+// Entries implements the raft.LogStorageSnapshot interface.
+// Requires that r.raftMu is held for writing.
+func (r *replicaLogSnap) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	entries, err := r.entriesRaftMuLocked(
+		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	if err != nil {
+		(*replicaLogStorage)(r).reportRaftStorageError(err)
+	}
+	return entries, err
+}
+
+// entriesRaftMuLocked implements the Entries() call.
+func (r *replicaLogSnap) entriesRaftMuLocked(
+	lo, hi kvpb.RaftIndex, maxBytes uint64,
+) ([]raftpb.Entry, error) {
+	// NB: writes to the storage engine and the sideloaded storage are made under
+	// raftMu only, so we are not racing with new writes. In addition, raft never
+	// tries to read "unstable" entries that correspond to ongoing writes.
+	r.raftMu.AssertHeld()
+	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
+	entries, _, loadedSize, err := logstore.LoadEntries(
+		r.AnnotateCtx(context.TODO()),
+		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		&r.raftMu.bytesAccount,
+	)
+	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	return entries, err
+}
+
+// Term implements the raft.LogStorageSnapshot interface.
+// Requires that r.raftMu is held for writing.
+func (r *replicaLogSnap) Term(i uint64) (uint64, error) {
+	term, err := r.termRaftMuLocked(kvpb.RaftIndex(i))
+	if err != nil {
+		(*replicaLogStorage)(r).reportRaftStorageError(err)
+	}
+	return uint64(term), err
+}
+
+// termRaftMuLocked implements the Term() call.
+func (r *replicaLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+	r.raftMu.AssertHeld()
+	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
+		return r.mu.lastTermNotDurable, nil
+	}
+	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
+		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+		r.store.raftEntryCache, i,
+	)
+}
+
+// LastIndex implements the raft.LogStorageSnapshot interface.
+// Requires that r.raftMu is held.
+func (r *replicaLogSnap) LastIndex() uint64 {
+	// NB: lastIndexNotDurable is updated under both r.raftMu and r.mu, so it is
+	// safe to access while holding any of these mutexes. We enforce raftMu
+	// because this is a raftMu-based snapshot.
+	r.raftMu.AssertHeld()
+	return uint64(r.mu.lastIndexNotDurable)
+}
+
+// FirstIndex implements the raft.LogStorageSnapshot interface.
+// Requires that r.raftMu is held.
+func (r *replicaLogSnap) FirstIndex() uint64 {
+	r.raftMu.AssertHeld()
+	// r.mu.state is mutated both under r.raftMu and r.mu, so the access is safe.
+	return uint64(r.mu.state.TruncatedState.Index + 1)
+}
+
+// LogSnapshot implements the raft.LogStorageSnapshot interface.
+func (r *replicaLogSnap) LogSnapshot() raft.LogStorageSnapshot {
 	return r
 }
