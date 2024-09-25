@@ -7,6 +7,7 @@
 package raftlog
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -25,11 +26,13 @@ func TestNewEntry(t *testing.T) {
 		// Proposed by CRDB on unquiescence.
 		"empty payload": {
 			data: EncodeCommandBytes(
+				context.Background(),
 				EntryEncodingStandardWithoutAC, "00000000", nil, 0 /* pri */),
 			expectEmpty: true,
 		},
 		"invalid": {
 			data: EncodeCommandBytes(
+				context.Background(),
 				EntryEncodingStandardWithAC, "00000000", []byte("not a protobuf"), 0 /* pri */),
 			expectErr: true,
 		},

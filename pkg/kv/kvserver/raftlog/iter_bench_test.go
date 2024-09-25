@@ -94,6 +94,7 @@ func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 	cmdB, err := protoutil.Marshal(cmd)
 	require.NoError(b, err)
 	data := EncodeCommandBytes(
+		context.Background(),
 		EntryEncodingStandardWithoutAC, "cmd12345", cmdB, 0 /* pri */)
 
 	ent := raftpb.Entry{

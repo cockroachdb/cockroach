@@ -71,7 +71,7 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 				func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// 1. Encode the raft command prefix.
-						EncodeRaftCommandPrefix(encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef", 0)
+						EncodeRaftCommandPrefix(context.Background(), encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef", 0)
 
 						// 2. If using below-raft admission, encode the raft
 						// metadata right after the command prefix.
@@ -226,7 +226,7 @@ func TestRaftAdmissionEncodingDecoding(t *testing.T) {
 			if tc.opts.RaftAdmissionMeta != nil && tc.opts.EncodePriority {
 				pri = raftpb.Priority(tc.opts.RaftAdmissionMeta.AdmissionPriority)
 			}
-			buf2 := EncodeCommandBytes(tc.encoding, cmdIDKey, cmdBytes, pri)
+			buf2 := EncodeCommandBytes(ctx, tc.encoding, cmdIDKey, cmdBytes, pri)
 
 			// buf1 and buf2 are not identical in terms of bytes, but should be logically
 			// equivalent.
