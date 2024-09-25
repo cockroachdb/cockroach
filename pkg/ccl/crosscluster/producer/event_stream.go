@@ -69,8 +69,6 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
-	lastPolled time.Time
-
 	debug streampb.DebugProducerStatus
 }
 
@@ -113,7 +111,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return errors.AssertionFailedf("expected to be started once")
 	}
 
-	s.lastPolled = timeutil.Now()
+	s.debug.State.Store(int64(streampb.Emitting))
+	s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
 
 	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
 	if err != nil {
@@ -227,11 +226,11 @@ func (s *eventStream) setErr(err error) bool {
 
 // Next implements eval.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
-	emitWait := int64(timeutil.Since(s.lastPolled))
-
+	s.debug.State.Store(int64(streampb.Producing))
+	emitWait := (timeutil.Now().UnixMicro() - s.debug.LastPolledMicros.Load()) * 1000
 	s.debug.Flushes.LastEmitWaitNanos.Store(emitWait)
 	s.debug.Flushes.EmitWaitNanos.Add(emitWait)
-	s.lastPolled = timeutil.Now()
+	s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
 
 	select {
 	case <-ctx.Done():
@@ -244,10 +243,11 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 		case err := <-s.errCh:
 			return false, err
 		default:
-			produceWait := int64(timeutil.Since(s.lastPolled))
+			s.debug.State.Store(int64(streampb.Emitting))
+			produceWait := (timeutil.Now().UnixMicro() - s.debug.LastPolledMicros.Load()) * 1000
 			s.debug.Flushes.ProduceWaitNanos.Add(produceWait)
 			s.debug.Flushes.LastProduceWaitNanos.Store(produceWait)
-			s.lastPolled = timeutil.Now()
+			s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
 			return true, nil
 		}
 	}
