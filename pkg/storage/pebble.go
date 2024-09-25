@@ -1192,12 +1192,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// Pebble has better guards against this.
 		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
-	// Multi-level compactions were discovered to cause excessively large
-	// compactions that can have adverse affects. We disable these types of
-	// compactions for now.
-	// See https://github.com/cockroachdb/pebble/issues/3120
-	// TODO(travers): Re-enable, once the issues are resolved.
-	cfg.opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
