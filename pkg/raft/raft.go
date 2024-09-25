@@ -438,6 +438,9 @@ func (r *raft) lookupContext(ctx context.Context, entry pb.Entry) context.Contex
 		return ctx
 	}
 	ctx = mCtx
+	if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+		log.Fatalf(ctx, "expected span in context: %v", ctx)
+	}
 	return ctx
 }
 

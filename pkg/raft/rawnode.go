@@ -111,6 +111,9 @@ func (rn *RawNode) ApplyConfChange(ctx context.Context, cc pb.ConfChangeI) *pb.C
 
 // Step advances the state machine using the given message.
 func (rn *RawNode) Step(ctx context.Context, m pb.Message) error {
+	if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+		log.Fatalf(ctx, "expected span in context: %v", ctx)
+	}
 	// Ignore unexpected local messages receiving over network.
 	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
 		return ErrStepLocalMsg
@@ -158,13 +161,24 @@ func (rn *RawNode) tracedContext(ctx context.Context, rd Ready) context.Context 
 		return ctx
 	}
 	for _, msg := range rd.Messages {
-		return msg.Context
+		if pb.MUST_TRACE_ALL && tracing.SpanFromContext(msg.Context) == nil {
+			log.Fatalf(ctx, "expected span in context: %v", msg.Context)
+		} else {
+			return msg.Context
+		}
 	}
 	for _, e := range rd.CommittedEntries {
 		return rn.raft.lookupContext(ctx, e)
 	}
 	for _, e := range rd.Entries {
 		return rn.raft.lookupContext(ctx, e)
+	}
+	// FIXME: Remove. We have no entries or messages, so we can't attach a
+	// context. Instead create a traced context manually for now. This should be
+	// removed as we don't really need to trace this message at all.
+	if pb.MUST_TRACE_ALL {
+		ctx, _ = tracing.ContextWithRecordingSpan(ctx, rn.tracer, "empty ready")
+		log.Event(ctx, "empty ready - created span")
 	}
 	return ctx
 }
@@ -193,6 +207,9 @@ func (rn *RawNode) readyWithoutAccept(ctx context.Context) Ready {
 	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
 
 	rd.Context = rn.tracedContext(ctx, rd)
+	if pb.MUST_TRACE_ALL && len(rd.Entries) != 0 && len(rd.CommittedEntries) != 0 && tracing.SpanFromContext(rd.Context) == nil {
+		log.Fatalf(ctx, "expected span in context: %v, %v, %v", rd.Entries, rd.CommittedEntries, rd.Context)
+	}
 	if rn.asyncStorageWrites {
 		// If async storage writes are enabled, enqueue messages to
 		// local storage threads, where applicable.

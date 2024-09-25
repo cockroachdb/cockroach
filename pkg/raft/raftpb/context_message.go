@@ -1,6 +1,13 @@
 package raftpb
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+)
+
+const MUST_TRACE_ALL = false
 
 // A RaftMessage with an attached context.
 type ContextMessage struct {
@@ -9,6 +16,12 @@ type ContextMessage struct {
 }
 
 func NewContextMessage(ctx context.Context, m Message) ContextMessage {
+	if ctx == nil {
+		log.Fatalf(context.Background(), "nil context")
+	}
+	if MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+		log.Fatalf(ctx, "expected span in context: %v", ctx)
+	}
 	return ContextMessage{Context: ctx, Message: m}
 }
 

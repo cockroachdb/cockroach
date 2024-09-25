@@ -1743,6 +1743,9 @@ func (r *Replica) sendRaftMessages(
 ) {
 	var lastAppResp raftpb.ContextMessage
 	for _, message := range messages {
+		if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(message.Context) == nil {
+			log.Fatalf(message.Context, "expected span in context: %v", message.Context)
+		}
 		switch message.To {
 		case raft.LocalAppendThread:
 			// To local append thread.

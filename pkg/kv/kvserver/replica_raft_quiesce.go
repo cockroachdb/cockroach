@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // quiesceAfterTicks is the number of ticks without proposals after which ranges
@@ -109,6 +110,9 @@ func (r *Replica) maybeUnquiesceLocked(ctx context.Context, wakeLeader, mayCampa
 	// proposal in candidate state. This gives it a chance to assert leadership if
 	// we're wrong about it being dead.
 	if mayCampaign {
+		if raftpb.MUST_TRACE_ALL {
+			ctx, _ = tracing.ContextWithRecordingSpan(ctx, r.Tracer, "campaign")
+		}
 		r.maybeCampaignOnWakeLocked(ctx)
 	}
 

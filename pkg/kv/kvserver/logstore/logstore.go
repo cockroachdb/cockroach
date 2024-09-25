@@ -35,8 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -206,6 +208,9 @@ func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
 func (s *LogStore) StoreEntries(
 	ctx context.Context, state RaftState, m MsgStorageAppend, cb SyncCallback, stats *AppendStats,
 ) (RaftState, error) {
+	if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(m.Context) == nil {
+		log.Fatalf(m.Context, "expected span in context: %v", m.Context)
+	}
 	batch := newStoreEntriesBatch(s.Engine)
 	return s.storeEntriesAndCommitBatch(ctx, state, m, cb, stats, batch)
 }

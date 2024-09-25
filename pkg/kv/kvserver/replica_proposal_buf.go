@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -343,6 +344,9 @@ func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) 
 // insertIntoArray inserts the proposal into the proposal buffer's array at the
 // specified index. It also schedules a Raft update check if necessary.
 func (b *propBuf) insertIntoArray(p *ProposalData, idx int) {
+	if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(p.ctx) == nil {
+		log.Fatalf(p.ctx, "expected span in context: %v", p.ctx)
+	}
 	b.arr.asSlice()[idx] = p
 	if idx == 0 {
 		// If this is the first proposal in the buffer, schedule a Raft update
@@ -575,6 +579,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// that all in-flight proposals are reproposed in a single batch.
 			ents = append(ents, raftpb.Entry{Data: p.encodedCommand})
 			// If we have a tracing span in the context, we want to keep it around.
+			if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(p.ctx) == nil {
+				log.Fatalf(p.ctx, "expected span in context: %v", p.ctx)
+			}
 			tracedCtx = p.ctx
 
 			nextProp++
