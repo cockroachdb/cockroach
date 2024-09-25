@@ -263,6 +263,11 @@ message GetRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 3;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Value
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -669,6 +674,11 @@ message ScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -757,6 +767,11 @@ message ReverseScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -3213,7 +3228,7 @@ message RangeFeedRequest {
   // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
   // WithFiltering should NOT be set for system-table rangefeeds.
   bool with_filtering = 7;
-  
+
   // WithMatchingOriginIDs specifies if the rangefeed server should emit events
   // originating from specific clusters during Logical Data Replication. If this
   // field is empty, all events are emitted.

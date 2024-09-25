@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -110,4 +111,76 @@ func TestGetResumeSpan(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetReturnRawMVCC tests that a GetRequest with the ReturnRawMVCC
+// option set should return the full bytes of the MVCCValue in the
+// RawBytes field of returned roachpb.Values.
+func TestGetReturnRawMVCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	key := roachpb.Key([]byte{'a'})
+	value := roachpb.MakeValueFromString("woohoo")
+
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+
+	// Write a value with WriteOptions that will produce an
+	// MVCCValueHeader.
+	clock := hlc.NewClockForTesting(nil)
+	settings := cluster.MakeTestingClusterSettings()
+	evalCtx := (&MockEvalCtx{Clock: clock, ClusterSettings: settings}).EvalContext()
+	expectedOriginID := uint32(42)
+	putResp := kvpb.PutResponse{}
+	_, err := Put(ctx, db, CommandArgs{
+		EvalCtx: evalCtx,
+		Header: kvpb.Header{
+			Timestamp: clock.Now(),
+			WriteOptions: &kvpb.WriteOptions{
+				OriginID: expectedOriginID,
+			},
+		},
+		Args: &kvpb.PutRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
+			Value:         value,
+		},
+	}, &putResp)
+	require.NoError(t, err)
+
+	// Test that by default we get back the OriginID.
+	getResp := kvpb.GetResponse{}
+	_, err = Get(ctx, db, CommandArgs{
+		EvalCtx: evalCtx,
+		Header: kvpb.Header{
+			Timestamp: clock.Now(),
+		},
+		Args: &kvpb.GetRequest{
+			ReturnRawMVCCValues: true,
+			RequestHeader:       kvpb.RequestHeader{Key: key},
+		},
+	}, &getResp)
+	require.NoError(t, err)
+	require.NotNil(t, getResp.Value)
+	mvccValue, err := storage.DecodeMVCCValue(getResp.Value.RawBytes)
+	require.NoError(t, err)
+	require.Equal(t, expectedOriginID, mvccValue.OriginID)
+
+	// Without the ReturnRawMVCCValues option set we expect to get
+	// back exactly what we put in.
+	getResp = kvpb.GetResponse{}
+	_, err = Get(ctx, db, CommandArgs{
+		EvalCtx: evalCtx,
+		Header: kvpb.Header{
+			Timestamp: clock.Now(),
+		},
+		Args: &kvpb.GetRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
+		},
+	}, &getResp)
+	require.NoError(t, err)
+	require.Equal(t, value.RawBytes, getResp.Value.RawBytes)
+	mvccValue, err = storage.DecodeMVCCValue(getResp.Value.RawBytes)
+	require.NoError(t, err)
+	require.Equal(t, uint32(0), mvccValue.OriginID)
 }
