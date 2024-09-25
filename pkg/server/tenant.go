@@ -286,7 +286,7 @@ func newTenantServer(
 	// (until the server is ready) won't cause client connections to be rejected.
 	if baseCfg.SplitListenSQL && !baseCfg.DisableSQLListener {
 		sqlAddrListener, err := ListenAndUpdateAddrs(
-			ctx, &baseCfg.SQLAddr, &baseCfg.SQLAdvertiseAddr, "sql")
+			ctx, &baseCfg.SQLAddr, &baseCfg.SQLAdvertiseAddr, "sql", baseCfg.AcceptProxyProtocolHeaders)
 		if err != nil {
 			return nil, err
 		}
@@ -599,7 +599,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		lf = s.sqlServer.cfg.RPCListenerFactory
 	}
 
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, lf, enableSQLListener)
+	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, lf, enableSQLListener, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
 		return err
 	}

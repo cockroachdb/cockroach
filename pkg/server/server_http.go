@@ -279,7 +279,7 @@ func startHTTPService(
 	stopper *stop.Stopper,
 	handler http.HandlerFunc,
 ) error {
-	httpLn, err := ListenAndUpdateAddrs(ctx, &cfg.HTTPAddr, &cfg.HTTPAdvertiseAddr, "http")
+	httpLn, err := ListenAndUpdateAddrs(ctx, &cfg.HTTPAddr, &cfg.HTTPAdvertiseAddr, "http", cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
 		return err
 	}
