@@ -231,6 +231,7 @@ func newLogicalReplicationWriterProcessor(
 		checkpoint:  lrw.checkpoint,
 		bytesGauge:  lrw.metrics.RetryQueueBytes,
 		eventsGauge: lrw.metrics.RetryQueueEvents,
+		debug:       &lrw.debug,
 	}
 
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
@@ -319,6 +320,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	lrw.subscription = sub
 	lrw.workerGroup.GoCtx(func(_ context.Context) error {
 		if err := sub.Subscribe(subscriptionCtx); err != nil {
+			log.Infof(lrw.Ctx(), "subscription completed. Error: %s", err)
 			lrw.sendError(errors.Wrap(err, "subscription"))
 		}
 		return nil
@@ -326,6 +328,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
 		if err := lrw.consumeEvents(ctx); err != nil {
+			log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
 			lrw.sendError(errors.Wrap(err, "consume events"))
 		}
 		return nil
@@ -391,10 +394,10 @@ func (lrw *logicalReplicationWriterProcessor) ConsumerClosed() {
 
 func (lrw *logicalReplicationWriterProcessor) close() {
 	streampb.UnregisterActiveLogicalConsumerStatus(&lrw.debug)
-
 	if lrw.Closed {
 		return
 	}
+	log.Infof(lrw.Ctx(), "logical replication writer processor closing")
 	defer lrw.frontier.Release()
 
 	if lrw.streamPartitionClient != nil {
@@ -423,6 +426,7 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	lrw.purgatory.bytesGauge.Dec(lrw.purgatory.bytes)
 	for _, i := range lrw.purgatory.levels {
 		lrw.purgatory.eventsGauge.Dec(int64(len(i.events)))
+		lrw.purgatory.debug.RecordPurgatory(-int64(len(i.events)))
 	}
 
 	lrw.InternalClose()
@@ -442,13 +446,20 @@ func (lrw *logicalReplicationWriterProcessor) sendError(err error) {
 // consumeEvents handles processing events on the event queue and returns once
 // the event channel has closed.
 func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context) error {
-	before := timeutil.Now()
+	lastLog := timeutil.Now()
+	lrw.debug.RecordRecvStart()
 	for event := range lrw.subscription.Events() {
-		lrw.debug.RecordRecv(timeutil.Since(before))
-		before = timeutil.Now()
+		lrw.debug.RecordRecv()
 		if err := lrw.handleEvent(ctx, event); err != nil {
 			return err
 		}
+		if timeutil.Since(lastLog) > 5*time.Minute {
+			lastLog = timeutil.Now()
+			if !lrw.frontier.Frontier().GoTime().After(timeutil.Now().Add(-5 * time.Minute)) {
+				log.Infof(lrw.Ctx(), "lagging frontier: %s with span %s", lrw.frontier.Frontier(), lrw.frontier.PeekFrontierSpan())
+			}
+		}
+		lrw.debug.RecordRecvStart()
 	}
 	return lrw.subscription.Err()
 }
@@ -534,6 +545,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 		return nil
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
+	lrw.debug.RecordCheckpoint(lrw.frontier.Frontier().GoTime())
 	return nil
 }
 

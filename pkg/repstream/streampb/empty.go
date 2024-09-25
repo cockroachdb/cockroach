@@ -15,6 +15,7 @@ import (
 	time "time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type DebugProducerStatus struct {
@@ -129,23 +130,58 @@ type DebugLogicalConsumerStatus struct {
 	}
 }
 
+type LogicalConsumerState int
+
+const (
+	Other LogicalConsumerState = iota
+	Flushing
+	Waiting
+)
+
+func (s LogicalConsumerState) String() string {
+	switch s {
+	case Other:
+		return "other"
+	case Flushing:
+		return "flush"
+	case Waiting:
+		return "receive"
+	default:
+		return "unknown"
+	}
+}
+
 type DebugLogicalConsumerStats struct {
 	Recv struct {
+		CurReceiveStart               time.Time
 		LastWaitNanos, TotalWaitNanos int64
+	}
+
+	Ingest struct {
+		// TotalIngestNanos is the total time spent not waiting for data.
+		CurIngestStart   time.Time
+		TotalIngestNanos int64
 	}
 
 	Flushes struct {
 		Count, Nanos, KVs, Bytes, Batches int64
 
-		Current struct {
-			StartedUnixMicros, ProcessedKVs, TotalKVs, Batches, SlowestBatchNanos int64
+		Last struct {
+			CurFlushStart                                                      time.Time
+			LastFlushNanos, ProcessedKVs, TotalKVs, Batches, SlowestBatchNanos int64
 			// TODO(dt):  BatchErrors atomic.Int64
 			// TODO(dt): LastBatchErr atomic.Value
 		}
-		Last struct {
-			Nanos, KVs, Bytes, Batches, SlowestBatchNanos int64
-			// TODO(dt): Errors     atomic.Int64
-		}
+	}
+	Checkpoints struct {
+		Count                    int64
+		LastCheckpoint, Resolved time.Time
+	}
+
+	CurrentState LogicalConsumerState
+
+	Purgatory struct {
+		CurrentCount int64
 	}
 }
 
@@ -154,62 +190,86 @@ func (d *DebugLogicalConsumerStatus) GetStats() DebugLogicalConsumerStats {
 	defer d.mu.Unlock()
 	return d.mu.stats
 }
-
-func (d *DebugLogicalConsumerStatus) RecordRecv(wait time.Duration) {
-	nanos := wait.Nanoseconds()
+func (d *DebugLogicalConsumerStatus) RecordRecvStart() {
 	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.mu.stats.Recv.CurReceiveStart = timeutil.Now()
+	d.mu.stats.CurrentState = Waiting
+	if !d.mu.stats.Ingest.CurIngestStart.IsZero() {
+		d.mu.stats.Ingest.TotalIngestNanos += timeutil.Since(d.mu.stats.Ingest.CurIngestStart).Nanoseconds()
+	}
+	d.mu.stats.Recv.LastWaitNanos = 0
+	d.mu.stats.Ingest.CurIngestStart = time.Time{}
+}
+
+func (d *DebugLogicalConsumerStatus) RecordRecv() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	nanos := timeutil.Since(d.mu.stats.Recv.CurReceiveStart).Nanoseconds()
+	d.mu.stats.CurrentState = Other
 	d.mu.stats.Recv.LastWaitNanos = nanos
 	d.mu.stats.Recv.TotalWaitNanos += nanos
-	d.mu.Unlock()
+
+	d.mu.stats.Ingest.CurIngestStart = timeutil.Now()
+	d.mu.stats.Recv.CurReceiveStart = time.Time{}
 }
 
 func (d *DebugLogicalConsumerStatus) SetInjectedFailurePercent(percent uint32) {
 	d.mu.Lock()
 	d.mu.injectFailurePercent = percent
-	d.mu.Unlock()
+	d.mu.Unlock() // nolint:deferunlockcheck
 }
 
 func (d *DebugLogicalConsumerStatus) RecordFlushStart(start time.Time, keyCount int64) uint32 {
-	micros := start.UnixMicro()
 	d.mu.Lock()
-	d.mu.stats.Flushes.Current.TotalKVs = keyCount
-	d.mu.stats.Flushes.Current.StartedUnixMicros = micros
+	defer d.mu.Unlock()
+	// Reset the incremental flush stats.
+	d.mu.stats.Flushes.Last.SlowestBatchNanos = 0
+	d.mu.stats.Flushes.Last.Batches = 0
+	d.mu.stats.Flushes.Last.ProcessedKVs = 0
+	d.mu.stats.Flushes.Last.LastFlushNanos = 0
+
+	d.mu.stats.CurrentState = Flushing
+	d.mu.stats.Flushes.Last.CurFlushStart = start
+	d.mu.stats.Flushes.Last.TotalKVs = keyCount
 	failPercent := d.mu.injectFailurePercent
-	d.mu.Unlock()
 	return failPercent
 }
 
 func (d *DebugLogicalConsumerStatus) RecordBatchApplied(t time.Duration, keyCount int64) {
 	nanos := t.Nanoseconds()
 	d.mu.Lock()
-	d.mu.stats.Flushes.Current.Batches++
-	d.mu.stats.Flushes.Current.ProcessedKVs += keyCount
-	if d.mu.stats.Flushes.Current.SlowestBatchNanos < nanos { // nolint:deferunlockcheck
-		d.mu.stats.Flushes.Current.SlowestBatchNanos = nanos
+	d.mu.stats.Flushes.Last.Batches++
+	d.mu.stats.Flushes.Last.ProcessedKVs += keyCount
+	if d.mu.stats.Flushes.Last.SlowestBatchNanos < nanos { // nolint:deferunlockcheck
+		d.mu.stats.Flushes.Last.SlowestBatchNanos = nanos
 	}
 	d.mu.Unlock() // nolint:deferunlockcheck
 }
 
 func (d *DebugLogicalConsumerStatus) RecordFlushComplete(totalNanos, keyCount, byteSize int64) {
 	d.mu.Lock()
-
+	defer d.mu.Unlock()
+	d.mu.stats.CurrentState = Other
 	d.mu.stats.Flushes.Count++
 	d.mu.stats.Flushes.Nanos += totalNanos
 	d.mu.stats.Flushes.KVs += keyCount
 	d.mu.stats.Flushes.Bytes += byteSize
-	d.mu.stats.Flushes.Batches += d.mu.stats.Flushes.Current.Batches
+	d.mu.stats.Flushes.Batches += d.mu.stats.Flushes.Last.Batches
+	d.mu.stats.Flushes.Last.LastFlushNanos = totalNanos
+	d.mu.stats.Flushes.Last.CurFlushStart = time.Time{}
+}
 
-	d.mu.stats.Flushes.Last.Nanos = totalNanos
-	d.mu.stats.Flushes.Last.Batches = d.mu.stats.Flushes.Current.Batches
-	d.mu.stats.Flushes.Last.SlowestBatchNanos = d.mu.stats.Flushes.Current.SlowestBatchNanos
-	d.mu.stats.Flushes.Last.KVs = keyCount
-	d.mu.stats.Flushes.Last.Bytes = byteSize
+func (d *DebugLogicalConsumerStatus) RecordCheckpoint(resolved time.Time) {
+	d.mu.Lock()
+	d.mu.stats.Checkpoints.Count++
+	d.mu.stats.Checkpoints.Resolved = resolved
+	d.mu.stats.Checkpoints.LastCheckpoint = timeutil.Now() // nolint:deferunlockcheck
+	d.mu.Unlock()
+}
 
-	d.mu.stats.Flushes.Current.StartedUnixMicros = 0
-	d.mu.stats.Flushes.Current.SlowestBatchNanos = 0
-	d.mu.stats.Flushes.Current.Batches = 0
-	d.mu.stats.Flushes.Current.TotalKVs = 0
-	d.mu.stats.Flushes.Current.ProcessedKVs = 0
-
-	d.mu.Unlock() // nolint:deferunlockcheck
+func (d *DebugLogicalConsumerStatus) RecordPurgatory(netEvents int64) {
+	d.mu.Lock()
+	d.mu.stats.Purgatory.CurrentCount += netEvents
+	d.mu.Unlock()
 }

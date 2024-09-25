@@ -58,6 +58,7 @@ type purgatory struct {
 	bytes                   int64
 	levels                  []purgatoryLevel
 	eventsGauge, bytesGauge *metric.Gauge
+	debug                   *streampb.DebugLogicalConsumerStatus
 }
 
 type purgatoryLevel struct {
@@ -95,6 +96,7 @@ func (p *purgatory) Store(
 	p.bytes += byteSize
 	p.bytesGauge.Inc(byteSize)
 	p.eventsGauge.Inc(int64(len(events)))
+	p.debug.RecordPurgatory(int64(len(events)))
 	return nil
 }
 
@@ -133,7 +135,9 @@ func (p *purgatory) Drain(ctx context.Context) error {
 		}
 
 		p.bytesGauge.Dec(levelBytes - p.levels[i].bytes)
-		p.eventsGauge.Dec(int64(levelCount - len(remaining)))
+		flushedEventCount := int64(levelCount - len(remaining))
+		p.eventsGauge.Dec(flushedEventCount)
+		p.debug.RecordPurgatory(-flushedEventCount)
 
 		// If we have resolved every prior level and all events in this level were
 		// handled, we can resolve this level and emit its checkpoint, if any.
