@@ -107,7 +107,7 @@ update uniq_enum
  ├── project
  │    ├── project
  │    │    ├── scan uniq_enum
- │    │    │    └── constraint: /7/9: [/'eu-west'/11 - /'eu-west'/20]
+ │    │    │    └── constraint: /9/11: [/'eu-west'/11 - /'eu-west'/20]
  │    │    └── projections
  │    │         ├── CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
  │    │         ├── 'baz'

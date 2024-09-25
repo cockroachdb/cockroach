@@ -3294,23 +3294,23 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
 ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 inner-join (lookup geo_table)
- ├── columns: k:1 geom:2 k:5 geom:6
- ├── key columns: [11] = [5]
+ ├── columns: k:1 geom:2 k:7 geom:8
+ ├── key columns: [15] = [7]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=9801]
  ├── cost: 112716.87
- ├── key: (1,5)
- ├── fd: (1)-->(2), (5)-->(6)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
- ├── prune: (1,5)
+ ├── prune: (1,7)
  ├── inner-join (inverted geo_table@geom_index,inverted)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:15
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
+ │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
+ │    ├── key: (1,15)
  │    ├── fd: (1)-->(2)
  │    ├── distribution: test
  │    ├── scan geo_table2
@@ -3321,10 +3321,10 @@ inner-join (lookup geo_table)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1-4)
+ │    │    └── unfiltered-cols: (1-6)
  │    └── filters (true)
  └── filters
-      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:8) [outer=(2,8), immutable, constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
@@ -3385,26 +3385,26 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 LEFT JOIN geo_table@geom_index
 ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 left-join (lookup geo_table)
- ├── columns: k:1 geom:2 k:5 geom:6
- ├── key columns: [11] = [5]
+ ├── columns: k:1 geom:2 k:7 geom:8
+ ├── key columns: [15] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=10000]
  ├── cost: 112716.87
- ├── key: (1,5)
- ├── fd: (1)-->(2), (5)-->(6)
+ ├── key: (1,7)
+ ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
- ├── prune: (1,5)
+ ├── prune: (1,7)
  ├── left-join (inverted geo_table@geom_index,inverted)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
- │    ├── first join in paired joiner; continuation column: continuation:16
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:15 continuation:22
+ │    ├── first join in paired joiner; continuation column: continuation:22
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
+ │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,11)
- │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── key: (1,15)
+ │    ├── fd: (1)-->(2), (15)-->(22)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3414,10 +3414,10 @@ left-join (lookup geo_table)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1-4)
+ │    │    └── unfiltered-cols: (1-6)
  │    └── filters (true)
  └── filters
-      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:8) [outer=(2,8), immutable, constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE EXISTS (SELECT * FROM geo_table@geom_index
@@ -3425,7 +3425,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 semi-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [12] = [5]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3436,14 +3436,14 @@ semi-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index,inverted)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
- │    ├── first join in paired joiner; continuation column: continuation:17
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:16 continuation:23
+ │    ├── first join in paired joiner; continuation column: continuation:23
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
- │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
+ │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,12)
- │    ├── fd: (1)-->(2), (12)-->(17)
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3454,10 +3454,10 @@ semi-join (lookup geo_table)
  │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    ├── interesting orderings: (+1)
- │    │    └── unfiltered-cols: (1-4)
+ │    │    └── unfiltered-cols: (1-6)
  │    └── filters (true)
  └── filters
-      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:8) [outer=(2,8), immutable, constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM geo_table2 WHERE NOT EXISTS (SELECT * FROM geo_table@geom_index
@@ -3465,7 +3465,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 anti-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [12] = [5]
+ ├── key columns: [16] = [7]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── immutable
@@ -3476,14 +3476,14 @@ anti-join (lookup geo_table)
  ├── distribution: test
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index,inverted)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:12 continuation:17
- │    ├── first join in paired joiner; continuation column: continuation:17
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:16 continuation:23
+ │    ├── first join in paired joiner; continuation column: continuation:23
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:13)
- │    ├── stats: [rows=10000, distinct(12)=999.957, null(12)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
+ │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
- │    ├── key: (1,12)
- │    ├── fd: (1)-->(2), (12)-->(17)
+ │    ├── key: (1,16)
+ │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -3493,10 +3493,10 @@ anti-join (lookup geo_table)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1-4)
+ │    │    └── unfiltered-cols: (1-6)
  │    └── filters (true)
  └── filters
-      └── st_intersects(geo_table2.geom:2, geo_table.geom:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── st_intersects(geo_table2.geom:2, geo_table.geom:8) [outer=(2,8), immutable, constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Tests for multi-column inverted indexes.
 subtest multi_column
@@ -3564,10 +3564,10 @@ index-join t117979
  ├── prune: (1)
  └── scan t117979@idx_links,inverted [as=t]
       ├── columns: id:1
-      ├── inverted constraint: /5/1
+      ├── inverted constraint: /7/1
       │    └── spans: ["str1", "str1"]
       ├── flags: force-index=idx_links
-      ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
+      ├── stats: [rows=111.1111, distinct(7)=100, null(7)=0]
       ├── cost: 135.797778
       ├── key: (1)
       └── distribution: test

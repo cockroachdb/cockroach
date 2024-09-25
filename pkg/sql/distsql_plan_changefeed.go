@@ -451,8 +451,9 @@ func newFamilyTableDescriptor(
 	}
 
 	// Add system columns -- those are always available.
-	includeSet.Add(colinfo.MVCCTimestampColumnID)
-	includeSet.Add(colinfo.TableOIDColumnID)
+	for _, col := range colinfo.AllSystemColumnDescs {
+		includeSet.Add(col.ID)
+	}
 
 	return &familyTableDescriptor{
 		TableDescriptor: original,
