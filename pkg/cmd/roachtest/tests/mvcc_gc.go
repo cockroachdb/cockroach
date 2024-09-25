@@ -138,7 +138,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		wlCtx, wlCancel := context.WithCancel(ctx)
 		defer wlCancel()
-		wlFailure := make(chan error)
+		wlFailure := make(chan error, 1)
 		go func() {
 			defer close(wlFailure)
 			cmd = roachtestutil.NewCommand("./cockroach workload run kv").
