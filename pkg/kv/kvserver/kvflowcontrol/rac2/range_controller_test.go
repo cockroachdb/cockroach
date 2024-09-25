@@ -151,7 +151,8 @@ func (s *testingRCState) tokenCountsString() string {
 		return streams[i].StoreID < streams[j].StoreID
 	})
 	for _, stream := range streams {
-		fmt.Fprintf(&b, "%v: %v\n", stream, s.ssTokenCounter.Eval(stream))
+		fmt.Fprintf(&b, "%v: eval %v\n", stream, s.ssTokenCounter.Eval(stream))
+		fmt.Fprintf(&b, "       send %v\n", s.ssTokenCounter.Send(stream))
 	}
 	return b.String()
 }
@@ -187,18 +188,23 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	var b strings.Builder
 
 	for _, desc := range sortReplicas(s.ranges[rangeID]) {
-		replica := s.ranges[rangeID].rc.replicaMap[desc.ReplicaID]
+		r := s.ranges[rangeID]
+		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
+		rss := r.rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
-		if replica.sendStream == nil {
+		if rss.sendStream == nil {
 			fmt.Fprintf(&b, "closed\n")
 			continue
 		}
-		replica.sendStream.mu.Lock()
-		defer replica.sendStream.mu.Unlock()
+		rss.sendStream.mu.Lock()
+		defer rss.sendStream.mu.Unlock()
 
-		fmt.Fprintf(&b, "state=%v closed=%v\n",
-			replica.sendStream.mu.connectedState, replica.sendStream.mu.closed)
-		b.WriteString(formatTrackerState(&replica.sendStream.mu.tracker))
+		fmt.Fprintf(&b, "state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v)\n",
+			rss.sendStream.mu.connectedState, rss.sendStream.mu.closed,
+			testRepl.info.Match+1, rss.sendStream.mu.sendQueue.indexToSend,
+			rss.sendStream.mu.sendQueue.indexToSend,
+			rss.sendStream.mu.sendQueue.nextRaftIndex)
+		b.WriteString(formatTrackerState(&rss.sendStream.mu.tracker))
 		b.WriteString("++++\n")
 	}
 	return b.String()
@@ -345,6 +351,12 @@ func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av 
 	defer r.mu.Unlock()
 	for _, replica := range r.mu.r.replicaSet {
 		if replica.desc.StoreID == storeID {
+			for _, v := range av.Admitted {
+				// Ensure that Match doesn't lag behind the highest index in the
+				// AdmittedVector.
+				replica.info.Match = max(replica.info.Match, v)
+			}
+			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
 			r.rc.AdmitRaftMuLocked(ctx, replica.desc.ReplicaID, av)
 			return
 		}
