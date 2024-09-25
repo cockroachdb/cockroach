@@ -359,10 +359,15 @@ func (t *tpccMultiDB) runInit() error {
 				return
 			}
 			strConsoleAPIList := strings.Split(string(file), "\n")
-			if v := len(strConsoleAPIList); v > 0 && len(strConsoleAPIList[v-1]) == 0 {
-				strConsoleAPIList = strConsoleAPIList[:v-1]
+			// Skip any empty lines from this file, since we may hit connection
+			// refused if no API end point is specified.
+			for _, command := range strConsoleAPIList {
+				command = strings.TrimSpace(command)
+				if len(command) == 0 {
+					continue
+				}
+				t.consoleAPICommands = append(t.consoleAPICommands, command)
 			}
-			t.consoleAPICommands = strConsoleAPIList
 		}
 		// Execute extra logic at the start of each txn.
 		t.onTxnStartFns = append(t.onTxnStartFns, t.runBeforeEachTxn)
