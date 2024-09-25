@@ -38,22 +38,23 @@ import (
 
 type JobStatusMessage string
 
+// Query string keys for table and database metadata endpoints.
 const (
 	dbIdKey         = "dbId"
 	nameKey         = "name"
-	sortByKey       = "sortBy"
-	sortOrderKey    = "sortOrder"
-	pageNumKey      = "pageNum"
-	pageSizeKey     = "pageSize"
 	storeIdKey      = "storeId"
 	onlyIfStaleKey  = "onlyIfStale"
 	defaultPageSize = 10
 	defaultPageNum  = 1
+)
 
+const (
 	MetadataNotStale JobStatusMessage = "Not enough time has elapsed since last job run"
 	JobRunning       JobStatusMessage = "Job is already running"
 	JobTriggered     JobStatusMessage = "Job triggered successfully"
+)
 
+const (
 	TableNotFound  string = "table not found"
 	InvalidTableId string = "invalid table ID"
 )
@@ -93,7 +94,7 @@ const (
 //   - name: sortOrder
 //     type: string
 //     description: The direction in which to order the sortBy column by. Supports either "asc" or "desc". If a non
-//     supported value is provided, it will be ignored.
+//     supported value is provided, it will return 400.
 //     in: query
 //     required: false
 //
@@ -124,8 +125,8 @@ const (
 //
 //	"200":
 //	  description: A paginated response of tableMetadata results.
-//	"422":
-//		description: An UnprocessableEntity error if dbId, storeId, pageNum, or pageKey are not int values
+//	"400":
+//		description: Bad request. If the provided query parameters are invalid.
 func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = a.sqlServer.AnnotateCtx(ctx)
@@ -140,29 +141,28 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	dbId, err := apiutil.GetIntQueryStringVal(queryValues, dbIdKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", dbIdKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 	tableName := queryValues.Get(nameKey)
 	sortByQs := queryValues.Get(sortByKey)
-	sortOrderQS := queryValues.Get(sortOrderKey)
 	pageNum, err := apiutil.GetIntQueryStringVal(queryValues, pageNumKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", pageNumKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 	pageSize, err := apiutil.GetIntQueryStringVal(queryValues, pageSizeKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", pageSizeKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 
 	storeIds, err := apiutil.GetIntQueryStringVals(queryValues, storeIdKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", storeIdKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 
@@ -195,10 +195,12 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sortOrder string
-	if sortBy != "" {
-		sortOrder = "ASC"
-		if sortOrderQS == "desc" {
-			sortOrder = "DESC"
+	if sortByQs != "" {
+		var ok bool
+		sortOrder, ok = validateSortOrderValue(queryValues.Get(sortOrderKey))
+		if !ok {
+			http.Error(w, "invalid sort key value", http.StatusBadRequest)
+			return
 		}
 	}
 
@@ -542,7 +544,7 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 //   - name: sortOrder
 //     type: string
 //     description: The direction in which to order the sortBy column by. Supports either "asc" or "desc". If a non
-//     supported value is provided, it will be ignored.
+//     supported value is provided, it will return 400.
 //     in: query
 //     required: false
 //
@@ -574,6 +576,8 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 //
 //	"200":
 //	  description: A paginated response of dbMetadata results.
+//	"400":
+//		description: Bad request. If the provided query parameters are invalid.
 func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = a.sqlServer.AnnotateCtx(ctx)
@@ -587,24 +591,23 @@ func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 
 	dbName := queryValues.Get(nameKey)
 	sortByQs := queryValues.Get(sortByKey)
-	sortOrderQs := queryValues.Get(sortOrderKey)
 	pageNum, err := apiutil.GetIntQueryStringVal(queryValues, pageNumKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", pageNumKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 	pageSize, err := apiutil.GetIntQueryStringVal(queryValues, pageSizeKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", pageSizeKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 
 	storeIds, err := apiutil.GetIntQueryStringVals(queryValues, storeIdKey)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid query param value for: %s", storeIdKey),
-			http.StatusUnprocessableEntity)
+			http.StatusBadRequest)
 		return
 	}
 
@@ -632,9 +635,11 @@ func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
 
 	var sortOrder string
 	if sortByQs != "" {
-		sortOrder = "ASC"
-		if sortOrderQs == "desc" {
-			sortOrder = "DESC"
+		var ok bool
+		sortOrder, ok = validateSortOrderValue(queryValues.Get(sortOrderKey))
+		if !ok {
+			http.Error(w, "invalid sort key value", http.StatusBadRequest)
+			return
 		}
 	}
 
