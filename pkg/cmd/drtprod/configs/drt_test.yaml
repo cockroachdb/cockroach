@@ -1,0 +1,39 @@
+# Yaml to create a test-cluster. Please make sure that you change the cluster names to avoid conflicts.
+environment:
+  GCE_PROJECT: cockroach-ephemeral
+  CLUSTER: drt-test
+  WORKLOAD_CLUSTER: workload-test
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+    - command: create
+      args:
+        - $CLUSTER
+      flags:
+        clouds: gce
+        nodes: 1
+        username: drt
+        gce-machine-type: n2-standard-2
+        gce-use-spot: true
+      on_rollback:
+      - command: destroy
+        args:
+          - $CLUSTER
+    - command: stage
+      args:
+        - $CLUSTER
+        - cockroach
+    - command: start
+      args:
+        - $CLUSTER
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+    - command: create
+      args:
+        - $WORKLOAD_CLUSTER
+      flags:
+        nodes: 1
+        username: workload
+      on_rollback:
+      - command: destroy
