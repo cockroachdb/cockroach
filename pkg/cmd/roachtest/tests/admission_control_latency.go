@@ -247,7 +247,6 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
 		Randomized:       true,
-		Benchmark:        true,
 		Run:              v.runTest,
 	})
 }
@@ -262,6 +261,7 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
+		Benchmark:        true,
 		Run:              v.runTest,
 	})
 }
