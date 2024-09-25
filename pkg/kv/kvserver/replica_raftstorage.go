@@ -110,9 +110,6 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 // means that both the original and the snapshot RawNode remain consistent. The
 // shallow copy represents a valid past state of the RawNode.
 //
-// TODO(pav-kv): the snapshotting with only r.raftMu held is not implemented,
-// but should be done soon.
-//
 // All the implementation methods assume that the required locks are held, and
 // don't acquire them. The specific locking requirements are noted in each
 // method's comment. The method names do not follow our "Locked" naming
