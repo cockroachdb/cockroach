@@ -111,7 +111,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
+	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, false /* rawMVCCValues */, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}

@@ -572,6 +572,7 @@ func NewColIndexJoin(
 			txn,
 			nil,   /* bsHeader */
 			false, /* reverse */
+			tableArgs.RequiresRawMVCCValues(),
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
 			spec.LockingDurability,
