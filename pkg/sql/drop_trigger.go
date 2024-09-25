@@ -8,11 +8,13 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-// DropTrigger drops a trigger.
-func (p *planner) DropTrigger(ctx context.Context, n *tree.DropTrigger) (ret planNode, err error) {
-	return nil, unimplemented.NewWithIssue(126359, "DROP TRIGGER")
+// DropTrigger is UNIMPLEMENTED for the legacy schema changer.
+func (p *planner) DropTrigger(_ context.Context, _ *tree.DropTrigger) (planNode, error) {
+	return nil, pgerror.New(pgcode.FeatureNotSupported,
+		"DROP TRIGGER is only implemented in the declarative schema changer")
 }
