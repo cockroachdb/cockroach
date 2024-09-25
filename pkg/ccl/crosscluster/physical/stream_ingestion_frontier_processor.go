@@ -392,7 +392,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		return err
 	}
 
-	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
