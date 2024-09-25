@@ -535,7 +535,7 @@ func NewProcessor(opts ProcessorOptions) Processor {
 func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
 	// We are the leader using V2, or a follower who learned that the leader is
 	// using the V2 protocol.
-	return p.leader.rc != nil || p.follower.isLeaderUsingV2Protocol
+	return p.leader.rc != nil || (p.opts.ReplicaID != p.leaderID && p.follower.isLeaderUsingV2Protocol)
 }
 
 // InitRaftLocked implements Processor.
@@ -933,7 +933,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				log.Infof(ctx,
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%d "+
-						"sideloaded=%t raft-entry=%d/%d",
+						"sideloaded=%t raft-entry=%d/%d lead-v2=%v",
 					raftpb.Priority(meta.AdmissionPriority),
 					meta.AdmissionCreateTime,
 					meta.AdmissionOriginNode,
@@ -944,12 +944,13 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					typ.IsSideloaded(),
 					entry.Term,
 					entry.Index,
+					p.isLeaderUsingV2ProcLocked(),
 				)
 			} else {
 				log.Infof(ctx,
 					"decoded v1 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%d "+
-						"sideloaded=%t raft-entry=%d/%d",
+						"sideloaded=%t raft-entry=%d/%d lead-v2=%v",
 					admissionpb.WorkPriority(meta.AdmissionPriority),
 					meta.AdmissionCreateTime,
 					meta.AdmissionOriginNode,
@@ -960,6 +961,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					typ.IsSideloaded(),
 					entry.Term,
 					entry.Index,
+					p.isLeaderUsingV2ProcLocked(),
 				)
 			}
 		}
