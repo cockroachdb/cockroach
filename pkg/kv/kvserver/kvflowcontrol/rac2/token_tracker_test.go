@@ -40,11 +40,12 @@ func formatTrackerState(t *Tracker) string {
 	return result.String()
 }
 
-func formatUntracked(untracked [raftpb.NumPriorities]kvflowcontrol.Tokens) string {
+func formatUntracked(prefix string, untracked [raftpb.NumPriorities]kvflowcontrol.Tokens) string {
 	var buf strings.Builder
 	for pri, tokens := range untracked {
 		if tokens > 0 {
-			buf.WriteString(fmt.Sprintf("returned: tokens=%-4d pri=%v\n", tokens, raftpb.Priority(pri)))
+			buf.WriteString(fmt.Sprintf("%s returned: tokens=%-4d pri=%v\n",
+				prefix, tokens, raftpb.Priority(pri)))
 		}
 	}
 	return buf.String()
@@ -106,6 +107,8 @@ func TestTokenTracker(t *testing.T) {
 		case "untrack":
 			var term uint64
 			d.ScanArgs(t, "term", &term)
+			var evalTokensGEIndex uint64
+			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
 			var admitted [raftpb.NumPriorities]uint64
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
@@ -121,15 +124,12 @@ func TestTokenTracker(t *testing.T) {
 				require.NoError(t, err)
 				admitted[pri] = index
 			}
-			return formatUntracked(tracker.Untrack(term, admitted))
-
-		case "untrack_ge":
-			var index uint64
-			d.ScanArgs(t, "index", &index)
-			return formatUntracked(tracker.UntrackGE(index))
+			returnedSend, returnedEval := tracker.Untrack(term, admitted, evalTokensGEIndex)
+			return fmt.Sprintf("%s%s", formatUntracked("send", returnedSend),
+				formatUntracked("eval", returnedEval))
 
 		case "untrack_all":
-			return formatUntracked(tracker.UntrackAll())
+			return formatUntracked("send", tracker.UntrackAll())
 
 		case "state":
 			return formatTrackerState(tracker)
