@@ -208,6 +208,7 @@ func NewColBatchDirectScan(
 		bsHeader,
 		&fetchSpec,
 		spec.Reverse,
+		tableArgs.RequiresRawMVCCValues(),
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.LockingDurability,

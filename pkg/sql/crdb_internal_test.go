@@ -1893,3 +1893,52 @@ func TestVirtualPTSTable(t *testing.T) {
 		require.Equal(t, ts, virtualRow.lastUpdated)
 	})
 }
+
+// TestMVCCValueHeaderSystemColumns tests that the system columns that read MVCCValueHeaders data.
+func TestMVCCValueHeaderSystemColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	internalDB := srv.ApplicationLayer().InternalDB().(isql.DB)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.foo (pk int primary key, v1 int, v2 int, INDEX(v2))")
+
+	_, err := internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{OriginIDForLogicalDataReplication: 42},
+		"INSERT INTO test.foo VALUES (1, 1, 1), (2, 2, 2)")
+	require.NoError(t, err)
+
+	_, err = internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{},
+		"INSERT INTO test.foo VALUES (3, 3, 3)")
+	require.NoError(t, err)
+
+	queries := map[string]string{
+		"primary":    "SELECT pk, v1, crdb_internal_origin_id FROM test.foo ",
+		"index join": "SELECT pk, v1, crdb_internal_origin_id FROM test.foo@{FORCE_INDEX=foo_v2_idx}",
+	}
+	exp := [][]string{
+		{"1", "1", "42"},
+		{"2", "2", "42"},
+		{"3", "3", "0"}}
+	for n, q := range queries {
+		t.Run(n, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
+				if vectorize {
+					sqlDB.Exec(t, "SET vectorize=on")
+				} else {
+					sqlDB.Exec(t, "SET vectorize=off")
+				}
+				sqlDB.CheckQueryResults(t, q, exp)
+			})
+		})
+	}
+}

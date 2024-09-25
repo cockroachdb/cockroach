@@ -18,6 +18,8 @@ TABLE xyz
  ├── z int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  └── INDEX foo
@@ -52,6 +54,8 @@ TABLE abcdef
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── CHECK (f > 2:::INT8)
  └── PRIMARY INDEX abcdef_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
@@ -88,6 +92,8 @@ TABLE uvwxy
  ├── y int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_u_v_w (u, v, w)
  ├── FAMILY fam_1_x (x)
  ├── FAMILY fam_2_y (y)
@@ -119,6 +125,8 @@ TABLE child
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── PRIMARY INDEX child_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
@@ -134,6 +142,8 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null
@@ -161,6 +171,8 @@ TABLE child2
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── PRIMARY INDEX child2_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
@@ -176,6 +188,8 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null

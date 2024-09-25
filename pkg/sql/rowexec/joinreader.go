@@ -570,6 +570,7 @@ func newJoinReader(
 			diskBuffer,
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
+			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint
