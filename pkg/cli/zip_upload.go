@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2/google"
@@ -710,14 +709,16 @@ var doUploadReq = func(req *http.Request) ([]byte, error) {
 	return rawBody, nil
 }
 
-// a wrapper around uuid.MakeV4().String() to make the tests more deterministic.
+// a wrapper around timestamp to make the tests more deterministic.
 // Everything is converted to lowercase and spaces are replaced with hyphens. Because,
 // datadog will do this anyway and we want to make sure the UUIDs match when we generate the
 // explore/dashboard links.
 var newUploadID = func(cluster string) string {
+	currentTime := timeutil.Now().UTC()
+	formattedTime := currentTime.Format("20060102150405")
 	return strings.ToLower(
 		strings.ReplaceAll(
-			fmt.Sprintf("%s-%s", cluster, uuid.NewV4().Short()), " ", "-",
+			fmt.Sprintf("%s-%s", cluster, formattedTime), " ", "-",
 		),
 	)
 }
