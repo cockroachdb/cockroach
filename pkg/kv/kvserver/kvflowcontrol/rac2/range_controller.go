@@ -802,7 +802,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 		}
 		tokens := entry.tokens
 		if fn := rs.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
-			tokens = fn()
+			tokens = fn(tokens)
 		}
 		rs.sendStream.mu.tracker.Track(ctx, entry.term, entry.index, entry.pri, tokens)
 		rs.evalTokenCounter.Deduct(
