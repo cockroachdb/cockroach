@@ -56,6 +56,7 @@ func Get(
 		TargetBytes:           cArgs.Header.TargetBytes,
 		AllowEmpty:            cArgs.Header.AllowEmpty,
 		ReadCategory:          fs.BatchEvalReadCategory,
+		ReturnRawMVCCValues:   args.ReturnRawMVCCValues,
 	})
 	if err != nil {
 		return result.Result{}, err
