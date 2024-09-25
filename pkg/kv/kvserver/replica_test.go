@@ -715,12 +715,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		<-transferSem
 		// Check that a transfer is indeed on-going.
 		tc.repl.mu.Lock()
-		repDesc, err := tc.repl.getReplicaDescriptorRLocked()
-		if err != nil {
-			tc.repl.mu.Unlock()
-			t.Fatal(err)
-		}
-		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 		tc.repl.mu.Unlock()
 		if !pending {
 			t.Fatalf("expected transfer to be in progress, and it wasn't")
@@ -761,7 +756,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 			if pending {
 				return errors.New("transfer pending")
 			}
@@ -11802,10 +11797,11 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	type params struct {
-		raftStatus  raft.SparseStatus
-		leaseStatus kvserverpb.LeaseStatus
-		storeID     roachpb.StoreID
-		draining    bool
+		raftStatus              raft.SparseStatus
+		leaseStatus             kvserverpb.LeaseStatus
+		leaseAcquisitionPending bool
+		storeID                 roachpb.StoreID
+		draining                bool
 	}
 
 	// Set up a base state that we can vary, representing this node n1 being a
@@ -11834,8 +11830,9 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			}},
 			State: kvserverpb.LeaseState_VALID,
 		},
-		storeID:  localID,
-		draining: false,
+		leaseAcquisitionPending: false,
+		storeID:                 localID,
+		draining:                false,
 	}
 
 	testcases := map[string]struct {
@@ -11863,6 +11860,9 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 		"local lease": {false, func(p *params) {
 			p.leaseStatus.Lease.Replica.ReplicaID = localID
 		}},
+		"lease request pending": {false, func(p *params) {
+			p.leaseAcquisitionPending = true
+		}},
 		"no progress": {false, func(p *params) {
 			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
 		}},
@@ -11884,7 +11884,7 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			p := base
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldTransferRaftLeadershipToLeaseholderLocked(
-				p.raftStatus, p.leaseStatus, p.storeID, p.draining))
+				p.raftStatus, p.leaseStatus, p.leaseAcquisitionPending, p.storeID, p.draining))
 		})
 	}
 }

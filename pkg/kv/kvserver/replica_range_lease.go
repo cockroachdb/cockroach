@@ -228,8 +228,8 @@ type pendingLeaseRequest struct {
 	// All accesses require repl.mu to be exclusively locked.
 	llHandles map[*leaseRequestHandle]struct{}
 	// nextLease is the pending RequestLease request, if any. It can be used to
-	// figure out if we're in the process of extending our own lease, or
-	// transferring it to another replica.
+	// figure out if we're in the process of acquiring our own lease, extending
+	// our own lease, or transferring it to another replica.
 	nextLease roachpb.Lease
 }
 
@@ -240,12 +240,47 @@ func makePendingLeaseRequest(repl *Replica) pendingLeaseRequest {
 	}
 }
 
-// RequestPending returns the pending Lease, if one is in progress.
-// The second return val is true if a lease request is pending.
+// RequestPending returns the pending Lease, if one is in the process of being
+// acquired, extended, or transferred. The second return val is true if a lease
+// request is pending.
 //
 // Requires repl.mu is read locked.
 func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 	return p.nextLease, p.nextLease != roachpb.Lease{}
+}
+
+// AcquisitionInProgress returns whether the replica is in the process of
+// acquiring a range lease for itself. Lease extensions do not count as
+// acquisitions.
+//
+// Requires repl.mu is read locked.
+func (p *pendingLeaseRequest) AcquisitionInProgress() bool {
+	if nextLease, ok := p.RequestPending(); ok {
+		// Is the lease being acquired? (as opposed to extended or transferred)
+		prevLocal := p.repl.ReplicaID() == p.repl.mu.state.Lease.Replica.ReplicaID
+		nextLocal := p.repl.ReplicaID() == nextLease.Replica.ReplicaID
+		return !prevLocal && nextLocal
+	}
+	return false
+}
+
+// TransferInProgress returns whether the replica is in the process of
+// transferring away its range lease. Note that the return values are
+// best-effort and shouldn't be relied upon for correctness: if a previous
+// transfer has returned an error, TransferInProgress will return `false`, but
+// that doesn't necessarily mean that the transfer cannot still apply (see
+// replica.mu.minLeaseProposedTS).
+//
+// It is assumed that the replica owning this pendingLeaseRequest owns the
+// lease.
+//
+// Requires repl.mu is read locked.
+func (p *pendingLeaseRequest) TransferInProgress() bool {
+	if nextLease, ok := p.RequestPending(); ok {
+		// Is the lease being transferred? (as opposed to just extended)
+		return p.repl.ReplicaID() != nextLease.Replica.ReplicaID
+	}
+	return false
 }
 
 // InitOrJoinRequest executes a RequestLease command asynchronously and returns a
@@ -622,27 +657,6 @@ func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
 	}
 	p.llHandles[llHandle] = struct{}{}
 	return llHandle
-}
-
-// TransferInProgress returns whether the replica is in the process of
-// transferring away its range lease. Note that the return values are
-// best-effort and shouldn't be relied upon for correctness: if a previous
-// transfer has returned an error, TransferInProgress will return `false`, but
-// that doesn't necessarily mean that the transfer cannot still apply (see
-// replica.mu.minLeaseProposedTS).
-//
-// It is assumed that the replica owning this pendingLeaseRequest owns the
-// LeaderLease.
-//
-// replicaID is the ID of the parent replica.
-//
-// Requires repl.mu is read locked.
-func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) bool {
-	if nextLease, ok := p.RequestPending(); ok {
-		// Is the lease being transferred? (as opposed to just extended)
-		return replicaID != nextLease.Replica.ReplicaID
-	}
-	return false
 }
 
 // newHandle creates a new leaseRequestHandle referencing the pending lease
@@ -1228,11 +1242,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			// commands - see comments on AdminTransferLease and TransferLease.
 			// So wait on the lease transfer to complete either successfully or
 			// unsuccessfully before redirecting or retrying.
-			repDesc, err := r.getReplicaDescriptorRLocked()
-			if err != nil {
-				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(err)
-			}
-			if ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
+			if ok := r.mu.pendingLeaseRequest.TransferInProgress(); ok {
 				return r.mu.pendingLeaseRequest.JoinRequest(), kvserverpb.LeaseStatus{}, true /* transfer */, nil
 			}
 
