@@ -850,6 +850,9 @@ func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
 func (a *apiV2Server) getTableMetadataUpdateJobStatus(
 	ctx context.Context,
 ) (jobStatus tmUpdateJobStatusResponse, retErr error) {
+	jobStatus.DataValidDuration = tablemetadatacache.DataValidDurationSetting.Get(&a.sqlServer.execCfg.Settings.SV)
+	jobStatus.AutomaticUpdatesEnabled = tablemetadatacache.AutomaticCacheUpdatesEnabledSetting.Get(&a.sqlServer.execCfg.Settings.SV)
+
 	query := safesql.NewQuery()
 	query.Append(`
 	SELECT 
@@ -1000,6 +1003,10 @@ type tmUpdateJobStatusResponse struct {
 	LastStartTime     *time.Time `json:"last_start_time"`
 	LastCompletedTime *time.Time `json:"last_completed_time"`
 	LastUpdatedTime   *time.Time `json:"last_updated_time"`
+	// The value of tablemetadatacache.DataValidDurationSetting
+	DataValidDuration time.Duration `json:"data_valid_duration"`
+	// The value of tablemetadatacache.AutomaticCacheUpdatesEnabledSetting
+	AutomaticUpdatesEnabled bool `json:"automatic_updates_enabled"`
 }
 
 type tmJobTriggeredResponse struct {
