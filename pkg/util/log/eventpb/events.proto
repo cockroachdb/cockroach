@@ -98,4 +98,7 @@ message CommonChangefeedEventDetails {
 
   // The data format being emitted (ex: JSON, Avro).
   string format = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The job id for enterprise changefeeds.
+  int64 job_id = 8 [(gogoproto.jsontag) = ",omitempty"];
 }
