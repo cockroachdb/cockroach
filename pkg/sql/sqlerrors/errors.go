@@ -422,6 +422,12 @@ func NewUndefinedConstraintError(constraintName, tableName string) error {
 		"constraint %q of relation %q does not exist", constraintName, tableName)
 }
 
+// NewUndefinedTriggerError returns a missing constraint error.
+func NewUndefinedTriggerError(triggerName, tableName string) error {
+	return pgerror.Newf(pgcode.UndefinedObject,
+		"trigger %q of relation %q does not exist", triggerName, tableName)
+}
+
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	return pgerror.Wrapf(origErr, pgcode.RangeUnavailable, "key range id:%d is unavailable", rangeID)
