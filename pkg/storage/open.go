@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -447,7 +446,6 @@ func WALFailover(
 func makePebbleWALFailoverOptsForDir(
 	settings *cluster.Settings, dir wal.Dir,
 ) *pebble.WALFailoverOptions {
-	cclWALFailoverLogEvery := log.Every(10 * time.Minute)
 	return &pebble.WALFailoverOptions{
 		Secondary: dir,
 		FailoverOptions: wal.FailoverOptions{
@@ -455,12 +453,7 @@ func makePebbleWALFailoverOptsForDir(
 			// UnhealthyOperationLatencyThreshold should be pulled from the
 			// cluster setting.
 			UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
-				// WAL failover is a licensed feature.
-				licenseOK := base.CCLDistributionAndEnterpriseEnabled(settings)
-				if !licenseOK && cclWALFailoverLogEvery.ShouldLog() {
-					log.Warningf(context.Background(), "Ignoring WAL failover configuration because it requires an enterprise license.")
-				}
-				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), licenseOK
+				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), true
 			},
 		},
 	}
