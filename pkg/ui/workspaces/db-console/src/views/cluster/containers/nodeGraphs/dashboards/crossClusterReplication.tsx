@@ -38,20 +38,6 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
     <LineGraph
-      title="SST Bytes"
-      sources={storeSources}
-      tenantSource={tenantSource}
-      tooltip={`Rate at which the SST bytes (compressed) are sent to KV by all replication jobs`}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric
-          name="cr.node.physical_replication.sst_bytes"
-          title="SST Bytes"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-    <LineGraph
       title="Replication Lag"
       sources={storeSources}
       tenantSource={tenantSource}

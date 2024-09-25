@@ -670,8 +670,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				return err
 			}
 			perChunkStats[worker] = s
-			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
-			lrw.metrics.KVWriteFallbackCount.Inc(s.kvWriteFallbacks)
 			return nil
 		})
 	}
@@ -707,9 +705,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	} else {
 		lrw.metrics.InitialApplySuccesses.Inc(stats.processed.success)
 		lrw.metrics.InitialApplyFailures.Inc(stats.notProcessed.count + stats.processed.dlq)
-		lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
-		lrw.metrics.StreamBatchRowsHist.RecordValue(int64(len(kvs)))
-		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
 		lrw.metrics.ReceivedLogicalBytes.Inc(stats.processed.bytes + stats.notProcessed.bytes)
 	}
 	return notProcessed, stats.notProcessed.bytes, nil

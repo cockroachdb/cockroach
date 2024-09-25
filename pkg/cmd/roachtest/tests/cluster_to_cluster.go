@@ -98,9 +98,6 @@ var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
 		Query:     "physical_replication_logical_bytes / 1e6"},
-	"PhysicalMegabytes": {
-		LabelName: "node",
-		Query:     "physical_replication_sst_bytes / 1e6"},
 	"PhysicalReplicatedMegabytes": {
 		LabelName: "node",
 		Query:     "capacity_used / 1e6"},
