@@ -23,6 +23,28 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
+// LogSnapshot encapsulates a point-in-time state of the raft log accessible
+// outside the raft package for reads.
+//
+// To access it safely, the user must not mutate the underlying raft log storage
+// between when the snapshot is obtained and the reads are done.
+//
+// TODO(pav-kv): this should be part of the Ready API. Instead of pre-fetching
+// entries (e.g. the committed entries subject to state machine application),
+// allow the application to read them from LogSnapshot in the Ready handler.
+// This gives the application direct control on resource allocation, and
+// flexibility to do raft log IO without blocking RawNode operation.
+type LogSnapshot struct {
+	// first is the first available log index.
+	first uint64
+	// storage contains the stable log entries.
+	storage LogStorage
+	// unstable contains the unstable log entries.
+	unstable logSlice
+	// logger gives access to logging errors.
+	logger Logger
+}
+
 type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
 	storage Storage
@@ -409,8 +431,12 @@ func (l *raftLog) lastEntryID() entryID {
 	return entryID{term: t, index: index}
 }
 
+func (l *raftLog) term(i uint64) (uint64, error) {
+	return l.snap(l.storage).term(i)
+}
+
 // term returns the term of the log entry at the given index.
-func (l *raftLog) term(index uint64) (uint64, error) {
+func (l LogSnapshot) term(index uint64) (uint64, error) {
 	// Check the unstable log first, even before computing the valid index range,
 	// which may need to access the storage. If we find the entry's term in the
 	// unstable log, we know it was in the valid range.
@@ -418,7 +444,7 @@ func (l *raftLog) term(index uint64) (uint64, error) {
 		return 0, ErrUnavailable
 	} else if index >= l.unstable.prev.index {
 		return l.unstable.termAt(index), nil
-	} else if index+1 < l.firstIndex() {
+	} else if index+1 < l.first {
 		return 0, ErrCompacted
 	}
 
@@ -518,6 +544,35 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 // The returned slice can be appended to, but the entries in it must not be
 // mutated.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+	return l.snap(l.storage).slice(lo, hi, maxSize)
+}
+
+// LogSlice returns a valid log slice for a prefix of the (lo, hi] log index
+// interval, with the total entries size not exceeding maxSize.
+//
+// Returns at least one entry if the interval contains any. The maxSize can only
+// be exceeded if the first entry (lo+1) is larger.
+//
+// TODO(pav-kv): export the logSlice type so that the caller can use it.
+func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (logSlice, error) {
+	prevTerm, err := l.term(lo)
+	if err != nil {
+		// The log is probably compacted at index > lo (err == ErrCompacted), or it
+		// can be a custom storage error.
+		return logSlice{}, err
+	}
+	ents, err := l.slice(lo, hi, entryEncodingSize(maxSize))
+	if err != nil {
+		return logSlice{}, err
+	}
+	return logSlice{
+		term:    l.unstable.term,
+		prev:    entryID{term: prevTerm, index: lo},
+		entries: ents,
+	}, nil
+}
+
+func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
 	} else if lo >= hi {
@@ -576,13 +631,13 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 
 // mustCheckOutOfBounds checks that the (lo, hi] interval is within the bounds
 // of this raft log: l.firstIndex()-1 <= lo <= hi <= l.lastIndex().
-func (l *raftLog) mustCheckOutOfBounds(lo, hi uint64) error {
+func (l LogSnapshot) mustCheckOutOfBounds(lo, hi uint64) error {
 	if lo > hi {
 		l.logger.Panicf("invalid slice %d > %d", lo, hi)
 	}
-	if fi := l.firstIndex(); lo+1 < fi {
+	if fi := l.first; lo+1 < fi {
 		return ErrCompacted
-	} else if li := l.lastIndex(); hi > li {
+	} else if li := l.unstable.lastIndex(); hi > li {
 		l.logger.Panicf("slice(%d,%d] out of bound [%d,%d]", lo, hi, fi, li)
 	}
 	return nil
@@ -597,4 +652,15 @@ func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 	}
 	l.logger.Panicf("unexpected error (%v)", err)
 	return 0
+}
+
+// snap returns a point-in-time snapshot of the raft log. This snapshot can be
+// read from while the underlying storage is not mutated.
+func (l *raftLog) snap(storage LogStorage) LogSnapshot {
+	return LogSnapshot{
+		first:    l.firstIndex(),
+		storage:  storage,
+		unstable: l.unstable.logSlice,
+		logger:   l.logger,
+	}
 }
