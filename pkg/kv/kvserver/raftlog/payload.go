@@ -123,7 +123,7 @@ func EncodeCommand(
 
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		EncodeRaftCommandPrefix(data, entryEncoding, idKey, pri)
+		EncodeRaftCommandPrefix(ctx, data, entryEncoding, idKey, pri)
 	}
 
 	// Encode the body of the command.

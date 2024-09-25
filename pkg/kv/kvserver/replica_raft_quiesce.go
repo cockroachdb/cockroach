@@ -100,7 +100,7 @@ func (r *Replica) maybeUnquiesceLocked(ctx context.Context, wakeLeader, mayCampa
 		if log.V(3) {
 			log.Infof(ctx, "waking r%d leader", r.RangeID)
 		}
-		data := raftlog.EncodeCommandBytes(
+		data := raftlog.EncodeCommandBytes(ctx,
 			raftlog.EntryEncodingStandardWithoutAC, raftlog.MakeCmdIDKey(), nil, 0 /* pri */)
 		_ = r.mu.internalRaftGroup.Propose(ctx, data)
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
