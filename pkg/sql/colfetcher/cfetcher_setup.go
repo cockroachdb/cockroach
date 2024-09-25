@@ -15,6 +15,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -37,6 +39,19 @@ var cFetcherTableArgsPool = sync.Pool{
 	New: func() interface{} {
 		return &cFetcherTableArgs{}
 	},
+}
+
+func (a cFetcherTableArgs) RequiresRawMVCCValues() bool {
+	for idx := range a.spec.FetchedColumns {
+		colID := a.spec.FetchedColumns[idx].ColumnID
+		if colinfo.IsColIDSystemColumn(colID) {
+			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
+			case catpb.SystemColumnKind_ORIGINID, catpb.SystemColumnKind_ORIGINTIMESTAMP:
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *cFetcherTableArgs) Release() {

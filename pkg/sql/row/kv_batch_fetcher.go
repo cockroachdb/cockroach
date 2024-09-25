@@ -177,7 +177,8 @@ type txnKVFetcher struct {
 	scanFormat     kvpb.ScanFormat
 	indexFetchSpec *fetchpb.IndexFetchSpec
 
-	reverse bool
+	reverse       bool
+	rawMVCCValues bool
 	// lockStrength represents the locking mode to use when fetching KVs.
 	lockStrength lock.Strength
 	// lockWaitPolicy represents the policy to be used for handling conflicting
@@ -400,6 +401,7 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
+	rawMVCCValues              bool
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -420,6 +422,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		// Default to BATCH_RESPONSE. The caller will override if needed.
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
+		rawMVCCValues:              args.rawMVCCValues,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockDurability:             GetKeyLockingDurability(args.lockDurability),
@@ -665,7 +668,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = spansToRequests(
-		f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.lockDurability, f.reqsScratch,
+		f.spans.Spans, f.scanFormat, f.reverse, f.rawMVCCValues, f.lockStrength, f.lockDurability, f.reqsScratch,
 	)
 
 	monitoring := f.acc != nil
@@ -1018,6 +1021,7 @@ func spansToRequests(
 	spans roachpb.Spans,
 	scanFormat kvpb.ScanFormat,
 	reverse bool,
+	rawMVCCValues bool,
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reqsScratch []kvpb.RequestUnion,
@@ -1055,6 +1059,7 @@ func spansToRequests(
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLockingStrength = lockStrength
 				gets[curGet].req.KeyLockingDurability = lockDurability
+				gets[curGet].req.ReturnRawMVCCValues = rawMVCCValues
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -1064,6 +1069,7 @@ func spansToRequests(
 			scans[curScan].req.SetSpan(spans[i])
 			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
+			scans[curScan].req.ReturnRawMVCCValues = rawMVCCValues
 			scans[curScan].req.KeyLockingStrength = lockStrength
 			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.ReverseScan = &scans[curScan].req
@@ -1081,6 +1087,7 @@ func spansToRequests(
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLockingStrength = lockStrength
 				gets[curGet].req.KeyLockingDurability = lockDurability
+				gets[curGet].req.ReturnRawMVCCValues = rawMVCCValues
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -1092,6 +1099,7 @@ func spansToRequests(
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLockingStrength = lockStrength
 			scans[curScan].req.KeyLockingDurability = lockDurability
+			scans[curScan].req.ReturnRawMVCCValues = rawMVCCValues
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}
