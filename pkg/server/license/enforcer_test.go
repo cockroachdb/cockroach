@@ -47,7 +47,7 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	// This is the timestamp that we'll override the grace period init timestamp with.
 	// This will be set when bringing up the server.
 	ts1 := timeutil.Unix(1724329716, 0)
-	ts1End := ts1.Add(30 * 24 * time.Hour) // Calculate the end of the grace period based on ts1
+	ts1_30d := ts1.Add(30 * 24 * time.Hour)
 
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -64,21 +64,24 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 
 	// Create a new enforcer, to test that it won't overwrite the grace period init
 	// timestamp that was already setup.
-	enforcer := &license.Enforcer{}
 	ts2 := ts1.Add(1)
 	ts2End := ts2.Add(7 * 24 * time.Hour) // Calculate the end of the grace period
-	enforcer.SetTestingKnobs(&license.TestingKnobs{
-		Enable:            true,
-		OverrideStartTime: &ts2,
-	})
+	enforcer := license.NewEnforcer(
+		&license.TestingKnobs{
+			Enable:            true,
+			OverrideStartTime: &ts2,
+		})
 	// Ensure request for the grace period init ts1 before start just returns the start
 	// time used when the enforcer was created.
 	require.Equal(t, ts2End, enforcer.GetClusterInitGracePeriodEndTS())
 	// Start the enforcer to read the timestamp from the KV.
-	enforcer.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: ts1})
-	err := enforcer.Start(ctx, srv.ClusterSettings(), srv.InternalDB().(descs.DB))
+	err := enforcer.Start(ctx, srv.ClusterSettings(),
+		license.WithDB(srv.InternalDB().(descs.DB)),
+		license.WithSystemTenant(true),
+		license.WithTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: ts1}),
+	)
 	require.NoError(t, err)
-	require.Equal(t, ts1End, enforcer.GetClusterInitGracePeriodEndTS())
+	require.Equal(t, ts1_30d, enforcer.GetClusterInitGracePeriodEndTS())
 }
 
 func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
@@ -112,12 +115,12 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 		{"init-1h1min-ago", ts1.Add(-61 * time.Minute), ts1.Add(30 * 24 * time.Hour)},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			enforcer := &license.Enforcer{}
-			enforcer.SetTestingKnobs(&license.TestingKnobs{
-				Enable:                            true,
-				OverrideStartTime:                 &ts1,
-				OverwriteClusterInitGracePeriodTS: true,
-			})
+			enforcer := license.NewEnforcer(
+				&license.TestingKnobs{
+					Enable:                            true,
+					OverrideStartTime:                 &ts1,
+					OverwriteClusterInitGracePeriodTS: true,
+				})
 
 			// Set up the min time in system.migrations. This is used by the enforcer
 			// to figure out if the cluster is new or old. The grace period length is
@@ -131,7 +134,15 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			err = enforcer.Start(ctx, srv.ClusterSettings(), srv.InternalDB().(descs.DB))
+			err = enforcer.Start(ctx, srv.ClusterSettings(),
+				license.WithDB(db),
+				license.WithSystemTenant(true),
+				license.WithTestingKnobs(&license.TestingKnobs{
+					Enable:                            true,
+					OverrideStartTime:                 &ts1,
+					OverwriteClusterInitGracePeriodTS: true,
+				}),
+			)
 			require.NoError(t, err)
 			require.Equal(t, tc.expGracePeriodEndTS, enforcer.GetClusterInitGracePeriodEndTS())
 		})
@@ -205,11 +216,12 @@ func TestThrottle(t *testing.T) {
 		{OverTxnThreshold, license.LicTypeEvaluation, t0, t0, t15d, t46d, "License expired", ""},
 	} {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			e := license.Enforcer{}
-			e.SetTestingKnobs(&license.TestingKnobs{
-				OverrideStartTime:         &tc.gracePeriodInit,
-				OverrideThrottleCheckTime: &tc.checkTs,
-			})
+			e := license.NewEnforcer(
+				&license.TestingKnobs{
+					Enable:                    true,
+					OverrideStartTime:         &tc.gracePeriodInit,
+					OverrideThrottleCheckTime: &tc.checkTs,
+				})
 			e.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{
 				lastPingTime: tc.lastTelemetryPingTime,
 			})
