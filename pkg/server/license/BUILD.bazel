@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cclbridge.go",
         "enforcer.go",
+        "opts.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/license",
     visibility = ["//visibility:public"],
