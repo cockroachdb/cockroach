@@ -35,7 +35,6 @@ An event of type `changefeed_emitted_bytes` is an event representing the bytes e
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `JobId` | The job id for enterprise changefeeds. | no |
 | `EmittedBytes` | The number of bytes emitted. | no |
 | `EmittedMessages` | The number of messages emitted. | no |
 | `LoggingInterval` | The time period in nanoseconds between emitting telemetry events of this type (per-aggregator). | no |
@@ -52,6 +51,7 @@ An event of type `changefeed_emitted_bytes` is an event representing the bytes e
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
 
 ### `changefeed_failed`
 
@@ -74,6 +74,7 @@ was triggered.
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
 
 ### `create_changefeed`
 
@@ -97,6 +98,7 @@ ChangefeedFailed events.
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
 
 ## Cluster-level events
 

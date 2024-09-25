@@ -66,7 +66,7 @@ func makePeriodicTelemetryLogger(
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
 		job:               job,
-		changefeedDetails: getCommonChangefeedEventDetails(ctx, job.Details().(jobspb.ChangefeedDetails), job.Payload().Description),
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, job.Details().(jobspb.ChangefeedDetails), job.Payload().Description, job.ID()),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -112,7 +112,6 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
-		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
@@ -128,7 +127,6 @@ func (ptl *periodicTelemetryLogger) close() {
 
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
-		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,

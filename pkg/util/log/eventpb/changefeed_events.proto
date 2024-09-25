@@ -45,8 +45,7 @@ message ChangefeedFailed {
 message ChangefeedEmittedBytes {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 
-  // The job id for enterprise changefeeds.
-  int64 job_id = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+  reserved 2;
 
   // The number of bytes emitted.
   int64 emitted_bytes = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
