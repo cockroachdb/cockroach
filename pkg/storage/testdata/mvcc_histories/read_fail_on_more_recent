@@ -242,13 +242,13 @@ run error
 scan k=a end=b_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"b_next" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
 
 run error
 scan k=a end=c_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"c_next" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
 
 run error
 scan k=b end=c_next ts=9,0 failOnMoreRecent
