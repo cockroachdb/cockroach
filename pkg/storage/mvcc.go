@@ -1261,6 +1261,10 @@ type MVCCGetOptions struct {
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
 	ReadCategory fs.ReadCategory
+	// ReturnRawMVCCValues indicates the get should return a
+	// roachpb.Value whose RawBytes may contain MVCCValueHeader
+	// data.
+	ReturnRawMVCCValues bool
 }
 
 // MVCCGetResult bundles return values for the MVCCGet family of functions.
@@ -1557,6 +1561,7 @@ func mvccGet(
 		inconsistent:     opts.Inconsistent,
 		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
+		rawMVCCValues:    opts.ReturnRawMVCCValues,
 		failOnMoreRecent: opts.FailOnMoreRecent,
 		keyBuf:           mvccScanner.keyBuf,
 	}
@@ -4557,6 +4562,7 @@ func mvccScanInit(
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
 		allowEmpty:       opts.AllowEmpty,
+		rawMVCCValues:    opts.ReturnRawMVCCValues,
 		wholeRows:        opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxLockConflicts: opts.MaxLockConflicts,
 		inconsistent:     opts.Inconsistent,
@@ -4816,6 +4822,10 @@ type MVCCScanOptions struct {
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
 	ReadCategory fs.ReadCategory
+	// ReturnRawMVCCValues indicates that the scan should return
+	// roachpb.Value whose RawBytes may contain MVCCValueHeader
+	// data.
+	ReturnRawMVCCValues bool
 }
 
 func (opts *MVCCScanOptions) validate() error {

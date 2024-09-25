@@ -434,6 +434,7 @@ type pebbleMVCCScanner struct {
 	inconsistent     bool
 	skipLocked       bool
 	tombstones       bool
+	rawMVCCValues    bool
 	failOnMoreRecent bool
 	keyBuf           []byte
 	savedBuf         []byte
@@ -825,7 +826,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 
 		// ts == read_ts
@@ -858,7 +859,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 
 		// ts > read_ts
@@ -916,7 +917,11 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 	}
 	if len(p.meta.RawBytes) != 0 {
 		// 7. Emit immediately if the value is inline.
-		return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes)
+		//
+		// TODO(ssd): Should we error if we find an inline when
+		// ReturnRawMVCCValues is set? Anyone scanning with that option
+		// set should not be encountering inline values.
+		return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes, p.meta.RawBytes)
 	}
 
 	if p.meta.Txn == nil {
@@ -1042,7 +1047,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			if p.err != nil {
 				return false, false
 			}
-			return p.add(ctx, p.curUnsafeKey.Key, p.keyBuf, p.curUnsafeValue.Value.RawBytes)
+			return p.add(ctx, p.curUnsafeKey.Key, p.keyBuf, p.curUnsafeValue.Value.RawBytes, intentValueRaw)
 		}
 		// 14. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
@@ -1218,12 +1223,15 @@ func IncludeStartKeyIntoErr(startKey roachpb.Key, err error) error {
 //   - added indicates whether the key and value were included into the result
 //     set.
 func (p *pebbleMVCCScanner) add(
-	ctx context.Context, key roachpb.Key, rawKey []byte, rawValue []byte,
+	ctx context.Context, key roachpb.Key, rawKey []byte, rawValue []byte, mvccRawBytes []byte,
 ) (ok, added bool) {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(rawValue) == 0 && !p.tombstones {
 		return true /* ok */, false
+	}
+	if p.rawMVCCValues {
+		rawValue = mvccRawBytes
 	}
 
 	// If the scanner has been configured with the skipLocked option, don't
@@ -1331,7 +1339,8 @@ func (p *pebbleMVCCScanner) addSynthetic(
 	if p.err != nil {
 		return false, false
 	}
-	return p.add(ctx, key, p.keyBuf, value.Value.RawBytes)
+
+	return p.add(ctx, key, p.keyBuf, value.Value.RawBytes, version.Value)
 }
 
 // Seeks to the latest revision of the current key that's still less than or
@@ -1385,7 +1394,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 				if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
 					return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 				}
-				return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+				return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 			}
 			// Iterate through uncertainty interval. Though we found a value in
 			// the interval, it may not be uncertainty. This is because seekTS
@@ -1427,7 +1436,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
 				return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 			}
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes)
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty

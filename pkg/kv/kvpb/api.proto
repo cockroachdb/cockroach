@@ -263,6 +263,11 @@ message GetRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 3;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Value
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -702,6 +707,11 @@ message ScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -790,6 +800,11 @@ message ReverseScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue using
+  // the MVCC_EXTENDED_ENCODING_SENTINEL value type as its tag.
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
