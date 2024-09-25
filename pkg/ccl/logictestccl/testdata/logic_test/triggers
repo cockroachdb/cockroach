@@ -1,28 +1,23 @@
-# TODO(#126356): remove this case when trigger functions are supported.
-statement error pgcode 0A000 pq: unimplemented: trigger functions are not yet supported
-CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
-
 # ==============================================================================
 # Trigger functions cannot be directly invoked.
 # ==============================================================================
 
 subtest direct_invocation
 
-# TODO(#126356): uncomment these cases when trigger functions are supported.
-#statement ok
-#CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#SELECT f();
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT f(); SELECT 1; $$;
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT f(); RETURN 1; END $$;
-#
-#statement ok
-#DROP FUNCTION f;
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+SELECT f();
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT f(); SELECT 1; $$;
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT f(); RETURN 1; END $$;
+
+statement ok
+DROP FUNCTION f;
 
 # ==============================================================================
 # Test invalid usage of parameters in trigger functions.
@@ -156,5 +151,305 @@ CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
 # Trigger array UDT field.
 statement error pgcode 42601 pq: at or near "\[": syntax error
 CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
+
+# ==============================================================================
+# Trigger functions support basic PL/pgSQL statements.
+# ==============================================================================
+
+subtest basic_plpgsql
+
+# RETURN statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement ok
+DROP FUNCTION f;
+
+# Variable declaration and assignment.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 1;
+    y INT;
+  BEGIN
+    y := 2;
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# RAISE statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'hello'; RETURN NULL; END $$;
+
+statement ok
+DROP FUNCTION f;
+
+# IF statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF now() > '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ THEN
+      RETURN NULL;
+    ELSE
+      RETURN ROW(1, 2, 3);
+    END IF;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# WHILE statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    WHILE x < 10 LOOP
+      x := x + 1;
+    END LOOP;
+    RETURN ROW(x);
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# OPEN and FETCH statements.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    c CURSOR FOR SELECT 1;
+    x INT;
+  BEGIN
+    OPEN c;
+    FETCH c INTO x;
+    CLOSE c;
+    RETURN ROW(x);
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Combination of statements.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 1;
+    y INT := 2;
+  BEGIN
+    RAISE NOTICE 'x: %, y: %', x, y;
+    IF x = 1 THEN
+      RETURN ROW(1, 2);
+    ELSE
+      RETURN ROW(3, 4);
+    END IF;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# ==============================================================================
+# Correct usage of PL/pgSQL statements is enforced at function creation.
+# ==============================================================================
+
+subtest invalid_plpgsql
+
+# RETURN statement must return a row.
+statement error pgcode 42601 pq: missing expression at or near "RETURN;"
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN; END $$;
+
+# Assigning to a nonexistent variable is not allowed.
+statement error pgcode 42601 pq: "nonexistent" is not a known variable
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    nonexistent := 'foo';
+    RAISE NOTICE '%', nonexistent;
+    RETURN NULL;
+  END
+$$;
+
+# Cannot assign to a constant variable.
+statement error pgcode 22005 pq: variable "x" is declared CONSTANT
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x CONSTANT INT := 1;
+  BEGIN
+    x := 2;
+    RETURN NULL;
+  END
+$$;
+
+# Cursor cannot be opened with an INSERT statement.
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    c CURSOR FOR INSERT INTO t VALUES (1);
+  BEGIN
+    OPEN c;
+    RETURN NULL;
+  END
+$$;
+
+# Transaction control statements are not allowed.
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN COMMIT; RETURN NULL; END $$;
+
+# ==============================================================================
+# Trigger functions have a set of implicitly-defined variables.
+# ==============================================================================
+
+# It is possible to assign to the implicit variables, including OLD and NEW.
+# TODO(#126727) The tg_op assignment is lower-cased because the INTO clause is
+# currently case-sensitive.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    TG_NAME := 'foo';
+    SELECT t INTO tg_op FROM ops_table;
+    OLD := ROW(1, 2, 3);
+    NEW := (SELECT * FROM xyz LIMIT 1);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Shadowing the implicit variables is not allowed (tracked in #117508).
+statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    tg_op TEXT := 'foo';
+  BEGIN
+    RETURN NEW;
+  END
+$$;
+
+# ==============================================================================
+# SQL expressions are not analyzed during function creation.
+# ==============================================================================
+
+subtest lazy_analysis
+
+# Arbitrary variables/columns (and fields of those variables) may be referenced
+# in an unbound PL/pgSQL trigger function, even if they do not exist.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT := NEW.x;
+  BEGIN
+    RAISE NOTICE '%', NEW.this_field_may_not_exist;
+    RAISE NOTICE '%', OLD.we_do_not_now_until_trigger_creation;
+    RETURN OLD.y + foo;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Arbitrary relations may be referenced in an unbound PL/pgSQL trigger function,
+# even if they do not exist.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT := (SELECT x FROM new_rows LIMIT 1);
+  BEGIN
+    RAISE NOTICE 'bar: %', (SELECT one, two FROM non_existent_table);
+    RETURN (SELECT y FROM old_rows LIMIT 1) + foo;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# SQL statements must still have correct syntax.
+statement error pgcode 42601 pq: at or near ";": at or near "sel": syntax error
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SEL y FROM old_rows LIMIT 1;
+    RETURN foo;
+  END
+$$;
+
+# ==============================================================================
+# Test CREATE OR REPLACE behavior for trigger functions.
+# ==============================================================================
+
+subtest create_or_replace
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+# The first function should have been replaced.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN NULL;
+  END;
+$$
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+# The replacement function should have a different body.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN (1, 2);
+  END;
+$$
+
+statement ok
+DROP FUNCTION f;
+
+# CREATE OR REPLACE should succeed when there is no existing function.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN NULL;
+  END;
+$$
+
+statement ok
+DROP FUNCTION f;
 
 subtest end

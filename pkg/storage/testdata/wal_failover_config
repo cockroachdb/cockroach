@@ -90,14 +90,6 @@ open flag=disabled envs=(foo,bar) open=bar
 OK
 WALRecoveryDir: foo/auxiliary/wals-among-stores
 
-# Ensure that WAL failover refuses to failover if there's no enterprise
-# license configured.
-open flag=among-stores envs=(foo,bar) open=foo disable-enterprise
-----
-OK
-secondary = bar/auxiliary/wals-among-stores
-UnhealthyOperationLatencyThreshold() = (100ms,false)
-
 open flag=disabled envs=(foo,bar) open=foo
 ----
 OK

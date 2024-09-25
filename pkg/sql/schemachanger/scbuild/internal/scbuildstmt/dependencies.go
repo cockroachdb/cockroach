@@ -319,7 +319,8 @@ type TableHelpers interface {
 
 type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
-	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language, provider ReferenceProvider) *scpb.FunctionBody
+	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
+		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
 }
 
 type SchemaHelpers interface {

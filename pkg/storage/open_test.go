@@ -128,11 +128,6 @@ func TestWALFailover(t *testing.T) {
 				}
 				settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true /* initializeVersion */)
 
-				// Mock an enterpise license, or not if disable-enterprise is specified.
-				enterpriseEnabledFunc := base.CCLDistributionAndEnterpriseEnabled
-				base.CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings) bool { return !td.HasArg("disable-enterprise") }
-				defer func() { base.CCLDistributionAndEnterpriseEnabled = enterpriseEnabledFunc }()
-
 				engine, err := Open(context.Background(), openEnv, settings, WALFailover(cfg, envs, defaultFS, nil))
 				if err != nil {
 					openEnv.Close()
