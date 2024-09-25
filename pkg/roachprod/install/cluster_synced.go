@@ -217,8 +217,8 @@ func scpWithRetry(
 	scpCtx, cancel := context.WithTimeout(ctx, scpTimeout)
 	defer cancel()
 
-	return runWithMaybeRetry(ctx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
-		func(ctx context.Context) (*RunResultDetails, error) { return scp(scpCtx, l, src, dest) })
+	return runWithMaybeRetry(scpCtx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
+		func(ctx context.Context) (*RunResultDetails, error) { return scp(ctx, l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -2801,6 +2801,7 @@ func scp(ctx context.Context, l *logger.Logger, src, dest string) (*RunResultDet
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.WaitDelay = time.Second // make sure the call below returns when the context is canceled
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
