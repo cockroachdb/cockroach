@@ -109,9 +109,11 @@ func (r *opsRunner) pickOperation(
 		opSpecsSet := r.specs[setIdx]
 		opSpec := &opSpecsSet[rng.Intn(len(opSpecsSet))]
 		r.mu.Lock()
+		defer func() {
+			r.mu.Unlock()
+		}()
 		if r.mu.lockOutOperations {
 			r.mu.completed.Wait()
-			r.mu.Unlock()
 			continue
 		}
 
@@ -121,7 +123,6 @@ func (r *opsRunner) pickOperation(
 		if timeutil.Now().Compare(eligibleForNextRun) < 0 {
 			// Find another operation to run.
 			r.mu.completed.Wait()
-			r.mu.Unlock()
 			continue
 		}
 		// Ratchet lastRun forward.
@@ -155,7 +156,6 @@ func (r *opsRunner) pickOperation(
 			}
 		}
 
-		r.mu.Unlock()
 		return opSpec
 	}
 }
@@ -215,7 +215,7 @@ func (r *opsRunner) runOperation(
 		})
 		return
 	}
-	cmd.Start()
+	_ = cmd.Start()
 	wg.Add(2)
 	// Spin up goroutines to read stdout and stderr, and pipe them
 	// into the event logger.
@@ -255,12 +255,14 @@ func (r *opsRunner) runOperation(
 	})
 
 	r.mu.Lock()
+	defer func() {
+		r.mu.Unlock()
+	}()
 	r.mu.runningOperations[workerIdx] = ""
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.mu.lockOutOperations = false
 	}
 	r.mu.completed.Broadcast()
-	r.mu.Unlock()
 }
 
 // runWorker manages the infinite loop for one operation runner worker.
