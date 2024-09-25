@@ -223,7 +223,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
-			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+			logChangefeedCreateTelemetry(ctx, jr, 0 /* jobID */, changefeedStmt.Select != nil)
 
 			err := coreChangefeed(ctx, p, details, progress, resultsCh)
 			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
@@ -308,7 +308,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+		logChangefeedCreateTelemetry(ctx, jr, jobID, changefeedStmt.Select != nil)
 
 		select {
 		case <-ctx.Done():
@@ -1524,11 +1524,13 @@ func getChangefeedTargetName(
 	return desc.GetName(), nil
 }
 
-func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
+func logChangefeedCreateTelemetry(
+	ctx context.Context, jr *jobs.Record, jobID jobspb.JobID, isTransformation bool,
+) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jobID)
 	}
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
@@ -1545,7 +1547,7 @@ func logChangefeedFailedTelemetry(
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
 	}
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
@@ -1556,8 +1558,8 @@ func logChangefeedFailedTelemetry(
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
-func getCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string,
+func makeCommonChangefeedEventDetails(
+	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID,
 ) eventpb.CommonChangefeedEventDetails {
 	opts := details.Opts
 
@@ -1602,6 +1604,7 @@ func getCommonChangefeedEventDetails(
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,
+		JobId:       int64(jobID),
 	}
 
 	return changefeedEventDetails
