@@ -706,7 +706,7 @@ func TestIsOutOfBounds(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			err := l.mustCheckOutOfBounds(tt.lo, tt.hi)
+			err := l.snap(l.storage).mustCheckOutOfBounds(tt.lo, tt.hi)
 			require.False(t, tt.wpanic)
 			require.False(t, tt.wErrCompacted && err != ErrCompacted)
 			require.False(t, !tt.wErrCompacted && err != nil)

@@ -300,6 +300,27 @@ func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 	return r.raftFirstIndexRLocked()
 }
 
+// LogSnapshot returns an immutable point-in-time snapshot of the log storage.
+func (r *replicaRaftStorage) LogSnapshot() raft.LogStorageSnapshot {
+	r.raftMu.AssertHeld()
+	r.mu.AssertRHeld()
+	// TODO(pav-kv): return a wrapper which, in all methods, checks that the log
+	// storage hasn't been written to. A more relaxed version of it should assert
+	// that only the relevant part of the log hasn't been overwritten, e.g. a new
+	// term leader hasn't appended a log slice that truncated the log, or the log
+	// hasn't been wiped.
+	//
+	// This would require auditing and integrating with the write paths. Today,
+	// this type implements only reads, and writes are in various places like the
+	// logstore.LogStore type, or the code in the split handler which creates an
+	// empty range state.
+	//
+	// We don't need a fully fledged Pebble snapshot here. For our purposes, we
+	// can also make sure that raftMu is held for the entire period of using the
+	// LogSnapshot - this should guarantee its immutability.
+	return r
+}
+
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
 func (r *Replica) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	r.mu.RLock()
