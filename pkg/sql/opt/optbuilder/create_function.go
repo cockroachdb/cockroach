@@ -417,9 +417,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				"set-returning PL/pgSQL functions are not yet supported",
 			))
 		}
-		if funcReturnType.Identical(types.Trigger) {
-			panic(unimplemented.NewWithIssue(126356, "trigger functions are not yet supported"))
-		}
 
 		// Parse the function body.
 		stmt, err := plpgsqlparser.Parse(funcBodyStr)
@@ -439,13 +436,38 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
+		// Special handling for trigger functions.
+		buildSQL := true
+		if funcReturnType.Identical(types.Trigger) {
+			// Trigger functions cannot have user-defined parameters. However, they do
+			// have a set of implicitly defined parameters.
+			for i := range createTriggerFuncParams {
+				param := &createTriggerFuncParams[i]
+				paramColName := funcParamColName(param.name, i)
+				col := b.synthesizeColumn(
+					bodyScope, paramColName, param.typ, nil /* expr */, nil, /* scalar */
+				)
+				col.setParamOrd(i)
+			}
+			routineParams = createTriggerFuncParams
+
+			// The actual return type for a trigger function is not known until it is
+			// bound to a trigger. Therefore, during function creation we use NULL as a
+			// placeholder type.
+			funcReturnType = types.Unknown
+
+			// Analysis of SQL expressions for trigger functions must be deferred
+			// until the function is bound to a trigger.
+			buildSQL = false
+		}
+
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), stmt.AST.Label, nil, /* colRefs */
-				routineParams, funcReturnType, cf.IsProcedure, nil, /* outScope */
+				b, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
+				funcReturnType, cf.IsProcedure, buildSQL, nil, /* outScope */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
@@ -499,6 +521,15 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	)
 	return outScope
 }
+
+// createTriggerFuncParams is the set of implicitly-defined parameters for a
+// PL/pgSQL trigger function. createTriggerFuncParams is used during trigger
+// function creation, when the type of the NEW and OLD variables is not yet
+// known.
+var createTriggerFuncParams = append([]routineParam{
+	{name: "new", typ: types.Unknown, class: tree.RoutineParamIn},
+	{name: "old", typ: types.Unknown, class: tree.RoutineParamIn},
+}, triggerFuncStaticParams...)
 
 func formatFuncBodyStmt(
 	fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, lang tree.RoutineLanguage, newLine bool,
