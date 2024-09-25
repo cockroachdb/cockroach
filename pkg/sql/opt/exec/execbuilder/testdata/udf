@@ -321,15 +321,15 @@ EXPLAIN (OPT, TYPES)
 SELECT fn93210()
 ----
 values
- ├── columns: fn93210:4(int)
+ ├── columns: fn93210:6(int)
  ├── cardinality: [1 - 1]
  ├── volatile
  ├── stats: [rows=1]
  ├── cost: 0.02
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(6)
  ├── distribution: test
- ├── prune: (4)
+ ├── prune: (6)
  └── tuple [type=tuple{int}]
       └── udf: fn93210 [type=int]
            └── body

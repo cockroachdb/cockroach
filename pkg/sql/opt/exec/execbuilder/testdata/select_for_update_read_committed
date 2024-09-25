@@ -23,7 +23,7 @@ EXPLAIN (OPT) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 ----
 lock supermarket
  ├── key columns: person
- ├── lock columns: (7-10)
+ ├── lock columns: (9-12)
  ├── locking: for-update,durability-guaranteed
  └── scan supermarket
       └── constraint: /1: [/'matilda' - /'matilda']
@@ -54,16 +54,16 @@ UPDATE supermarket
 update supermarket
  └── project
       ├── scan supermarket
-      │    └── constraint: /7: [/'michael' - /'michael']
+      │    └── constraint: /9: [/'michael' - /'michael']
       └── projections
            └── subquery
                 └── project
                      └── lock supermarket
                           ├── key columns: person
-                          ├── lock columns: (19-22)
+                          ├── lock columns: (25-28)
                           ├── locking: for-update,durability-guaranteed
                           └── scan supermarket
-                               └── constraint: /13: [/'matilda' - /'matilda']
+                               └── constraint: /17: [/'matilda' - /'matilda']
 
 query T
 EXPLAIN (VERBOSE)
@@ -124,7 +124,7 @@ with &1 (s)
  ├── project
  │    └── lock supermarket
  │         ├── key columns: person
- │         ├── lock columns: (7-10)
+ │         ├── lock columns: (9-12)
  │         ├── locking: for-update,durability-guaranteed
  │         └── scan supermarket
  │              └── constraint: /1: [/'matilda' - /'matilda']
@@ -189,7 +189,7 @@ with &1 (names)
  │    └── ('matilda',)
  └── lock supermarket
       ├── key columns: supermarket.person
-      ├── lock columns: (9-12)
+      ├── lock columns: (11-14)
       ├── locking: for-update,durability-guaranteed
       └── project
            └── inner-join (lookup supermarket)
@@ -263,7 +263,7 @@ SELECT aisle
 ----
 lock supermarket
  ├── key columns: person
- ├── lock columns: (7-10)
+ ├── lock columns: (9-12)
  ├── locking: for-update,durability-guaranteed
  └── project
       └── index-join supermarket
@@ -320,7 +320,7 @@ SELECT aisle
 ----
 lock supermarket
  ├── key columns: person
- ├── lock columns: (7-10)
+ ├── lock columns: (9-12)
  ├── locking: for-update,durability-guaranteed
  └── project
       └── inner-join (lookup supermarket)
