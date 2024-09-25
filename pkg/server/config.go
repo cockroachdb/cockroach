@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -542,6 +543,9 @@ type SQLConfig struct {
 	// NodeMetricsRecorder is the node's MetricRecorder; the tenant's metrics will
 	// be recorded with it. Nil if this is not a shared-process tenant.
 	NodeMetricsRecorder *status.MetricsRecorder
+
+	// LicenseEnforcer is used to enforce license policies.
+	LicenseEnforcer *license.Enforcer
 }
 
 // LocalKVServerInfo is used to group information about the local KV server
@@ -575,6 +579,7 @@ func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
 	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
 	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
 	sqlCfg.TempStorageConfig = tempStorageCfg
+	sqlCfg.LicenseEnforcer = license.NewEnforcer(nil)
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard

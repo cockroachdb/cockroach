@@ -167,6 +167,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	// Temp storage disk monitors will have slightly different names, so we
 	// override them to point to the same one.
 	cfgExpected.TempStorageConfig.Mon = cfg.TempStorageConfig.Mon
+	// The LicenseEnforcer initializes a start time, which can vary between runs,
+	// so we ensure they are the same for comparison.
+	cfgExpected.LicenseEnforcer = cfg.LicenseEnforcer
 	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set
