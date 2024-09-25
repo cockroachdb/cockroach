@@ -2551,8 +2551,10 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
+	raftStatus := r.mu.internalRaftGroup.SparseStatus()
+	leaseAcquisitionPending := r.mu.pendingLeaseRequest.AcquisitionInProgress()
 	ok := shouldTransferRaftLeadershipToLeaseholderLocked(
-		r.mu.internalRaftGroup.SparseStatus(), leaseStatus, r.StoreID(), r.store.IsDraining())
+		raftStatus, leaseStatus, leaseAcquisitionPending, r.StoreID(), r.store.IsDraining())
 	if ok {
 		lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
@@ -2564,6 +2566,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 func shouldTransferRaftLeadershipToLeaseholderLocked(
 	raftStatus raft.SparseStatus,
 	leaseStatus kvserverpb.LeaseStatus,
+	leaseAcquisitionPending bool,
 	storeID roachpb.StoreID,
 	draining bool,
 ) bool {
@@ -2575,6 +2578,30 @@ func shouldTransferRaftLeadershipToLeaseholderLocked(
 	// The status is invalid or its owned locally, there's nothing to do.
 	// Otherwise, the lease is valid and owned by another store.
 	if !leaseStatus.IsValid() || leaseStatus.OwnedBy(storeID) {
+		return false
+	}
+
+	// If there is an attempt to acquire the lease in progress, we don't want to
+	// transfer leadership away. This is more than just an optimization. If we
+	// were to transfer away leadership while a lease request was in progress, we
+	// may end up acquiring a leader lease after leadership has been transferred
+	// away. Or worse, the leader lease acquisition may succeed and then at some
+	// later point, the leadership transfer could succeed, leading to leadership
+	// being stolen out from under the leader lease. This second case could lead
+	// to a lease expiration regression, as the leadership term would end before
+	// lead support had expired.
+	//
+	// This same form of race is not possible if the lease is transferred to us as
+	// raft leader, because lease transfers always send targets expiration-based
+	// leases and never leader leases.
+	//
+	// NOTE: this check may be redundant with the lease validity check above, as a
+	// replica will not attempt to acquire a valid lease. We include it anyway for
+	// defense-in-depth and so that the proper synchronization between leader
+	// leases and leadership transfer makes fewer assumptions. A leader holding
+	// a leader lease must never transfer leadership away before transferring the
+	// lease away first.
+	if leaseAcquisitionPending {
 		return false
 	}
 

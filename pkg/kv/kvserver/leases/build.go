@@ -370,15 +370,27 @@ func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
 		// construct an epoch-based lease.
 		return roachpb.LeaseEpoch
 	}
-	if i.RaftStatus.RaftState != raft.StateLeader {
-		// If this range wants to use a leader lease, but it is not currently the
-		// raft leader, we construct an expiration-based lease. It is highly likely
-		// that the lease acquisition will be rejected before being proposed by the
-		// lease safety checks in verifyAcquisition. If not (e.g. because the
-		// kv.lease.reject_on_leader_unknown.enabled setting is set to a non-default
-		// value of false), we may end up with an expiration-based lease, which is
-		// safe and can be upgraded to a leader lease when the range becomes the
-		// leader.
+	if i.RaftStatus.RaftState != raft.StateLeader || i.RaftStatus.LeadTransferee != raft.None {
+		// If this range wants to use a leader lease, but the local replica is not
+		// currently the raft leader, we construct an expiration-based lease. It is
+		// highly likely that the lease acquisition will be rejected before being
+		// proposed by the lease safety checks in verifyAcquisition. If not (e.g.
+		// because the kv.lease.reject_on_leader_unknown.enabled setting is set to
+		// the default value of false), the local replica may end up with an
+		// expiration-based lease, which is safe and can be upgraded to a leader
+		// lease when the replica becomes the leader.
+		//
+		// Similarly, if the replica is the raft leader but it is in the process of
+		// transferring away its leadership, we construct an expiration-based lease
+		// instead of a leader lease, as a precaution. This ensures that a poorly
+		// timed leader lease acquisition does not race with a leadership transfer
+		// and cause a leader lease to be prematurely invalidated when the leader
+		// transfer completes and leadership is stolen away, before leader support
+		// expires. The race cannot occur in the other direction (lease acquisition
+		// in-progress, then leadership transfer initiated) because a raft leader
+		// will only initiate a leadership transfer if it does not currently hold
+		// the lease and is not in the process of acquiring it. The two synchronize
+		// on the replica mutex.
 		return roachpb.LeaseExpiration
 	}
 	// We're the leader and we prefer leader leases, so we construct a leader
