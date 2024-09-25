@@ -20,6 +20,16 @@ import (
 )
 
 // replicaLogStorage implements the raft.LogStorage interface.
+//
+// All methods require r.mu held for writes or reads. The specific requirements
+// are noted in a method's comment, or can be found in assertions at the
+// beginning of the implementation methods.
+//
+// The method names do not follow our "Locked" naming conventions, due to being
+// an implementation of an interface from a different package, but in most cases
+// they delegate to a method that does follow the convention.
+//
+// TODO(pav-kv): make it a proper type, and integrate with the logstore package.
 type replicaLogStorage Replica
 
 // Entries implements the raft.LogStorage interface.
@@ -33,14 +43,16 @@ type replicaLogStorage Replica
 // Requires that r.mu is held for writing.
 // TODO(pav-kv): make it possible to call with only raftMu held.
 func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	entries, err := r.entriesLocked(
+		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
 		r.reportRaftStorageError(err)
 	}
 	return entries, err
 }
 
-func (r *replicaLogStorage) TypedEntries(
+// entriesLocked implements the Entries() call.
+func (r *replicaLogStorage) entriesLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	// The call is always initiated by RawNode, under r.mu. Need it locked for
@@ -76,27 +88,26 @@ func (r *replicaLogStorage) TypedEntries(
 	return entries, err
 }
 
-// raftEntriesLocked requires that r.mu is held for writing.
+// raftEntriesLocked implements the Entries() call.
 func (r *Replica) raftEntriesLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
-	return (*replicaLogStorage)(r).TypedEntries(lo, hi, maxBytes)
+	return (*replicaLogStorage)(r).entriesLocked(lo, hi, maxBytes)
 }
 
 // Term implements the raft.LogStorage interface.
+// Requires that r.mu is held for writing.
 func (r *replicaLogStorage) Term(i uint64) (uint64, error) {
-	term, err := r.TypedTerm(kvpb.RaftIndex(i))
+	term, err := r.termLocked(kvpb.RaftIndex(i))
 	if err != nil {
 		r.reportRaftStorageError(err)
 	}
 	return uint64(term), err
 }
 
-// TypedTerm requires that r.mu is held for writing because it requires
-// exclusive access to r.mu.stateLoader.
-//
-// TODO(pav-kv): make it possible to read with only raftMu held.
-func (r *replicaLogStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+// termLocked implements the Term() call.
+func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+	// TODO(pav-kv): make it possible to read with only raftMu held.
 	r.mu.AssertHeld()
 	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
 	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
@@ -111,58 +122,52 @@ func (r *replicaLogStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	)
 }
 
-// raftTermLocked requires that r.mu is locked for writing.
+// raftTermLocked implements the Term() call.
 func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return (*replicaLogStorage)(r).TypedTerm(i)
+	return (*replicaLogStorage)(r).termLocked(i)
 }
 
-// GetTerm returns the term of the given index in the raft log. It requires that
-// r.mu is not held.
+// GetTerm returns the term of the entry at the given index in the raft log.
+// Requires that r.mu is not held.
 func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftTermLocked(i)
 }
 
-// raftLastIndexRLocked requires that r.mu is held for reading.
+// LastIndex implements the raft.LogStorage interface.
+// Requires that r.mu is held for reading.
+func (r *replicaLogStorage) LastIndex() uint64 {
+	return uint64((*Replica)(r).raftLastIndexRLocked())
+}
+
+// raftLastIndexRLocked implements the LastIndex() call.
 func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 	return r.mu.lastIndexNotDurable
 }
 
-// LastIndex implements the raft.LogStorage interface.
-// LastIndex requires that r.mu is held for reading.
-func (r *replicaLogStorage) LastIndex() uint64 {
-	return uint64(r.TypedLastIndex())
-}
-
-func (r *replicaLogStorage) TypedLastIndex() kvpb.RaftIndex {
-	return (*Replica)(r).raftLastIndexRLocked()
-}
-
-// GetLastIndex returns the index of the last entry in the replica's Raft log.
+// GetLastIndex returns the index of the last entry in the raft log.
+// Requires that r.mu is not held.
 func (r *Replica) GetLastIndex() kvpb.RaftIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftLastIndexRLocked()
 }
 
-// raftFirstIndexRLocked requires that r.mu is held for reading.
+// FirstIndex implements the raft.LogStorage interface.
+// Requires that r.mu is held for reading.
+func (r *replicaLogStorage) FirstIndex() uint64 {
+	return uint64((*Replica)(r).raftFirstIndexRLocked())
+}
+
+// raftFirstIndexRLocked implements the FirstIndex() call.
 func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 	// TruncatedState is guaranteed to be non-nil.
 	return r.mu.state.TruncatedState.Index + 1
 }
 
-// FirstIndex implements the raft.LogStorage interface.
-// FirstIndex requires that r.mu is held for reading.
-func (r *replicaLogStorage) FirstIndex() uint64 {
-	return uint64(r.TypedFirstIndex())
-}
-
-func (r *replicaLogStorage) TypedFirstIndex() kvpb.RaftIndex {
-	return (*Replica)(r).raftFirstIndexRLocked()
-}
-
-// GetFirstIndex returns the index of the first entry in the replica's Raft log.
+// GetFirstIndex returns the index of the first entry in the raft log.
+// Requires that r.mu is not held.
 func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -170,6 +175,7 @@ func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 }
 
 // LogSnapshot returns an immutable point-in-time snapshot of the log storage.
+// Requires that r.raftMu is held for writing, and r.mu for reading.
 func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
 	r.raftMu.AssertHeld()
 	r.mu.AssertRHeld()
