@@ -2553,3 +2553,12 @@ func (writeOptions *WriteOptions) GetOriginID() uint32 {
 	}
 	return writeOptions.OriginID
 }
+
+func (r *ConditionalPutRequest) Validate() error {
+	if !r.OriginTimestamp.IsEmpty() {
+		if r.AllowIfDoesNotExist {
+			return errors.AssertionFailedf("invalid ConditionalPutRequest: AllowIfDoesNotExist and non-empty OriginTimestamp are incompatible")
+		}
+	}
+	return nil
+}

@@ -382,6 +382,39 @@ message ConditionalPutRequest {
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
   bool inline = 7;
+
+  // OriginTimestamp, if set, indicates that the ConditionalPut should
+  // only succeed if the provided timestamp is greater than the
+  // OriginTimestamp field in the MVCCValueHeader of the existing
+  // value (if the value has a non-zero OriginTimestamp) or the MVCC
+  // timestamp of the existing value. If there is no existing value,
+  // the timestamp check succeeds.
+  //
+  // The conditional put request will only succeed if this timestamp
+  // comparison is successful and the expected bytes matches the
+  // actual bytes.
+  //
+  // On success, this timestamp will also be stored in the
+  // OriginTimestamp field of the the MVCCValueHeader for the newly
+  // written value.
+  //
+  // In the proposed use case, the OriginTimestamp is the MVCC version
+  // timestamp of the row on the source cluster and the semantics lead
+  // to idempotent last-write-wins semantics against the "original
+  // MVCC timestamp" of the value on the destination, which is its
+  // MVCC timestamp or, if set, the OriginTimestamp (reflecting that
+  // this value originated from the source cluster).
+  //
+  // Used by logical data replication.
+  util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // ShouldWinOriginTimestampTie, if true, indicates that if the "comparison
+  // timestamp" (see comment on OriginTimestamp) and OriginTimestamp are equal,
+  // then the ConditionalPut should succeed (assuming the expected and actual
+  // bytes also match).
+  //
+  // This must only be used in conjunction with OriginTimestamp.
+  bool should_win_origin_timestamp_tie = 9;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -3213,7 +3246,7 @@ message RangeFeedRequest {
   // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
   // WithFiltering should NOT be set for system-table rangefeeds.
   bool with_filtering = 7;
-  
+
   // WithMatchingOriginIDs specifies if the rangefeed server should emit events
   // originating from specific clusters during Logical Data Replication. If this
   // field is empty, all events are emitted.

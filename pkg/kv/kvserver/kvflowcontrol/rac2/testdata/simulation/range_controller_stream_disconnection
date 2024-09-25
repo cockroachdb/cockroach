@@ -12,9 +12,9 @@ handle=h
 # deducted (1MiB/s). For the third stream (s3), we return flow tokens at only
 # 0.5MiB/s. At t=35s, disconnect the slow stream.
 timeline
-t=0s       handle=h op=connect    stream=t1/s1     log-position=4/0
-t=0s       handle=h op=connect    stream=t1/s2     log-position=4/0
-t=0s       handle=h op=connect    stream=t1/s3     log-position=4/0
+t=0s       handle=h op=connect    stream=t1/s1
+t=0s       handle=h op=connect    stream=t1/s2
+t=0s       handle=h op=connect    stream=t1/s3
 t=[0s,50s) handle=h class=regular adjust=-1MiB/s   rate=10/s
 t=[0s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s1
 t=[0s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s2

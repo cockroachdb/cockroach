@@ -150,7 +150,7 @@ message IgnoredSeqNumRange {
 //
 // NB: a shallow copy of this value has to equal a deep copy, i.e. there
 // must be (recursively) no pointers in this type. Should this need to
-// change, need to update mvccGetWithValueHeader.
+// change, need to update mvccGet.
 //
 // NB: ensure that this struct stays in sync with MVCCValueHeader{Pure,CrdbTest}.
 // See kvpb.RequestHeader for details on how they help us keep the KVNemesisSeq

@@ -151,7 +151,8 @@ func (s *testingRCState) tokenCountsString() string {
 		return streams[i].StoreID < streams[j].StoreID
 	})
 	for _, stream := range streams {
-		fmt.Fprintf(&b, "%v: %v\n", stream, s.ssTokenCounter.Eval(stream))
+		fmt.Fprintf(&b, "%v: eval %v\n", stream, s.ssTokenCounter.Eval(stream))
+		fmt.Fprintf(&b, "       send %v\n", s.ssTokenCounter.Send(stream))
 	}
 	return b.String()
 }
@@ -187,18 +188,23 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	var b strings.Builder
 
 	for _, desc := range sortReplicas(s.ranges[rangeID]) {
-		replica := s.ranges[rangeID].rc.replicaMap[desc.ReplicaID]
+		r := s.ranges[rangeID]
+		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
+		rss := r.rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
-		if replica.sendStream == nil {
+		if rss.sendStream == nil {
 			fmt.Fprintf(&b, "closed\n")
 			continue
 		}
-		replica.sendStream.mu.Lock()
-		defer replica.sendStream.mu.Unlock()
+		rss.sendStream.mu.Lock()
+		defer rss.sendStream.mu.Unlock()
 
-		fmt.Fprintf(&b, "state=%v closed=%v\n",
-			replica.sendStream.mu.connectedState, replica.sendStream.mu.closed)
-		b.WriteString(formatTrackerState(&replica.sendStream.mu.tracker))
+		fmt.Fprintf(&b, "state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v)\n",
+			rss.sendStream.mu.connectedState, rss.sendStream.mu.closed,
+			testRepl.info.Match+1, rss.sendStream.mu.sendQueue.indexToSend,
+			rss.sendStream.mu.sendQueue.indexToSend,
+			rss.sendStream.mu.sendQueue.nextRaftIndex)
+		b.WriteString(formatTrackerState(&rss.sendStream.mu.tracker))
 		b.WriteString("++++\n")
 	}
 	return b.String()
@@ -241,6 +247,7 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 			TenantID:            r.tenantID,
 			LocalReplicaID:      r.localReplicaID,
 			SSTokenCounter:      s.ssTokenCounter,
+			RaftInterface:       testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			EvalWaitMetrics:     s.evalMetrics,
@@ -248,8 +255,9 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 		}
 
 		init := RangeControllerInitState{
-			ReplicaSet:  r.replicas(),
-			Leaseholder: r.localReplicaID,
+			ReplicaSet:    r.replicas(),
+			Leaseholder:   r.localReplicaID,
+			NextRaftIndex: r.nextRaftIndex,
 		}
 		testRC.rc = NewRangeController(s.testCtx, options, init)
 		s.ranges[r.rangeID] = testRC
@@ -275,6 +283,7 @@ type testingRCRange struct {
 	// snapshots contain snapshots of the tracker state for different replicas,
 	// at various points in time. It is used in TestUsingSimulation.
 	snapshots []testingTrackerSnapshot
+	entries   []raftpb.Entry
 
 	mu struct {
 		syncutil.Mutex
@@ -343,6 +352,12 @@ func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av 
 	defer r.mu.Unlock()
 	for _, replica := range r.mu.r.replicaSet {
 		if replica.desc.StoreID == storeID {
+			for _, v := range av.Admitted {
+				// Ensure that Match doesn't lag behind the highest index in the
+				// AdmittedVector.
+				replica.info.Match = max(replica.info.Match, v)
+			}
+			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
 			r.rc.AdmitRaftMuLocked(ctx, replica.desc.ReplicaID, av)
 			return
 		}
@@ -353,9 +368,11 @@ type testingRange struct {
 	rangeID        roachpb.RangeID
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
+	nextRaftIndex  uint64
 	replicaSet     map[roachpb.ReplicaID]testingReplica
 }
 
+// Used by simulation test.
 func makeSingleVoterTestingRange(
 	rangeID roachpb.RangeID,
 	tenantID roachpb.TenantID,
@@ -366,6 +383,8 @@ func makeSingleVoterTestingRange(
 		rangeID:        rangeID,
 		tenantID:       tenantID,
 		localReplicaID: 1,
+		// Set to 1, since simulation test starts appending at index 1.
+		nextRaftIndex: 1,
 		replicaSet: map[roachpb.ReplicaID]testingReplica{
 			1: {
 				desc: roachpb.ReplicaDescriptor{
@@ -403,7 +422,7 @@ func scanRanges(t *testing.T, input string) []testingRange {
 		if strings.HasPrefix(parts[0], "range_id=") {
 			// Create a new range, any replicas which follow until the next range_id
 			// line will be added to this replica set.
-			var rangeID, tenantID, localReplicaID int
+			var rangeID, tenantID, localReplicaID, nextRaftIndex int
 			var err error
 
 			require.True(t, strings.HasPrefix(parts[0], "range_id="))
@@ -423,10 +442,17 @@ func scanRanges(t *testing.T, input string) []testingRange {
 			localReplicaID, err = strconv.Atoi(parts[2])
 			require.NoError(t, err)
 
+			parts[3] = strings.TrimSpace(parts[3])
+			require.True(t, strings.HasPrefix(parts[3], "next_raft_index="))
+			parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "next_raft_index=")
+			nextRaftIndex, err = strconv.Atoi(parts[2])
+			require.NoError(t, err)
+
 			replicas = append(replicas, testingRange{
 				rangeID:        roachpb.RangeID(rangeID),
 				tenantID:       roachpb.MustMakeTenantID(uint64(tenantID)),
 				localReplicaID: roachpb.ReplicaID(localReplicaID),
+				nextRaftIndex:  uint64(nextRaftIndex),
 				replicaSet:     make(map[roachpb.ReplicaID]testingReplica),
 			})
 		} else {
@@ -482,10 +508,12 @@ func scanReplica(t *testing.T, line string) testingReplica {
 		panic("unknown replica type")
 	}
 
+	next := uint64(0)
 	// The fourth field is optional, if set it contains the tracker state of the
 	// replica on the leader replica (localReplicaID). The valid states are
 	// Probe, Replicate, and Snapshot.
 	if len(parts) > 3 {
+		require.Equal(t, 5, len(parts))
 		parts[3] = strings.TrimSpace(parts[3])
 		require.True(t, strings.HasPrefix(parts[3], "state="))
 		parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "state=")
@@ -499,6 +527,12 @@ func scanReplica(t *testing.T, line string) testingReplica {
 		default:
 			panic("unknown replica state")
 		}
+		parts[4] = strings.TrimSpace(parts[4])
+		require.True(t, strings.HasPrefix(parts[4], "next="))
+		parts[4] = strings.TrimPrefix(strings.TrimSpace(parts[4]), "next=")
+		nextInt, err := strconv.Atoi(parts[4])
+		require.NoError(t, err)
+		next = uint64(nextInt)
 	}
 
 	return testingReplica{
@@ -508,7 +542,7 @@ func scanReplica(t *testing.T, line string) testingReplica {
 			ReplicaID: roachpb.ReplicaID(replicaID),
 			Type:      replicaType,
 		},
-		info: ReplicaStateInfo{State: state},
+		info: ReplicaStateInfo{State: state, Next: next},
 	}
 }
 
@@ -524,6 +558,112 @@ func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 		require.Failf(t, "unknown work class", "%v", input)
 		return admissionpb.WorkPriority(-1)
 	}
+}
+
+type testingEntryRange struct {
+	fromIndex, toIndex uint64
+}
+
+type testingRaftEvent struct {
+	rangeID           roachpb.RangeID
+	entries           []entryInfo
+	sendingEntryRange map[roachpb.ReplicaID]testingEntryRange
+}
+
+func parseRaftEvents(t *testing.T, input string) []testingRaftEvent {
+	var eventBuf []testingRaftEvent
+	n := 0
+	for _, line := range strings.Split(input, "\n") {
+		var (
+			rangeID, term, index              int
+			replicaID, fromIndex, toIndexExcl int
+			size                              int64
+			err                               error
+			pri                               admissionpb.WorkPriority
+		)
+
+		parts := strings.Fields(line)
+		parts[0] = strings.TrimSpace(parts[0])
+		switch {
+		case strings.HasPrefix(parts[0], "range_id="):
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+			rangeID, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+			eventBuf = append(eventBuf, testingRaftEvent{
+				rangeID: roachpb.RangeID(rangeID),
+			})
+			n++
+		case strings.HasPrefix(parts[0], "entries"):
+			// Skip the first line, which is the header.
+			eventBuf[n-1].entries = make([]entryInfo, 0)
+			continue
+		case strings.HasPrefix(parts[0], "term="):
+			require.True(t, strings.HasPrefix(parts[0], "term="))
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
+			term, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+
+			parts[1] = strings.TrimSpace(parts[1])
+			require.True(t, strings.HasPrefix(parts[1], "index="))
+			parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
+			index, err = strconv.Atoi(parts[1])
+			require.NoError(t, err)
+
+			parts[2] = strings.TrimSpace(parts[2])
+			require.True(t, strings.HasPrefix(parts[2], "pri="))
+			parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
+			pri = parsePriority(t, parts[2])
+
+			parts[3] = strings.TrimSpace(parts[3])
+			require.True(t, strings.HasPrefix(parts[3], "size="))
+			parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
+			size, err = humanizeutil.ParseBytes(parts[3])
+			require.NoError(t, err)
+
+			eventBuf[n-1].entries = append(eventBuf[n-1].entries, entryInfo{
+				term:   uint64(term),
+				index:  uint64(index),
+				enc:    raftlog.EntryEncodingStandardWithACAndPriority,
+				tokens: kvflowcontrol.Tokens(size),
+				pri:    AdmissionToRaftPriority(pri),
+			})
+		case strings.HasPrefix(parts[0], "sending"):
+			// Skip the first line, which is the header.
+			eventBuf[n-1].sendingEntryRange = make(map[roachpb.ReplicaID]testingEntryRange)
+			continue
+		case strings.HasPrefix(parts[0], "replica_id="):
+			require.True(t, strings.HasPrefix(parts[0], "replica_id="))
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "replica_id=")
+			replicaID, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
+
+			// Line has format: [%d,%d) corresponding to [from,to).
+			parts[1] = strings.TrimSpace(parts[1])
+			bounds := strings.Split(parts[1], ",")
+			require.Len(t, bounds, 2)
+
+			bounds[0] = strings.TrimSpace(bounds[0])
+			require.True(t, strings.HasPrefix(bounds[0], "["))
+			bounds[0] = strings.TrimPrefix(strings.TrimSpace(bounds[0]), "[")
+			fromIndex, err = strconv.Atoi(bounds[0])
+			require.NoError(t, err)
+
+			bounds[1] = strings.TrimSpace(bounds[1])
+			require.True(t, strings.HasSuffix(bounds[1], ")"))
+			bounds[1] = strings.TrimSuffix(strings.TrimSpace(bounds[1]), ")")
+			toIndexExcl, err = strconv.Atoi(bounds[1])
+			require.NoError(t, err)
+
+			eventBuf[n-1].sendingEntryRange[roachpb.ReplicaID(replicaID)] = testingEntryRange{
+				fromIndex: uint64(fromIndex),
+				// Subtract 1 to make the range exclusive.
+				toIndex: uint64(toIndexExcl - 1),
+			}
+		default:
+			require.Failf(t, "unknown line", "%v", line)
+		}
+	}
+	return eventBuf
 }
 
 type entryInfo struct {
@@ -647,7 +787,12 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 //   - raft_event: Simulates a raft event on the given range, calling
 //     HandleRaftEvent.
 //     range_id=<range_id>
+//     entries
 //     term=<term> index=<index> pri=<pri> size=<size>
+//     ...
+//     sending
+//     replica_id=<replica_id> [from,to)
+//     ...
 //     ...
 //
 //   - stream_state: Prints the state of the stream(s) for the given range's
@@ -680,8 +825,10 @@ func TestRangeController(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				var regularInitString, elasticInitString string
-				var regularLimitString, elasticLimitString string
+				var (
+					regularInitString, elasticInitString   string
+					regularLimitString, elasticLimitString string
+				)
 				d.MaybeScanArgs(t, "regular_init", &regularInitString)
 				d.MaybeScanArgs(t, "elastic_init", &elasticInitString)
 				d.MaybeScanArgs(t, "regular_limit", &regularLimitString)
@@ -876,86 +1023,66 @@ func TestRangeController(t *testing.T) {
 				return state.tokenCountsString()
 
 			case "raft_event":
-				var lastRangeID roachpb.RangeID
-				init := false
-				var buf []entryInfo
-
-				propRangeEntries := func() {
-					event := RaftEvent{
-						Entries:           make([]raftpb.Entry, len(buf)),
-						ReplicasStateInfo: state.ranges[lastRangeID].replicasStateInfo(),
+				for _, event := range parseRaftEvents(t, d.Input) {
+					raftEvent := RaftEvent{
+						Entries:           make([]raftpb.Entry, len(event.entries)),
+						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
+						ReplicasStateInfo: state.ranges[event.rangeID].replicasStateInfo(),
 					}
-					for i, state := range buf {
-						event.Entries[i] = testingCreateEntry(t, state)
+					for i, entry := range event.entries {
+						raftEvent.Entries[i] = testingCreateEntry(t, entry)
 					}
-					err := state.ranges[lastRangeID].rc.HandleRaftEventRaftMuLocked(ctx, event)
-					require.NoError(t, err)
-				}
+					msgApp := raftpb.Message{
+						Type: raftpb.MsgApp,
+						To:   0,
+						// We will selectively include a prefix of the new entries, and a
+						// suffix of entries that were previously appended, down below.
+						Entries: nil,
+					}
+					testRC := state.ranges[event.rangeID]
+					testRC.entries = append(testRC.entries, raftEvent.Entries...)
+					func() {
+						testRC.mu.Lock()
+						defer testRC.mu.Unlock()
 
-				for _, line := range strings.Split(d.Input, "\n") {
-					var (
-						rangeID, term, index int
-						size                 int64
-						err                  error
-						pri                  admissionpb.WorkPriority
-					)
-
-					parts := strings.Fields(line)
-					parts[0] = strings.TrimSpace(parts[0])
-					if strings.HasPrefix(parts[0], "range_id=") {
-						if init {
-							// We are moving to another range, if a previous range has entries
-							// created then create the raft event and call handle raft ready
-							// using all the entries added so far.
-							propRangeEntries()
-							init = false
+						for replicaID, testR := range testRC.mu.r.replicaSet {
+							msgApp.Entries = nil
+							msgApp.To = raftpb.PeerID(replicaID)
+							if event.sendingEntryRange == nil ||
+								testingFirst(0, event.sendingEntryRange[replicaID]) == nil {
+								// When sendingEntryRange is not specified, include all
+								// entries for this replica.
+								msgApp.Entries = raftEvent.Entries
+							} else {
+								fromIndex := event.sendingEntryRange[replicaID].fromIndex
+								toIndex := event.sendingEntryRange[replicaID].toIndex
+								for _, entry := range testRC.entries {
+									if entry.Index >= fromIndex && entry.Index <= toIndex {
+										msgApp.Entries = append(msgApp.Entries, entry)
+									}
+								}
+							}
+							raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
+							if len(msgApp.Entries) > 0 {
+								// Bump the Next and Index fields for replicas that have
+								// MsgApps being sent to them. The Match index is only updated
+								// if it increases.
+								testR.info.Match = max(msgApp.Entries[0].Index-1, testR.info.Match)
+								testR.info.Next = msgApp.Entries[len(msgApp.Entries)-1].Index + 1
+								testRC.mu.r.replicaSet[replicaID] = testR
+							}
 						}
-
-						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
-						rangeID, err = strconv.Atoi(parts[0])
-						require.NoError(t, err)
-						lastRangeID = roachpb.RangeID(rangeID)
-					} else {
-						require.True(t, strings.HasPrefix(parts[0], "term="))
-						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
-						term, err = strconv.Atoi(parts[0])
-						require.NoError(t, err)
-
-						parts[1] = strings.TrimSpace(parts[1])
-						require.True(t, strings.HasPrefix(parts[1], "index="))
-						parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
-						index, err = strconv.Atoi(parts[1])
-						require.NoError(t, err)
-
-						parts[2] = strings.TrimSpace(parts[2])
-						require.True(t, strings.HasPrefix(parts[2], "pri="))
-						parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
-						pri = parsePriority(t, parts[2])
-
-						parts[3] = strings.TrimSpace(parts[3])
-						require.True(t, strings.HasPrefix(parts[3], "size="))
-						parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
-						size, err = humanizeutil.ParseBytes(parts[3])
-						require.NoError(t, err)
-
-						init = true
-						buf = append(buf, entryInfo{
-							term:   uint64(term),
-							index:  uint64(index),
-							enc:    raftlog.EntryEncodingStandardWithACAndPriority,
-							tokens: kvflowcontrol.Tokens(size),
-							pri:    AdmissionToRaftPriority(pri),
-						})
-					}
-				}
-				if init {
-					propRangeEntries()
+					}()
+					raftEvent.ReplicasStateInfo = testRC.replicasStateInfo()
+					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, raftEvent))
 				}
 				return state.tokenCountsString()
 
 			case "stream_state":
 				var rangeID int
 				d.ScanArgs(t, "range_id", &rangeID)
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
 				return state.sendStreamString(roachpb.RangeID(rangeID))
 
 			case "metrics":
@@ -1181,5 +1308,434 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 			return cmp.Compare(a.To, b.To)
 		})
 		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
+	}
+}
+
+func TestConstructRaftEventForReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		startingIndex uint64 = 10
+		startingTerm  uint64 = 1
+		tokenMult            = 100
+		defaultPri           = raftpb.NormalPri
+		defaultUseFC         = true
+	)
+
+	makeEntry := func(t *testing.T, info entryInfo) raftpb.Entry {
+		if info.pri == 0 {
+			info.pri = raftpb.NormalPri
+		}
+		if info.enc == raftlog.EntryEncodingEmpty {
+			info.enc = raftlog.EntryEncodingStandardWithACAndPriority
+		}
+		return testingCreateEntry(t, info)
+	}
+
+	makeEntries := func(t *testing.T, n int) []raftpb.Entry {
+		var entries []raftpb.Entry
+		for i := 0; i < n; i++ {
+			entries = append(entries, makeEntry(t, entryInfo{
+				index:  startingIndex + uint64(i),
+				term:   startingTerm,
+				tokens: kvflowcontrol.Tokens((i + 1) * tokenMult)}))
+		}
+		return entries
+
+	}
+
+	makeEntryFCStates := func(t *testing.T, n int) []entryFCState {
+		var entries []entryFCState
+		for i := 0; i < n; i++ {
+			entries = append(entries, entryFCState{
+				term:            startingTerm,
+				index:           startingIndex + uint64(i),
+				usesFlowControl: defaultUseFC,
+				tokens:          kvflowcontrol.Tokens((i + 1) * tokenMult),
+				pri:             defaultPri,
+			})
+		}
+		return entries
+	}
+
+	ctx := context.Background()
+	testCases := []struct {
+		name                     string
+		raftEventAppendState     raftEventAppendState
+		latestReplicaStateInfo   ReplicaStateInfo
+		existingSendStreamState  existingSendStreamState
+		msgApps                  []raftpb.Message
+		scratchSendingEntries    []entryFCState
+		expectedRaftEventReplica raftEventForReplica
+		expectedScratchEntries   []entryFCState
+		expectFatal              bool
+	}{
+		{
+			name: "new entries existing send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "no new entries recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: false,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "inconsistent msgapps recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
+						// Inconsistent index.
+						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 200}),
+					},
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "next in the past recreate send stream",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 15,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: false,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      15,
+				recreateSendStream: true,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "existing send stream with no msgapps",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  10,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				recreateSendStream: false,
+				newEntries:         []entryFCState{},
+				sendingEntries:     nil,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "msgapps with entries before new entries",
+			raftEventAppendState: raftEventAppendState{
+				newEntries: []entryFCState{
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+				},
+				rewoundNextRaftIndex: 12,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  14,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 4),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex: 12,
+				newEntries: []entryFCState{
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+				},
+				sendingEntries:     makeEntryFCStates(t, 4),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: makeEntryFCStates(t, 4),
+		},
+		{
+			name: "regression in send-queue",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               11, // Regression
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "forward jump in send-queue",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 2),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				// Forward jump.
+				indexToSend: 9,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type:    raftpb.MsgApp,
+					Entries: makeEntries(t, 2),
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 2),
+				sendingEntries:     makeEntryFCStates(t, 2),
+				recreateSendStream: true,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+		{
+			name: "next greater than rewound next raft index",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           []entryFCState{},
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  12,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps:               []raftpb.Message{},
+			scratchSendingEntries: []entryFCState{},
+			expectFatal:           true,
+		},
+		{
+			name: "multiple msgapps",
+			raftEventAppendState: raftEventAppendState{
+				newEntries:           makeEntryFCStates(t, 3),
+				rewoundNextRaftIndex: 10,
+			},
+			latestReplicaStateInfo: ReplicaStateInfo{
+				State: tracker.StateReplicate,
+				Match: 9,
+				Next:  13,
+			},
+			existingSendStreamState: existingSendStreamState{
+				existsAndInStateReplicate: true,
+				indexToSend:               10,
+			},
+			msgApps: []raftpb.Message{
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
+					},
+				},
+				{
+					Type: raftpb.MsgApp,
+					Entries: []raftpb.Entry{
+						makeEntry(t, entryInfo{index: 11, term: 1, tokens: 200}),
+						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 300}),
+					},
+				},
+			},
+			scratchSendingEntries: []entryFCState{},
+			expectedRaftEventReplica: raftEventForReplica{
+				replicaStateInfo: ReplicaStateInfo{
+					State: tracker.StateReplicate,
+					Match: 9,
+					Next:  10,
+				},
+				nextRaftIndex:      10,
+				newEntries:         makeEntryFCStates(t, 3),
+				sendingEntries:     makeEntryFCStates(t, 3),
+				recreateSendStream: false,
+			},
+			expectedScratchEntries: []entryFCState{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.expectFatal {
+				require.Panics(t, func() {
+					constructRaftEventForReplica(
+						ctx,
+						tc.raftEventAppendState,
+						tc.latestReplicaStateInfo,
+						tc.existingSendStreamState,
+						tc.msgApps,
+						tc.scratchSendingEntries,
+					)
+				})
+			} else {
+				gotRaftEventReplica, gotScratch := constructRaftEventForReplica(
+					ctx,
+					tc.raftEventAppendState,
+					tc.latestReplicaStateInfo,
+					tc.existingSendStreamState,
+					tc.msgApps,
+					tc.scratchSendingEntries,
+				)
+				require.Equal(t, tc.expectedRaftEventReplica, gotRaftEventReplica)
+				require.Equal(t, tc.expectedScratchEntries, gotScratch)
+			}
+		})
 	}
 }

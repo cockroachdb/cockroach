@@ -19,9 +19,9 @@ handle=h
 # - Start writing to the range again at t=[20s,21s) at 2MiB/s across 10 reqs/s. 
 # - At t=22s, close the handle. 
 timeline
-t=0s        handle=h op=connect    stream=t1/s1   log-position=4/0
-t=0s        handle=h op=connect    stream=t1/s2   log-position=4/0
-t=0s        handle=h op=connect    stream=t1/s3   log-position=4/0
+t=0s        handle=h op=connect    stream=t1/s1
+t=0s        handle=h op=connect    stream=t1/s2
+t=0s        handle=h op=connect    stream=t1/s3
 t=2s        handle=h op=snapshot   stream=t1/s1
 t=3s        handle=h op=snapshot   stream=t1/s1
 t=4s        handle=h op=disconnect stream=t1/s2
@@ -175,109 +175,109 @@ snapshots handle=h
 ----
 t=2s stream=t1/s1
  pri=normal-pri
-  tokens=205KiB log-position=4/1
-  tokens=205KiB log-position=4/2
-  tokens=205KiB log-position=4/3
-  tokens=205KiB log-position=4/4
-  tokens=205KiB log-position=4/5
-  tokens=205KiB log-position=4/6
-  tokens=205KiB log-position=4/7
-  tokens=205KiB log-position=4/8
-  tokens=205KiB log-position=4/9
-  tokens=205KiB log-position=4/10
-  tokens=205KiB log-position=4/11
-  tokens=205KiB log-position=4/12
-  tokens=205KiB log-position=4/13
-  tokens=205KiB log-position=4/14
-  tokens=205KiB log-position=4/15
-  tokens=205KiB log-position=4/16
-  tokens=205KiB log-position=4/17
-  tokens=205KiB log-position=4/18
-  tokens=205KiB log-position=4/19
-  tokens=205KiB log-position=4/20
+  tokens=205KiB log-position=1/1
+  tokens=205KiB log-position=1/2
+  tokens=205KiB log-position=1/3
+  tokens=205KiB log-position=1/4
+  tokens=205KiB log-position=1/5
+  tokens=205KiB log-position=1/6
+  tokens=205KiB log-position=1/7
+  tokens=205KiB log-position=1/8
+  tokens=205KiB log-position=1/9
+  tokens=205KiB log-position=1/10
+  tokens=205KiB log-position=1/11
+  tokens=205KiB log-position=1/12
+  tokens=205KiB log-position=1/13
+  tokens=205KiB log-position=1/14
+  tokens=205KiB log-position=1/15
+  tokens=205KiB log-position=1/16
+  tokens=205KiB log-position=1/17
+  tokens=205KiB log-position=1/18
+  tokens=205KiB log-position=1/19
+  tokens=205KiB log-position=1/20
 
 t=3s stream=t1/s1
  pri=normal-pri
-  tokens=205KiB log-position=4/1
-  tokens=205KiB log-position=4/2
-  tokens=205KiB log-position=4/3
-  tokens=205KiB log-position=4/4
-  tokens=205KiB log-position=4/5
-  tokens=205KiB log-position=4/6
-  tokens=205KiB log-position=4/7
-  tokens=205KiB log-position=4/8
-  tokens=205KiB log-position=4/9
-  tokens=205KiB log-position=4/10
-  tokens=205KiB log-position=4/11
-  tokens=205KiB log-position=4/12
-  tokens=205KiB log-position=4/13
-  tokens=205KiB log-position=4/14
-  tokens=205KiB log-position=4/15
-  tokens=205KiB log-position=4/16
-  tokens=205KiB log-position=4/17
-  tokens=205KiB log-position=4/18
-  tokens=205KiB log-position=4/19
-  tokens=205KiB log-position=4/20
-  tokens=205KiB log-position=4/21
-  tokens=205KiB log-position=4/22
-  tokens=205KiB log-position=4/23
-  tokens=205KiB log-position=4/24
-  tokens=205KiB log-position=4/25
-  tokens=205KiB log-position=4/26
-  tokens=205KiB log-position=4/27
-  tokens=205KiB log-position=4/28
-  tokens=205KiB log-position=4/29
-  tokens=205KiB log-position=4/30
+  tokens=205KiB log-position=1/1
+  tokens=205KiB log-position=1/2
+  tokens=205KiB log-position=1/3
+  tokens=205KiB log-position=1/4
+  tokens=205KiB log-position=1/5
+  tokens=205KiB log-position=1/6
+  tokens=205KiB log-position=1/7
+  tokens=205KiB log-position=1/8
+  tokens=205KiB log-position=1/9
+  tokens=205KiB log-position=1/10
+  tokens=205KiB log-position=1/11
+  tokens=205KiB log-position=1/12
+  tokens=205KiB log-position=1/13
+  tokens=205KiB log-position=1/14
+  tokens=205KiB log-position=1/15
+  tokens=205KiB log-position=1/16
+  tokens=205KiB log-position=1/17
+  tokens=205KiB log-position=1/18
+  tokens=205KiB log-position=1/19
+  tokens=205KiB log-position=1/20
+  tokens=205KiB log-position=1/21
+  tokens=205KiB log-position=1/22
+  tokens=205KiB log-position=1/23
+  tokens=205KiB log-position=1/24
+  tokens=205KiB log-position=1/25
+  tokens=205KiB log-position=1/26
+  tokens=205KiB log-position=1/27
+  tokens=205KiB log-position=1/28
+  tokens=205KiB log-position=1/29
+  tokens=205KiB log-position=1/30
 
 t=16s stream=t1/s1
  pri=normal-pri
-  tokens=205KiB log-position=4/62
-  tokens=205KiB log-position=4/63
-  tokens=205KiB log-position=4/64
-  tokens=205KiB log-position=4/65
-  tokens=205KiB log-position=4/66
-  tokens=205KiB log-position=4/67
-  tokens=205KiB log-position=4/68
-  tokens=205KiB log-position=4/69
-  tokens=205KiB log-position=4/70
-  tokens=205KiB log-position=4/71
-  tokens=205KiB log-position=4/72
-  tokens=205KiB log-position=4/73
-  tokens=205KiB log-position=4/74
-  tokens=205KiB log-position=4/75
-  tokens=205KiB log-position=4/76
-  tokens=205KiB log-position=4/77
-  tokens=205KiB log-position=4/78
-  tokens=205KiB log-position=4/79
-  tokens=205KiB log-position=4/80
+  tokens=205KiB log-position=1/62
+  tokens=205KiB log-position=1/63
+  tokens=205KiB log-position=1/64
+  tokens=205KiB log-position=1/65
+  tokens=205KiB log-position=1/66
+  tokens=205KiB log-position=1/67
+  tokens=205KiB log-position=1/68
+  tokens=205KiB log-position=1/69
+  tokens=205KiB log-position=1/70
+  tokens=205KiB log-position=1/71
+  tokens=205KiB log-position=1/72
+  tokens=205KiB log-position=1/73
+  tokens=205KiB log-position=1/74
+  tokens=205KiB log-position=1/75
+  tokens=205KiB log-position=1/76
+  tokens=205KiB log-position=1/77
+  tokens=205KiB log-position=1/78
+  tokens=205KiB log-position=1/79
+  tokens=205KiB log-position=1/80
 
 t=17s stream=t1/s1
  pri=normal-pri
-  tokens=205KiB log-position=4/72
-  tokens=205KiB log-position=4/73
-  tokens=205KiB log-position=4/74
-  tokens=205KiB log-position=4/75
-  tokens=205KiB log-position=4/76
-  tokens=205KiB log-position=4/77
-  tokens=205KiB log-position=4/78
-  tokens=205KiB log-position=4/79
-  tokens=205KiB log-position=4/80
+  tokens=205KiB log-position=1/72
+  tokens=205KiB log-position=1/73
+  tokens=205KiB log-position=1/74
+  tokens=205KiB log-position=1/75
+  tokens=205KiB log-position=1/76
+  tokens=205KiB log-position=1/77
+  tokens=205KiB log-position=1/78
+  tokens=205KiB log-position=1/79
+  tokens=205KiB log-position=1/80
 
 t=19s stream=t1/s1
  
 t=21s stream=t1/s1
  pri=normal-pri
-  tokens=205KiB log-position=4/81
-  tokens=205KiB log-position=4/82
-  tokens=205KiB log-position=4/83
-  tokens=205KiB log-position=4/84
-  tokens=205KiB log-position=4/85
-  tokens=205KiB log-position=4/86
-  tokens=205KiB log-position=4/87
-  tokens=205KiB log-position=4/88
-  tokens=205KiB log-position=4/89
-  tokens=205KiB log-position=4/90
-  tokens=205KiB log-position=4/91
+  tokens=205KiB log-position=1/81
+  tokens=205KiB log-position=1/82
+  tokens=205KiB log-position=1/83
+  tokens=205KiB log-position=1/84
+  tokens=205KiB log-position=1/85
+  tokens=205KiB log-position=1/86
+  tokens=205KiB log-position=1/87
+  tokens=205KiB log-position=1/88
+  tokens=205KiB log-position=1/89
+  tokens=205KiB log-position=1/90
+  tokens=205KiB log-position=1/91
 ----
 ----
 
