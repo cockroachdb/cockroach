@@ -36,9 +36,9 @@ export const rawDatabaseMetadataToDatabaseRows = (
     return {
       name: db.db_name,
       id: db.db_id,
-      tableCount: db.table_count,
-      approximateDiskSizeBytes: db.size_bytes,
-      rangeCount: db.table_count,
+      tableCount: db.table_count ?? 0,
+      approximateDiskSizeBytes: db.size_bytes ?? 0,
+      rangeCount: db.table_count ?? 0,
       schemaInsightsCount: 0,
       key: db.db_id.toString(),
       nodesByRegion: {
