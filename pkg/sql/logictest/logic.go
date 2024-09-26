@@ -948,6 +948,10 @@ type logicQuery struct {
 	// noticetrace indicates we're comparing the output of a notice trace.
 	noticetrace bool
 
+	// regexp indicates the output should be compared as a regexp expression,
+	// rather than via direct string comparison.
+	regexp bool
+
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
@@ -2838,6 +2842,9 @@ func (t *logicTest) processSubtest(
 						case "noticetrace":
 							query.noticetrace = true
 
+						case "regexp":
+							query.regexp = true
+
 						case "async":
 							query.expectAsync = true
 
@@ -3871,7 +3878,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		for i := range query.expectedResults {
 			expected, actual := query.expectedResults[i], actualResults[i]
 			var resultMatches bool
-			if query.noticetrace {
+			if query.regexp {
 				resultMatches, err = regexp.MatchString(expected, actual)
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)
