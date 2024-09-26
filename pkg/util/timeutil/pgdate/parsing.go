@@ -78,9 +78,6 @@ var (
 	// resulted in '23:59:59.999999'.) This behavior may change in the future, see issue #129148
 	// for more details.
 	//
-	// Postgres uses math.MaxInt64 microseconds as the infinity value.
-	// See: https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L157
-	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
 	TimeInfinity    = timeutil.Unix(9224318102399 /* sec */, 999999000 /* nsec */)
@@ -96,9 +93,6 @@ var (
 	// '-Infinity'::time as it was before PR #127141. (Prior to PR #127141, '-Infinity'::time
 	// resulted in '00:00:00'.) This behavior may change in the future, see issue #129148
 	// for more details.
-	//
-	// Postgres uses math.MinInt64 microseconds as the -infinity value.
-	// See: https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L156
 	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
