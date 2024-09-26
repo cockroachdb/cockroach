@@ -1071,16 +1071,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
 
-			// r.mu.lastIndexNotDurable, r.mu.lastTermNotDurable and r.mu.raftLogSize
-			// were updated in applySnapshot, but we also want to make sure we reflect
-			// these changes in the local variables we're tracking here.
-			r.mu.RLock()
+			// lastIndexNotDurable, lastTermNotDurable and raftLogSize were updated in
+			// applySnapshot, but we also want to make sure we reflect these changes
+			// in the local variables we're tracking here.
 			state = logstore.RaftState{
 				LastIndex: r.mu.orRaftMu.lastIndexNotDurable,
 				LastTerm:  r.mu.orRaftMu.lastTermNotDurable,
 				ByteSize:  r.mu.orRaftMu.raftLogSize,
 			}
-			r.mu.RUnlock()
 
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
