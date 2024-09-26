@@ -46,20 +46,21 @@ func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
 }
 
 func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+	r.raftMu.AssertHeld()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.raftLogSize += deltaBytes
-	r.mu.raftLogLastCheckSize += deltaBytes
+	r.mu.orRaftMu.raftLogSize += deltaBytes
+	r.mu.orRaftMu.raftLogLastCheckSize += deltaBytes
 	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
 	// between server restarts.
-	if r.mu.raftLogSize < 0 {
-		r.mu.raftLogSize = 0
+	if r.mu.orRaftMu.raftLogSize < 0 {
+		r.mu.orRaftMu.raftLogSize = 0
 	}
-	if r.mu.raftLogLastCheckSize < 0 {
-		r.mu.raftLogLastCheckSize = 0
+	if r.mu.orRaftMu.raftLogLastCheckSize < 0 {
+		r.mu.orRaftMu.raftLogLastCheckSize = 0
 	}
 	if !isDeltaTrusted {
-		r.mu.raftLogSizeTrusted = false
+		r.mu.orRaftMu.raftLogSizeTrusted = false
 	}
 }
 

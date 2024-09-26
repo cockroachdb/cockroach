@@ -279,8 +279,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	r.setStartKeyLocked(desc.StartKey)
 
 	r.mu.state = s.ReplState
-	r.mu.lastIndexNotDurable = s.LastIndex
-	r.mu.lastTermNotDurable = invalidLastTerm
+	r.mu.orRaftMu.lastIndexNotDurable = s.LastIndex
+	r.mu.orRaftMu.lastTermNotDurable = invalidLastTerm
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
