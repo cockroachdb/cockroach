@@ -1117,15 +1117,21 @@ func (v *vector) recordLabels(labelValues []string) {
 	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
 }
 
-// GaugeVec is a collector for gauges that have a variable set of lables.
-// This uses the prometheus.GaugeVec under the hood.
+// GaugeVec is a collector for gauges that have a variable set of labels.
+// This uses the prometheus.GaugeVec under the hood. The contained gauges are
+// not persisted by the internal TSDB, nor are they aggregated; see aggmetric
+// for a metric that allows keeping labeled submetrics while recording their
+// aggregation in the tsdb.
 type GaugeVec struct {
 	Metadata
 	vector
 	promVec *prometheus.GaugeVec
 }
 
-func NewGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
+// NewExportedGaugeVec creates a new GaugeVec containing labeled gauges to be
+// exported to an external collector, but is not persisted by the internal TSDB,
+// nor are the metrics in the vector aggregated in any way.
+func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 	vec := newVector(labelSchema)
 
 	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -1204,7 +1210,11 @@ type CounterVec struct {
 	promVec *prometheus.CounterVec
 }
 
-func NewCounterVec(metadata Metadata, labelNames []string) *CounterVec {
+// NewExportedCounterVec creates a new CounterVec containing labeled counters to
+// be exported to an external collector; the contained counters are not
+// aggregated or persisted to the tsdb (see aggmetric.Counter for a counter that
+// persists the aggregation of n labeled child metrics).
+func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 	vec := newVector(labelNames)
 
 	promVec := prometheus.NewCounterVec(prometheus.CounterOpts{
