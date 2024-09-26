@@ -387,11 +387,28 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			BypassSafetyChecks: bypassSafetyChecks,
 			Lease:              out.NextLease,
 		}
+		// TransferLease unconditionally (there is no flag) handles revoking the
+		// previous lease during evaluation, under latches. It then forwards the
+		// start time of the next lease. See cmd_lease_transfer.go.
+		if !out.PrevLeaseManipulation.RevokeAndForwardNextStart {
+			panic("RevokeAndForwardNextStart unexpectedly unset for transfer")
+		}
+		if out.PrevLeaseManipulation.RevokeAndForwardNextExpiration {
+			panic("RevokeAndForwardNextExpiration unexpectedly set for transfer")
+		}
 	} else {
 		leaseReq = &kvpb.RequestLeaseRequest{
 			RequestHeader: leaseReqHeader,
 			PrevLease:     in.PrevLease,
 			Lease:         out.NextLease,
+			// If requested, RequestLease handles revoking the previous lease during
+			// evaluation. It then forwards the expiration of the next lease beyond
+			// the maximum expiration reached by the then-revoked lease. See
+			// cmd_lease_request.go.
+			RevokePrevAndForwardExpiration: out.PrevLeaseManipulation.RevokeAndForwardNextExpiration,
+		}
+		if out.PrevLeaseManipulation.RevokeAndForwardNextStart {
+			panic("RevokeAndForwardNextStart unexpectedly set for acquisition/extension")
 		}
 	}
 
@@ -509,6 +526,7 @@ func (p *pendingLeaseRequest) requestLease(
 		p.repl.store.metrics.LeaseRequestLatency.RecordValue(timeutil.Since(started).Nanoseconds())
 	}()
 
+	// Perform any necessary manipulation of node liveness before evaluation.
 	nl := leaseReqInfo.NodeLivenessManipulation
 	if nl.Heartbeat != nil {
 		curLiveness := *nl.Heartbeat
@@ -1513,8 +1531,7 @@ func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 }
 
 func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
-	hasExpirationLease := lease.Type() == roachpb.LeaseExpiration
-	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
+	return lease.Type() == r.desiredLeaseTypeRLocked()
 }
 
 // LeasePreferencesStatus represents the state of satisfying lease preferences.
