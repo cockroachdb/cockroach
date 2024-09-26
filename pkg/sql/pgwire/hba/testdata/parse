@@ -476,6 +476,49 @@ host   all      all  all     gss    k=v " someopt = withspaces "
 
 subtest end
 
+subtest quoted_options_values
+
+multiline
+host all all all ldap k=v " someopt = withspaces " someopt2=" whitespaces " someopt3= whitespace_without_quotes someopt4="value_with_equals=foo" someopt5= O=Cockroach, OU=Security, CN=foo
+----
+# String render check:
+# Original configuration:
+# host all all all ldap k=v " someopt = withspaces " someopt2=" whitespaces " someopt3= whitespace_without_quotes someopt4="value_with_equals=foo" someopt5= O=Cockroach, OU=Security, CN=foo
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   all      all  all     ldap   k=v " someopt = withspaces " "someopt2= whitespaces " "someopt3=whitespace_without_quotes" "someopt4=value_with_equals=foo" "someopt5=O=Cockroach, OU=Security, CN=foo"
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            ConnType: 6,
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address:  rulebasedscanner.String{Value:"all", Quoted:false},
+            Method:   rulebasedscanner.String{Value:"ldap", Quoted:false},
+            MethodFn: nil,
+            Options:  {
+                {"k", "v"},
+                {" someopt ", " withspaces "},
+                {"someopt2", " whitespaces "},
+                {"someopt3", "whitespace_without_quotes"},
+                {"someopt4", "value_with_equals=foo"},
+                {"someopt5", "O=Cockroach, OU=Security, CN=foo"},
+            },
+            OptionQuotes: {false, true, true, true, true, true},
+            Input:        "host all all all ldap k=v \" someopt = withspaces \" someopt2=\" whitespaces \" someopt3= whitespace_without_quotes someopt4=\"value_with_equals=foo\" someopt5= O=Cockroach, OU=Security, CN=foo",
+            Generated:    false,
+        },
+    },
+}
+
+subtest end
+
 subtest invalid_string
 
 multiline
