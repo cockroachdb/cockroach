@@ -696,6 +696,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
+	if l := lrw.spec.MetricsLabel; l != "" {
+		lrw.metrics.LabeledEventsIngested.Inc(map[string]string{"label": l}, stats.processed.success)
+		lrw.metrics.LabeledEventsDLQed.Inc(map[string]string{"label": l}, stats.processed.dlq)
+	}
 
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
