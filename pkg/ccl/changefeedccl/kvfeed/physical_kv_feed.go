@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -34,6 +35,7 @@ type rangeFeedConfig struct {
 	RangeObserver kvcoord.RangeObserver
 	Knobs         TestingKnobs
 	UseMux        bool
+	Timers        *timers.ScopedTimers
 }
 
 type rangefeedFactory func(
@@ -48,6 +50,7 @@ type rangefeed struct {
 	cfg    rangeFeedConfig
 	eventC chan kvcoord.RangeFeedMessage
 	knobs  TestingKnobs
+	st     *timers.ScopedTimers
 }
 
 func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
@@ -73,6 +76,7 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 		cfg:    cfg,
 		eventC: make(chan kvcoord.RangeFeedMessage, 128),
 		knobs:  cfg.Knobs,
+		st:     cfg.Timers,
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
@@ -117,11 +121,13 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 					e = kvcoord.RangeFeedMessage{RangeFeedEvent: e.ShallowCopy(), RegisteredSpan: e.RegisteredSpan}
 					p.knobs.ModifyTimestamps(&e.Val.Value.Timestamp)
 				}
+				stop := p.st.RangefeedBufferValue.Start()
 				if err := p.memBuf.Add(
 					ctx, kvevent.MakeKVEvent(e.RangeFeedEvent),
 				); err != nil {
 					return err
 				}
+				stop()
 			case *kvpb.RangeFeedCheckpoint:
 				if p.knobs.ModifyTimestamps != nil {
 					e = kvcoord.RangeFeedMessage{RangeFeedEvent: e.ShallowCopy(), RegisteredSpan: e.RegisteredSpan}
@@ -136,11 +142,13 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				if p.knobs.ShouldSkipCheckpoint != nil && p.knobs.ShouldSkipCheckpoint(t) {
 					continue
 				}
+				stop := p.st.RangefeedBufferCheckpoint.Start()
 				if err := p.memBuf.Add(
 					ctx, kvevent.MakeResolvedEvent(e.RangeFeedEvent, jobspb.ResolvedSpan_NONE),
 				); err != nil {
 					return err
 				}
+				stop()
 			case *kvpb.RangeFeedSSTable:
 				// For now, we just error on SST ingestion, since we currently don't
 				// expect SST ingestion into spans with active changefeeds.

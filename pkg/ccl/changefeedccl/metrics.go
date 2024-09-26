@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -75,6 +76,8 @@ type AggMetrics struct {
 	LaggingRanges             *aggmetric.AggGauge
 	TotalRanges               *aggmetric.AggGauge
 	CloudstorageBufferedBytes *aggmetric.AggGauge
+
+	Timers *timers.Timers
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -146,6 +149,8 @@ type sliMetrics struct {
 	LaggingRanges             *aggmetric.Gauge
 	TotalRanges               *aggmetric.Gauge
 	CloudstorageBufferedBytes *aggmetric.Gauge
+
+	Timers *timers.ScopedTimers
 
 	mu struct {
 		syncutil.Mutex
@@ -852,6 +857,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		LaggingRanges:             b.Gauge(metaLaggingRanges),
 		TotalRanges:               b.Gauge(metaTotalRanges),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
+		Timers:                    timers.New(histogramWindow),
 		NetMetrics:                lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
@@ -915,6 +921,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		LaggingRanges:             a.LaggingRanges.AddChild(scope),
 		TotalRanges:               a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes: a.CloudstorageBufferedBytes.AddChild(scope),
+
+		Timers: a.Timers.GetOrCreateScopedTimers(scope),
+
 		// TODO(#130358): Again, this doesn't belong here, but it's the most
 		// convenient way to feed this metric to changefeeds.
 		NetMetrics: a.NetMetrics,

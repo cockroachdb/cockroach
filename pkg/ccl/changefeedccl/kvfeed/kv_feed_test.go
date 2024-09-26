@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -138,6 +139,7 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
+		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
@@ -146,7 +148,7 @@ func TestKVFeed(t *testing.T) {
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			util.ConstantWithMetamorphicTestBool("use_mux", true),
 			changefeedbase.Targets{},
-			TestingKnobs{})
+			st, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
