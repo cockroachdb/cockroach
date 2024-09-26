@@ -130,7 +130,7 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	mb := &sm.ephemeralBatch
 	mb.r = r
 	r.mu.RLock()
-	mb.state = r.mu.state
+	mb.state = r.mu.orRaftMu.state
 	r.mu.RUnlock()
 	return mb
 }
@@ -143,9 +143,9 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
-	b.state = r.mu.state
+	b.state = r.mu.orRaftMu.state
 	b.state.Stats = &sm.stats
-	*b.state.Stats = *r.mu.state.Stats
+	*b.state.Stats = *r.mu.orRaftMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
 	b.start = timeutil.Now()

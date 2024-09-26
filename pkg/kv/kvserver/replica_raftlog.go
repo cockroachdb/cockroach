@@ -158,7 +158,7 @@ func (r *replicaLogStorage) FirstIndex() uint64 {
 // raftFirstIndexRLocked implements the FirstIndex() call.
 func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 	// TruncatedState is guaranteed to be non-nil.
-	return r.mu.state.TruncatedState.Index + 1
+	return r.mu.orRaftMu.state.TruncatedState.Index + 1
 }
 
 // GetFirstIndex returns the index of the first entry in the raft log.
@@ -268,7 +268,7 @@ func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 func (r *replicaRaftMuLogSnap) FirstIndex() uint64 {
 	r.raftMu.AssertHeld()
 	// r.mu.state is mutated both under r.raftMu and r.mu, so the access is safe.
-	return uint64(r.mu.state.TruncatedState.Index + 1)
+	return uint64(r.mu.orRaftMu.state.TruncatedState.Index + 1)
 }
 
 // LogSnapshot implements the raft.LogStorageSnapshot interface.

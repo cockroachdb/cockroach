@@ -101,7 +101,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		}
 
 		repl.mu.Lock()
-		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
+		repl.mu.orRaftMu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
 		conf := roachpb.TestingDefaultSpanConfig()
 		conf.RangeMaxBytes = test.maxBytes
