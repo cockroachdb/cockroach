@@ -324,19 +324,24 @@ func TestThrottleErrorMsg(t *testing.T) {
 		overThreshold   bool
 		throttleCheckTS time.Time
 		telemetryTS     time.Time
+		sql             string
 		errRE           string
 	}{
 		// NB: license expires at t30d and grace period ends at t60d.
-		{"at-threshold-valid-license-and-telemetry", true, t10d, t10d, ""},
-		{"at-threshold-expired-license-in-grace-valid-telemetry", true, t60d, t55d, ""},
+		{"at-threshold-valid-license-and-telemetry", true, t10d, t10d, "SELECT 1", ""},
+		{"at-threshold-expired-license-in-grace-valid-telemetry", true, t60d, t55d, "SELECT 1", ""},
 		{"at-threshold-expired-license-past-grace-valid-telemetry", true, t60d1ms, t55d,
-			"License expired .*. The maximum number of .*"},
-		{"below-threshold-expired-license-past-grace-valid-telemetry", false, t60d1ms, t55d, ""},
-		{"at-threshold-expired-license-in-grace-invalid-telemetry", true, t55d, t10d,
+			"SELECT 1", "License expired .*. The maximum number of .*"},
+		{"below-threshold-expired-license-past-grace-valid-telemetry", false, t60d1ms, t55d, "SELECT 1", ""},
+		{"at-threshold-expired-license-in-grace-invalid-telemetry", true, t55d, t10d, "SELECT 1",
 			"The maximum number of concurrently open transactions has been reached because the license requires diagnostic reporting"},
-		{"at-threshold-valid-license-invalid-telemetry", true, t10d, t0d,
+		{"at-threshold-valid-license-invalid-telemetry", true, t10d, t0d, "SELECT 1",
 			"The maximum number of concurrently open transactions has been reached because the license requires diagnostic reporting"},
-		{"below-threshold-invalid-telemetry", false, t10d, t0d, ""},
+		{"below-threshold-invalid-telemetry", false, t10d, t0d, "SELECT 1", ""},
+		{"at-threshold-expired-license-past-grace-valid-telemetry-SET_CLUSTER", true, t60d1ms, t55d,
+			"SET CLUSTER SETTING cluster.label = ''", ""},
+		{"at-threshold-expired-license-past-grace-invalid-telemetry-SET_CLUSTER", true, t60d1ms, t10d,
+			"SET CLUSTER SETTING cluster.label = ''", ""},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			// Adjust the throttle check time for this test unit
@@ -358,9 +363,9 @@ func TestThrottleErrorMsg(t *testing.T) {
 			// It may or may not be throttled, depending on tc parms.
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 			if tc.errRE != "" {
-				tdb.ExpectErr(t, tc.errRE, "SELECT 1")
+				tdb.ExpectErr(t, tc.errRE, tc.sql)
 			} else {
-				tdb.Exec(t, "SELECT 1")
+				tdb.Exec(t, tc.sql)
 			}
 
 			// Confirm that internal connections are never throttled

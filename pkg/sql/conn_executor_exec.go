@@ -505,11 +505,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		// Enforce license policies. Throttling can occur if there is no valid
-		// license or if it has expired.
-		if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
-			return makeErrEvent(err)
-		} else if notice != nil {
-			res.BufferNotice(notice)
+		// license or if the existing one has expired.
+		if isSQLOkayToThrottle(ast) {
+			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+				return makeErrEvent(err)
+			} else if notice != nil {
+				res.BufferNotice(notice)
+			}
 		}
 	}
 
@@ -3445,4 +3447,17 @@ func (ex *connExecutor) execWithProfiling(
 		err = op(ctx)
 	}
 	return err
+}
+
+// isSQLOkayToThrottle will return true if the given statement is allowed to be throttled.
+func isSQLOkayToThrottle(ast tree.Statement) bool {
+	switch ast.(type) {
+	// We do not throttle the SET CLUSTER command, as this is how a new license
+	// would be installed to disable throttling. We want to avoid the situation
+	// where the action to disable throttling is itself throttled.
+	case *tree.SetClusterSetting:
+		return false
+	default:
+		return true
+	}
 }
