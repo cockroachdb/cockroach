@@ -239,6 +239,7 @@ func alterReplicationJobHook(
 				srcTenant,
 				retentionTTLSeconds,
 				alterTenantStmt,
+				options,
 			)
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
@@ -321,6 +322,7 @@ func alterTenantRestartReplication(
 	srcTenant string,
 	retentionTTLSeconds int32,
 	alterTenantStmt *tree.AlterTenantReplication,
+	options *resolvedTenantReplicationOptions,
 ) error {
 	dstTenantID, err := roachpb.MakeTenantID(tenInfo.ID)
 	if err != nil {
@@ -399,6 +401,11 @@ func alterTenantRestartReplication(
 		revertTo = tenInfo.PreviousSourceTenant.CutoverAsOf
 	}
 
+	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options)
+	if err != nil {
+		return err
+	}
+
 	return errors.Wrap(createReplicationJob(
 		ctx,
 		p,
@@ -416,7 +423,7 @@ func alterTenantRestartReplication(
 			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
 			Options:                     alterTenantStmt.Options,
 		},
-		roachpb.TenantID{},
+		readerID,
 	), "creating replication job")
 }
 
