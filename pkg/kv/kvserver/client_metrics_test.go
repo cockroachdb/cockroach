@@ -262,7 +262,7 @@ func TestStoreMetrics(t *testing.T) {
 			},
 		}
 		stickyServerArgs[i] = base.TestServerArgs{
-			CacheSize:  1 << 20, /* 1 MiB */
+			CacheSize:  2 << 20, /* 2 MiB */
 			StoreSpecs: []base.StoreSpec{spec},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
