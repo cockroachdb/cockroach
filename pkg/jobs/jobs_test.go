@@ -1119,8 +1119,15 @@ func TestRegistryLifecycle(t *testing.T) {
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
 			Username:  username.TestUserName(),
 		}
-		job, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, nil /* txn */)
-		require.NoError(t, err)
+		var job *jobs.Job
+		require.NoError(t, rts.s.InternalDB().(isql.DB).Txn(rts.ctx, func(ctx context.Context, txn isql.Txn) error {
+			txn.SessionData().Location = time.FixedZone("UTC+5", 5*60*60)
+			j, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, txn)
+			job = j
+			return err
+		}))
+
+		rts.sqlDB.CheckQueryResults(t, "SELECT created <= now() FROM system.jobs WHERE id = "+jobID.String(), [][]string{{"true"}})
 
 		loadedJob, err := rts.registry.LoadJob(rts.ctx, jobID)
 		require.NoError(t, err)
