@@ -135,6 +135,21 @@ func TestStoreLiveness(t *testing.T) {
 							strings.Join(sortedSupportMap, "\n"),
 						)
 
+					case "debug-metrics":
+						return fmt.Sprintf(
+							"HeartbeatSuccess: %d, HeartbeatFailure: %d\n"+
+								"MessageHandleSuccess: %d, MessageHandleFailure: %d\n"+
+								"SupportWithdrawSuccess: %d, SupportWithdrawFailure: %d\n"+
+								"SupportFromStores: %d, SupportForStores: %d",
+							sm.metrics.HeartbeatSuccesses.Count(),
+							sm.metrics.HeartbeatFailures.Count(),
+							sm.metrics.MessageHandleSuccesses.Count(),
+							sm.metrics.MessageHandleFailures.Count(),
+							sm.metrics.SupportWithdrawSuccesses.Count(),
+							sm.metrics.SupportWithdrawFailures.Count(),
+							sm.metrics.SupportFromStores.Value(),
+							sm.metrics.SupportForStores.Value(),
+						)
 					default:
 						return fmt.Sprintf("unknown command: %s", d.Cmd)
 					}
