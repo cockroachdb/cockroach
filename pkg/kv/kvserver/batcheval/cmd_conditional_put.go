@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -62,6 +63,14 @@ func ConditionalPut(
 		return result.Result{}, err
 	}
 
+	originTimestampForValueHeader := h.WriteOptions.GetOriginTimestamp()
+	if args.OriginTimestamp.IsSet() {
+		originTimestampForValueHeader = args.OriginTimestamp
+	}
+	if args.OriginTimestamp.IsSet() && h.WriteOptions.GetOriginTimestamp().IsSet() {
+		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
+	}
+
 	opts := storage.ConditionalPutWriteOptions{
 		MVCCWriteOptions: storage.MVCCWriteOptions{
 			Txn:                            h.Txn,
@@ -70,6 +79,7 @@ func ConditionalPut(
 			ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 			OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 			OriginID:                       h.WriteOptions.GetOriginID(),
+			OriginTimestamp:                originTimestampForValueHeader,
 			MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			Category:                       fs.BatchEvalReadCategory,
