@@ -59,19 +59,13 @@ func TestStoreLiveness(t *testing.T) {
 
 					case "support-from":
 						remoteID := parseStoreID(t, d, "node-id", "store-id")
-						epoch, timestamp, supported := sm.SupportFrom(remoteID)
-						return fmt.Sprintf(
-							"epoch: %+v, expiration: %+v, support provided: %v",
-							epoch, timestamp, supported,
-						)
+						epoch, timestamp := sm.SupportFrom(remoteID)
+						return fmt.Sprintf("epoch: %+v, expiration: %+v", epoch, timestamp)
 
 					case "support-for":
 						remoteID := parseStoreID(t, d, "node-id", "store-id")
 						epoch, supported := sm.SupportFor(remoteID)
-						return fmt.Sprintf(
-							"epoch: %+v, support provided: %v",
-							epoch, supported,
-						)
+						return fmt.Sprintf("epoch: %+v, support provided: %v", epoch, supported)
 
 					case "send-heartbeats":
 						now := parseTimestamp(t, d, "now")

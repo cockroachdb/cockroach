@@ -129,13 +129,13 @@ func (s *storeLiveness) SupportFor(id pb.PeerID) (pb.Epoch, bool) {
 }
 
 // SupportFrom implements the StoreLiveness interface.
-func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
+func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
 	entry := s.livenessFabric.state[id][s.nodeID]
 	if !entry.isSupported {
-		return 0, hlc.Timestamp{}, false
+		return 0, hlc.Timestamp{}
 	}
 	// TODO(arul): we may need to inject timestamps in here as well.
-	return entry.epoch, hlc.MaxTimestamp, entry.isSupported
+	return entry.epoch, hlc.MaxTimestamp
 }
 
 // SupportFromEnabled implements the StoreLiveness interface.

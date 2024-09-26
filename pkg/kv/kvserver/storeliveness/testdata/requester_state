@@ -5,7 +5,7 @@
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) successfully establishes support.
@@ -22,7 +22,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 1, expiration: 110.000000000,0, support provided: true
+epoch: 1, expiration: 110.000000000,0
 
 debug-requester-state
 ----
@@ -47,7 +47,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 1, expiration: 210.000000000,0, support provided: true
+epoch: 1, expiration: 210.000000000,0
 
 
 # -------------------------------------------------------------
@@ -65,7 +65,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 debug-requester-state
 ----
@@ -90,7 +90,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 
 # -------------------------------------------------------------
@@ -103,7 +103,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 handle-messages
   msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=0
@@ -111,7 +111,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 handle-messages
   msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=400
@@ -119,11 +119,11 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 
 # -------------------------------------------------------------
-# Store (n1, s1) requests support but receives to response.
+# Store (n1, s1) requests support but receives no response.
 # -------------------------------------------------------------
 
 send-heartbeats now=500 liveness-interval=10s
@@ -133,7 +133,7 @@ heartbeats:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 debug-requester-state
 ----
@@ -183,7 +183,7 @@ heartbeats:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 2, expiration: 410.000000000,0, support provided: true
+epoch: 2, expiration: 410.000000000,0
 
 send-heartbeats now=700 liveness-interval=10s
 ----

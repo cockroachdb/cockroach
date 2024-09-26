@@ -8,7 +8,7 @@
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 send-heartbeats now=100 liveness-interval=10s
 ----
@@ -24,7 +24,7 @@ responses:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 1, expiration: 110.000000000,0, support provided: true
+epoch: 1, expiration: 110.000000000,0
 
 support-for node-id=2 store-id=2
 ----

@@ -59,10 +59,9 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
-	epoch, expiration, supported := sm.SupportFrom(remoteStore)
+	epoch, expiration := sm.SupportFrom(remoteStore)
 	require.Equal(t, slpb.Epoch(0), epoch)
 	require.Equal(t, hlc.Timestamp{}, expiration)
-	require.False(t, supported)
 
 	// Ensure heartbeats are sent.
 	msgs := ensureHeartbeats(t, sender, 10)
@@ -84,13 +83,12 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	// Ensure support is provided as seen by SupportFrom.
 	testutils.SucceedsSoon(
 		t, func() error {
-			epoch, expiration, supported = sm.SupportFrom(remoteStore)
-			if !supported {
+			epoch, expiration = sm.SupportFrom(remoteStore)
+			if expiration.IsEmpty() {
 				return errors.New("support not provided yet")
 			}
 			require.Equal(t, slpb.Epoch(1), epoch)
 			require.Equal(t, requestedExpiration, expiration)
-			require.True(t, supported)
 			return nil
 		},
 	)
@@ -114,13 +112,16 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
+	// Pause the clock so support is not withdrawn before calling SupportFor.
+	manual.Pause()
+
 	// Process a heartbeat from the remote store.
 	heartbeat := &slpb.Message{
 		Type:       slpb.MsgHeartbeat,
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(time.Second),
+		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
 	}
 	require.NoError(t, sm.HandleMessage(heartbeat))
 
@@ -144,6 +145,9 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	epoch, supported := sm.SupportFor(remoteStore)
 	require.Equal(t, slpb.Epoch(1), epoch)
 	require.True(t, supported)
+
+	// Resume the clock, so support can be withdrawn.
+	manual.Resume()
 
 	// Wait for support to be withdrawn.
 	testutils.SucceedsSoon(
@@ -178,8 +182,7 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
-	_, _, supported := sm.SupportFrom(remoteStore)
-	require.False(t, supported)
+	sm.SupportFrom(remoteStore)
 	ensureHeartbeats(t, sender, 10)
 
 	// Disable Store Liveness and make sure heartbeats stop.
@@ -314,11 +317,10 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 0)
 
 	// SupportFrom and SupportFor calls are still being answered.
-	epoch, _, supported := sm.SupportFrom(remoteStore)
+	epoch, _ := sm.SupportFrom(remoteStore)
 	require.Equal(t, slpb.Epoch(1), epoch)
-	require.True(t, supported)
 
-	epoch, supported = sm.SupportFor(remoteStore)
+	epoch, supported := sm.SupportFor(remoteStore)
 	require.Equal(t, slpb.Epoch(1), epoch)
 	require.True(t, supported)
 

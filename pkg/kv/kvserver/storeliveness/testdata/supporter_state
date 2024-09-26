@@ -105,6 +105,27 @@ epoch: 2, support provided: true
 
 
 # -------------------------------------------------------------
+# Store (n1, s1) provides support even if the expiration is in
+# the past.
+# -------------------------------------------------------------
+
+send-heartbeats now=301 liveness-interval=10s # just to forward the clock
+----
+heartbeats:
+
+support-for node-id=2 store-id=2
+----
+epoch: 2, support provided: true
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+
+# -------------------------------------------------------------
 # Store (n1, s1) fails to write the support state.
 # -------------------------------------------------------------
 
