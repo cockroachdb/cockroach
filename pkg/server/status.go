@@ -472,6 +472,7 @@ type statusServer struct {
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+	tenantStatusServer       serverpb.TenantStatusServer
 
 	// cancelSemaphore is a semaphore that limits the number of
 	// concurrent calls to the pgwire query cancellation endpoint. This
@@ -585,6 +586,7 @@ func newStatusServer(
 	serverIterator ServerIterator,
 	clock *hlc.Clock,
 	knobs *TestingKnobs,
+	tenantStatusServer serverpb.TenantStatusServer,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	if !rpcCtx.TenantID.IsSystem() {
@@ -613,6 +615,7 @@ func newStatusServer(
 		cancelSemaphore:              quotapool.NewIntPool("pgwire-cancel", 256),
 		updateTableMetadataJobSignal: make(chan struct{}),
 		knobs:                        knobs,
+		tenantStatusServer:           tenantStatusServer,
 	}
 
 	return server
@@ -660,6 +663,7 @@ func newSystemStatusServer(
 		serverIterator,
 		clock,
 		knobs,
+		&serverpb.UnimplementedStatusServer{},
 	)
 
 	return &systemStatusServer{
@@ -1859,6 +1863,20 @@ func (s *systemStatusServer) Nodes(
 	}
 
 	return resp, nil
+}
+
+func (s *statusServer) Nodes(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.tenantStatusServer.Nodes(ctx, req)
 }
 
 // TODO: Enhance with redaction middleware, refer: https://github.com/cockroachdb/cockroach/issues/109594

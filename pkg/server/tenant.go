@@ -390,6 +390,7 @@ func newTenantServer(
 		serverIterator,
 		args.clock,
 		&serverKnobs,
+		args.tenantStatusServer,
 	)
 	args.sqlStatusServer = sStatus
 
