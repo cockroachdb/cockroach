@@ -247,7 +247,6 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
 		Randomized:       true,
-		Benchmark:        true,
 		Run:              v.runTest,
 	})
 }
@@ -262,6 +261,7 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
+		Benchmark:        true,
 		Run:              v.runTest,
 	})
 }
@@ -678,8 +678,14 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	require.NoError(t, err)
 
 	// Start the consistent workload and begin collecting profiles.
-	stableRatePerNode := int(float64(<-clusterMaxRate) * v.ratioOfMax / float64(v.numWorkloadNodes))
-	t.Status(fmt.Sprintf("T2: running workload at stable rate of %d per node", stableRatePerNode))
+	var stableRatePerNode int
+	select {
+	case rate := <-clusterMaxRate:
+		stableRatePerNode = int(float64(rate) * v.ratioOfMax / float64(v.numWorkloadNodes))
+		t.Status(fmt.Sprintf("T2: running workload at stable rate of %d per node", stableRatePerNode))
+	case <-ctx.Done(): // closes when the caller cancels the ctx
+		t.Fatal("failed to get cluster max rate")
+	}
 	var data *workloadData
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		if data, err = v.workload.runWorkload(ctx, v, 0, stableRatePerNode); err != nil && !errors.Is(err, context.Canceled) {
