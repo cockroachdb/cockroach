@@ -1,4 +1,4 @@
-# This test excercises calling WaitForEval with a variety of replica sets which
+# This test exercises calling WaitForEval with a variety of replica sets which
 # include non-voters in various states.
 #
 # Initialize the test state with a single range, holding two voters and one
@@ -105,7 +105,8 @@ t1/s6: eval reg=+1 B/+1 B ela=+0 B/+1 B
 # Start a low priority evaluation 'c'. This should not complete until: 
 # (1) The leader has elastic tokens (already true)
 # (2) The leaseholder has elastic tokens (already true)
-# (3) A quorum of voting replicas have elastic tokens e.g., s1 + (s2|s3)
+# (3) A quorum of voting replicas have elastic tokens and are in
+#     StateReplicate e.g., s1 + (s2|s3)
 # (4) All non-voting replicas in StateReplicate have elastic tokens
 wait_for_eval name=c range_id=1 pri=LowPri
 ----
@@ -302,15 +303,40 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=c pri=low-pri  done=true  waited=true  err=<nil>
   name=d pri=high-pri done=false waited=false err=<nil>
 
-# Lastly, add tokens back the voting replica in StateSnapshot. Despite being in
-# StateSnapshot, the replica stream having tokens is sufficient to complete the
-# evaluation 'd', as it completes a quorum (s1+s3/3).
+# Add tokens back the voting replica in StateSnapshot. Being in StateSnapshot,
+# it is not allowed to be part of the quorum.
 adjust_tokens
   store_id=3 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
        send reg=+1 B/+1 B ela=+1 B/+1 B
 t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s4: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s6: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=low-pri  done=true  waited=true  err=<nil>
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=low-pri  done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=false waited=false err=<nil>
+
+# Add tokens back to the voting replica in StateReplicate. This is sufficient
+# to complete evaluation 'd', as it completes a quorum (s1+s2/3).
+adjust_tokens
+  store_id=2 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
        send reg=+1 B/+1 B ela=+1 B/+1 B
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
        send reg=+1 B/+1 B ela=+1 B/+1 B
