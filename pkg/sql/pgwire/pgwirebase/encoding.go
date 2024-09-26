@@ -916,9 +916,13 @@ type PGNumeric struct {
 // for a timestamp. To create a timestamp from this value, it takes the microseconds
 // delta and adds it to PGEpochJDate.
 func pgBinaryToTime(i int64) time.Time {
+	// Postgres uses math.MaxInt64 microseconds as the "infinity" timestamp, see:
+	// https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L151
 	if i == math.MaxInt64 {
 		return pgdate.TimeInfinity
 	}
+	// Postgres uses math.MinInt64 microseconds as the "-infinity" timestamp, see:
+	// https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L150
 	if i == math.MinInt64 {
 		return pgdate.TimeNegativeInfinity
 	}
