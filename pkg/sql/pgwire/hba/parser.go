@@ -157,10 +157,22 @@ func parseHbaLine(inputLine rulebasedscanner.Line) (entry Entry, err error) {
 
 	// Parse remaining arguments.
 	for fieldIdx++; fieldIdx < len(line); fieldIdx++ {
-		for _, tok := range line[fieldIdx] {
+		for tokenIdx := 0; tokenIdx < len(line[fieldIdx]); tokenIdx++ {
+			tok := line[fieldIdx][tokenIdx]
 			kv := strings.SplitN(tok.Value, "=", 2)
+			// 1. Handle the case where the option does not have equal operator.
+			// 2. Handle the case where token ends with equals operator and next token
+			// having the value for option is absent.
+			optionsError := errors.Newf("authentication option not in name=value format: %s", tok.Value)
 			if len(kv) != 2 {
-				return entry, errors.Newf("authentication option not in name=value format: %s", tok.Value)
+				return entry, optionsError
+			}
+			if len(kv[1]) == 0 {
+				if (tokenIdx + 1) == len(line[fieldIdx]) {
+					return entry, optionsError
+				}
+				kv[1], tok.Quoted = rulebasedscanner.Join(line[fieldIdx][tokenIdx+1:], ", "), true
+				tokenIdx = len(line[fieldIdx])
 			}
 			entry.Options = append(entry.Options, [2]string{kv[0], kv[1]})
 			entry.OptionQuotes = append(entry.OptionQuotes, tok.Quoted)

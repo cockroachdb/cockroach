@@ -2,65 +2,90 @@ subtest token
 
 token
 ----
-rulebasedscanner.String{} false ""
+rulebasedscanner.String{} false false ""
 
 
 token
   # Just a comment.
 ----
-rulebasedscanner.String{} false ""
+rulebasedscanner.String{} false false ""
 
 token
 a b
 ----
-rulebasedscanner.String{Value:"a", Quoted:false} false " b"
+rulebasedscanner.String{Value:"a", Quoted:false} false false " b"
 
 token
 a,b
 ----
-rulebasedscanner.String{Value:"a", Quoted:false} true "b"
+rulebasedscanner.String{Value:"a", Quoted:false} true false "b"
 
 token
 a, b
 ----
-rulebasedscanner.String{Value:"a", Quoted:false} true " b"
+rulebasedscanner.String{Value:"a", Quoted:false} true false " b"
 
 
 token
 a  ,b
 ----
-rulebasedscanner.String{Value:"a", Quoted:false} false "  ,b"
+rulebasedscanner.String{Value:"a", Quoted:false} false false "  ,b"
 
 token
 abc,def
 ----
-rulebasedscanner.String{Value:"abc", Quoted:false} true "def"
+rulebasedscanner.String{Value:"abc", Quoted:false} true false "def"
 
 token
 "abc",def
 ----
-rulebasedscanner.String{Value:"abc", Quoted:true} true "def"
+rulebasedscanner.String{Value:"abc", Quoted:true} true false "def"
 
 token
 "abc"def
 ----
-rulebasedscanner.String{Value:"abc", Quoted:true} false "def"
+rulebasedscanner.String{Value:"abc", Quoted:true} false false "def"
 
 token
 # abc,def
 ----
-rulebasedscanner.String{} false ""
+rulebasedscanner.String{} false false ""
 
 token
 # "abc
 ----
-rulebasedscanner.String{} false ""
+rulebasedscanner.String{} false false ""
 
 
 token
 "abc
 ----
 error: unterminated quoted string
+
+token
+"abc=def"ghi
+----
+rulebasedscanner.String{Value:"abc=def", Quoted:true} false false "ghi"
+
+token
+abc="def"ghi
+----
+rulebasedscanner.String{Value:"abc=", Quoted:false} false true "\"def\"ghi"
+
+token
+abc= "def"
+----
+rulebasedscanner.String{Value:"abc=", Quoted:false} false true " \"def\""
+
+token
+"abc= def
+----
+error: unterminated quoted string
+
+token
+abc=def,ghi
+----
+rulebasedscanner.String{Value:"abc=def", Quoted:false} true false "ghi"
 
 subtest end
 
@@ -148,6 +173,65 @@ field
 ----
 []
 ""
+
+field
+abc=def
+----
+[abc=def]
+""
+
+field
+"abc=def"
+----
+["abc=def"]
+""
+
+field
+"abc= def "
+----
+["abc= def "]
+""
+
+field
+abc=" def "
+----
+[abc= " def "]
+""
+
+field
+abc= " def "
+----
+[abc= " def "]
+""
+
+field
+abc="def=ghi"
+----
+[abc= "def=ghi"]
+""
+
+field
+abc= "def=ghi"
+----
+[abc= "def=ghi"]
+""
+
+field
+abc=def,ghi
+----
+[abc=def ghi]
+""
+
+field
+abc=def, ghi
+----
+[abc=def ghi]
+""
+
+field
+abc="def
+----
+error: unterminated quoted string
 
 field
 all,"abc
@@ -351,6 +435,72 @@ rulebasedscanner.ScannedInput{
     },
     Linenos: {3, 5},
 }
+
+file
+#
+
+  a  "b=c" # c d e
+
+ d  e="f" # b c
+
+   f  a="e=c" c= a f= b, c # d b
+
+#
+----
+rulebasedscanner.ScannedInput{
+    Lines: {
+        {
+            Input:  "a  \"b=c\" # c d e",
+            Tokens: {
+                {
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"b=c", Quoted:true},
+                },
+            },
+        },
+        {
+            Input:  "d  e=\"f\" # b c",
+            Tokens: {
+                {
+                    {Value:"d", Quoted:false},
+                },
+                {
+                    {Value:"e=", Quoted:false},
+                    {Value:"f", Quoted:true},
+                },
+            },
+        },
+        {
+            Input:  "f  a=\"e=c\" c= a f= b, c # d b",
+            Tokens: {
+                {
+                    {Value:"f", Quoted:false},
+                },
+                {
+                    {Value:"a=", Quoted:false},
+                    {Value:"e=c", Quoted:true},
+                },
+                {
+                    {Value:"c=", Quoted:false},
+                    {Value:"a", Quoted:false},
+                },
+                {
+                    {Value:"f=", Quoted:false},
+                    {Value:"b", Quoted:false},
+                    {Value:"c", Quoted:false},
+                },
+            },
+        },
+    },
+    Linenos: {3, 5, 7},
+}
+
+file
+d  a e="f # b c
+----
+error: line 1: unterminated quoted string
 
 
 subtest end
