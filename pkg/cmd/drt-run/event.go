@@ -64,25 +64,25 @@ type Event struct {
 // String() implements the Stringer interface.
 func (e *Event) String() string {
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "[%s] ", e.Timestamp.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(&builder, "[%s] ", e.Timestamp.Format(time.RFC3339))
 	switch e.Source {
 	case SourceWorkload:
-		fmt.Fprintf(&builder, "workload %s", e.SourceName)
+		_, _ = fmt.Fprintf(&builder, "workload %s", e.SourceName)
 	case SourceOperation:
-		fmt.Fprintf(&builder, "operation %s", e.SourceName)
+		_, _ = fmt.Fprintf(&builder, "operation %s", e.SourceName)
 	}
 	switch e.Type {
 	case EventOutput:
-		fmt.Fprintf(&builder, ": %s", e.Details)
+		_, _ = fmt.Fprintf(&builder, ": %s", e.Details)
 	case EventFinish:
-		fmt.Fprintf(&builder, " finished with %s", e.Details)
+		_, _ = fmt.Fprintf(&builder, " finished with %s", e.Details)
 	case EventStart:
 		builder.WriteString(" started")
 		if e.Details != "" {
-			fmt.Fprintf(&builder, " with %s", e.Details)
+			_, _ = fmt.Fprintf(&builder, " with %s", e.Details)
 		}
 	case EventError:
-		fmt.Fprintf(&builder, " returned an error %s", e.Details)
+		_, _ = fmt.Fprintf(&builder, " returned an error %s", e.Details)
 	}
 	return builder.String()
 }
@@ -119,16 +119,18 @@ func (l *eventLogger) logWorkloadEvent(ev Event, workloadIdx int) {
 	ev.Source = SourceWorkload
 
 	we := &l.workloadEvents[workloadIdx]
-	we.mu.Lock()
-	idx := we.mu.startIdx
-	we.mu.startIdx = (we.mu.startIdx + 1) % perWorkloadEventRetention
-	if we.mu.numEvents != len(we.events) {
-		we.mu.numEvents++
-	}
-	we.mu.Unlock()
-
+	var idx int
+	func() {
+		we.mu.Lock()
+		defer we.mu.Unlock()
+		idx = we.mu.startIdx
+		we.mu.startIdx = (we.mu.startIdx + 1) % perWorkloadEventRetention
+		if we.mu.numEvents != len(we.events) {
+			we.mu.numEvents++
+		}
+	}()
 	we.events[idx] = ev
-	io.WriteString(l.outputFile, ev.String()+"\n")
+	_, _ = io.WriteString(l.outputFile, ev.String()+"\n")
 }
 
 // logOperationEvent logs an event in the operation log. Up to operationEventRetention
@@ -137,16 +139,18 @@ func (l *eventLogger) logOperationEvent(ev Event) {
 	ev.Timestamp = timeutil.Now()
 	ev.Source = SourceOperation
 
-	l.mu.Lock()
-	idx := l.mu.operationStartIdx
-	l.mu.operationStartIdx = (l.mu.operationStartIdx + 1) % operationEventRetention
-	if l.mu.operationEvents != len(l.operationEvents) {
-		l.mu.operationEvents++
-	}
-	l.mu.Unlock()
-
+	var idx int
+	func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		idx = l.mu.operationStartIdx
+		l.mu.operationStartIdx = (l.mu.operationStartIdx + 1) % operationEventRetention
+		if l.mu.operationEvents != len(l.operationEvents) {
+			l.mu.operationEvents++
+		}
+	}()
 	l.operationEvents[idx] = ev
-	io.WriteString(l.outputFile, ev.String()+"\n")
+	_, _ = io.WriteString(l.outputFile, ev.String()+"\n")
 }
 
 // getWorkloadEvents returns workload events for a given workload worker. Up to
