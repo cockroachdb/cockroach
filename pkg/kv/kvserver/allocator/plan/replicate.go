@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -104,6 +105,7 @@ type AllocatorReplica interface {
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
+	SendStreamStats() rac2.RangeSendStreamStats
 }
 
 // ReplicaPlanner implements the ReplicationPlanner interface.

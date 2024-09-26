@@ -21,6 +21,7 @@ go_library(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/raft",
         "//pkg/roachpb",
