@@ -278,6 +278,7 @@ func createLogicalReplicationStreamPlanHook(
 				DefaultConflictResolution:  defaultConflictResolution,
 				IgnoreCDCIgnoredTTLDeletes: options.IgnoreCDCIgnoredTTLDeletes(),
 				Mode:                       mode,
+				MetricsLabel:               options.metricsLabel,
 			},
 			Progress: progress,
 		}
@@ -318,6 +319,7 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.Cursor,
 			stmt.Options.DefaultFunction,
 			stmt.Options.Mode,
+			stmt.Options.MetricsLabel,
 		},
 		exprutil.Bools{
 			stmt.Options.IgnoreCDCIgnoredTTLDeletes,
@@ -341,6 +343,7 @@ type resolvedLogicalReplicationOptions struct {
 	userFunctions              map[string]int32
 	ignoreCDCIgnoredTTLDeletes bool
 	skipSchemaCheck            bool
+	metricsLabel               string
 }
 
 func evalLogicalReplicationOptions(
@@ -356,6 +359,13 @@ func evalLogicalReplicationOptions(
 			return nil, err
 		}
 		r.mode = mode
+	}
+	if options.MetricsLabel != nil {
+		metricsLabel, err := eval.String(ctx, options.MetricsLabel)
+		if err != nil {
+			return nil, err
+		}
+		r.metricsLabel = metricsLabel
 	}
 	if options.Cursor != nil {
 		cursor, err := eval.String(ctx, options.Cursor)
