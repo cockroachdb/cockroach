@@ -123,6 +123,7 @@ func runDiskStalledWALFailover(
 				continue
 			}
 			func() {
+				stopStall := time.After(30 * time.Second)
 				s.Stall(ctx, c.Node(1))
 				// NB: We use a background context in the defer'ed unstall command,
 				// otherwise on test failure our Unstall calls will be ignored. Leaving
@@ -137,7 +138,7 @@ func runDiskStalledWALFailover(
 				select {
 				case <-ctx.Done():
 					t.Fatalf("context done while stall induced: %s", ctx.Err())
-				case <-time.After(30 * time.Second):
+				case <-stopStall:
 					// Return from the anonymous function, allowing the
 					// defer to unstall the node.
 					return
@@ -151,7 +152,7 @@ func runDiskStalledWALFailover(
 	time.Sleep(1 * time.Second)
 	exit, ok := getProcessExitMonotonic(ctx, t, c, 1)
 	if ok && exit > 0 {
-		t.Fatal("process exited unexectedly")
+		t.Fatal("process exited unexpectedly")
 	}
 
 	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,
