@@ -466,13 +466,12 @@ type Replica struct {
 		// mergeTxnID contains the ID of the in-progress merge transaction, if a
 		// merge is currently in progress. Otherwise, the ID is empty.
 		mergeTxnID uuid.UUID
-		// The state of the Raft state machine. Updated only when raftMu and mu are
-		// both held.
-		state kvserverpb.ReplicaState
 
 		// orRaftMu contains fields which are mutated while both raftMu and mu are
 		// held. They can be accessed when either of the two mutexes is held.
 		orRaftMu struct {
+			// The state of the Raft state machine.
+			state kvserverpb.ReplicaState
 			// Last index/term written to the raft log (not necessarily durable locally
 			// or committed by the group). Note that lastTermNotDurable may be 0 (and
 			// thus invalid) even when lastIndexNotDurable is known, in which case the
@@ -1020,7 +1019,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	oldConf := r.mu.conf
 
 	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
-		total := r.mu.state.Stats.Total()
+		total := r.mu.orRaftMu.state.Stats.Total()
 
 		// Set largestPreviousMaxRangeSizeBytes if the current range size is
 		// greater than the new limit, if the limit has decreased from what we
@@ -1136,7 +1135,7 @@ func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanCo
 	// This method is being removed shortly. We can't pass out a pointer to the
 	// underlying replica's SpanConfig.
 	conf := r.mu.conf
-	return r.mu.state.Desc, &conf
+	return r.mu.orRaftMu.state.Desc, &conf
 }
 
 // LoadSpanConfig loads the authoritative span config for the replica.
@@ -1154,12 +1153,12 @@ func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error)
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc
+	return r.mu.orRaftMu.state.Desc
 }
 
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	r.mu.AssertRHeld()
-	return r.mu.state.Desc
+	return r.mu.orRaftMu.state.Desc
 }
 
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
@@ -1170,7 +1169,7 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
 	if r.mu.conf.GlobalReads {
-		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+		if !r.mu.orRaftMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 			return roachpb.LEAD_FOR_GLOBAL_READS
 		}
 		// The node liveness range ignores zone configs and always uses a
@@ -1234,14 +1233,14 @@ func (r *Replica) GetRangeID() roachpb.RangeID {
 func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return *r.mu.state.GCThreshold
+	return *r.mu.orRaftMu.state.GCThreshold
 }
 
 // GetGCHint returns the GC hint.
 func (r *Replica) GetGCHint() roachpb.GCHint {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return *r.mu.state.GCHint
+	return *r.mu.orRaftMu.state.GCHint
 }
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
@@ -1285,7 +1284,9 @@ func (r *Replica) entireSpanExcludedFromBackupRLocked(
 
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
-	if r.mu.state.Version == nil {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.mu.orRaftMu.state.Version == nil {
 		// We introduced replica versions in v21.1 to service long-running
 		// migrations. For replicas that were instantiated pre-21.1, it's
 		// possible that the replica version is unset (but not for too long!).
@@ -1304,10 +1305,7 @@ func (r *Replica) Version() roachpb.Version {
 		// always have replica versions.
 		return roachpb.Version{}
 	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.Version
+	return *r.mu.orRaftMu.state.Version
 }
 
 // GetRangeInfo atomically reads the range's current range info.
@@ -1351,7 +1349,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
 		r.shouldIgnoreStrictGCEnforcementRLocked() {
-		return *r.mu.state.GCThreshold
+		return *r.mu.orRaftMu.state.GCThreshold
 	}
 
 	// In order to make this check inexpensive, we keep a copy of the reading of
@@ -1364,7 +1362,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
 	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
-		return *r.mu.state.GCThreshold
+		return *r.mu.orRaftMu.state.GCThreshold
 	}
 
 	gcTTL := r.mu.conf.TTL()
@@ -1379,7 +1377,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 			gcThreshold = impliedGCThreshold
 		}
 	}
-	gcThreshold.Forward(*r.mu.state.GCThreshold)
+	gcThreshold.Forward(*r.mu.orRaftMu.state.GCThreshold)
 
 	return gcThreshold
 }
@@ -1445,7 +1443,7 @@ func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
 // getReplicaDescriptorRLocked is like getReplicaDescriptor, but assumes that
 // r.mu is held for either reading or writing.
 func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, error) {
-	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	repDesc, ok := r.mu.orRaftMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 	if ok {
 		return repDesc, nil
 	}
@@ -1492,7 +1490,7 @@ func (r *Replica) getLastReplicaDescriptors() (to, from roachpb.ReplicaDescripto
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return *r.mu.state.Stats
+	return *r.mu.orRaftMu.state.Stats
 }
 
 // SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
@@ -1500,7 +1498,7 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.mu.state.Stats = stats
+	r.mu.orRaftMu.state.Stats = stats
 }
 
 // GetMaxSplitQPS returns the Replica's maximum queries/s request rate over a
@@ -1668,7 +1666,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)
+	ri.ReplicaState = *(protoutil.Clone(&r.mu.orRaftMu.state)).(*kvserverpb.ReplicaState)
 	ri.LastIndex = r.mu.orRaftMu.lastIndexNotDurable
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.orRaftMu.raftLogSize
@@ -1694,7 +1692,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
 	r.sideTransportClosedTimestamp.mu.Unlock()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
-		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
+		ctx, r.RangeID, r.mu.orRaftMu.state.Lease.Replica.NodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
 	if err := r.breaker.Signal().Err(); err != nil {
@@ -1717,7 +1715,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	ctx context.Context, reader storage.Reader,
 ) {
-	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
+	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.orRaftMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -1725,20 +1723,21 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	// We don't care about this field; see comment on
 	// DeprecatedUsingAppliedStateKey for more details. This can be removed once
 	// we stop loading the replica state from snapshot protos.
-	diskState.DeprecatedUsingAppliedStateKey = r.mu.state.DeprecatedUsingAppliedStateKey
-	if !diskState.Equal(r.mu.state) {
+	diskState.DeprecatedUsingAppliedStateKey = r.mu.orRaftMu.state.DeprecatedUsingAppliedStateKey
+	if !diskState.Equal(r.mu.orRaftMu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.
 		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
-			pretty.Diff(diskState, r.mu.state))
-		r.mu.state.Desc, diskState.Desc = nil, nil
+			pretty.Diff(diskState, r.mu.orRaftMu.state))
+		r.mu.orRaftMu.state.Desc, diskState.Desc = nil, nil
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
-			redact.Safe(pretty.Diff(diskState, r.mu.state)))
+			redact.Safe(pretty.Diff(diskState, r.mu.orRaftMu.state)))
 	}
 	if r.IsInitialized() {
-		if !r.startKey.Equal(r.mu.state.Desc.StartKey) {
-			log.Fatalf(ctx, "denormalized start key %s diverged from %s", r.startKey, r.mu.state.Desc.StartKey)
+		if !r.startKey.Equal(r.mu.orRaftMu.state.Desc.StartKey) {
+			log.Fatalf(ctx, "denormalized start key %s diverged from %s",
+				r.startKey, r.mu.orRaftMu.state.Desc.StartKey)
 		}
 	}
 	// A replica is always contained in its descriptor. This is an invariant. When
@@ -1764,13 +1763,13 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/pull/40892
-	if !r.store.TestingKnobs().DisableEagerReplicaRemoval && r.mu.state.Desc.IsInitialized() {
-		replDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	if !r.store.TestingKnobs().DisableEagerReplicaRemoval && r.mu.orRaftMu.state.Desc.IsInitialized() {
+		replDesc, ok := r.mu.orRaftMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 		if !ok {
-			log.Fatalf(ctx, "%+v does not contain local store s%d", r.mu.state.Desc, r.store.StoreID())
+			log.Fatalf(ctx, "%+v does not contain local store s%d", r.mu.orRaftMu.state.Desc, r.store.StoreID())
 		}
 		if replDesc.ReplicaID != r.replicaID {
-			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.mu.state.Desc)
+			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.mu.orRaftMu.state.Desc)
 		}
 	}
 	diskReplID, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, reader)
@@ -1991,12 +1990,13 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 // checkSpanInRangeRLocked returns an error if a request (identified by its
 // key span) can not be run on the replica.
 func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
-	desc := r.mu.state.Desc
+	desc := r.mu.orRaftMu.state.Desc
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
-		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease, r.closedTimestampPolicyRLocked())
+		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
+		r.mu.orRaftMu.state.Lease, r.closedTimestampPolicyRLocked())
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
@@ -2372,7 +2372,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 func (r *Replica) getReplicaDescriptorByIDRLocked(
 	replicaID roachpb.ReplicaID, fallback roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, error) {
-	if repDesc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(replicaID); ok {
+	if repDesc, ok := r.mu.orRaftMu.state.Desc.GetReplicaDescriptorByID(replicaID); ok {
 		return repDesc, nil
 	}
 	if fallback.ReplicaID == replicaID {
@@ -2380,7 +2380,7 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 	}
 	return roachpb.ReplicaDescriptor{},
 		errors.Errorf("replica %d not present in %v, %v",
-			replicaID, fallback, r.mu.state.Desc.Replicas())
+			replicaID, fallback, r.mu.orRaftMu.state.Desc.Replicas())
 }
 
 // checkIfTxnAborted checks the txn AbortSpan for the given

@@ -139,7 +139,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 		return raftpb.HardState{}, raftpb.ConfState{}, nil
 	}
 	// NB: r.mu.state is guarded by both r.raftMu and r.mu.
-	cs := r.mu.state.Desc.Replicas().ConfState()
+	cs := r.mu.orRaftMu.state.Desc.Replicas().ConfState()
 	return hs, cs, nil
 }
 
@@ -147,7 +147,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 func (r *Replica) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.LeaseAppliedIndex
+	return r.mu.orRaftMu.state.LeaseAppliedIndex
 }
 
 // Snapshot implements the raft.Storage interface.
@@ -170,8 +170,8 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	return raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
-			Index: uint64(r.mu.state.RaftAppliedIndex),
-			Term:  uint64(r.mu.state.RaftAppliedIndexTerm),
+			Index: uint64(r.mu.orRaftMu.state.RaftAppliedIndex),
+			Term:  uint64(r.mu.orRaftMu.state.RaftAppliedIndexTerm),
 		},
 	}, nil
 }
@@ -205,10 +205,10 @@ func (r *Replica) GetSnapshot(
 	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
 		r.mu.RLock()
-		spans := rditer.MakeAllKeySpans(r.mu.state.Desc) // needs unreplicated to access Raft state
-		startKey = r.mu.state.Desc.StartKey
+		spans := rditer.MakeAllKeySpans(r.mu.orRaftMu.state.Desc) // needs unreplicated to access Raft state
+		startKey = r.mu.orRaftMu.state.Desc.StartKey
 		if util.RaceEnabled {
-			ss = rditer.MakeAllKeySpanSet(r.mu.state.Desc)
+			ss = rditer.MakeAllKeySpanSet(r.mu.orRaftMu.state.Desc)
 			defer ss.Release()
 		}
 		r.mu.RUnlock()
@@ -233,7 +233,7 @@ func (r *Replica) GetSnapshot(
 	defer r.mu.RUnlock()
 	rangeID := r.RangeID
 	if startKey == nil {
-		startKey = r.mu.state.Desc.StartKey
+		startKey = r.mu.orRaftMu.state.Desc.StartKey
 	}
 
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
@@ -723,14 +723,14 @@ func (r *Replica) applySnapshot(
 	r.mu.orRaftMu.lastTermNotDurable = invalidLastTerm
 	r.mu.orRaftMu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
+	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.orRaftMu.state.Stats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
-	lastKnownLease := r.mu.state.Lease
+	lastKnownLease := r.mu.orRaftMu.state.Lease
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
-	r.mu.state = state
+	r.mu.orRaftMu.state = state
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.mu.orRaftMu.raftLogSizeTrusted = false
@@ -754,7 +754,7 @@ func (r *Replica) applySnapshot(
 
 	if fn := r.store.cfg.TestingKnobs.AfterSnapshotApplication; fn != nil {
 		desc, _ := r.getReplicaDescriptorRLocked()
-		fn(desc, r.mu.state, inSnap)
+		fn(desc, r.mu.orRaftMu.state, inSnap)
 	}
 
 	r.mu.Unlock()

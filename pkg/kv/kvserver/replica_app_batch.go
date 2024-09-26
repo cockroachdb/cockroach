@@ -616,12 +616,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
 	r := b.r
 	r.mu.Lock()
-	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
-	r.mu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
-	r.mu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
+	r.mu.orRaftMu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
+	r.mu.orRaftMu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
+	r.mu.orRaftMu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
 
 	// Sanity check that the RaftClosedTimestamp doesn't go backwards.
-	existingClosed := r.mu.state.RaftClosedTimestamp
+	existingClosed := r.mu.orRaftMu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
 	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) {
 		err := errors.AssertionFailedf(
@@ -631,9 +631,9 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 	r.mu.closedTimestampSetter = b.closedTimestampSetter
 
-	closedTimestampUpdated := r.mu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
-	prevStats := *r.mu.state.Stats
-	*r.mu.state.Stats = *b.state.Stats
+	closedTimestampUpdated := r.mu.orRaftMu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
+	prevStats := *r.mu.orRaftMu.state.Stats
+	*r.mu.orRaftMu.state.Stats = *b.state.Stats
 
 	// If the range is now less than its RangeMaxBytes, clear the history of its
 	// largest previous max bytes.
