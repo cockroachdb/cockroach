@@ -4223,14 +4223,14 @@ skipif config weak-iso-level-configs
 query T noticetrace
 CREATE TABLE t2_fk ( pk INT PRIMARY KEY, t1_fk_col1 CHAR(8), t1_fk_col2 INT4, col3 INT, FOREIGN KEY (t1_fk_col1,t1_fk_col2) REFERENCES t1_fk(col1, col2), FAMILY f1 (pk,t1_fk_col1,t1_fk_col2) );
 ----
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(8\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 onlyif config weak-iso-level-configs
 query T noticetrace
 CREATE TABLE t2_fk ( pk INT PRIMARY KEY, t1_fk_col1 CHAR(8), t1_fk_col2 INT4, col3 INT, FOREIGN KEY (t1_fk_col1,t1_fk_col2) REFERENCES t1_fk(col1, col2), FAMILY f1 (pk,t1_fk_col1,t1_fk_col2) );
 ----
 NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(8\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 # Test trivial data type change
 skipif config local-legacy-schema-changer
@@ -4239,14 +4239,14 @@ skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
 ----
-NOTICE: type of foreign key column "t1_fk_col2" \(INT8\) is not identical to referenced column "t1_fk"."col2" \(INT4\)
+NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
 
 onlyif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
 ----
 NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
-NOTICE: type of foreign key column "t1_fk_col2" \(INT8\) is not identical to referenced column "t1_fk"."col2" \(INT4\)
+NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
 
 # Test validation data type change
 skipif config local-legacy-schema-changer
@@ -4255,14 +4255,14 @@ skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
 ----
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(5\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 onlyif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
 ----
 NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(5\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 
 skipif config local-legacy-schema-changer
