@@ -13,10 +13,15 @@ package tablemetadatacache
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDataDrivenTableMetadataCacheUpdater tests the operations performed by
@@ -39,7 +45,22 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 
 	queryConn := s.ApplicationLayer().SQLConn(t)
 	s.ApplicationLayer().DB()
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
+	jobId := jobRegistry.MakeJobID()
 
+	// Create a new job so that we don't have to wait for the existing one be claimed
+	jr := jobs.Record{
+		JobID:         jobId,
+		Description:   jobspb.TypeUpdateTableMetadataCache.String(),
+		Details:       jobspb.UpdateTableMetadataCacheDetails{},
+		Progress:      jobspb.UpdateTableMetadataCacheProgress{},
+		CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+		Username:      username.NodeUserName(),
+		NonCancelable: true,
+	}
+	job, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobId, nil)
+	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
+	require.NoError(t, err)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, ""), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -54,14 +75,14 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				}
 				return res
 			case "update-cache":
-				updater := newTableMetadataUpdater(s.InternalExecutor().(isql.Executor))
+				updater := newTableMetadataUpdater(job, &metrics, s.InternalExecutor().(isql.Executor)).(*tableMetadataUpdater)
 				updated, err := updater.updateCache(ctx)
 				if err != nil {
 					return err.Error()
 				}
 				return fmt.Sprintf("updated %d table(s)", updated)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(s.InternalExecutor().(isql.Executor))
+				updater := newTableMetadataUpdater(job, &metrics, s.InternalExecutor().(isql.Executor)).(*tableMetadataUpdater)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()
@@ -83,4 +104,54 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 		})
 	})
 
+}
+
+func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var currentProgress float32
+	// Server setup.
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
+	count := 0
+	updater := tableMetadataUpdater{
+		ie:      s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor(),
+		metrics: &metrics,
+		updateProgress: func(ctx context.Context, progress float32) {
+			require.Greater(t, progress, currentProgress, "progress should be greater than current progress")
+			currentProgress = progress
+			count++
+		},
+	}
+
+	require.NoError(t, updater.RunUpdater(ctx))
+	updatedTables := metrics.UpdatedTables.Count()
+	require.Greater(t, updatedTables, int64(0))
+	// Since there are only system tables in the cluster, the threshold to call updateProgress isn't met.
+	// Update progress will only be called once.
+	require.Equal(t, 1, count)
+	require.Equal(t, int64(0), metrics.Errors.Count())
+	require.Equal(t, float32(.99), currentProgress)
+	require.Equal(t, int64(1), metrics.NumRuns.Count())
+	count = 0
+	currentProgress = 0
+
+	// generate 500 random tables
+	conn.Exec(t,
+		`SELECT crdb_internal.generate_test_objects('{"names": "random_table_", "counts": [500], "randomize_columns": true}'::JSONB)`)
+	require.NoError(t, updater.RunUpdater(ctx))
+	// The updated tables metric doesn't reset between runs, so it should increase by updatedTables + 500, because 500
+	// random tables were previously generated
+	expectedTablesUpdated := (updatedTables * 2) + 500
+	require.Equal(t, expectedTablesUpdated, metrics.UpdatedTables.Count())
+	estimatedBatches := int(math.Ceil(float64(expectedTablesUpdated) / float64(tableBatchSize)))
+	estimatedProgressUpdates := estimatedBatches / batchesPerProgressUpdate
+	require.GreaterOrEqual(t, count, estimatedProgressUpdates)
+	require.Equal(t, int64(0), metrics.Errors.Count())
+	require.Equal(t, float32(.99), currentProgress)
+	require.Equal(t, int64(2), metrics.NumRuns.Count())
 }

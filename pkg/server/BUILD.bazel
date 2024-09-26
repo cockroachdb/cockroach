@@ -282,7 +282,6 @@ go_library(
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/syntheticprivilegecache",
         "//pkg/sql/tablemetadatacache",
-        "//pkg/sql/tablemetadatacache/util",
         "//pkg/sql/ttl/ttljob",
         "//pkg/sql/ttl/ttlschedule",
         "//pkg/storage",

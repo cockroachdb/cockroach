@@ -15,33 +15,75 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const pruneBatchSize = 512
 
-// tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
-type tableMetadataUpdater struct {
-	ie isql.Executor
-	// upsertQuery is the query used to upsert table metadata rows,
-	// it is reused for each batch to avoid allocations between batches.
-	upsertQuery *tableMetadataBatchUpsertQuery
+// iTableMetadataUpdater is an interface that exposes a RunUpdater
+// to be tableMetadataUpdateJobResumer. This interface primarily
+// serves as a way to facilitate better testing of tableMetadataUpdater
+// and tableMetadataUpdateJobResumer.
+type iTableMetadataUpdater interface {
+	RunUpdater(ctx context.Context) error
 }
 
-// newTableMetadataUpdater creates a new tableMetadataUpdater.
-func newTableMetadataUpdater(ie isql.Executor) *tableMetadataUpdater {
-	return &tableMetadataUpdater{ie: ie, upsertQuery: newTableMetadataBatchUpsertQuery(tableBatchSize)}
+// tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
+type tableMetadataUpdater struct {
+	ie             isql.Executor
+	metrics        *TableMetadataUpdateJobMetrics
+	updateProgress func(ctx context.Context, progress float32)
+}
+
+var _ iTableMetadataUpdater = &tableMetadataUpdater{}
+
+// newTableMetadataUpdater creates a new iTableMetadataUpdater.
+var newTableMetadataUpdater = func(job *jobs.Job, metrics *TableMetadataUpdateJobMetrics, ie isql.Executor) iTableMetadataUpdater {
+	return &tableMetadataUpdater{
+		ie:      ie,
+		metrics: metrics,
+		updateProgress: func(ctx context.Context, progress float32) {
+			updateProgress(ctx, job, progress)
+		},
+	}
+}
+
+// RunUpdater prunes then updates table_metadata and records metrics for the run.
+func (u *tableMetadataUpdater) RunUpdater(ctx context.Context) error {
+	u.metrics.NumRuns.Inc(1)
+	sw := timeutil.NewStopWatch()
+	sw.Start()
+	if _, err := u.pruneCache(ctx); err != nil {
+		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
+	}
+	rowsUpdated, err := u.updateCache(ctx)
+	sw.Stop()
+	u.metrics.Duration.RecordValue(sw.Elapsed().Nanoseconds())
+	u.metrics.UpdatedTables.Inc(int64(rowsUpdated))
+	return err
 }
 
 // updateCache performs a full update of the system.table_metadata, returning
 // the number of rows updated and the last error encountered.
 func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, err error) {
+	// upsertQuery is the query used to upsert table metadata rows,
+	// it is reused for each batch to avoid allocations between batches.
+	upsert := newTableMetadataBatchUpsertQuery(tableBatchSize)
 	it := newTableMetadataBatchIterator(u.ie)
-
+	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
+	if err != nil {
+		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
+	}
+	estimatedBatches := int(math.Ceil(float64(estimatedRowsToUpdate) / float64(tableBatchSize)))
+	batchNum := 0
 	for {
 		more, err := it.fetchNextBatch(ctx, tableBatchSize)
 		if err != nil {
@@ -49,6 +91,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 			// https://github.com/cockroachdb/cockroach/issues/130040. For now,
 			// we can't continue because the page key is in an invalid state.
 			log.Errorf(ctx, "failed to fetch next batch: %s", err.Error())
+			u.metrics.Errors.Inc(1)
 			return updated, err
 		}
 
@@ -56,14 +99,22 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 			// No more results.
 			break
 		}
-
-		count, err := u.upsertBatch(ctx, it.batchRows)
+		batchNum++
+		count, err := u.upsertBatch(ctx, it.batchRows, upsert)
 		if err != nil {
 			// If an upsert fails, let's just continue to the next batch for now.
 			log.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
+			u.metrics.Errors.Inc(1)
 			continue
 		}
+
 		updated += count
+		if batchNum == estimatedBatches {
+			u.updateProgress(ctx, .99)
+		} else if batchNum%batchesPerProgressUpdate == 0 && estimatedBatches > 0 {
+			progress := float32(updated) / float32(estimatedRowsToUpdate)
+			u.updateProgress(ctx, progress)
+		}
 	}
 
 	return updated, err
@@ -108,13 +159,12 @@ RETURNING table_id`, pruneBatchSize)
 // upsertBatch upserts the given batch of table metadata rows returning
 // the number of rows upserted and any error that occurred.
 func (u *tableMetadataUpdater) upsertBatch(
-	ctx context.Context, batch []tableMetadataIterRow,
+	ctx context.Context, batch []tableMetadataIterRow, upsertQuery *tableMetadataBatchUpsertQuery,
 ) (int, error) {
-	u.upsertQuery.resetForBatch()
-
+	upsertQuery.resetForBatch()
 	upsertBatchSize := 0
 	for _, row := range batch {
-		if err := u.upsertQuery.addRow(&row); err != nil {
+		if err := upsertQuery.addRow(&row); err != nil {
 			log.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
 			continue
 		}
@@ -130,9 +180,25 @@ func (u *tableMetadataUpdater) upsertBatch(
 		"batch-upsert-table-metadata",
 		nil, // txn
 		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
-		u.upsertQuery.getQuery(),
-		u.upsertQuery.args...,
+		upsertQuery.getQuery(),
+		upsertQuery.args...,
 	)
+}
+
+func (u *tableMetadataUpdater) getRowsToUpdateCount(ctx context.Context) (int, error) {
+	query := `
+SELECT count(*)::INT 
+FROM system.namespace t
+JOIN system.namespace d ON t."parentID" = d.id
+AS OF SYSTEM TIME follower_read_timestamp()
+WHERE d."parentID" = 0 and t."parentSchemaID" != 0
+`
+	row, err := u.ie.QueryRow(ctx, "get-table-metadata-row-count", nil, query)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(tree.MustBeDInt(row[0])), nil
 }
 
 type tableMetadataBatchUpsertQuery struct {
@@ -154,7 +220,11 @@ func newTableMetadataBatchUpsertQuery(batchLen int) *tableMetadataBatchUpsertQue
 // another batch.
 func (q *tableMetadataBatchUpsertQuery) resetForBatch() {
 	q.stmt.Reset()
-	q.stmt.WriteString(`
+	q.stmt.WriteString(upsertQuery)
+	q.args = q.args[:0]
+}
+
+var upsertQuery = `
 UPSERT INTO system.table_metadata (
 	db_id,
 	table_id,
@@ -172,9 +242,7 @@ UPSERT INTO system.table_metadata (
 	perc_live_data,
   last_updated
 ) VALUES
-`)
-	q.args = q.args[:0]
-}
+`
 
 // addRow adds a tableMetadataIterRow to the batch upsert query.
 func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error {

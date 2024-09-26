@@ -1204,6 +1204,7 @@ CREATE TABLE system.mvcc_statistics (
     last_update_error string,
     last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
     table_type string NOT NULL,
+    details jsonb not null,
 		crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
     CONSTRAINT "primary" PRIMARY KEY (db_id, table_id),
 		INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
