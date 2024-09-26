@@ -38,9 +38,8 @@ import (
 // range at the leader. It must be created for a particular leader term, and
 // closed if the term changes.
 //
-// Almost none of the methods are called with Replica.mu held. The caller and
-// callee should typically order their mutexes before Replica.mu. The one
-// exception is MaybeSendPingsLocked.
+// None of the methods are called with Replica.mu held. The caller and callee
+// should order their mutexes before Replica.mu.
 type RangeController interface {
 	// WaitForEval seeks admission to evaluate a request at the given priority.
 	// This blocks until there are positive tokens available for the request to
@@ -71,12 +70,12 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, AdmittedVector)
-	// MaybeSendPingsLocked sends a MsgApp ping to each raft peer in
+	// MaybeSendPingsRaftMuLocked sends a MsgApp ping to each raft peer in
 	// StateReplicate whose admitted vector is lagging, and there wasn't a
 	// recent MsgApp to this peer.
 	//
-	// Requires replica.raftMu and replica.mu to be held.
-	MaybeSendPingsLocked()
+	// Requires replica.raftMu to be held.
+	MaybeSendPingsRaftMuLocked()
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -97,21 +96,20 @@ type RangeController interface {
 
 // RaftInterface implements methods needed by RangeController.
 //
-// Locking reminder: as noted in replicaSendStream, replicaSendStream.mu is
-// ordered after Replica.mu.
+// Replica.mu is not held when calling any methods. Replica.raftMu is held,
+// though is not needed, and is mentioned in the method names purely from an
+// informational perspective.
 //
 // TODO(pav-kv): This interface a placeholder for the interface containing raft
 // methods. Replace this as part of #128019.
 type RaftInterface interface {
-	// SendPingReplicaMuLocked sends a MsgApp ping to the given raft peer if
+	// SendPingRaftMuLocked sends a MsgApp ping to the given raft peer if
 	// there wasn't a recent MsgApp to this peer. The message is added to raft's
 	// message queue, and will be extracted and sent during the next Ready
 	// processing.
 	//
 	// If the peer is not in StateReplicate, this call does nothing.
-	//
-	// Requires Replica.mu to be held.
-	SendPingReplicaMuLocked(roachpb.ReplicaID) bool
+	SendPingRaftMuLocked(roachpb.ReplicaID) bool
 	// MakeMsgAppRaftMuLocked is used to construct a MsgApp for entries in
 	// [start, end) and must only be called in MsgAppPull mode for followers.
 	//
@@ -137,7 +135,11 @@ type RaftInterface interface {
 	// flow stays in StateReplicate. We should define or eliminate these cases.
 	//
 	// TODO(sumeer): This is a temporary API. LogSnapshot and LogSlice will
-	// replace it.
+	// replace it, and we will do this in two steps: (a) create a LogSlice while
+	// holding raftMu, which will not use RaftInterface, (b) call the following
+	// method with the LogSlice, and the callee will make the MsgApp and behave
+	// as if it was sent (i.e., update Next). Since we are not holding
+	// Replica.mu, the callee will need to acquire Replica.mu.
 	MakeMsgAppRaftMuLocked(
 		replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
 }
@@ -761,16 +763,14 @@ func (rc *rangeController) AdmitRaftMuLocked(
 	}
 }
 
-// MaybeSendPingsLocked implements RangeController.
-func (rc *rangeController) MaybeSendPingsLocked() {
-	// NB: Replica.mu is already held, so no IO is permitted.
+// MaybeSendPingsRaftMuLocked implements RangeController.
+func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 	for id, state := range rc.replicaMap {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
-		// s.shouldPing acquires replicaSendStream.mu.
 		if s := state.sendStream; s != nil && s.shouldPing() {
-			rc.opts.RaftInterface.SendPingReplicaMuLocked(id)
+			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
 		}
 	}
 }
@@ -976,10 +976,7 @@ func NewReplicaState(
 type replicaSendStream struct {
 	parent *replicaState
 
-	// Because of MaybeSendPingsLocked being called with Replica.mu held, this
-	// mutex is ordered after Replica.mu. This ordering is a bit unfortunate, in
-	// that we need to ensure that we never need to acquire Replica.mu while
-	// holding replicaSendStream.mu.
+	// Mutex is ordered before Replica.mu.
 	mu struct {
 		syncutil.Mutex
 		// connectedStateStart is the time when the connectedState was last
