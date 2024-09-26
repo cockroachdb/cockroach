@@ -1654,31 +1654,14 @@ func stepLeader(r *raft, m pb.Message) error {
 				cc = ccc
 			}
 			if cc != nil {
-				// Per the "Apply" invariant in the config change safety argument[^1],
-				// the leader must not append a config change if it hasn't applied all
-				// config changes in its log.
-				//
-				// [^1]: https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
-				alreadyPending := r.pendingConfIndex > r.raftLog.applied
-
-				alreadyJoint := len(r.config.Voters[1]) > 0
-				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
-
-				var failedCheck string
-				if alreadyPending {
-					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
-				} else if alreadyJoint && !wantsLeaveJoint {
-					failedCheck = "must transition out of joint config first"
-				} else if !alreadyJoint && wantsLeaveJoint {
-					failedCheck = "not in joint state; refusing empty conf change"
+				ccCtx := confchange.ValidationContext{
+					CurConfig:                         &r.config,
+					Applied:                           r.raftLog.applied,
+					PendingConfIndex:                  r.pendingConfIndex,
+					DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
 				}
-
-				// Allow disabling config change constraints that are guaranteed by the
-				// upper state machine layer (incorrect ones will apply as no-ops).
-				//
-				// NB: !alreadyPending requirement is always respected, for safety.
-				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
+				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1

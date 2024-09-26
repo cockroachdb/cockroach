@@ -528,6 +528,8 @@ func checkReplicationChangeAllowed(
 		return err
 	}
 
+	// TODO(nvanbenschoten): check against direct voter removal.
+
 	return nil
 }
 
