@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -112,6 +113,10 @@ func (sr *simulatorReplica) AdminTransferLease(
 	}
 
 	return nil
+}
+
+func (sr *simulatorReplica) SendStreamStats() rac2.RangeSendStreamStats {
+	return rac2.RangeSendStreamStats{}
 }
 
 // Replica returns the underlying kvserver replica, however when called from
