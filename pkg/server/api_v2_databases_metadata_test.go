@@ -620,8 +620,7 @@ func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
-	defer conn.Close()
+	conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 
 	ts := testCluster.Server(0)
 
@@ -634,21 +633,27 @@ func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 		failed := makeApiRequest[interface{}](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
-		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
-		require.NoError(t, e)
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
 
 		mdResp := makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, "NOT_RUNNING", mdResp.CurrentStatus)
+		require.Equal(t, false, mdResp.AutomaticUpdatesEnabled)
+		require.Equal(t, 20*time.Minute, mdResp.DataValidDuration)
 
-		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
-		require.NoError(t, e)
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
 		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
-		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
-		require.NoError(t, e)
+		conn.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		mdResp = makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, "NOT_RUNNING", mdResp.CurrentStatus)
+
+		// Test setting changes are reflected in the response.
+		conn.Exec(t, "SET CLUSTER SETTING obs.tablemetadata.data_valid_duration = '10m'")
+		conn.Exec(t, "SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = true")
+		mdResp = makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, true, mdResp.AutomaticUpdatesEnabled)
+		require.Equal(t, 10*time.Minute, mdResp.DataValidDuration)
 	})
 }
 
