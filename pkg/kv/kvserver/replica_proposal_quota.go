@@ -22,9 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
+)
+
+var enableRaftProposalQuota = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft.proposal_quota.enabled",
+	"set to true to enable waiting for and acquiring quota before issuing Raft "+
+		"proposals, false to disable",
+	true,
 )
 
 func (r *Replica) maybeAcquireProposalQuota(
@@ -33,6 +42,15 @@ func (r *Replica) maybeAcquireProposalQuota(
 	// We don't want to delay lease requests or transfers, in particular
 	// expiration lease extensions. These are small and latency-sensitive.
 	if ba.IsSingleRequestLeaseRequest() || ba.IsSingleTransferLeaseRequest() {
+		return nil, nil
+	}
+
+	// If the quota pool is disabled via the setting, we don't need to acquire
+	// quota.
+	if !enableRaftProposalQuota.Get(&r.store.cfg.Settings.SV) {
+		// TODO(kvoli): Once we have a setting for RACv2 pull vs push mode, we
+		// should abstract this check into a function that also disables quota
+		// acquisition for pull mode.
 		return nil, nil
 	}
 

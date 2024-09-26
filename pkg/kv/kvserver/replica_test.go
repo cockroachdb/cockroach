@@ -7205,6 +7205,41 @@ func TestReplicaDestroy(t *testing.T) {
 	require.Equal(t, expectedKeys, actualKeys)
 }
 
+// TestQuotaPoolDisabled tests that the no quota is acquired by proposals when
+// the quota pool enablement setting is disabled.
+func TestQuotaPoolDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tsc := TestStoreConfig(nil /* clock */)
+	enableRaftProposalQuota.Override(ctx, &tsc.Settings.SV, false)
+	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+		// Expect no quota allocation when the quota pool is disabled.
+		require.Nil(t, args.QuotaAlloc)
+		return nil
+	}
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	// Flush a write all the way through the Raft proposal pipeline to ensure
+	// that the replica becomes the Raft leader and sets up its quota pool.
+	iArgs := incrementArgs([]byte("a"), 1)
+	_, pErr := tc.SendWrapped(iArgs)
+	require.Nil(t, pErr)
+
+	initialQuota := tc.repl.QuotaAvailable()
+	for i := 0; i < 10; i++ {
+		pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
+		_, pErr = tc.SendWrapped(&pArg)
+		require.Nil(t, pErr)
+	}
+	require.Equal(t, initialQuota, tc.repl.QuotaAvailable())
+}
+
 // TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by
 // proposals is released back into the quota pool if the proposal fails before
 // being submitted to Raft.
