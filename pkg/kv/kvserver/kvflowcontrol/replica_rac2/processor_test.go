@@ -143,6 +143,12 @@ func (rn *testRaftNode) SendPingReplicaMuLocked(to roachpb.ReplicaID) bool {
 	return true
 }
 
+func (rn *testRaftNode) MakeMsgAppRaftMuLocked(
+	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
+) (raftpb.Message, error) {
+	panic("unimplemented")
+}
+
 func (rn *testRaftNode) setMark(t *testing.T, mark rac2.LogMark) {
 	require.True(t, mark.After(rn.mark))
 	rn.mark = mark

@@ -323,6 +323,12 @@ func (r *testingRCRange) SendPingReplicaMuLocked(roachpb.ReplicaID) bool {
 	return false
 }
 
+func (r *testingRCRange) MakeMsgAppRaftMuLocked(
+	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
+) (raftpb.Message, error) {
+	panic("unimplemented")
+}
+
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1278,17 +1284,20 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
 
 	// No outbound msgs.
-	event := RaftEventFromMsgStorageAppendAndMsgApps(20, appendMsg, nil, msgAppScratch)
+	event := RaftEventFromMsgStorageAppendAndMsgApps(
+		MsgAppPush, 20, appendMsg, nil, msgAppScratch)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
 	require.Nil(t, event.MsgApps)
 	// Zero value.
-	event = RaftEventFromMsgStorageAppendAndMsgApps(20, raftpb.Message{}, nil, msgAppScratch)
+	event = RaftEventFromMsgStorageAppendAndMsgApps(
+		MsgAppPush, 20, raftpb.Message{}, nil, msgAppScratch)
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
 	// is for the leader.
-	event = RaftEventFromMsgStorageAppendAndMsgApps(20, appendMsg, outboundMsgs[:2], msgAppScratch)
+	event = RaftEventFromMsgStorageAppendAndMsgApps(
+		MsgAppPush, 20, appendMsg, outboundMsgs[:2], msgAppScratch)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
@@ -1296,7 +1305,8 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// Outbound msgs contains MsgApps for followers. We call this twice to
 	// ensure msgAppScratch is cleared before reuse.
 	for i := 0; i < 2; i++ {
-		event = RaftEventFromMsgStorageAppendAndMsgApps(19, appendMsg, outboundMsgs, msgAppScratch)
+		event = RaftEventFromMsgStorageAppendAndMsgApps(
+			MsgAppPush, 19, appendMsg, outboundMsgs, msgAppScratch)
 		require.Equal(t, uint64(10), event.Term)
 		require.Equal(t, appendMsg.Snapshot, event.Snap)
 		require.Equal(t, appendMsg.Entries, event.Entries)
