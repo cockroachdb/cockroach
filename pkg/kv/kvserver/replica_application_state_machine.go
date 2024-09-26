@@ -134,9 +134,8 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	r := sm.r
 	mb := &sm.ephemeralBatch
 	mb.r = r
-	r.mu.RLock()
+	r.raftMu.AssertHeld()
 	mb.state = r.mu.orRaftMu.state
-	r.mu.RUnlock()
 	return mb
 }
 
