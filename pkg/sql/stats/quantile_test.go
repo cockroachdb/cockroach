@@ -199,8 +199,8 @@ func randBounds(colType *types.T, rng *rand.Rand, num int) tree.Datums {
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(colType.Precision())
 		var lo, hi int
 		if pgdate.TimeInfinitySec < math.MaxInt/2 {
-			lo = int(pgdate.TimeNegativeInfinitySec)
-			hi = int(pgdate.TimeInfinitySec)
+			lo = int(tree.MinSupportedTimeSec)
+			hi = int(tree.MaxSupportedTimeSec)
 		} else {
 			// Make sure we won't overflow in randInts (i.e. make sure that
 			// hi - lo + 1 <= math.MaxInt which requires -2 for hi).
@@ -209,6 +209,17 @@ func randBounds(colType *types.T, rng *rand.Rand, num int) tree.Datums {
 			hi = (1 << w) - 2
 		}
 		secs := randInts(num, lo, hi)
+
+		// Craft edge cases near the range boundaries to expose potential bugs in the
+		// "round and check" logic.
+		edgeCases := randInts(5, lo, min(lo+10000, hi) /* use "min" to avoid overflow */)
+		edgeCases = append(edgeCases, randInts(5, max(hi-10000, lo) /* use "max" to avoid overflow */, hi)...)
+		edgeCases = append(edgeCases, lo)
+		edgeCases = append(edgeCases, hi)
+
+		secs = append(secs, edgeCases...)
+		datums = append(datums, make(tree.Datums, len(edgeCases))...)
+
 		for i := range datums {
 			t := timeutil.Unix(int64(secs[i]), 0)
 			var err error
