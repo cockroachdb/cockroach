@@ -36,6 +36,8 @@ var ConnIdentityMapConf = settings.RegisterStringSetting(
 	},
 	),
 	settings.WithPublic,
+	settings.WithReportable(false),
+	settings.Sensitive,
 )
 
 // loadLocalIdentityMapUponRemoteSettingChange initializes the local

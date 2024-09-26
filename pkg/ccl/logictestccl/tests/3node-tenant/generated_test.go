@@ -2671,13 +2671,6 @@ func TestTenantLogicCCL_new_schema_changer(
 	runCCLLogicTest(t, "new_schema_changer")
 }
 
-func TestTenantLogicCCL_oidc(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "oidc")
-}
-
 func TestTenantLogicCCL_partitioning_enum(
 	t *testing.T,
 ) {
@@ -2788,6 +2781,13 @@ func TestTenantLogicCCL_select_for_update_read_committed(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "select_for_update_read_committed")
+}
+
+func TestTenantLogicCCL_senstive_cluster_settings(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "senstive_cluster_settings")
 }
 
 func TestTenantLogicCCL_show_create(
