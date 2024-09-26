@@ -491,3 +491,13 @@ func (r *replicaForRACv2) LeaseholderMuRLocked() roachpb.ReplicaID {
 func (r *replicaForRACv2) IsScratchRange() bool {
 	return (*Replica)(r).IsScratchRange()
 }
+
+// MuLock implements replica_rac2.ReplicaForRaftNode.
+func (r *replicaForRACv2) MuLock() {
+	r.mu.Lock()
+}
+
+// MuUnlock implements replica_rac2.ReplicaForRaftNode.
+func (r *replicaForRACv2) MuUnlock() {
+	r.mu.Unlock()
+}
