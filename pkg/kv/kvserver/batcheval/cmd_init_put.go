@@ -42,6 +42,7 @@ func InitPut(
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		OriginID:                       h.WriteOptions.GetOriginID(),
+		OriginTimestamp:                h.WriteOptions.GetOriginTimestamp(),
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       fs.BatchEvalReadCategory,

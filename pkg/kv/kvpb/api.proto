@@ -3020,6 +3020,10 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
+  // OriginTimestamp is bound to the MVCCValueHeader of written key in the
+  // batch. Note that a kv client cannot set this if they use CPut's origin
+  // timestamp arg.
+  util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
