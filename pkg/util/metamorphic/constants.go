@@ -171,11 +171,9 @@ func ConstantWithTestBoolWithoutLogging(name string, defaultValue bool) bool {
 // included in the random choice.
 //
 // The given name is used for logging.
-func ConstantWithTestChoice(
-	name string, defaultValue interface{}, otherValues ...interface{},
-) interface{} {
+func ConstantWithTestChoice[T any](name string, defaultValue T, otherValues ...T) T {
 	if metamorphicutil.IsMetamorphicBuild {
-		values := append([]interface{}{defaultValue}, otherValues...)
+		values := append([]T{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()
 		value := values[rng.r.Int63n(int64(len(values)))]

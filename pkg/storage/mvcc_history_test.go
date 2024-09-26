@@ -59,10 +59,10 @@ var (
 	cmdDeleteRangeTombstoneKnownStats = metamorphic.ConstantWithTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
 	mvccHistoriesReader = metamorphic.ConstantWithTestChoice("mvcc-histories-reader",
-		"engine", "readonly", "batch", "snapshot", "efos").(string)
+		"engine", "readonly", "batch", "snapshot", "efos")
 	mvccHistoriesUseBatch   = metamorphic.ConstantWithTestBool("mvcc-histories-use-batch", false)
 	mvccHistoriesPeekBounds = metamorphic.ConstantWithTestChoice("mvcc-histories-peek-bounds",
-		"none", "left", "right", "both").(string)
+		"none", "left", "right", "both")
 	sstIterVerify           = metamorphic.ConstantWithTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = metamorphic.ConstantWithTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
 	separateEngineBlocks    = metamorphic.ConstantWithTestBool("mvcc-histories-separate-engine-blocks", false)
