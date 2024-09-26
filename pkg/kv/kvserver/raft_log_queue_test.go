@@ -644,7 +644,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 		index2 = 60
 	)
 
-	r.mu.state.RaftAppliedIndex = index1
+	r.mu.orRaftMu.state.RaftAppliedIndex = index1
 	// Add first constraint.
 	_, cleanup1 := r.addSnapshotLogTruncationConstraint(ctx, id1, false /* initial */, storeID)
 	exp1 := map[uuid.UUID]snapTruncationInfo{id1: {index: index1}}
@@ -652,7 +652,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// Make sure it registered.
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
 
-	r.mu.state.RaftAppliedIndex = index2
+	r.mu.orRaftMu.state.RaftAppliedIndex = index2
 	// Add another constraint with the same id. Extremely unlikely in practice
 	// but we want to make sure it doesn't blow anything up. Collisions are
 	// handled by ignoring the colliding update.
@@ -673,7 +673,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// colliding update at index2 is not represented.
 	assertMin(index1, time.Time{})
 
-	r.mu.state.RaftAppliedIndex = index2
+	r.mu.orRaftMu.state.RaftAppliedIndex = index2
 	// Add another, higher, index. We're not going to notice it's around
 	// until the lower one disappears.
 	_, cleanup3 := r.addSnapshotLogTruncationConstraint(ctx, id2, false /* initial */, storeID)

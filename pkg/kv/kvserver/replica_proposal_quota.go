@@ -38,7 +38,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
-	desc := r.mu.state.Desc
+	desc := r.mu.orRaftMu.state.Desc
 	r.mu.RUnlock()
 
 	// Quota acquisition only takes place on the leader replica,
@@ -120,7 +120,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 				logSlowRaftProposalQuotaAcquisition,
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), now)
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.orRaftMu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		} else if r.mu.proposalQuota != nil {
@@ -156,7 +156,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	minIndex := kvpb.RaftIndex(status.Applied)
 
 	r.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
-		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
+		rep, ok := r.mu.orRaftMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
 			return
 		}

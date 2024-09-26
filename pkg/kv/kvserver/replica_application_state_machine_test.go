@@ -94,17 +94,17 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
+				Index: uint64(r.mu.orRaftMu.state.RaftAppliedIndex + 1),
 				Type:  raftpb.EntryConfChange,
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.mu.orRaftMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.mu.orRaftMu.state.LeaseAppliedIndex + 1,
 				ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 					State:          &kvserverpb.ReplicaState{Desc: &newDesc},
 					ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
-					WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
+					WriteTimestamp: r.mu.orRaftMu.state.GCThreshold.Add(1, 0),
 				},
 			},
 			ConfChangeV1: &confChange,
@@ -183,8 +183,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 
 		r.raftMu.Lock()
 		r.mu.Lock()
-		raftAppliedIndex := r.mu.state.RaftAppliedIndex
-		truncatedIndex := r.mu.state.TruncatedState.Index
+		raftAppliedIndex := r.mu.orRaftMu.state.RaftAppliedIndex
+		truncatedIndex := r.mu.orRaftMu.state.TruncatedState.Index
 		raftLogSize := r.mu.orRaftMu.raftLogSize
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
@@ -205,8 +205,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.mu.orRaftMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.mu.orRaftMu.state.LeaseAppliedIndex + 1,
 				ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 					State: &kvserverpb.ReplicaState{
 						TruncatedState: &kvserverpb.RaftTruncatedState{
@@ -215,7 +215,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 					},
 					RaftLogDelta:           -1,
 					RaftExpectedFirstIndex: expectedFirstIndex,
-					WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
+					WriteTimestamp:         r.mu.orRaftMu.state.GCThreshold.Add(1, 0),
 				},
 			},
 		}
@@ -244,8 +244,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			// log index that we pulled out of thin air above.
 			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 
-			require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
-			require.Equal(t, truncatedIndex+1, r.mu.state.TruncatedState.Index)
+			require.Equal(t, raftAppliedIndex+1, r.mu.orRaftMu.state.RaftAppliedIndex)
+			require.Equal(t, truncatedIndex+1, r.mu.orRaftMu.state.TruncatedState.Index)
 			expectedSize := raftLogSize - 1
 			// We typically have a raftLogSize > 0 (based on inspecting some test
 			// runs), but we can't be sure.
@@ -256,7 +256,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			require.Equal(t, accurate, r.mu.orRaftMu.raftLogSizeTrusted)
 			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
 			require.NoError(t, err)
-			require.Equal(t, r.mu.state.TruncatedState.Index, truncState.Index)
+			require.Equal(t, r.mu.orRaftMu.state.TruncatedState.Index, truncState.Index)
 		}()
 	})
 }
@@ -297,8 +297,8 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
 			r.mu.Lock()
-			raftAppliedIndex := r.mu.state.RaftAppliedIndex
-			truncatedIndex := r.mu.state.TruncatedState.Index
+			raftAppliedIndex := r.mu.orRaftMu.state.RaftAppliedIndex
+			truncatedIndex := r.mu.orRaftMu.state.TruncatedState.Index
 			raftLogSize := r.mu.orRaftMu.raftLogSize
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
@@ -324,8 +324,8 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 				},
 				ID: raftlog.MakeCmdIDKey(),
 				Cmd: kvserverpb.RaftCommand{
-					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+					ProposerLeaseSequence: r.mu.orRaftMu.state.Lease.Sequence,
+					MaxLeaseIndex:         r.mu.orRaftMu.state.LeaseAppliedIndex + 1,
 					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 						State: &kvserverpb.ReplicaState{
 							TruncatedState: &kvserverpb.RaftTruncatedState{
@@ -334,7 +334,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 						},
 						RaftLogDelta:           -1,
 						RaftExpectedFirstIndex: expectedFirstIndex,
-						WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
+						WriteTimestamp:         r.mu.orRaftMu.state.GCThreshold.Add(1, 0),
 					},
 				},
 			}
@@ -356,9 +356,9 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			func() {
 				r.mu.Lock() // TODO(pav-kv): don't need these
 				defer r.mu.Unlock()
-				require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
+				require.Equal(t, raftAppliedIndex+1, r.mu.orRaftMu.state.RaftAppliedIndex)
 				// No truncation.
-				require.Equal(t, truncatedIndex, r.mu.state.TruncatedState.Index)
+				require.Equal(t, truncatedIndex, r.mu.orRaftMu.state.TruncatedState.Index)
 				require.True(t, r.mu.orRaftMu.raftLogSizeTrusted)
 			}()
 			require.False(t, r.pendingLogTruncations.isEmptyLocked())
@@ -382,7 +382,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			if r.mu.state.TruncatedState.Index != truncatedIndex+1 {
+			if r.mu.orRaftMu.state.TruncatedState.Index != truncatedIndex+1 {
 				return errors.Errorf("not truncated")
 			}
 			if r.mu.orRaftMu.raftLogSize != expectedSize {
@@ -425,7 +425,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	sm := r.getStateMachine()
 
 	r.mu.Lock()
-	raftAppliedIndex := r.mu.state.RaftAppliedIndex
+	raftAppliedIndex := r.mu.orRaftMu.state.RaftAppliedIndex
 	r.mu.Unlock()
 
 	descWriteRepr := func(v string) (kvpb.Request, []byte) {
@@ -455,8 +455,8 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.mu.orRaftMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.mu.orRaftMu.state.LeaseAppliedIndex + 1,
 				WriteBatch:            &kvserverpb.WriteBatch{Data: repr},
 			},
 		}

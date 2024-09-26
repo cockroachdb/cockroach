@@ -153,7 +153,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 	// we'll allow. Don't bother with any multipliers/byte tolerance calculations
 	// if it is.
 	rangeSizeHardCap := backpressureRangeHardCap.Get(&r.store.cfg.Settings.SV)
-	size := r.mu.state.Stats.Total()
+	size := r.mu.orRaftMu.state.Stats.Total()
 	if size >= rangeSizeHardCap {
 		return true
 	}

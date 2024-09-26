@@ -250,7 +250,7 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	if fromReplica == nil {
 		return false
 	}
-	desc := toReplica.mu.state.Desc
+	desc := toReplica.mu.orRaftMu.state.Desc
 	_, found := desc.GetReplicaDescriptorByID(fromReplica.ReplicaID)
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }

@@ -369,7 +369,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			// back to indicate that we have no idea who the range lease holder might
 			// be; we've withdrawn from active duty.
 			llHandle.resolve(kvpb.NewError(
-				kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.mu.state.Desc,
+				kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.mu.orRaftMu.state.Desc,
 					"lease acquisition task couldn't be started; node is shutting down")))
 		}
 		return llHandle
@@ -706,7 +706,7 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		MinProposedTs:      r.mu.minLeaseProposedTS,
 		MinValidObservedTs: r.mu.minValidObservedTimestamp,
 		RequestTs:          reqTS,
-		Lease:              *r.mu.state.Lease,
+		Lease:              *r.mu.orRaftMu.state.Lease,
 	}
 	// TODO(nvanbenschoten): evaluate whether this is too expensive to compute for
 	// every lease status request. We may need to cache this result. If, at that
@@ -770,7 +770,7 @@ func (r *Replica) GetRangeLeaseDuration() time.Duration {
 // callers: when expiration leases don't quiesce and are always eagerly renewed.
 func (r *Replica) requiresExpirationLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil ||
-		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+		r.mu.orRaftMu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
@@ -839,7 +839,7 @@ func (r *Replica) requestLeaseLocked(
 		return r.mu.pendingLeaseRequest.newResolvedHandle(kvpb.NewError(err))
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(),
+		ctx, repDesc, status, r.mu.orRaftMu.state.Desc.StartKey.AsRawKey(),
 		false /* bypassSafetyChecks */, limiter)
 }
 
@@ -887,7 +887,7 @@ func (r *Replica) AdminTransferLease(
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil
 		}
-		desc := r.mu.state.Desc
+		desc := r.mu.orRaftMu.state.Desc
 		if !status.Lease.OwnedBy(r.store.StoreID()) {
 			return nil, nil, kvpb.NewNotLeaseHolderError(status.Lease, r.store.StoreID(), desc,
 				"can't transfer the lease because this store doesn't own it")
@@ -992,9 +992,9 @@ func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 
 func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return *r.mu.state.Lease, nextLease
+		return *r.mu.orRaftMu.state.Lease, nextLease
 	}
-	return *r.mu.state.Lease, roachpb.Lease{}
+	return *r.mu.orRaftMu.state.Lease, roachpb.Lease{}
 }
 
 // RevokeLease stops the replica from using its current lease, if that lease
@@ -1003,7 +1003,7 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.state.Lease.Sequence == seq {
+	if r.mu.orRaftMu.state.Lease.Sequence == seq {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 }
@@ -1096,7 +1096,7 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 	}
 	if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Case (3): not leaseholder.
-		_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(st.Lease.Replica.StoreID)
+		_, stillMember := r.mu.orRaftMu.state.Desc.GetReplicaDescriptor(st.Lease.Replica.StoreID)
 		if !stillMember {
 			// This would be the situation in which the lease holder gets removed when
 			// holding the lease, or in which a lease request erroneously gets accepted
@@ -1250,11 +1250,11 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				// hit this path more. Do we need to add the lease to this
 				// NotLeaseHolder error to ensure fast redirection?
 				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(
-					kvpb.NewNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc, msg))
+					kvpb.NewNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.orRaftMu.state.Desc, msg))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
 				if !status.Lease.OwnedBy(r.store.StoreID()) {
-					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
+					_, stillMember := r.mu.orRaftMu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
 						// See corresponding comment in leaseGoodToGoRLocked.
 						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
@@ -1263,7 +1263,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
 					return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(
-						kvpb.NewNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc,
+						kvpb.NewNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.orRaftMu.state.Desc,
 							"lease held by different store"))
 				}
 
@@ -1291,7 +1291,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(
-					kvpb.NewNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc, "lease proscribed"))
+					kvpb.NewNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.orRaftMu.state.Desc, "lease proscribed"))
 
 			default:
 				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewErrorf("unknown lease status state %v", status)

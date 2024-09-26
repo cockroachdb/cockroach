@@ -98,7 +98,7 @@ func (r *Replica) Metrics(
 		conf:                     r.mu.conf,
 		vitalityMap:              vitalityMap,
 		clusterNodes:             clusterNodes,
-		desc:                     r.mu.state.Desc,
+		desc:                     r.mu.orRaftMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
@@ -111,7 +111,7 @@ func (r *Replica) Metrics(
 		lockTableMetrics:         lockTableMetrics,
 		raftLogSize:              r.mu.orRaftMu.raftLogSize,
 		raftLogSizeTrusted:       r.mu.orRaftMu.raftLogSizeTrusted,
-		rangeSize:                r.mu.state.Stats.Total(),
+		rangeSize:                r.mu.orRaftMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
@@ -359,7 +359,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
+	return r.mu.orRaftMu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -390,7 +390,7 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}
-	size := r.mu.state.Stats.Total()
+	size := r.mu.orRaftMu.state.Stats.Total()
 	maxSize := int64(float64(maxBytes)*mult) + 1
 	if maxBytes <= 0 || size <= maxSize {
 		return false, 0
