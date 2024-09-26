@@ -192,18 +192,10 @@ func randBounds(colType *types.T, rng *rand.Rand, num int) tree.Datums {
 		}
 	case types.TimestampFamily, types.TimestampTZFamily:
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(colType.Precision())
-		var lo, hi int
-		if pgdate.TimeInfinitySec < math.MaxInt/2 {
-			lo = int(pgdate.TimeNegativeInfinitySec)
-			hi = int(pgdate.TimeInfinitySec)
-		} else {
-			// Make sure we won't overflow in randInts (i.e. make sure that
-			// hi - lo + 1 <= math.MaxInt which requires -2 for hi).
-			w := int(bits.UintSize) - 2
-			lo = -1 << w
-			hi = (1 << w) - 2
-		}
+		lo := int(tree.MinSupportedTimeSec)
+		hi := int(tree.MaxSupportedTimeSec)
 		secs := randInts(num, lo, hi)
+
 		for i := range datums {
 			t := timeutil.Unix(int64(secs[i]), 0)
 			var err error
@@ -794,12 +786,12 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 		{
 			typ: types.Timestamp,
 			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
-			val: pgdate.TimeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.Timestamp,
 			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
-			val: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.TimestampTZ,
@@ -809,12 +801,12 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 		{
 			typ: types.TimestampTZ,
 			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
-			val: pgdate.TimeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.TimestampTZ,
 			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
-			val: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 	}
 	ctx := context.Background()
@@ -1049,50 +1041,43 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 		{
 			typ: types.Timestamp,
 			val: float64(pgdate.TimeNegativeInfinity.Unix()),
-			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
-			res: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.Timestamp,
 			val: float64(pgdate.TimeInfinity.Unix()),
-			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
-			res: pgdate.TimeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.Timestamp,
 			val: -math.MaxFloat64,
-			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
-			res: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.Timestamp,
 			val: math.MaxFloat64,
-			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
-			res: pgdate.TimeInfinitySec,
+			err: true,
 		},
+		// TimestampTZ cases.
 		{
 			typ: types.TimestampTZ,
 			val: float64(pgdate.TimeNegativeInfinity.Unix()),
-			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
-			res: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: float64(pgdate.TimeInfinity.Unix()),
-			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
-			res: pgdate.TimeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: -math.MaxFloat64,
-			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
-			res: pgdate.TimeNegativeInfinitySec,
+			err: true,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: math.MaxFloat64,
-			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
-			res: pgdate.TimeInfinitySec,
+			err: true,
 		},
 	}
 	ctx := context.Background()
