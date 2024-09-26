@@ -22,7 +22,8 @@ type DebugProducerStatus struct {
 	// Identification info.
 	StreamID StreamID
 	// Properties.
-	Spec StreamPartitionSpec
+	Spec  StreamPartitionSpec
+	State atomic.Int64
 
 	RF struct {
 		Checkpoints, Advances atomic.Int64
@@ -36,6 +37,25 @@ type DebugProducerStatus struct {
 	LastCheckpoint struct {
 		Micros atomic.Int64
 		Spans  atomic.Value
+	}
+	LastPolledMicros atomic.Int64
+}
+
+type ProducerState int64
+
+const (
+	Producing ProducerState = iota
+	Emitting
+)
+
+func (p ProducerState) String() string {
+	switch p {
+	case Producing:
+		return "produce"
+	case Emitting:
+		return "emit"
+	default:
+		return "unknown"
 	}
 }
 
