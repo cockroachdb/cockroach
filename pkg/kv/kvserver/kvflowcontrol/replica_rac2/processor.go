@@ -399,6 +399,11 @@ type Processor interface {
 	// underlying range controller. It is used to power /inspectz-style debugging
 	// pages.
 	InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool)
+
+	// SendStreamStats returns the stats for the replica send streams It is only
+	// populated on the leader. The stats may be used to inform placement
+	// decisions pertaining to the range.
+	SendStreamStats() rac2.RangeSendStreamStats
 }
 
 // processorImpl implements Processor.
@@ -1174,6 +1179,16 @@ func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectp
 		return kvflowinspectpb.Handle{}, false
 	}
 	return p.leader.rc.InspectRaftMuLocked(ctx), true
+}
+
+// SendStreamStats implements Processor.
+func (p *processorImpl) SendStreamStats() rac2.RangeSendStreamStats {
+	p.leader.rcReferenceUpdateMu.RLock()
+	defer p.leader.rcReferenceUpdateMu.RUnlock()
+	if p.leader.rc == nil {
+		return nil
+	}
+	return p.leader.rc.SendStreamStats()
 }
 
 // RangeControllerFactoryImpl implements the RangeControllerFactory interface.
