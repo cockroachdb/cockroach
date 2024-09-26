@@ -99,6 +99,10 @@ type RangeController interface {
 	// InspectRaftMuLocked returns a handle containing the state of the range
 	// controller. It's used to power /inspectz-style debugging pages.
 	InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle
+	// SendStreamStats returns the stats for the replica send streams that belong
+	// to this range controller. It is only populated on the leader. The stats
+	// may be used to inform placement decisions pertaining to the range.
+	SendStreamStats() RangeSendStreamStats
 }
 
 // RaftInterface implements methods needed by RangeController.
@@ -179,6 +183,22 @@ type ReplicaStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
+}
+
+// ReplicaSendStreamStats contains the stats for the replica send streams that
+// belong to a range.
+type RangeSendStreamStats map[roachpb.ReplicaID]ReplicaSendStreamStats
+
+// ReplicaSendStreamStats contains the stats for a replica send stream that may
+// be used to inform placement decisions pertaining to the replica.
+type ReplicaSendStreamStats struct {
+	// IsStateReplicate is true iff the replica is being sent entries.
+	IsStateReplicate bool
+	// HasSendQueue is true when a replica has a non-zero amount of queued
+	// entries waiting on flow tokens to be sent.
+	//
+	// Ignore this value unless IsStateReplicate is true.
+	HasSendQueue bool
 }
 
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
@@ -1130,6 +1150,29 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 		RangeID:          rc.opts.RangeID,
 		ConnectedStreams: streams,
 	}
+}
+
+func (rc *rangeController) SendStreamStats() RangeSendStreamStats {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	stats := RangeSendStreamStats{}
+	for i, vss := range rc.mu.voterSets {
+		for _, vs := range vss {
+			if i != 0 {
+				if _, ok := stats[vs.replicaID]; ok {
+					// NB: We have already seen this voter in the other set, the stats
+					// will be the same so we can skip it.
+					continue
+				}
+			}
+			stats[vs.replicaID] = ReplicaSendStreamStats{
+				IsStateReplicate: vs.isStateReplicate,
+				HasSendQueue:     vs.hasSendQ,
+			}
+		}
+	}
+	return stats
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
