@@ -870,9 +870,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	r.mu.Lock()
 	state := logstore.RaftState{ // used for append below
-		LastIndex: r.mu.lastIndexNotDurable,
-		LastTerm:  r.mu.lastTermNotDurable,
-		ByteSize:  r.mu.raftLogSize,
+		LastIndex: r.mu.orRaftMu.lastIndexNotDurable,
+		LastTerm:  r.mu.orRaftMu.lastTermNotDurable,
+		ByteSize:  r.mu.orRaftMu.raftLogSize,
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
@@ -1076,9 +1076,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// these changes in the local variables we're tracking here.
 			r.mu.RLock()
 			state = logstore.RaftState{
-				LastIndex: r.mu.lastIndexNotDurable,
-				LastTerm:  r.mu.lastTermNotDurable,
-				ByteSize:  r.mu.raftLogSize,
+				LastIndex: r.mu.orRaftMu.lastIndexNotDurable,
+				LastTerm:  r.mu.orRaftMu.lastTermNotDurable,
+				ByteSize:  r.mu.orRaftMu.raftLogSize,
 			}
 			r.mu.RUnlock()
 
@@ -1148,9 +1148,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// leader ID.
 	r.mu.Lock()
 	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
-	r.mu.lastIndexNotDurable = state.LastIndex
-	r.mu.lastTermNotDurable = state.LastTerm
-	r.mu.raftLogSize = state.ByteSize
+	r.mu.orRaftMu.lastIndexNotDurable = state.LastIndex
+	r.mu.orRaftMu.lastTermNotDurable = state.LastTerm
+	r.mu.orRaftMu.raftLogSize = state.ByteSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID

@@ -468,7 +468,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				// TODO(sumeer): this code will be deleted when there is no
 				// !looselyCoupledTruncation code path.
 				b.r.mu.Lock()
-				b.r.mu.raftLogSizeTrusted = false
+				b.r.mu.orRaftMu.raftLogSizeTrusted = false
 				b.r.mu.Unlock()
 			}
 		}
