@@ -88,8 +88,8 @@ var (
 	// cockroachModifiedCopyright is a header that's required to be added any
 	// time a file with etcdApacheHeader is modified by authors from CRL.
 	cockroachModifiedCopyright = regexp.MustCompile(
-		`// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+		`// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 20\d\d The Cockroach Authors.`)
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
