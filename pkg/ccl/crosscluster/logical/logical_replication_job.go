@@ -425,6 +425,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		streampb.StreamID(payload.StreamID),
 		payload.IgnoreCDCIgnoredTTLDeletes,
 		payload.Mode,
+		payload.MetricsLabel,
 	)
 	if err != nil {
 		return nil, nil, info, err
