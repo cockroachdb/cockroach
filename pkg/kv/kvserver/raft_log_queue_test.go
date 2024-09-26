@@ -329,9 +329,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	t.Helper()
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.mu.Lock()
 	raftLogSize := r.mu.orRaftMu.raftLogSize
-	r.mu.Unlock()
 	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
@@ -859,8 +857,8 @@ func TestTruncateLogRecompute(t *testing.T) {
 	repl := tc.store.LookupReplica(keys.MustAddr(key))
 
 	trusted := func() bool {
-		repl.mu.Lock()
-		defer repl.mu.Unlock()
+		repl.mu.RLock()
+		defer repl.mu.RUnlock()
 		return repl.mu.orRaftMu.raftLogSizeTrusted
 	}
 
