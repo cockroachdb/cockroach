@@ -73,6 +73,13 @@ meta:
 support for:
 {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
+debug-metrics
+----
+HeartbeatSuccess: 0, HeartbeatFailure: 0
+MessageHandleSuccess: 0, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 0, SupportForStores: 1
+
 # -------------------------------------------------------------
 # Store (n1, s1) receives an old heartbeat response from store
 # (n2, s2) after restarting. It's ignored
@@ -139,3 +146,10 @@ send-heartbeats now=500 liveness-interval=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:510.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 1, HeartbeatFailure: 0
+MessageHandleSuccess: 1, MessageHandleFailure: 0
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 1

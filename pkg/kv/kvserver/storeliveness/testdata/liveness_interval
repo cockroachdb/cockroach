@@ -62,3 +62,10 @@ handle-messages
 support-from node-id=2 store-id=2
 ----
 epoch: 1, expiration: 121.000000000,0
+
+debug-metrics
+----
+HeartbeatSuccess: 3, HeartbeatFailure: 0
+MessageHandleSuccess: 3, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 0
