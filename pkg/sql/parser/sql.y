@@ -4741,6 +4741,10 @@ logical_replication_options:
   {
     $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
   }
+| LABEL '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
+  }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
