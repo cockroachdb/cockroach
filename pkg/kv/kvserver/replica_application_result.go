@@ -405,6 +405,8 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 }
 
 func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *replicatedCmd) error {
+	r.raftMu.AssertHeld() // we're in the applications stack
+
 	newProposal, onSuccess := r.makeReproposal(origCmd.proposal)
 
 	// We need to track the request again in order to protect its timestamp until
@@ -419,8 +421,6 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		r.mu.RLock()
-		defer r.mu.RUnlock()
 		return kvpb.NewNotLeaseHolderError(
 			*r.mu.orRaftMu.state.Lease,
 			r.store.StoreID(),
