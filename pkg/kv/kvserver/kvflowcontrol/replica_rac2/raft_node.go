@@ -59,3 +59,10 @@ func (rn raftNodeForRACv2) ReplicasStateLocked(
 func (rn raftNodeForRACv2) SendPingReplicaMuLocked(to roachpb.ReplicaID) bool {
 	return rn.RawNode.SendPing(raftpb.PeerID(to))
 }
+
+// MakeMsgAppRaftMuLocked implements rac2.RaftInterface.
+func (rn raftNodeForRACv2) MakeMsgAppRaftMuLocked(
+	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
+) (raftpb.Message, error) {
+	panic("unimplemented")
+}
