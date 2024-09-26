@@ -528,7 +528,30 @@ func checkReplicationChangeAllowed(
 		return err
 	}
 
-	// TODO(nvanbenschoten): check against direct voter removal.
+	// Check against direct voter removal. Voters must first be demoted to
+	// learners before they can be removed for at least two reasons:
+	// 1. the leader (or any voter) may be needed to vote for a candidate who
+	//    has not yet applied the configuration change. This is a liveness issue
+	//    if the leader/voter is immediately removed without stepping down to a
+	//    learner first and waiting for a second configuration change to
+	//    succeed.
+	//    For details, see: https://github.com/cockroachdb/cockroach/pull/42251.
+	// 2. the leader may have fortified its leadership term, binding the
+	//    liveness of the leader replica to the leader's store's store liveness
+	//    heartbeats. Removal of the leader replica from a store while that
+	//    store continues to heartbeat in the store liveness fabric will lead to
+	//    the leader disappearing without any other replica deciding that the
+	//    leader is gone and stepping up to campaign.
+	//
+	// This same check exists in the pkg/raft library, but we disable it with
+	// DisableConfChangeValidation.
+	for _, repl := range desc.Replicas().Voters().Descriptors() {
+		if _, ok := proposedDesc.Replicas().GetReplicaDescriptorByID(repl.ReplicaID); !ok {
+			err := errors.Errorf("cannot remove voter %s directly; must first demote to learner", repl)
+			err = errors.Mark(err, errMarkInvalidReplicationChange)
+			return err
+		}
+	}
 
 	return nil
 }
