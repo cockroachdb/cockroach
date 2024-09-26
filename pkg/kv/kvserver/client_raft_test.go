@@ -4084,6 +4084,69 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 	}
 }
 
+// TestVoterRemovalWithoutDemotion verifies that a voter replica cannot be
+// removed directly without first being demoted to a learner.
+func TestVoterRemovalWithoutDemotion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Inject a filter which skips the demotion of a voter replica when removing
+	// it from the range. This will trigger the raft-level check which ensures
+	// that a voter replica cannot be removed directly.
+	type noDemotionKey struct{}
+	var removalTarget roachpb.ReplicationTarget
+	testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+		if args.Ctx.Value(noDemotionKey{}) != nil {
+			if state := args.Cmd.ReplicatedEvalResult.State; state != nil && state.Desc != nil {
+				repl, ok := state.Desc.GetReplicaDescriptor(removalTarget.StoreID)
+				if ok && repl.Type == roachpb.VOTER_DEMOTING_LEARNER {
+					t.Logf("intercepting proposal, skipping voter demotion: %+v", args.Cmd)
+					_, ok := state.Desc.RemoveReplica(repl.NodeID, repl.StoreID)
+					require.True(t, ok)
+				}
+			}
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						TestingProposalFilter: testingProposalFilter,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	removalTarget = tc.Target(1)
+
+	key := []byte("a")
+	tc.SplitRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, removalTarget)
+
+	var beforeDesc roachpb.RangeDescriptor
+	db := tc.Servers[0].SystemLayer().DB()
+	require.NoError(t, db.GetProto(ctx, keys.RangeDescriptorKey(key), &beforeDesc))
+
+	// First attempt to remove the voter without demotion. Should fail.
+	expectedErr := "cannot remove voter .* directly; must first demote to learner"
+	noDemotionCtx := context.WithValue(ctx, noDemotionKey{}, struct{}{})
+	removeVoter := kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removalTarget)
+	_, err := db.AdminChangeReplicas(noDemotionCtx, key, beforeDesc, removeVoter)
+	require.Error(t, err)
+	require.Regexp(t, expectedErr, err)
+
+	// Now demote the voter to a learner and then remove it.
+	desc, err := db.AdminChangeReplicas(ctx, key, beforeDesc, removeVoter)
+	require.NoError(t, err)
+	_, ok := desc.GetReplicaDescriptor(removalTarget.StoreID)
+	require.False(t, ok)
+}
+
 // TestRemovedReplicaError verifies that a replica that has been removed from a
 // range returns a RangeNotFoundError if it receives a request for that range
 // (not RaftGroupDeletedError, and even before the ReplicaGCQueue has run).
