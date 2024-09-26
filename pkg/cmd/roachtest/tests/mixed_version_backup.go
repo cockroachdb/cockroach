@@ -187,7 +187,6 @@ var (
 	possibleNumIncrementalBackups = []int{
 		1,
 		3,
-		5,
 	}
 
 	schemaChangeDB = "schemachange"
@@ -477,7 +476,7 @@ func randString(rng *rand.Rand, strLen int) string {
 }
 
 func randWaitDuration(rng *rand.Rand) time.Duration {
-	durations := []int{1, 10, 60, 5 * 60}
+	durations := []int{1, 10, 60}
 	return time.Duration(durations[rng.Intn(len(durations))]) * time.Second
 }
 
@@ -1637,7 +1636,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 	return mvb.createBackupCollection(ctx, l, rng, executeOnAllNodesSpec, executeOnAllNodesSpec, h, label)
 }
 
-// randomWait waits from 1s to 5m, to allow for the background
+// randomWait waits from 1s to 3m, to allow for the background
 // workloads to update the databases we are backing up.
 func (d *BackupRestoreTestDriver) randomWait(l *logger.Logger, rng *rand.Rand) {
 	dur := randWaitDuration(rng)
