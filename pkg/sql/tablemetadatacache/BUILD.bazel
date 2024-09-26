@@ -48,6 +48,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/isql",
