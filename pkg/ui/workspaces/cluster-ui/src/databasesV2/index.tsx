@@ -46,7 +46,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
 })[] = [
   {
     title: DatabaseColName.NAME,
-    sorter: true,
+    sorter: (a, b) => a.name.localeCompare(b.name),
     sortKey: DatabaseSortOptions.NAME,
     render: (db: DatabaseRow) => {
       return <Link to={`/v2/databases/${db.id}`}>{db.name}</Link>;
@@ -55,7 +55,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   {
     title: DatabaseColName.SIZE,
     sortKey: DatabaseSortOptions.REPLICATION_SIZE,
-    sorter: true,
+    sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
     render: (db: DatabaseRow) => {
       return Bytes(db.approximateDiskSizeBytes);
     },
@@ -175,13 +175,13 @@ export const DatabasesPageV2 = () => {
   const sort = params.sort;
   const colsWithSort = useMemo(
     () =>
-      COLUMNS.map((col, i) => {
-        const colInd = COLUMNS.findIndex(c => c.title === sort.field);
+      COLUMNS.map(col => {
         const sortOrder: SortDirection =
           sort?.order === "desc" ? "descend" : "ascend";
         return {
           ...col,
-          sortOrder: colInd === i && col.sorter ? sortOrder : null,
+          sortOrder:
+            sort.field === col.sortKey && col.sorter ? sortOrder : null,
         };
       }),
     [sort],

@@ -2055,7 +2055,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-auth-msk",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyAWS,
 		Suites:           registry.Suites(registry.Nightly),
