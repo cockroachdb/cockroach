@@ -40,6 +40,13 @@ import (
 //
 // None of the methods are called with Replica.mu held. The caller and callee
 // should order their mutexes before Replica.mu.
+//
+// RangeController dynamically switches between push and pull mode based on
+// RaftEvent handling. In general, the code here is oblivious to the fact that
+// WaitForEval in push mode will only be called for elastic work. However,
+// there are emergent behaviors that rely on this behavior (which are noted in
+// comments). Unit tests can run RangeController in push mode and call
+// WaitForEval for regular work.
 type RangeController interface {
 	// WaitForEval seeks admission to evaluate a request at the given priority.
 	// This blocks until there are positive tokens available for the request to
@@ -358,6 +365,8 @@ type rangeController struct {
 	nextRaftIndex uint64
 
 	mu struct {
+		// All the fields in this struct are modified while holding raftMu and
+		// this mutex. So readers can hold either mutex.
 		syncutil.RWMutex
 
 		// State for waiters. When anything in voterSets or nonVoterSets changes,
@@ -378,12 +387,23 @@ type voterStateForWaiters struct {
 	stateForWaiters
 	isLeader      bool
 	isLeaseHolder bool
+	// When hasSendQ is true, the voter is not included as part of the quorum.
+	hasSendQ bool
 }
 
 // stateForWaiters informs whether WaitForEval is required to wait for
 // eval-tokens for a replica.
 type stateForWaiters struct {
-	replicaID        roachpb.ReplicaID
+	replicaID roachpb.ReplicaID
+	// !isStateReplicate replicas are not required to be waited on for
+	// evaluating elastic work.
+	//
+	// For voters, we ensure the following invariant: !isStateReplicate =>
+	// hasSendQ. Since, hasSendQ voters are not included in the quorum, this
+	// ensures that !isStateReplicate are not in the quorum. This is done since
+	// voters that are down will tend to have all the eval tokens returned by
+	// their streams, so will have positive eval tokens. We don't want to
+	// erroneously think that these are actually part of the quorum.
 	isStateReplicate bool
 	evalTokenCounter *tokenCounter
 }
@@ -404,7 +424,7 @@ func NewRangeController(
 	}
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSet(ctx, init.ReplicaSet)
-	rc.updateWaiterSets()
+	rc.updateWaiterSetsRaftMuLocked()
 	return rc
 }
 
@@ -448,17 +468,17 @@ retry:
 		// First check the voter set, which participate in quorum.
 		for _, v := range vs {
 			available, handle := v.evalTokenCounter.TokensAvailable(wc)
-			if available {
+			if available && !v.hasSendQ {
 				votersHaveEvalTokensCount++
 				continue
 			}
 
-			// Don't have eval tokens, and have a handle.
+			// Don't have eval tokens, and have a handle OR have a send-queue and no handle.
 			handleInfo := tokenWaitingHandleInfo{
 				handle: handle,
 				requiredWait: v.isLeader || v.isLeaseHolder ||
 					(waitForAllReplicateHandles && v.isStateReplicate),
-				partOfQuorum: true,
+				partOfQuorum: !v.hasSendQ,
 			}
 			handles = append(handles, handleInfo)
 			if !requiredWait && handleInfo.requiredWait {
@@ -499,6 +519,11 @@ retry:
 		}
 		if remainingForQuorum > 0 || requiredWait {
 			var state WaitEndState
+			// We may call WaitForEval with a remainingForQuorum count higher than
+			// the number of handles that have partOfQuorum set to true. This can
+			// happen when not enough replicas are in StateReplicate, or not enough
+			// have no send-queue. This is acceptable in that the callee will end up
+			// waiting on the refreshCh.
 			state, scratch = WaitForEval(ctx, refreshCh, handles, remainingForQuorum, scratch)
 			switch state {
 			case WaitSuccess:
@@ -732,12 +757,12 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 		}
 		shouldWaitChange = rs.handleReadyState(
 			ctx, info, eventForReplica.nextRaftIndex, eventForReplica.recreateSendStream) || shouldWaitChange
-		rs.handleReadyEntries(ctx, eventForReplica)
+		shouldWaitChange = rs.handleReadyEntries(ctx, eventForReplica) || shouldWaitChange
 	}
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.
 	if shouldWaitChange {
-		rc.updateWaiterSets()
+		rc.updateWaiterSetsRaftMuLocked()
 	}
 	return nil
 }
@@ -781,7 +806,7 @@ func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 // Requires replica.raftMu to be held.
 func (rc *rangeController) SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error {
 	rc.updateReplicaSet(ctx, replicas)
-	rc.updateWaiterSets()
+	rc.updateWaiterSetsRaftMuLocked()
 	return nil
 }
 
@@ -796,7 +821,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 	}
 	log.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	rc.leaseholder = replica
-	rc.updateWaiterSets()
+	rc.updateWaiterSetsRaftMuLocked()
 }
 
 // CloseRaftMuLocked closes the range controller.
@@ -882,7 +907,7 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 	rc.replicaSet = newSet
 }
 
-func (rc *rangeController) updateWaiterSets() {
+func (rc *rangeController) updateWaiterSetsRaftMuLocked() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -908,9 +933,10 @@ func (rc *rangeController) updateWaiterSets() {
 		isNew := r.IsVoterNewConfig()
 
 		rs := rc.replicaMap[r.ReplicaID]
+		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQ()
 		waiterState := stateForWaiters{
 			replicaID:        r.ReplicaID,
-			isStateReplicate: rs.isStateReplicate(),
+			isStateReplicate: isStateReplicate,
 			evalTokenCounter: rs.evalTokenCounter,
 		}
 
@@ -927,6 +953,7 @@ func (rc *rangeController) updateWaiterSets() {
 			stateForWaiters: waiterState,
 			isLeader:        r.ReplicaID == rc.opts.LocalReplicaID,
 			isLeaseHolder:   r.ReplicaID == rc.leaseholder,
+			hasSendQ:        hasSendQ,
 		}
 		if isOld {
 			voterSets[0] = append(voterSets[0], vsfw)
@@ -1129,9 +1156,24 @@ func (rs *replicaState) createReplicaSendStream(
 
 }
 
-func (rs *replicaState) isStateReplicate() bool {
-	// probeRecentlyReplicate is also included in this state.
-	return rs.sendStream != nil
+func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ bool) {
+	if rs.sendStream == nil {
+		return false, true
+	}
+	rs.sendStream.mu.Lock()
+	defer rs.sendStream.mu.Unlock()
+	isStateReplicate = rs.sendStream.mu.connectedState == replicate
+	if isStateReplicate {
+		hasSendQ = !rs.sendStream.isEmptySendQueueLocked()
+	} else {
+		// For WaitForEval, we treat probeRecentlyNoSendQ as having a send-queue
+		// and not part of the quorum. We don't want to keep evaluating and pile
+		// up work. Note, that this is the exact opposite of how
+		// probeRecentlyNoSendQ behaves wrt contributing to the quorum when
+		// deciding to force-flush.
+		hasSendQ = true
+	}
+	return isStateReplicate, hasSendQ
 }
 
 type entryFCState struct {
@@ -1168,7 +1210,7 @@ func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCStat
 
 func (rs *replicaState) handleReadyEntries(
 	ctx context.Context, eventForReplica raftEventForReplica,
-) {
+) (transitionedSendQStateAsVoter bool) {
 	if rs.sendStream == nil {
 		return
 	}
@@ -1178,7 +1220,7 @@ func (rs *replicaState) handleReadyEntries(
 	if rs.sendStream.mu.connectedState != replicate {
 		return
 	}
-	rs.sendStream.handleReadyEntriesLocked(ctx, eventForReplica)
+	return rs.sendStream.handleReadyEntriesLocked(ctx, eventForReplica)
 }
 
 // handleReadyState handles state management for the replica based on the
@@ -1194,7 +1236,7 @@ func (rs *replicaState) handleReadyState(
 			// We have already closed the stream, nothing to do.
 			return false
 		}
-		if shouldClose := func() (should bool) {
+		if shouldClose := func() (shouldClose bool) {
 			now := rs.parent.opts.Clock.PhysicalTime()
 			rs.sendStream.mu.Lock()
 			defer rs.sendStream.mu.Unlock()
@@ -1204,14 +1246,16 @@ func (rs *replicaState) handleReadyState(
 				// The replica has been in StateProbe for at least
 				// probeRecentlyReplicateDuration (default 1s) second, close the
 				// stream.
-				should = true
+				shouldClose = true
 			} else if state != probeRecentlyReplicate {
 				rs.sendStream.changeToProbeLocked(ctx, now)
+				// probeRecentlyReplicate is considered to have a send-queue, so
+				// waiting may need to change.
+				shouldWaitChange = true
 			}
-			return should
+			return shouldClose
 		}(); shouldClose {
 			rs.closeSendStream(ctx)
-			shouldWaitChange = true
 		}
 
 	case tracker.StateReplicate:
@@ -1219,7 +1263,6 @@ func (rs *replicaState) handleReadyState(
 			if !recreateSendStream {
 				panic(errors.AssertionFailedf("in StateReplica, but recreateSendStream is false"))
 			}
-			shouldWaitChange = true
 		}
 		if rs.sendStream != nil && recreateSendStream {
 			// This includes both (a) inconsistencies, and (b) transition from
@@ -1228,6 +1271,8 @@ func (rs *replicaState) handleReadyState(
 		}
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream(ctx, info.Next, nextRaftIndex)
+			// Have stale send-queue state.
+			shouldWaitChange = true
 		}
 
 	case tracker.StateSnapshot:
@@ -1262,7 +1307,8 @@ func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 
 func (rss *replicaSendStream) handleReadyEntriesLocked(
 	ctx context.Context, event raftEventForReplica,
-) {
+) (transitionedSendQStateAsVoter bool) {
+	wasEmptySendQ := rss.isEmptySendQueueLocked()
 	if n := len(event.sendingEntries); n > 0 {
 		if event.sendingEntries[0].index != rss.mu.sendQueue.indexToSend {
 			panic(errors.AssertionFailedf("first send entry %d does not match indexToSend %d",
@@ -1338,6 +1384,20 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 			rss.mu.eval.tokensDeducted[wc] += tokens
 		}
 	}
+	// NB: we don't special case to an empty send-queue in push mode, where Raft
+	// is responsible for causing this send-queue. Raft does not keep track of
+	// whether the send-queues are causing a loss of quorum, so in the worst
+	// case we could stop evaluating because of a majority of voters having a
+	// send-queue. But in push mode only elastic work will be subject to
+	// replication admission control, and regular work will not call
+	// WaitForEval, so we accept this behavior.
+	transitionedSendQStateAsVoter =
+		rss.parent.desc.IsAnyVoter() && (wasEmptySendQ != rss.isEmptySendQueueLocked())
+	return transitionedSendQStateAsVoter
+}
+
+func (rss *replicaSendStream) isEmptySendQueueLocked() bool {
+	return rss.mu.sendQueue.indexToSend == rss.mu.sendQueue.nextRaftIndex
 }
 
 func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.Time) {
@@ -1444,6 +1504,8 @@ type connectedState uint32
 //
 // Initial states: replicate
 // State transitions: replicate <=> probeRecentlyReplicate
+//
+// TODO(sumeer): replace probeRecentlyReplicate with probeRecentlyNoSendQ.
 const (
 	replicate connectedState = iota
 	probeRecentlyReplicate

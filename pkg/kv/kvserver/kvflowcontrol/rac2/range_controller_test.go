@@ -451,7 +451,7 @@ func scanRanges(t *testing.T, input string) []testingRange {
 			parts[3] = strings.TrimSpace(parts[3])
 			require.True(t, strings.HasPrefix(parts[3], "next_raft_index="))
 			parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "next_raft_index=")
-			nextRaftIndex, err = strconv.Atoi(parts[2])
+			nextRaftIndex, err = strconv.Atoi(parts[3])
 			require.NoError(t, err)
 
 			replicas = append(replicas, testingRange{

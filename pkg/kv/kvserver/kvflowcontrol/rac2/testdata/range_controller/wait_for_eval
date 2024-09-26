@@ -1,4 +1,4 @@
-# Intialize a range with voters on s1,s2 and s3. The local replica and
+# Initialize a range with voters on s1,s2 and s3. The local replica and
 # leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
 # set all streams to initially have 0 tokens and a limit of 1 token to simplify
 # the test, as evaluation requests only wait for positive tokens.
