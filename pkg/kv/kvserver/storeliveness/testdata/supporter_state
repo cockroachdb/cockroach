@@ -148,3 +148,10 @@ meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
 {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 0, HeartbeatFailure: 0
+MessageHandleSuccess: 5, MessageHandleFailure: 1
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 1
+SupportFromStores: 0

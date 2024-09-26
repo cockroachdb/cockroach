@@ -216,3 +216,10 @@ send-heartbeats now=900 liveness-interval=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:910.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 8, HeartbeatFailure: 1
+MessageHandleSuccess: 7, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 1

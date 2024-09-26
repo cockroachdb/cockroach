@@ -272,7 +272,8 @@ func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState 
 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
-func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) {
+// The function returns the number of stores for which support was withdrawn.
+func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (numWithdrawn int) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
@@ -287,8 +288,10 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) {
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
 			}
+			numWithdrawn++
 		}
 	}
+	return numWithdrawn
 }
 
 // maybeWithdrawSupport contains the core logic for updating the epoch and

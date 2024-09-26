@@ -2187,6 +2187,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
+	// Create the Store Liveness SupportManager.
 	heartbeatInterval, livenessInterval := s.cfg.StoreLivenessDurations()
 	supportGracePeriod := s.cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
 	options := storeliveness.NewOptions(heartbeatInterval, livenessInterval, supportGracePeriod)
@@ -2196,6 +2197,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.cfg.StoreLivenessTransport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm
+	s.metrics.registry.AddMetricStruct(sm.Metrics())
 	if err = sm.Start(ctx); err != nil {
 		return errors.Wrap(err, "starting store liveness")
 	}
