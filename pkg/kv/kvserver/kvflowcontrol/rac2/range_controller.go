@@ -93,6 +93,13 @@ type RangeController interface {
 	// InspectRaftMuLocked returns a handle containing the state of the range
 	// controller. It's used to power /inspectz-style debugging pages.
 	InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle
+	// SendStreamStatsRaftMuLocked returns the stats for the replica send streams
+	// that belong to this range controller. It is only populated on the leader.
+	// The stats may be used to inform placement decisions pertaining to the
+	// range.
+	//
+	// Requires replica.raftMu to be held.
+	SendStreamStatsRaftMuLocked() RangeSendStreamStats
 }
 
 // RaftInterface implements methods needed by RangeController.
@@ -121,6 +128,23 @@ type ReplicaStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
+}
+
+// ReplicaSendStreamStats contains the stats for the replica send streams that
+// belong to a range.
+type RangeSendStreamStats map[roachpb.ReplicaID]ReplicaSendStreamStats
+
+// ReplicaSendStreamStats contains the stats for a replica send stream that may
+// be used to inform placement decisions pertaining to the replica.
+type ReplicaSendStreamStats struct {
+	// Closed is true iff the send stream is closed.
+	Closed bool
+	// SendQueueSizeBytes is the size of the send queue entries in bytes. This
+	// roughly represents the amount of data that is buffered in the send queue,
+	// waiting for available tokens before being sent. A large value here may
+	// indicate that the replica's store is not able to keep up with the rate of
+	// incoming replication.
+	SendQueueSizeBytes int64
 }
 
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
@@ -800,6 +824,29 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 		RangeID:          rc.opts.RangeID,
 		ConnectedStreams: streams,
 	}
+}
+
+func (rc *rangeController) SendStreamStatsRaftMuLocked() RangeSendStreamStats {
+	stats := RangeSendStreamStats{}
+	for _, rs := range rc.replicaMap {
+		if rs.sendStream == nil {
+			stats[rs.desc.ReplicaID] = ReplicaSendStreamStats{
+				Closed: true,
+			}
+			continue
+		}
+		func() {
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+			stats[rs.desc.ReplicaID] = ReplicaSendStreamStats{
+				Closed: rs.sendStream.mu.closed,
+				// TODO(kvoli): Populate this once the send queue bytes are tracked as
+				// part of #130433.
+				SendQueueSizeBytes: 0,
+			}
+		}()
+	}
+	return stats
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {

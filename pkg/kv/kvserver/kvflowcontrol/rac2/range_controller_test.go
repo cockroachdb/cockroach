@@ -1114,6 +1114,20 @@ func TestRangeController(t *testing.T) {
 				require.NoError(t, err)
 				return fmt.Sprintf("%v", marshaled)
 
+			case "send_stream_stats":
+				var rangeID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				r := state.ranges[roachpb.RangeID(rangeID)]
+				stats := r.rc.SendStreamStatsRaftMuLocked()
+				var buf strings.Builder
+				for _, repl := range sortReplicas(r) {
+					buf.WriteString(fmt.Sprintf("%v: closed=%-5v send_queue_bytes=%v\n",
+						repl,
+						stats[repl.ReplicaID].Closed,
+						stats[repl.ReplicaID].SendQueueSizeBytes))
+				}
+				return buf.String()
+
 			default:
 				panic(fmt.Sprintf("unknown command: %s", d.Cmd))
 			}
