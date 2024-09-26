@@ -18,11 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const pruneBatchSize = 512
+
+type onBatchUpdateCallback func(ctx context.Context, totalRowsToUpdate int, rowsUpdated int)
 
 // tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
 type tableMetadataUpdater struct {
@@ -39,9 +42,14 @@ func newTableMetadataUpdater(ie isql.Executor) *tableMetadataUpdater {
 
 // updateCache performs a full update of the system.table_metadata, returning
 // the number of rows updated and the last error encountered.
-func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, err error) {
+func (u *tableMetadataUpdater) updateCache(
+	ctx context.Context, onUpdate onBatchUpdateCallback,
+) (updated int, err error) {
 	it := newTableMetadataBatchIterator(u.ie)
-
+	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
+	if err != nil {
+		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
+	}
 	for {
 		more, err := it.fetchNextBatch(ctx, tableBatchSize)
 		if err != nil {
@@ -63,7 +71,11 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 			log.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
 			continue
 		}
+
 		updated += count
+		if onUpdate != nil {
+			onUpdate(ctx, estimatedRowsToUpdate, updated)
+		}
 	}
 
 	return updated, err
@@ -111,7 +123,6 @@ func (u *tableMetadataUpdater) upsertBatch(
 	ctx context.Context, batch []tableMetadataIterRow,
 ) (int, error) {
 	u.upsertQuery.resetForBatch()
-
 	upsertBatchSize := 0
 	for _, row := range batch {
 		if err := u.upsertQuery.addRow(&row); err != nil {
@@ -133,6 +144,21 @@ func (u *tableMetadataUpdater) upsertBatch(
 		u.upsertQuery.getQuery(),
 		u.upsertQuery.args...,
 	)
+}
+
+func (u *tableMetadataUpdater) getRowsToUpdateCount(ctx context.Context) (int, error) {
+	query := `
+SELECT count(*)::INT 
+FROM system.namespace t
+JOIN system.namespace d ON t."parentID" = d.id
+WHERE d."parentID" = 0 and t."parentSchemaID" != 0
+`
+	row, err := u.ie.QueryRow(ctx, "get-table-metadata-row-count", nil, query)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(tree.MustBeDInt(row[0])), nil
 }
 
 type tableMetadataBatchUpsertQuery struct {

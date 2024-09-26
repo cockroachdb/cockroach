@@ -13,6 +13,7 @@ package tablemetadatacache
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,9 +27,15 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+const (
+	// batchesPerProgressUpdate is used to determine how many batches
+	// should be processed before updating the job progress
+	batchesPerProgressUpdate = 10
+)
+
 // updateJobExecFn specifies the function that is run on each iteration of the
 // table metadata update job. It can be overriden in tests.
-var updateJobExecFn func(context.Context, isql.Executor) error = updateTableMetadataCache
+var updateJobExecFn func(context.Context, isql.Executor, *tableMetadataUpdateJobResumer) error = updateTableMetadataCache
 
 type tableMetadataUpdateJobResumer struct {
 	job *jobs.Job
@@ -106,13 +113,19 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		// Run table metadata update job.
 		metrics.NumRuns.Inc(1)
 		j.markAsRunning(ctx)
-		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
+		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor(), j); err != nil {
 			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
 		j.markAsCompleted(ctx)
 		if onJobCompleteKnob != nil {
 			onJobCompleteKnob()
 		}
+	}
+}
+
+func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
+	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+		log.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }
 
@@ -126,6 +139,9 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
 		details.LastStartTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 0,
+		}
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
@@ -143,6 +159,9 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
 		details.LastCompletedTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 1.0,
+		}
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
@@ -152,16 +171,38 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 
 // updateTableMetadataCache performs a full update of system.table_metadata by collecting
 // metadata from the system.namespace, system.descriptor tables and table span stats RPC.
-func updateTableMetadataCache(ctx context.Context, ie isql.Executor) error {
+func updateTableMetadataCache(
+	ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer,
+) error {
 	updater := newTableMetadataUpdater(ie)
 	if _, err := updater.pruneCache(ctx); err != nil {
 		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
 	}
 
+	resumer.updateProgress(ctx, .01)
 	// We'll use the updated ret val in a follow-up to update metrics and
 	// fractional job progress.
-	_, err := updater.updateCache(ctx)
+	_, err := updater.updateCache(ctx, resumer.onBatchUpdate())
 	return err
+}
+
+// onBatchUpdate returns an onBatchUpdateCallback func that updates the progress of the job.
+// The call to updateProgress doesn't happen on every invocation, and only happens every nth
+// invocation, where n is defined by batchesPerProgressUpdate. This is done because each
+// batch update is expected to execute quickly, and updating progress at a high velocity
+// doesn't seem worth it.
+func (j *tableMetadataUpdateJobResumer) onBatchUpdate() onBatchUpdateCallback {
+	batchNum := 0
+	return func(ctx context.Context, totalRowsToUpdate int, rowsUpdated int) {
+		batchNum++
+		estimatedBatches := int(math.Ceil(float64(totalRowsToUpdate) / float64(tableBatchSize)))
+		if batchNum == estimatedBatches {
+			j.updateProgress(ctx, .99)
+		} else if batchNum%batchesPerProgressUpdate == 0 && estimatedBatches > 0 {
+			progress := float32(rowsUpdated) / float32(totalRowsToUpdate)
+			j.updateProgress(ctx, progress)
+		}
+	}
 }
 
 // OnFailOrCancel implements jobs.Resumer.

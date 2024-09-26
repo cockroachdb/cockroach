@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -77,18 +79,79 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 			return errors.New("job hasn't run yet")
 		}
 		row := conn.Query(t,
-			`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
+			`SELECT running_status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
 			jobs.UpdateTableMetadataCacheJobID)
 		if !row.Next() {
 			return errors.New("last_run_time not updated")
 		}
 		var runningStatus string
-		require.NoError(t, row.Scan(&runningStatus))
+		var fractionCompleted float32
+		require.NoError(t, row.Scan(&runningStatus, &fractionCompleted))
 		if !strings.Contains(runningStatus, "Job completed at") {
 			return errors.New("running_status not updated")
 		}
+		if fractionCompleted != 1.0 {
+			return errors.New("fraction_completed not updated")
+		}
 		return nil
 	})
+}
+
+func TestUpdateTableMetadataCacheProgressUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Server setup.
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
+	jobId := jobRegistry.MakeJobID()
+
+	// Create a new job so that we don't have to wait for the existing one be claimed
+	jr := jobs.Record{
+		JobID:         jobId,
+		Description:   jobspb.TypeUpdateTableMetadataCache.String(),
+		Details:       jobspb.UpdateTableMetadataCacheDetails{},
+		Progress:      jobspb.UpdateTableMetadataCacheProgress{},
+		CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
+		Username:      username.NodeUserName(),
+		NonCancelable: true,
+	}
+	job, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobId, nil)
+	require.NoError(t, err)
+	resumer := tableMetadataUpdateJobResumer{job: job}
+
+	getJobProgress := func() float32 {
+		var fractionCompleted float32
+		conn.QueryRow(t, `SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
+			jobId).Scan(&fractionCompleted)
+		return fractionCompleted
+	}
+
+	totalRowsToUpdate := []int{50, 99, 1000, 2000, 20001}
+	for _, r := range totalRowsToUpdate {
+		resumer.updateProgress(ctx, 0)
+		cb := resumer.onBatchUpdate()
+		x := r
+		iterations := int(math.Ceil(float64(x) / float64(tableBatchSize)))
+		for i := 1; i <= iterations; i++ {
+			rowsUpdated := min(r, i*tableBatchSize)
+			preUpdateProgress := getJobProgress()
+			cb(ctx, x, rowsUpdated)
+			postUpdateProgress := getJobProgress()
+			if i == iterations {
+				require.Equal(t, float32(.99), postUpdateProgress)
+			} else if i%batchesPerProgressUpdate == 0 {
+				require.Greater(t, postUpdateProgress, preUpdateProgress)
+			} else {
+				require.Equal(t, preUpdateProgress, postUpdateProgress)
+			}
+		}
+	}
+
 }
 
 // TestUpdateTableMetadataCacheAutomaticUpdates tests that:
@@ -109,7 +172,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	mockMutex := syncutil.RWMutex{}
 	jobRunCh := make(chan struct{})
 	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
-		func(ctx context.Context, ie isql.Executor) error {
+		func(ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer) error {
 			mockMutex.Lock()
 			defer mockMutex.Unlock()
 			mockCalls = append(mockCalls, timeutil.Now())
