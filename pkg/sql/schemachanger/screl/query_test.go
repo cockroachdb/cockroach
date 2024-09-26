@@ -155,7 +155,8 @@ func TestQueryBasic(t *testing.T) {
 			for _, q := range c.queries {
 				t.Run("", func(t *testing.T) {
 					var results []string
-					require.NoError(t, q.query.Iterate(tr, func(r rel.Result) error {
+					stats := &rel.QueryStats{}
+					require.NoError(t, q.query.Iterate(tr, stats, func(r rel.Result) error {
 						results = append(results, formatResults(r, q.nodes))
 						return nil
 					}))

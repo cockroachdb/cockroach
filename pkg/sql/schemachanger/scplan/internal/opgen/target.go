@@ -74,7 +74,7 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 		return t, errors.Wrap(err, "failed to construct query")
 	}
 	t.iterateFunc = func(database *rel.Database, f func(*screl.Node) error) error {
-		return q.Iterate(database, func(r rel.Result) error {
+		return q.Iterate(database, nil, func(r rel.Result) error {
 			return f(r.Var(node).(*screl.Node))
 		})
 	}

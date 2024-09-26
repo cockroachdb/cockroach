@@ -177,4 +177,5 @@ func maybeSet(
 type filter struct {
 	input     []slotIdx
 	predicate reflect.Value
+	clauseID  int
 }

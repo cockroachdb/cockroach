@@ -6,6 +6,7 @@ go_library(
         "admin.go",
         "admission.go",
         "api_v2.go",
+        "api_v2_constants.go",
         "api_v2_databases_metadata.go",
         "api_v2_ranges.go",
         "api_v2_sql.go",
