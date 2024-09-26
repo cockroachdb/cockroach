@@ -994,10 +994,10 @@ type tableMetadata struct {
 }
 
 type dbMetadata struct {
-	DbId        int64      `json:"db_id,omitempty"`
-	DbName      string     `json:"db_name,omitempty"`
-	SizeBytes   int64      `json:"size_bytes,omitempty"`
-	TableCount  int64      `json:"table_count,omitempty"`
+	DbId        int64      `json:"db_id"`
+	DbName      string     `json:"db_name"`
+	SizeBytes   int64      `json:"size_bytes"`
+	TableCount  int64      `json:"table_count"`
 	StoreIds    []int64    `json:"store_ids"`
 	LastUpdated *time.Time `json:"last_updated"`
 }
