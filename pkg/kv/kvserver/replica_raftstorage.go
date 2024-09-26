@@ -714,14 +714,14 @@ func (r *Replica) applySnapshot(
 	// performance implications are not likely to be drastic. If our
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	r.mu.lastIndexNotDurable = state.RaftAppliedIndex
+	r.mu.orRaftMu.lastIndexNotDurable = state.RaftAppliedIndex
 
 	// TODO(sumeer): We should be able to set this to
 	// nonemptySnap.Metadata.Term. See
 	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
 	// for a discussion regarding this.
-	r.mu.lastTermNotDurable = invalidLastTerm
-	r.mu.raftLogSize = 0
+	r.mu.orRaftMu.lastTermNotDurable = invalidLastTerm
+	r.mu.orRaftMu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
@@ -733,7 +733,7 @@ func (r *Replica) applySnapshot(
 	r.mu.state = state
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
-	r.mu.raftLogSizeTrusted = false
+	r.mu.orRaftMu.raftLogSizeTrusted = false
 
 	// Invoke the leasePostApply method to ensure we properly initialize the
 	// replica according to whether it holds the lease. We allow jumps in the
