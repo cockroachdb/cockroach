@@ -104,7 +104,7 @@ const maxNodeInitTime = 60 * time.Second
 
 // secondaryTenantID is the ID of the secondary tenant to use when
 // --multitenant=true.
-const secondaryTenantID = 2
+const secondaryTenantID = 3
 
 // demoOrg is the organization to use to request an evaluation
 // license.
