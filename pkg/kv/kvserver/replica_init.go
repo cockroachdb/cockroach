@@ -188,7 +188,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
 	// NB: the state will be loaded when the replica gets initialized.
-	r.mu.state = uninitState
+	r.mu.orRaftMu.state = uninitState
 	r.rangeStr.store(replicaID, uninitState.Desc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
@@ -278,7 +278,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 
 	r.setStartKeyLocked(desc.StartKey)
 
-	r.mu.state = s.ReplState
+	r.mu.orRaftMu.state = s.ReplState
 	r.mu.orRaftMu.lastIndexNotDurable = s.LastIndex
 	r.mu.orRaftMu.lastTermNotDurable = invalidLastTerm
 
@@ -301,7 +301,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	// this problem would multiply to a number of replicas at cluster bootstrap.
 	// Instead, we make the first lease special (which is OK) and the problem
 	// disappears.
-	if r.mu.state.Lease.Sequence > 0 {
+	if r.mu.orRaftMu.state.Lease.Sequence > 0 {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
@@ -316,7 +316,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		ctx,
 		(*replicaRaftStorage)(r),
 		raftpb.PeerID(r.replicaID),
-		r.mu.state.RaftAppliedIndex,
+		r.mu.orRaftMu.state.RaftAppliedIndex,
 		r.store.cfg,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
@@ -376,15 +376,15 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
-	if r.mu.state.Desc.IsInitialized() &&
+	if r.mu.orRaftMu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
-			r.mu.state.Desc, desc)
+			r.mu.orRaftMu.state.Desc, desc)
 	}
-	if r.mu.state.Desc.IsInitialized() &&
-		!r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
+	if r.mu.orRaftMu.state.Desc.IsInitialized() &&
+		!r.mu.orRaftMu.state.Desc.StartKey.Equal(desc.StartKey) {
 		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
-			r.mu.state.Desc.StartKey, desc.StartKey)
+			r.mu.orRaftMu.state.Desc.StartKey, desc.StartKey)
 	}
 
 	// NB: It might be nice to assert that the current replica exists in desc
@@ -422,7 +422,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	// Determine if a new replica was added. This is true if the new max replica
 	// ID is greater than the old max replica ID.
-	oldMaxID := maxReplicaIDOfAny(r.mu.state.Desc)
+	oldMaxID := maxReplicaIDOfAny(r.mu.orRaftMu.state.Desc)
 	newMaxID := maxReplicaIDOfAny(desc)
 	if newMaxID > oldMaxID {
 		r.mu.lastReplicaAdded = newMaxID
@@ -437,7 +437,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.isInitialized.Store(desc.IsInitialized())
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
-	r.mu.state.Desc = desc
+	r.mu.orRaftMu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
 

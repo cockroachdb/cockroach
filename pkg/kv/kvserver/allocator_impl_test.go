@@ -299,11 +299,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		{NodeID: 5, StoreID: 5, ReplicaID: 5},
 	}
 	repl := &Replica{RangeID: firstRangeID}
-
-	repl.mu.Lock()
-	repl.mu.state.Stats = &enginepb.MVCCStats{}
-	repl.mu.Unlock()
-
+	repl.mu.orRaftMu.state.Stats = &enginepb.MVCCStats{}
 	repl.loadStats = load.NewReplicaLoad(clock, nil)
 
 	var rangeUsageInfo allocator.RangeUsageInfo

@@ -29,10 +29,10 @@ func (r *raftTruncatorReplica) getRangeID() roachpb.RangeID {
 }
 
 func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState {
-	r.mu.Lock()
+	r.mu.Lock() // TODO(pav-kv): not needed if raftMu is held.
 	defer r.mu.Unlock()
 	// TruncatedState is guaranteed to be non-nil.
-	return *r.mu.state.TruncatedState
+	return *r.mu.orRaftMu.state.TruncatedState
 }
 
 func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(

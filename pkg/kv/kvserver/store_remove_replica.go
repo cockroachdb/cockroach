@@ -130,7 +130,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		// Now we know that the Store's Replica is identical to the passed-in
 		// Replica.
-		desc := rep.mu.state.Desc
+		desc := rep.mu.orRaftMu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 			// The ReplicaID of a Replica is immutable.
 			return nil, errors.AssertionFailedf("replica descriptor's ID has changed (%s >= %s)",

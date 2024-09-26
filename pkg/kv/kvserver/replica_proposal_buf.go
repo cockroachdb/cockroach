@@ -1169,7 +1169,7 @@ func (rp *replicaProposer) destroyed() destroyStatus {
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
-	return rp.mu.state.LeaseAppliedIndex
+	return rp.mu.orRaftMu.state.LeaseAppliedIndex
 }
 
 func (rp *replicaProposer) enqueueUpdateCheck() {
@@ -1200,7 +1200,7 @@ func (rp *replicaProposer) onErrProposalDropped(
 }
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
-	return rp.mu.state.Lease.String()
+	return rp.mu.orRaftMu.state.Lease.String()
 }
 
 func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
