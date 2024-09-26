@@ -268,19 +268,20 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 // un-quiesce the range.
 //
 // A replica should quiesce if all the following hold:
-// a) The lease is not expiration-based and kv.expiration_leases_only.enabled
-// is true, since we'll have to renew it shortly.
-// b) The leaseholder and the leader are collocated. We don't want to quiesce
+// a) The lease is not a leader lease, since such leases do not require raft
+// heartbeats.
+// b) The lease is not expiration-based, since we'll have to renew it shortly.
+// c) The leaseholder and the leader are collocated. We don't want to quiesce
 // otherwise as we don't want to quiesce while a leader election is in progress,
 // and also we don't want to quiesce if another replica might have commands
 // pending that require this leader for proposing them. Note that, after the
 // leaseholder decides to quiesce, followers can still refuse quiescing if they
 // have pending commands.
-// c) There are no commands in-flight proposed by this leaseholder. Clients can
+// d) There are no commands in-flight proposed by this leaseholder. Clients can
 // be waiting for results while there's pending proposals.
-// d) There is no outstanding proposal quota. Quiescing while there's quota
+// e) There is no outstanding proposal quota. Quiescing while there's quota
 // outstanding can lead to deadlock. See #46699.
-// e) All the live followers are caught up. We don't want to quiesce when
+// f) All the live followers are caught up. We don't want to quiesce when
 // followers are behind because then they might not catch up until we
 // un-quiesce. We like it when everybody is caught up because otherwise
 // failovers can take longer.
@@ -305,10 +306,18 @@ func shouldReplicaQuiesce(
 		}
 		return nil, nil, false
 	}
+	// Fast path: don't quiesce leader leases. A fortified raft leader does not
+	// send raft heartbeats, so quiescence is not needed. All liveness decisions
+	// are based on store liveness communication, which is cheap enough to not
+	// need a notion of quiescence.
+	if leaseStatus.Lease.Type() == roachpb.LeaseLeader {
+		log.VInfof(ctx, 4, "not quiescing: leader lease")
+		return nil, nil, false
+	}
 	// Fast path: don't quiesce expiration-based leases, since they'll likely be
 	// renewed soon. The lease may not be ours, but in that case we wouldn't be
 	// able to quiesce anyway (see leaseholder condition below).
-	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
+	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration {
 		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
 		return nil, nil, false
 	}

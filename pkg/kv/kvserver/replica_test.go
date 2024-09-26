@@ -10093,6 +10093,12 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		}
 		return q
 	})
+	// Verify no quiescence with leader leases.
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Term = 1
+		return q
+	})
 }
 
 func TestFollowerQuiesceOnNotify(t *testing.T) {
