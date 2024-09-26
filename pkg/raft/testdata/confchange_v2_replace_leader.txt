@@ -1,8 +1,8 @@
-# Run a V2 membership change that removes the leader and adds another voter as a
+# Run a V2 membership change that demotes the leader and adds another voter as a
 # single operation, using joint consensus and explicitly determining when to
 # transition out of the joint config. Leadership is transferred by campaigning a
 # designated voter in the new config once the old leader steps down. After the
-# reconfiguration completes, we verify that the removed leader cannot campaign
+# reconfiguration completes, we verify that the demoted leader cannot campaign
 # to become leader.
 
 # We'll turn this back on after the boilerplate.
@@ -43,7 +43,7 @@ INFO newRaft 4 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 
 # Start reconfiguration to remove n1 and add n4.
 propose-conf-change 1 v1=false transition=explicit
-r1 v4
+r1 l1 v4
 ----
 ok
 
@@ -119,7 +119,7 @@ stabilize
   1->2 MsgApp Term:1 Log:1/5 Commit:5
   1->3 MsgApp Term:1 Log:1/5 Commit:5
   1->4 MsgApp Term:1 Log:1/5 Commit:5
-  INFO 1 switched to configuration voters=(2 3 4)
+  INFO 1 switched to configuration voters=(2 3 4) learners=(1)
   INFO 1 became follower at term 1
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/5 Commit:5
@@ -137,7 +137,7 @@ stabilize
   1/5 EntryConfChangeV2
   Messages:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
-  INFO 2 switched to configuration voters=(2 3 4)
+  INFO 2 switched to configuration voters=(2 3 4) learners=(1)
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
@@ -145,7 +145,7 @@ stabilize
   1/5 EntryConfChangeV2
   Messages:
   3->1 MsgAppResp Term:1 Log:0/5 Commit:5
-  INFO 3 switched to configuration voters=(2 3 4)
+  INFO 3 switched to configuration voters=(2 3 4) learners=(1)
 > 4 handling Ready
   Ready MustSync=true:
   HardState Term:1 Commit:5 Lead:1 LeadEpoch:1
@@ -153,7 +153,7 @@ stabilize
   1/5 EntryConfChangeV2
   Messages:
   4->1 MsgAppResp Term:1 Log:0/5 Commit:5
-  INFO 4 switched to configuration voters=(2 3 4)
+  INFO 4 switched to configuration voters=(2 3 4) learners=(1)
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
   3->1 MsgAppResp Term:1 Log:0/5 Commit:5
@@ -196,7 +196,7 @@ ok
 
 raft-state
 ----
-1: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:1
+1: StateFollower (Non-Voter) Term:2 Lead:2 LeadEpoch:1
 2: StateLeader (Voter) Term:2 Lead:2 LeadEpoch:1
 3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
 4: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1

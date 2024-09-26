@@ -42,6 +42,10 @@ func ValidateProp(ctx ValidationContext, cc pb.ConfChangeV2) error {
 	if !ctx.DisableValidationAgainstCurConfig {
 		curConfig := ctx.CurConfig
 
+		// Check that the proposed ConfChange is handling the joint state correctly.
+		// When in a joint state, the next config change must be to leave the joint
+		// state. When not in a joint state, the config change must not be asking us
+		// to leave the joint state.
 		alreadyJoint := len(curConfig.Voters[1]) > 0
 		wantsLeaveJoint := cc.LeaveJoint()
 		if alreadyJoint && !wantsLeaveJoint {
@@ -50,7 +54,29 @@ func ValidateProp(ctx ValidationContext, cc pb.ConfChangeV2) error {
 			return errors.New("not in joint state; refusing empty conf change")
 		}
 
-		// TODO(nvanbenschoten): check against direct voter removal.
+		// Check against direct voter removal. Voters must first be demoted to
+		// learners before they can be removed.
+		voterRemovals := make(map[pb.PeerID]struct{})
+		for _, cc := range cc.Changes {
+			switch cc.Type {
+			case pb.ConfChangeRemoveNode:
+				if _, ok := incoming(curConfig.Voters)[cc.NodeID]; ok {
+					voterRemovals[cc.NodeID] = struct{}{}
+				}
+			case pb.ConfChangeAddNode, pb.ConfChangeAddLearnerNode:
+				// If the node is being added back as a voter or learner, don't consider
+				// it a removal. Note that the order of the changes to the voterRemovals
+				// map is important here — we need the map manipulation to follow the
+				// slice order and mirror the handling of changes in Changer.apply.
+				delete(voterRemovals, cc.NodeID)
+			case pb.ConfChangeUpdateNode:
+			default:
+				return errors.Errorf("unexpected conf type %d", cc.Type)
+			}
+		}
+		if len(voterRemovals) > 0 {
+			return errors.New("voters must be demoted to learners before being removed")
+		}
 	}
 
 	return nil
