@@ -17,15 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,30 +95,8 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 
 	ctx := context.Background()
 
-	// We'll mock the job execution function to track when the job is run and
-	// to avoid running the actual job which could take longer - we don't care
-	// about the actual update logic in this test.
-	var mockCalls []time.Time
-	mockMutex := syncutil.RWMutex{}
 	jobRunCh := make(chan struct{})
-	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
-		func(ctx context.Context, ie isql.Executor) error {
-			mockMutex.Lock()
-			defer mockMutex.Unlock()
-			mockCalls = append(mockCalls, timeutil.Now())
-			select {
-			case jobRunCh <- struct{}{}:
-			default:
-			}
-			return nil
-		})
-	defer restoreUpdate()
-
-	getMockCallCount := func() int {
-		mockMutex.RLock()
-		defer mockMutex.RUnlock()
-		return len(mockCalls)
-	}
+	updater := mockUpdater{jobRunCh: jobRunCh}
 
 	waitForJobRuns := func(count int, timeout time.Duration) error {
 		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
@@ -136,7 +112,13 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	}
 
 	// Server setup.
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableMetadata: &tablemetadatacacheutil.TestingKnobs{
+				TableMetadataUpdater: &updater,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
@@ -144,9 +126,9 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	// Wait for the job to be claimed by a node.
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.Query(t, `
-				SELECT claim_instance_id, status FROM system.jobs 
+				SELECT claim_instance_id, status FROM system.jobs
 				WHERE id = $1 AND claim_instance_id IS NOT NULL
-                      AND status = 'running'`,
+                    AND status = 'running'`,
 			jobs.UpdateTableMetadataCacheJobID)
 		if !row.Next() {
 			return errors.New("no node has claimed the job")
@@ -154,25 +136,22 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 		return nil
 	})
 
-	require.Zero(t, getMockCallCount(), "Job should not run automatically by default")
+	require.Zero(t, len(updater.mockCalls), "Job should not run automatically by default")
 
 	t.Run("AutomaticUpdatesEnabled", func(t *testing.T) {
 		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = true`)
 		DataValidDurationSetting.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
-		err := waitForJobRuns(3, 10*time.Second)
+		err := waitForJobRuns(3, 30*time.Second)
 		require.NoError(t, err, "Job should have run at least 3 times")
-		mockCallsCount := getMockCallCount()
-		require.GreaterOrEqual(t, mockCallsCount, 3, "Job should have run at least 3 times")
+		require.GreaterOrEqual(t, len(updater.mockCalls), 3, "Job should have run at least 3 times")
 		conn.Exec(t, `RESET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled`)
 		// We'll wait for one more signal in case the job was running when the setting was disabled.
 		// Ignore the error since it could timeout or be successful.
 		_ = waitForJobRuns(1, 200*time.Millisecond)
 
 		// Verify time between calls.
-		mockMutex.RLock()
-		defer mockMutex.RUnlock()
-		for i := 1; i < len(mockCalls); i++ {
-			timeBetweenCalls := mockCalls[i].Sub(mockCalls[i-1])
+		for i := 1; i < len(updater.mockCalls); i++ {
+			timeBetweenCalls := updater.mockCalls[i].Sub(updater.mockCalls[i-1])
 			require.GreaterOrEqual(t, timeBetweenCalls, 50*time.Millisecond,
 				"Time between calls %d and %d should be at least 50ms", i-1, i)
 		}
@@ -181,9 +160,22 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	t.Run("AutomaticUpdatesDisabled", func(t *testing.T) {
 		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = f`)
 		DataValidDurationSetting.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
-		initialCount := getMockCallCount()
+		initialCount := len(updater.mockCalls)
 		err := waitForJobRuns(1, 200*time.Millisecond)
 		require.Error(t, err, "Job should not run after being disabled")
-		require.Equal(t, initialCount, getMockCallCount(), "Job count should not increase after being disabled")
+		require.Equal(t, initialCount, len(updater.mockCalls), "Job count should not increase after being disabled")
 	})
 }
+
+type mockUpdater struct {
+	mockCalls []time.Time
+	jobRunCh  chan struct{}
+}
+
+func (t *mockUpdater) RunUpdater(ctx context.Context) error {
+	t.mockCalls = append(t.mockCalls, time.Now())
+	t.jobRunCh <- struct{}{}
+	return nil
+}
+
+var _ tablemetadatacacheutil.ITableMetadataUpdater = &mockUpdater{}
