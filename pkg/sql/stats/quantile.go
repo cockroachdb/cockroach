@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -376,20 +375,14 @@ func toQuantileValue(d tree.Datum) (float64, error) {
 		// converting back.
 		return float64(v.PGEpochDays()), nil
 	case *tree.DTimestamp:
-		if v.Equal(pgdate.TimeInfinity) {
-			return pgdate.TimeInfinitySec, nil
-		}
-		if v.Equal(pgdate.TimeNegativeInfinity) {
-			return pgdate.TimeNegativeInfinitySec, nil
+		if v.Before(tree.MinSupportedTime) || v.After(tree.MaxSupportedTime) {
+			return 0, tree.ErrFloatOutOfRange
 		}
 		return float64(v.Unix()) + float64(v.Nanosecond())*1e-9, nil
 	case *tree.DTimestampTZ:
 		// TIMESTAMPTZ doesn't store a timezone, so this is the same as TIMESTAMP.
-		if v.Equal(pgdate.TimeInfinity) {
-			return pgdate.TimeInfinitySec, nil
-		}
-		if v.Equal(pgdate.TimeNegativeInfinity) {
-			return pgdate.TimeNegativeInfinitySec, nil
+		if v.Before(tree.MinSupportedTime) || v.After(tree.MaxSupportedTime) {
+			return 0, tree.ErrFloatOutOfRange
 		}
 		return float64(v.Unix()) + float64(v.Nanosecond())*1e-9, nil
 	default:
@@ -461,15 +454,11 @@ func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 		return tree.NewDDate(pgdate.MakeDateFromPGEpochClampFinite(int32(days))), nil
 	case types.TimestampFamily, types.TimestampTZFamily:
 		sec, frac := math.Modf(val)
-		var t time.Time
-		// Clamp to DTimestamp bounds.
-		if sec <= pgdate.TimeNegativeInfinitySec {
-			t = pgdate.TimeNegativeInfinity
-		} else if sec >= pgdate.TimeInfinitySec {
-			t = pgdate.TimeInfinity
-		} else {
-			t = timeutil.Unix(int64(sec), int64(frac*1e9))
+		// Return an error for all values outside the supported time range.
+		if sec < tree.MinSupportedTimeSec || sec > tree.MaxSupportedTimeSec {
+			return nil, tree.ErrFloatOutOfRange
 		}
+		t := timeutil.Unix(int64(sec), int64(frac*1e9))
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(colType.Precision())
 		if colType.Family() == types.TimestampFamily {
 			return tree.MakeDTimestamp(t, roundTo)
