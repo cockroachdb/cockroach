@@ -5,7 +5,7 @@
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) establishes support for and from (n2, s2).
@@ -129,7 +129,7 @@ heartbeats:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) sends heartbeats with an incremented epoch.

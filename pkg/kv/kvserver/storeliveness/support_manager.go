@@ -105,7 +105,7 @@ func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 
 // SupportFrom implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
-func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp, bool) {
+func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp) {
 	ss, ok := sm.requesterStateHandler.getSupportFrom(id)
 	if !ok {
 		// If this is the first time SupportFrom has been called for this store,
@@ -119,13 +119,13 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 			context.Background(), 2,
 			"store %+v enqueued to add remote store %+v", sm.storeID, id,
 		)
-		return 0, hlc.Timestamp{}, false
+		return 0, hlc.Timestamp{}
 	}
 	// An empty expiration implies support has expired.
 	if ss.Expiration.IsEmpty() {
-		return 0, hlc.Timestamp{}, false
+		return 0, hlc.Timestamp{}
 	}
-	return ss.Epoch, ss.Expiration, true
+	return ss.Epoch, ss.Expiration
 }
 
 // SupportFromEnabled implements the Fabric interface and determines if Store
