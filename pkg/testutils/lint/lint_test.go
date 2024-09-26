@@ -359,8 +359,8 @@ func TestLint(t *testing.T) {
 // limitations under the License.
 `)
 		cockroachCopyright := regexp.MustCompile(
-			`// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+			`// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 20\d\d The Cockroach Authors.`)
 
 		raftDir := filepath.Join(pkgDir, "raft")
 		// These extensions identify source files that should have copyright headers.
