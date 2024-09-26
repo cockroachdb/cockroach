@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -84,6 +86,7 @@ type AggMetrics struct {
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
+	SinkErrors                  sinkErrors
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -95,6 +98,32 @@ type AggMetrics struct {
 	// threading the NetMetrics through all the other places.
 	NetMetrics *cidr.NetMetrics
 }
+
+type sinkErrors map[sinkType]*aggmetric.AggCounter
+
+func newSinkErrors(b aggmetric.Builder) sinkErrors {
+	se := make(sinkErrors)
+	for _, st := range allSinkTypes {
+		meta := metric.Metadata{
+			Name:        fmt.Sprintf("changefeed.sink_errors.%s", st),
+			Help:        fmt.Sprintf("Number of errors encountered by the %s sink", st),
+			Measurement: "Errors",
+			Unit:        metric.Unit_COUNT,
+		}
+		se[st] = b.Counter(meta)
+	}
+	return se
+}
+
+func (se sinkErrors) scoped(scope string) scopedSinkErrors {
+	sse := make(scopedSinkErrors, len(se))
+	for st, c := range se {
+		sse[st] = c.AddChild(scope)
+	}
+	return sse
+}
+
+type scopedSinkErrors map[sinkType]*aggmetric.Counter
 
 const (
 	requiresResourceAccounting = true
@@ -120,6 +149,7 @@ type metricsRecorder interface {
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
 	netMetrics() *cidr.NetMetrics
+	recordSinkError(ctx context.Context, st sinkType, err error)
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -162,6 +192,7 @@ type sliMetrics struct {
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
+	SinkErrors                  scopedSinkErrors
 
 	mu struct {
 		syncutil.Mutex
@@ -349,6 +380,23 @@ func (m *sliMetrics) netMetrics() *cidr.NetMetrics {
 	}
 
 	return m.NetMetrics
+}
+
+func (m *sliMetrics) recordSinkError(ctx context.Context, st sinkType, err error) {
+	// TODO: either we put calls in the change aggregator encode and emit, or we put it inside the sinks as close to the errors as possible
+	// i think the latter is better because it captures more transient errors.
+
+	// TODO: log more detailed info to event log or another channel or smth
+
+	// TODO: handle this differently
+	if _, ok := m.SinkErrors[st]; !ok {
+		log.Warningf(ctx, "unknown sink type %d", st)
+	}
+
+	m.SinkErrors[st].Inc(1)
+	// log.Eventf .. or something
+
+	panic("todo")
 }
 
 // JobScopedUsageMetrics are aggregated metrics keeping track of
@@ -668,6 +716,10 @@ func (w *wrappingCostController) getKafkaThrottlingMetrics(
 
 func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
 	return w.inner.netMetrics()
+}
+
+func (w *wrappingCostController) recordSinkError(ctx context.Context, st sinkType, err error) {
+	w.inner.recordSinkError(sinkType, err)
 }
 
 var (
@@ -1064,6 +1116,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		SinkErrors: newSinkErrors(b),
 		NetMetrics: lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
@@ -1133,6 +1186,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		TotalRanges:                 a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		SinkErrors:                  a.SinkErrors.scoped(scope),
 		// TODO(#130358): Again, this doesn't belong here, but it's the most
 		// convenient way to feed this metric to changefeeds.
 		NetMetrics: a.NetMetrics,

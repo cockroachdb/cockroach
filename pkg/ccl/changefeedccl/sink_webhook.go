@@ -567,7 +567,13 @@ func (s *deprecatedWebhookSink) sendMessageWithRetries(ctx context.Context, reqB
 	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
 }
 
-func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
+func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			s.metrics.recordSinkError("webhook", retErr)
+		}
+	}()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return err
@@ -648,6 +654,7 @@ func (s *deprecatedWebhookSink) EmitRow(
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-s.errChan:
+		s.metrics.recordSinkError("webhook", err)
 		return err
 	case s.batchChan <- webhookMessage{
 		payload: deprecatedMessagePayload{
