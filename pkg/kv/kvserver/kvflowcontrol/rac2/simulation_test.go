@@ -1106,6 +1106,7 @@ func (r *testingRCRange) testingDeductTokens(
 		r.mu.r.replicaSet[k] = testR
 	}
 	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{
+		MsgAppMode:        MsgAppPush,
 		ReplicasStateInfo: r.replicasStateInfo(),
 		Term:              r.mu.quorumPosition.Term,
 		Entries:           []raftpb.Entry{entry},
