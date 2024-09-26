@@ -44,7 +44,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     {
       title: TableColName.NAME,
       width: "15%",
-      sorter: true,
+      sorter: (a, b) => a.name.localeCompare(b.name),
       render: (t: TableRow) => {
         // This linking is just temporary. We'll need to update it to the correct path
         // using db ID and table ID once we have the table details page.
@@ -56,7 +56,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     {
       title: TableColName.REPLICATION_SIZE,
       width: "fit-content",
-      sorter: true,
+      sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
       render: (t: TableRow) => {
         return Bytes(t.replicationSizeBytes);
       },

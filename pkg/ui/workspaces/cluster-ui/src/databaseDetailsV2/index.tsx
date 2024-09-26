@@ -17,8 +17,6 @@ import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
 import { TablesPageV2 } from "./tablesView";
 
-const { TabPane } = Tabs;
-
 enum TabKeys {
   TABLES = "tables",
   GRANTS = "grants",
@@ -27,6 +25,19 @@ export const DatabaseDetailsPageV2 = () => {
   const [currentTab, setCurrentTab] = useState(TabKeys.TABLES);
 
   // TODO (xinhaoz) #131119 - Populate db name here.
+  const tabItems = [
+    {
+      key: TabKeys.TABLES,
+      label: "Tables",
+      children: <TablesPageV2 />,
+    },
+    {
+      key: TabKeys.GRANTS,
+      label: "Grants",
+      children: <div />,
+    },
+  ];
+
   return (
     <PageLayout>
       <PageHeader title="myDB" />
@@ -36,12 +47,8 @@ export const DatabaseDetailsPageV2 = () => {
         onChange={setCurrentTab}
         activeKey={currentTab}
         destroyInactiveTabPane
-      >
-        <TabPane tab="Tables" key={TabKeys.TABLES}>
-          <TablesPageV2 />
-        </TabPane>
-        <TabPane tab="Grants" key={TabKeys.GRANTS}></TabPane>
-      </Tabs>
+        items={tabItems}
+      />
     </PageLayout>
   );
 };
