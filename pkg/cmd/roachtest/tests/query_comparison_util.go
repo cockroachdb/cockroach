@@ -184,12 +184,33 @@ func runOneRoundQueryComparison(
 		fmt.Fprint(failureLog, "\n")
 	}
 
+	connSetup := func(conn *gosql.DB) {
+		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
+		t.Status("setting statement_timeout")
+		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
+		if _, err := conn.Exec(setStmtTimeout); err != nil {
+			t.Fatal(err)
+		}
+		logStmt(setStmtTimeout)
+
+		setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
+		t.Status("setting unconstrained_non_covering_index_scan_enabled")
+		t.L().Printf("\n%s", setUnconstrainedStmt)
+		if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
+			logStmt(setUnconstrainedStmt)
+			t.Fatal(err)
+		}
+		logStmt(setUnconstrainedStmt)
+	}
+
 	node := 1
 	conn := c.Conn(ctx, t.L(), node)
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
 	t.L().Printf("setupName: %s", qct.setupName)
+
+	connSetup(conn)
 
 	if qct.setupName == "workload-replay" {
 
@@ -309,23 +330,6 @@ func runOneRoundQueryComparison(
 			}
 		}
 
-		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
-		t.Status("setting statement_timeout")
-		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
-		if _, err := conn.Exec(setStmtTimeout); err != nil {
-			t.Fatal(err)
-		}
-		logStmt(setStmtTimeout)
-
-		setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
-		t.Status("setting unconstrained_non_covering_index_scan_enabled")
-		t.L().Printf("\n%s", setUnconstrainedStmt)
-		if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
-			logStmt(setUnconstrainedStmt)
-			t.Fatal(err)
-		}
-		logStmt(setUnconstrainedStmt)
-
 		conn2 := conn
 		node2 := 1
 		if qct.isMultiRegion {
@@ -336,6 +340,7 @@ func runOneRoundQueryComparison(
 			node2 = rnd.Intn(qct.nodeCount-1) + 2
 			t.Status(fmt.Sprintf("running some queries from node %d with conn1 and some queries from node %d with conn2", node, node2))
 			conn2 = c.Conn(ctx, t.L(), node2)
+			connSetup(conn2)
 		}
 
 		// Initialize a smither that generates only INSERT and UPDATE statements with
