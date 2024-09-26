@@ -37,7 +37,7 @@ var _ invertedFilterPlanner = &tsqueryFilterPlanner{}
 func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	_ context.Context, _ *eval.Context, expr opt.ScalarExpr,
 ) (
-	invertedExpr inverted.Expression,
+	invertedExpr *inverted.SpanExpression,
 	remainingFilters opt.ScalarExpr,
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
@@ -48,7 +48,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		left, right = e.Left, e.Right
 	default:
 		// Only the above types are supported.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 	if isIndexColumn(t.tabID, t.index, left, t.computedColumns) && memo.CanExtractConstDatum(right) {
 		constantVal = right
@@ -56,7 +56,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		constantVal = left
 	} else {
 		// Can only accelerate with a single constant value.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 	d := memo.ExtractConstDatum(constantVal)
 	if !d.ResolvedType().Identical(types.TSQuery) {
@@ -69,7 +69,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	invertedExpr, err = q.GetInvertedExpr()
 	if err != nil {
 		// An inverted expression could not be extracted.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 
 	// If the extracted inverted expression is not tight then remaining filters

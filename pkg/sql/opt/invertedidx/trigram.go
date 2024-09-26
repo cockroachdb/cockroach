@@ -37,7 +37,7 @@ var _ invertedFilterPlanner = &trigramFilterPlanner{}
 func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	_ context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
-	invertedExpr inverted.Expression,
+	invertedExpr *inverted.SpanExpression,
 	remainingFilters opt.ScalarExpr,
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
@@ -75,7 +75,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		// Do not generate legacy inverted constraints for similarity filters
 		// if the text similarity optimization is enabled.
 		if evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization {
-			return inverted.NonInvertedColExpression{}, expr, nil
+			return nil, expr, nil
 		}
 		// If we're doing a % expression (similarity threshold), we need to
 		// construct an OR out of the spans: we need to find results that match any
@@ -87,7 +87,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		commutative = true
 	default:
 		// Only the above types are supported.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 	if isIndexColumn(t.tabID, t.index, left, t.computedColumns) && memo.CanExtractConstDatum(right) {
 		constantVal = right
@@ -97,7 +97,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		constantVal = left
 	} else {
 		// Can only accelerate with a single constant value.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 	d := tree.UnwrapDOidWrapper(memo.ExtractConstDatum(constantVal))
 	ds, ok := d.(*tree.DString)
@@ -111,7 +111,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch)
 	if err != nil {
 		// An inverted expression could not be extracted.
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 
 	// If the extracted inverted expression is not tight then remaining filters

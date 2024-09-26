@@ -772,7 +772,7 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) (inverted.Expression, error) {
+) (*inverted.SpanExpression, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -782,7 +782,7 @@ func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
 
 func (j *jsonEncoded) encodeContainedInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
-) (inverted.Expression, error) {
+) (*inverted.SpanExpression, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
