@@ -261,9 +261,9 @@ type SideChannelInfoUsingRaftMessageRequest struct {
 // We *strongly* prefer methods to be called without holding Replica.mu, since
 // then the callee (implementation of Processor) does not need to worry about
 // (a) deadlocks, since it sometimes needs to lock Replica.mu itself, (b) the
-// amount of work it is doing under this critical section. There are three
+// amount of work it is doing under this critical section. There are two
 // exceptions to this, due to difficulty in changing the calling code:
-// InitRaftLocked, OnDescChangedLocked and MaybeSendPingsLocked.
+// InitRaftLocked, OnDescChangedLocked.
 type Processor interface {
 	// InitRaftLocked is called when RaftNode is initialized for the Replica.
 	// NB: can be called twice before the Replica is fully initialized.
@@ -376,15 +376,15 @@ type Processor interface {
 	// raftMu is held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, rac2.AdmittedVector)
 
-	// MaybeSendPingsLocked sends a MsgApp ping to each raft peer whose admitted
-	// vector is lagging, and there wasn't a recent MsgApp to this peer. The
-	// messages are added to raft's message queue, and will be extracted from
-	// raft and sent during the next Ready processing.
+	// MaybeSendPingsRaftMuLocked sends a MsgApp ping to each raft peer whose
+	// admitted vector is lagging, and there wasn't a recent MsgApp to this
+	// peer. The messages are added to raft's message queue, and will be
+	// extracted from raft and sent during the next Ready processing.
 	//
 	// If the replica is not the leader, this call does nothing.
 	//
-	// Both Replica.raftMu and Replica.mu are held.
-	MaybeSendPingsLocked()
+	// raftMu is held.
+	MaybeSendPingsRaftMuLocked()
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -1131,12 +1131,11 @@ func (p *processorImpl) AdmitRaftMuLocked(
 	}
 }
 
-// MaybeSendPingsLocked implements Processor.
-func (p *processorImpl) MaybeSendPingsLocked() {
+// MaybeSendPingsRaftMuLocked implements Processor.
+func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
 	p.opts.Replica.RaftMuAssertHeld()
-	p.opts.Replica.MuAssertHeld()
 	if rc := p.leader.rc; rc != nil {
-		rc.MaybeSendPingsLocked()
+		rc.MaybeSendPingsRaftMuLocked()
 	}
 }
 
