@@ -20,10 +20,18 @@ import (
 
 type raftNodeForRACv2 struct {
 	*raft.RawNode
+	r ReplicaForRaftNode
+}
+
+type ReplicaForRaftNode interface {
+	// MuLock acquires Replica.mu.
+	MuLock()
+	// MuUnlock releases Replica.mu.
+	MuUnlock()
 }
 
 // NewRaftNode creates a RaftNode implementation from the given RawNode.
-func NewRaftNode(rn *raft.RawNode) RaftNode {
+func NewRaftNode(rn *raft.RawNode, r ReplicaForRaftNode) RaftNode {
 	return raftNodeForRACv2{RawNode: rn}
 }
 
@@ -55,7 +63,9 @@ func (rn raftNodeForRACv2) ReplicasStateLocked(
 	})
 }
 
-// SendPingReplicaMuLocked implements rac2.RaftInterface.
-func (rn raftNodeForRACv2) SendPingReplicaMuLocked(to roachpb.ReplicaID) bool {
+// SendPingRaftMuLocked implements rac2.RaftInterface.
+func (rn raftNodeForRACv2) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+	rn.r.MuLock()
+	defer rn.r.MuUnlock()
 	return rn.RawNode.SendPing(raftpb.PeerID(to))
 }
