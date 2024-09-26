@@ -266,7 +266,9 @@ message LogicalReplicationDetails {
 
   ApplyMode mode = 9;
 
-  // Next ID: 10.
+  string metrics_label = 10;
+
+  // Next ID: 11.
 }
 
 message LogicalReplicationProgress {

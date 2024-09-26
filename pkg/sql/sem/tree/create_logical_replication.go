@@ -32,6 +32,7 @@ type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
 	UserFunctions              map[UnresolvedName]RoutineName
 	Cursor                     Expr
+	MetricsLabel               Expr
 	Mode                       Expr
 	DefaultFunction            Expr
 	IgnoreCDCIgnoredTTLDeletes *DBool
@@ -134,6 +135,13 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("SKIP SCHEMA CHECK")
 	}
+
+	if lro.MetricsLabel != nil {
+		maybeAddSep()
+		ctx.WriteString("LABEL = ")
+		ctx.FormatNode(lro.MetricsLabel)
+	}
+
 }
 
 func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions) error {
@@ -188,6 +196,14 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		o.SkipSchemaCheck = other.SkipSchemaCheck
 	}
 
+	if o.MetricsLabel != nil {
+		if other.MetricsLabel != nil {
+			return errors.New("LABEL option specified multiple times")
+		}
+	} else {
+		o.MetricsLabel = other.MetricsLabel
+	}
+
 	return nil
 }
 
@@ -199,5 +215,6 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.DefaultFunction == options.DefaultFunction &&
 		o.UserFunctions == nil &&
 		o.IgnoreCDCIgnoredTTLDeletes == options.IgnoreCDCIgnoredTTLDeletes &&
-		o.SkipSchemaCheck == options.SkipSchemaCheck
+		o.SkipSchemaCheck == options.SkipSchemaCheck &&
+		o.MetricsLabel == options.MetricsLabel
 }
