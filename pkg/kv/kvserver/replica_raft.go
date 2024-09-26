@@ -369,7 +369,7 @@ func (r *Replica) encodePriorityForRACv2() bool {
 // of the proposal buffer.
 //
 // Note that this method is called for "new" proposals but also by
-// `tryReproposeWithNewLeaseIndex`. This second call leaves questions on what
+// `tryReproposeWithNewLeaseIndexRaftMuLocked`. This second call leaves questions on what
 // exactly the desired semantics are - some fields (MaxLeaseIndex,
 // ClosedTimestamp) will be set and this re-entrance into `propose`
 // is hard to fully understand. (The reset of `MaxLeaseIndex`	inside this

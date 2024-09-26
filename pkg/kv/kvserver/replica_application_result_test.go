@@ -66,7 +66,7 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 
 	prop := makeProposalData()
 	// If you are adding a field to ProposalData or RaftCommand, please consider the
-	// desired semantics of that field in `tryReproposeWithNewLeaseIndex{,v2}`. Once
+	// desired semantics of that field in `tryReproposeWithNewLeaseIndexRaftMuLocked{,v2}`. Once
 	// this has been done, adjust the expected number of fields below, and populate
 	// the field above, to let this test pass.
 	//
