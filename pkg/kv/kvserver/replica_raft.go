@@ -934,7 +934,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
-		r.ReplicaID(), msgStorageAppend, outboundMsgs, r.raftMu.msgAppScratchForFlowControl)
+		rac2.MsgAppPush, r.ReplicaID(), msgStorageAppend, outboundMsgs,
+		r.raftMu.msgAppScratchForFlowControl)
 	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftEvent)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
