@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -2579,4 +2580,18 @@ func (r *Replica) maybeEnqueueProblemRange(
 	}
 	r.store.replicateQueue.AddAsync(ctx, r,
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+}
+
+// SendStreamStats returns the range's flow control send stream stats iff the
+// replica is the raft leader and RACv2 is enabled, otherwise nil.
+//
+// raftMu must NOT be held.
+func (r *Replica) SendStreamStats() rac2.RangeSendStreamStats {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	if r.flowControlV2 == nil {
+		return nil
+	}
+	return r.flowControlV2.SendStreamStatsRaftMuLocked()
 }

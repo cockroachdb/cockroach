@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2019,6 +2021,7 @@ func (a *Allocator) ValidLeaseTargets(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats() rac2.RangeSendStreamStats
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2082,6 +2085,8 @@ func (a *Allocator) ValidLeaseTargets(
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
 			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
+		candidates = excludeReplicasInNeedOfCatchup(
+			ctx, leaseRepl.SendStreamStats(), candidates)
 	}
 
 	// Determine which store(s) is preferred based on user-specified preferences.
@@ -2190,6 +2195,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats() rac2.RangeSendStreamStats
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
@@ -2222,6 +2228,8 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
 			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+		preferred = excludeReplicasInNeedOfCatchup(
+			ctx, leaseRepl.SendStreamStats(), preferred)
 	}
 	if len(preferred) == 0 {
 		return false
@@ -2280,6 +2288,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats() rac2.RangeSendStreamStats
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2648,6 +2657,7 @@ func (a *Allocator) ShouldTransferLease(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats() rac2.RangeSendStreamStats
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
@@ -3044,6 +3054,41 @@ func excludeReplicasInNeedOfSnapshots(
 			)
 			continue
 		}
+		replicas[filled] = repl
+		filled++
+	}
+	return replicas[:filled]
+}
+
+// excludeReplicasInNeedOfCatchup filters out the `replicas` that may be in
+// need of a catchup messages before able to apply the lease, based on the
+// provided RangeSendStreamStats.
+func excludeReplicasInNeedOfCatchup(
+	ctx context.Context,
+	sendStreamStats rac2.RangeSendStreamStats,
+	replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	if sendStreamStats == nil {
+		// When we don't have stats, we can't make an informed decision about which
+		// replicas are behind. We'll just return the replicas as is. This can
+		// occur if the current leaseholder is not yet the raft leader, or only
+		// recently became one (concurrent to the lease transfer decision).
+		return replicas
+	}
+	filled := 0
+	for _, repl := range replicas {
+		if stats, ok := sendStreamStats[repl.ReplicaID]; ok &&
+			(stats.Closed || stats.SendQueueSizeBytes > 0) {
+			log.KvDistribution.VEventf(ctx, 5,
+				"not considering %s as a potential candidate for a lease transfer "+
+					"because the replica requires catchup: [closed=%v send_queue_bytes=%v]",
+				repl, stats.Closed, humanizeutil.IBytes(stats.SendQueueSizeBytes))
+			continue
+		}
+		// We are also not excluding any replicas which weren't included in the
+		// stats here. If they weren't included it indicates that they were either
+		// recently added or removed and in either case we don't know enough to
+		// preclude them as lease transfer targets.
 		replicas[filled] = repl
 		filled++
 	}

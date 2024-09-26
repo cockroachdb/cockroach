@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,6 +54,9 @@ type CandidateReplica interface {
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by
 	// the allocator to make rebalancing decisions for a given range.
 	RangeUsageInfo() allocator.RangeUsageInfo
+	// SendStreamStats returns the range's flow control send stream stats iff the
+	// replica is the raft leader and RACv2 is enabled, otherwise nil.
+	SendStreamStats() rac2.RangeSendStreamStats
 	// AdminTransferLease transfers the LeaderLease to another replica.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	// Repl returns the underlying replica for this CandidateReplica. It is
