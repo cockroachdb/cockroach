@@ -134,7 +134,7 @@ function mapTableColumnsToAntDesignColumns<T>(
   return antDTableColumns;
 }
 
-const DEFAULT_EMPTY_ICON = emptyListResultsImg;
+const DEFAULT_EMPTY_ICON = <img src={emptyListResultsImg} />;
 
 // export component for quick custom empty states
 export const EmptyState = ({
