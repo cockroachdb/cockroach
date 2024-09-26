@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,6 +41,10 @@ type Query struct {
 	// notJoins are sub-queries which, if successfully unified, imply a
 	// contradiction in the outer query.
 	notJoins []subQuery
+	// clauseIDs is a list that parallels slots[]. It identifies the clause that
+	// created the given slot entry. This is used to for debugging to provide
+	// meaningful diagnostics when clauses fail to find any qualifying results.
+	clauseIDs []int
 
 	// cache one evalContext for reuse to accelerate benchmarks and deal with
 	// the common case.
@@ -87,17 +92,37 @@ func NewQuery(sc *Schema, clauses ...Clause) (_ *Query, err error) {
 			err = errors.AssertionFailedf("failed to construct query: %v", r)
 		}
 	}()
-	q := newQuery(sc, clauses)
+	q := newQuery(sc, clauses, &clauseIDBuilder{})
 	return q, nil
 }
 
 // Iterate will call the result iterator for every valid binding of each
 // distinct entity variable such that all the variables in the query are
 // bound and all filters passing.
-func (q *Query) Iterate(db *Database, ri ResultIterator) error {
+func (q *Query) Iterate(db *Database, stats *QueryStats, ri ResultIterator) error {
 	ec := q.getEvalContext()
 	defer q.putEvalContext(ec)
-	return ec.Iterate(db, ri)
+
+	// Early out if not returning stats.
+	if stats == nil {
+		return ec.Iterate(db, ri)
+	}
+
+	// If we are collecting stats, then we need gather some diagnostics
+	// before giving up the eval context. So, this is a slightly slower path.
+	ec.stats.StartTime = timeutil.Now()
+	if err := ec.Iterate(db, ri); err != nil {
+		return err
+	}
+	if ec.stats.ResultsFound == 0 {
+		if clauseID, err := ec.findFirstClauseNotSatisfied(); err != nil {
+			return err
+		} else {
+			ec.stats.FirstUnsatisfiedClause = clauseID
+		}
+	}
+	*stats = ec.stats
+	return nil
 }
 
 // getEvalContext grabs a cached evalContext from the query
@@ -110,6 +135,9 @@ func (q *Query) getEvalContext() *evalContext {
 		return ec
 	}
 	if ec := getCachedEvalContext(); ec != nil {
+		for i := range ec.slotResetCount {
+			ec.slotResetCount[i] = 0
+		}
 		return ec
 	}
 	return newEvalContext(q)
