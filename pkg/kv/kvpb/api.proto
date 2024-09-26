@@ -1683,6 +1683,12 @@ message RequestLeaseRequest {
   // it has not changed when executing this command.
   Lease prev_lease = 3 [(gogoproto.nullable) = false];
   reserved 4;
+  // RevokePrevAndForwardExpiration indicates that the previous lease should be
+  // explicitly revoked when acquiring the new lease. Then, after doing so, the
+  // expiration of the next lease should be forwarded beyond the expiration of
+  // the previous lease. This is used to prevent expiration regressions during
+  // lease type switches.
+  bool revoke_prev_and_forward_expiration = 5;
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()

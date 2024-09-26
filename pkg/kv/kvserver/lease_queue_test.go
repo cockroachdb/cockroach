@@ -228,7 +228,7 @@ func TestLeaseQueueExpirationLeasesOnly(t *testing.T) {
 		epochLeases, leaderLeases, expLeases = countLeases()
 		t.Logf("enabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
 		return epochLeases == 0 && leaderLeases == 0 && expLeases > 0
-	}, 30*time.Second, 500*time.Millisecond) // accomodate stress/deadlock builds
+	}, 30*time.Second, 500*time.Millisecond) // accommodate stress/deadlock builds
 
 	// Run a scan across the ranges, just to make sure they work.
 	scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -248,6 +248,99 @@ func TestLeaseQueueExpirationLeasesOnly(t *testing.T) {
 		t.Logf("disabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
 		return epochLeases > 0 && leaderLeases == 0 && expLeases > 0 && expLeases <= initialExpLeases
 	}, 30*time.Second, 500*time.Millisecond)
+}
+
+// TestLeaseQueueSwitchesLeaseType tests that changing the value of the
+// kv.raft.leader_fortification.fraction_enabled cluster setting switches leases
+// on non-system ranges between epoch-based leases and leader leases.
+func TestLeaseQueueSwitchesLeaseType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Speed up the lease queue, which switches the lease type.
+			Settings:        st,
+			ScanMinIdleTime: time.Millisecond,
+			ScanMaxIdleTime: time.Millisecond,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	// Split off a few ranges so we have something to work with.
+	scratchKey := tc.ScratchRange(t)
+	for i := 0; i <= 255; i++ {
+		splitKey := append(scratchKey.Clone(), byte(i))
+		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	countLeases := func() (epoch, leader, expiration int64) {
+		for i := 0; i < tc.NumServers(); i++ {
+			require.NoError(t, tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				require.NoError(t, s.ComputeMetrics(ctx))
+				epoch += s.Metrics().LeaseEpochCount.Value()
+				leader += s.Metrics().LeaseLeaderCount.Value()
+				expiration += s.Metrics().LeaseExpirationCount.Value()
+				return nil
+			}))
+		}
+		return
+	}
+
+	// We expect to have both expiration and epoch leases at the start, since the
+	// meta and liveness ranges require expiration leases. However, we should have
+	// no leader leases.
+	epochLeases, leaderLeases, expLeases := countLeases()
+	require.NotZero(t, epochLeases)
+	require.Zero(t, leaderLeases)
+	require.NotZero(t, expLeases)
+	t.Logf("initial: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
+
+	waitForLeasesToSwitch := func(name string, someEpoch, someLeader bool) {
+		require.Eventually(t, func() bool {
+			epochLeases, leaderLeases, expLeases = countLeases()
+			t.Logf("%s: epochLeases=%d leaderLeases=%d expLeases=%d", name, epochLeases, leaderLeases, expLeases)
+			return ((epochLeases > 0) == someEpoch) && ((leaderLeases > 0) == someLeader)
+		}, 30*time.Second, 500*time.Millisecond) // accommodate stress/deadlock builds
+
+		// Run a scan across the ranges, just to make sure they work.
+		scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		_, err := db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
+		require.NoError(t, err)
+	}
+
+	// Switch 100% of ranges to use leader fortification, which should allow them
+	// to switch to leader leases, except for the system ranges, which still
+	// require expiration-based leases.
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 1.00`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("100%", false /* someEpoch */, true /* someLeader */)
+
+	// Switch to 50% of ranges using leader fortification, and by extension, leader
+	// leases. The other 50% should switch back to epoch-based leases.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 0.50`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("50%", true /* someEpoch */, true /* someLeader */)
+
+	// Disable leader leases, even on ranges using raft fortification. All leader
+	// leases should switch back to epoch-based leases.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.leases.leader_leases.enabled = false`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("disabled", true /* someEpoch */, false /* someLeader */)
 }
 
 // TestLeaseQueueRaceReplicateQueue asserts that the replicate/lease queue will

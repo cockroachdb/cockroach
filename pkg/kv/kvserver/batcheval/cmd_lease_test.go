@@ -89,7 +89,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		testutils.RunTrueAndFalse(t, "served-future-reads", func(t *testing.T, servedFutureReads bool) {
 			ctx := context.Background()
 			db := storage.NewDefaultInMemForTesting()
@@ -117,11 +117,16 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				Start:      now,
 				Sequence:   prevLease.Sequence + 1,
 			}
-			if epoch {
-				nextLease.Epoch = 1
-			} else {
+			switch leaseType {
+			case roachpb.LeaseExpiration:
 				exp := nextLease.Start.ToTimestamp().Add(9*time.Second.Nanoseconds(), 0)
 				nextLease.Expiration = &exp
+			case roachpb.LeaseEpoch:
+				nextLease.Epoch = 1
+			case roachpb.LeaseLeader:
+				nextLease.Term = 1
+			default:
+				t.Fatalf("unexpected lease type: %s", leaseType)
 			}
 
 			var maxPriorReadTS hlc.Timestamp
@@ -185,6 +190,105 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			require.NotNil(t, persistReadSum, "should persist prior read summary")
 			require.NotEqual(t, currentReadSummary, *persistReadSum)
 			require.Equal(t, rspb.FromTimestamp(maxPriorReadTS), *persistReadSum)
+		})
+	})
+}
+
+// TestLeaseTransferForwardsStartTime tests that during a lease transfer, the
+// start time of the new lease is determined during evaluation, after latches
+// have granted the lease transfer full mutual exclusion over the leaseholder.
+func TestLeaseRequestTypeSwitchForwardsExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		testutils.RunTrueAndFalse(t, "revoke", func(t *testing.T, revoke bool) {
+			ctx := context.Background()
+			db := storage.NewDefaultInMemForTesting()
+			defer db.Close()
+			batch := db.NewBatch()
+			defer batch.Close()
+
+			replicas := []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, Type: roachpb.VOTER_FULL, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, Type: roachpb.VOTER_FULL, ReplicaID: 2},
+			}
+			desc := roachpb.RangeDescriptor{}
+			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+			clock := hlc.NewClockForTesting(manual)
+			const rangeLeaseDuration = 6 * time.Second
+
+			prevLease := roachpb.Lease{
+				Replica:  replicas[0],
+				Sequence: 1,
+			}
+			now := clock.NowAsClockTimestamp()
+			nowPlusExp := now.ToTimestamp().Add(rangeLeaseDuration.Nanoseconds(), 0)
+			nextLease := roachpb.Lease{
+				Replica:    replicas[0],
+				ProposedTS: now,
+				Start:      now,
+				Sequence:   prevLease.Sequence,
+			}
+			switch leaseType {
+			case roachpb.LeaseExpiration:
+				exp := nowPlusExp
+				nextLease.Expiration = &exp
+			case roachpb.LeaseEpoch:
+				nextLease.Epoch = 1
+			case roachpb.LeaseLeader:
+				nextLease.Term = 1
+			default:
+				t.Fatalf("unexpected lease type: %s", leaseType)
+			}
+
+			evalCtx := &MockEvalCtx{
+				ClusterSettings:    cluster.MakeTestingClusterSettings(),
+				StoreID:            1,
+				Desc:               &desc,
+				Clock:              clock,
+				RangeLeaseDuration: rangeLeaseDuration,
+			}
+			cArgs := CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
+				Args: &kvpb.RequestLeaseRequest{
+					Lease:                          nextLease,
+					PrevLease:                      prevLease,
+					RevokePrevAndForwardExpiration: revoke,
+				},
+			}
+
+			manual.Advance(1000)
+			beforeEval := clock.Now()
+
+			res, err := RequestLease(ctx, batch, cArgs, nil)
+			require.NoError(t, err)
+
+			propLease := res.Replicated.State.Lease
+			if revoke {
+				// The previous lease should have been revoked.
+				require.Equal(t, prevLease.Sequence, evalCtx.RevokedLeaseSeq)
+
+				// The expiration of the new lease should have been forwarded.
+				expExp := beforeEval.Add(int64(evalCtx.RangeLeaseDuration), 1)
+				if leaseType == roachpb.LeaseExpiration {
+					require.True(t, nowPlusExp.Less(propLease.GetExpiration()))
+					require.Equal(t, expExp, propLease.GetExpiration())
+				} else {
+					require.Equal(t, expExp, propLease.MinExpiration)
+				}
+			} else {
+				// The previous lease should NOT have been revoked.
+				require.Zero(t, evalCtx.RevokedLeaseSeq)
+
+				// The expiration of the new lease should NOT have been forwarded.
+				if leaseType == roachpb.LeaseExpiration {
+					require.Equal(t, nowPlusExp, propLease.GetExpiration())
+				} else {
+					require.Zero(t, propLease.MinExpiration)
+				}
+			}
 		})
 	})
 }

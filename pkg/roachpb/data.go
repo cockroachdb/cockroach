@@ -1869,6 +1869,8 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 }
 
 // LeaseType describes the type of lease.
+//
+//go:generate stringer -type=LeaseType
 type LeaseType int
 
 const (
@@ -1884,6 +1886,11 @@ const (
 	// to be the range's raft leader.
 	LeaseLeader
 )
+
+// LeaseTypes returns a list of all lease types.
+func LeaseTypes() []LeaseType {
+	return []LeaseType{LeaseExpiration, LeaseEpoch, LeaseLeader}
+}
 
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
