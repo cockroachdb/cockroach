@@ -47,6 +47,7 @@ go_test(
 proto_library(
     name = "eventpb_proto",
     srcs = [
+        "changefeed_events.proto",
         "cluster_events.proto",
         "ddl_events.proto",
         "debug_events.proto",
