@@ -1056,6 +1056,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"spans",
 			"initial_ts",
 			"prev_ts",
+			"state",
 			"batches",
 			"checkpoints",
 			"megabytes",
