@@ -37,6 +37,7 @@ func constructLogicalReplicationWriterSpecs(
 	streamID streampb.StreamID,
 	ignoreCDCIgnoredTTLDeletes bool,
 	mode jobspb.LogicalReplicationDetails_ApplyMode,
+	metricsLabel string,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
 	spanGroup := roachpb.SpanGroup{}
 	baseSpec := execinfrapb.LogicalReplicationWriterSpec{
@@ -49,6 +50,7 @@ func constructLogicalReplicationWriterSpecs(
 		TableMetadataByDestID:       tableMetadataByDestID,
 		IgnoreCDCIgnoredTTLDeletes:  ignoreCDCIgnoredTTLDeletes,
 		Mode:                        mode,
+		MetricsLabel:                metricsLabel,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))
