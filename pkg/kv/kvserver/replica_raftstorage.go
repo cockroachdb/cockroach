@@ -200,18 +200,15 @@ func (r *Replica) GetSnapshot(
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	var snap storage.Reader
-	var startKey roachpb.RKey
 	r.raftMu.Lock()
+	startKey := r.mu.orRaftMu.state.Desc.StartKey
 	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
-		r.mu.RLock()
 		spans := rditer.MakeAllKeySpans(r.mu.orRaftMu.state.Desc) // needs unreplicated to access Raft state
-		startKey = r.mu.orRaftMu.state.Desc.StartKey
 		if util.RaceEnabled {
 			ss = rditer.MakeAllKeySpanSet(r.mu.orRaftMu.state.Desc)
 			defer ss.Release()
 		}
-		r.mu.RUnlock()
 		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
 		if util.RaceEnabled {
 			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
@@ -228,13 +225,7 @@ func (r *Replica) GetSnapshot(
 			snap.Close()
 		}
 	}()
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	rangeID := r.RangeID
-	if startKey == nil {
-		startKey = r.mu.orRaftMu.state.Desc.StartKey
-	}
 
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
@@ -245,8 +236,8 @@ func (r *Replica) GetSnapshot(
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
 	//
-	// NB: We have Replica.mu read-locked, but we need it write-locked in order
-	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
+	// NB: we don't hold either of locks, so can't use Replica.mu.stateLoader or
+	// Replica.raftMu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
