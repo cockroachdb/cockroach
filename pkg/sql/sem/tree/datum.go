@@ -85,12 +85,14 @@ var (
 	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
-	MaxSupportedTime = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
+	MaxSupportedTime    = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
+	MaxSupportedTimeSec = float64(MaxSupportedTime.Unix())
 	// MinSupportedTime is the minimum time we support parsing.
 	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
-	MinSupportedTime = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
+	MinSupportedTime    = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
+	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons
@@ -2597,7 +2599,7 @@ type DTimestamp struct {
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
 func MakeDTimestamp(t time.Time, precision time.Duration) (_ *DTimestamp, err error) {
-	if t, err = checkTimeBounds(t, precision); err != nil {
+	if t, err = roundAndCheck(t, precision); err != nil {
 		return nil, err
 	}
 	return &DTimestamp{Time: t}, nil
@@ -2871,7 +2873,14 @@ type DTimestampTZ struct {
 	time.Time
 }
 
-func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
+// roundAndCheck rounds the given time to the specified precision and checks
+// if the rounded time is within the supported bounds.
+//
+// Supported bounds:
+//   - [MinSupportedTime, MaxSupportedTime]
+//   - TimeInfinity
+//   - TimeNegativeInfinity
+func roundAndCheck(t time.Time, precision time.Duration) (time.Time, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
 		if t == pgdate.TimeInfinity || t == pgdate.TimeNegativeInfinity {
@@ -2885,7 +2894,7 @@ func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
 
 // MakeDTimestampTZ creates a DTimestampTZ with specified precision.
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (_ *DTimestampTZ, err error) {
-	if t, err = checkTimeBounds(t, precision); err != nil {
+	if t, err = roundAndCheck(t, precision); err != nil {
 		return nil, err
 	}
 	return &DTimestampTZ{Time: t}, nil
@@ -2928,7 +2937,7 @@ func ParseTimestampTZ(
 	if err != nil {
 		return time.Time{}, false, err
 	}
-	if t, err = checkTimeBounds(t, precision); err != nil {
+	if t, err = roundAndCheck(t, precision); err != nil {
 		return time.Time{}, false, err
 	}
 	return t, dependsOnContext, nil
