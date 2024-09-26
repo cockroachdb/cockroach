@@ -102,6 +102,83 @@ func TestValidateProp(t *testing.T) {
 			},
 			cc: changeLeaveJoint,
 		},
+		{
+			name: "valid, voter demoted",
+			ctx: ValidationContext{
+				CurConfig:        configNormal,
+				Applied:          10,
+				PendingConfIndex: 5,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+				{Type: pb.ConfChangeAddLearnerNode, NodeID: 3},
+			}},
+		},
+		{
+			// NOTE: this case shouldn't happen in practice, but we handle it.
+			name: "valid, voter replaced",
+			ctx: ValidationContext{
+				CurConfig:        configNormal,
+				Applied:          10,
+				PendingConfIndex: 5,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+				{Type: pb.ConfChangeAddNode, NodeID: 3},
+			}},
+		},
+		{
+			name: "invalid, voter removed",
+			ctx: ValidationContext{
+				CurConfig:        configNormal,
+				Applied:          10,
+				PendingConfIndex: 5,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+			}},
+			expErr: "voters must be demoted to learners before being removed",
+		},
+		{
+			// NOTE: this case shouldn't happen in practice, but we handle it.
+			name: "invalid, voter demoted in wrong order",
+			ctx: ValidationContext{
+				CurConfig:        configNormal,
+				Applied:          10,
+				PendingConfIndex: 5,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeAddLearnerNode, NodeID: 3},
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+			}},
+			expErr: "voters must be demoted to learners before being removed",
+		},
+		{
+			name: "invalid, voter removed, validation disabled",
+			ctx: ValidationContext{
+				CurConfig:                         configNormal,
+				Applied:                           10,
+				PendingConfIndex:                  5,
+				DisableValidationAgainstCurConfig: true,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+			}},
+		},
+		{
+			// NOTE: this case shouldn't happen in practice, but we handle it.
+			name: "invalid, voter demoted in wrong order, validation disabled",
+			ctx: ValidationContext{
+				CurConfig:                         configNormal,
+				Applied:                           10,
+				PendingConfIndex:                  5,
+				DisableValidationAgainstCurConfig: true,
+			},
+			cc: pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
+				{Type: pb.ConfChangeAddLearnerNode, NodeID: 3},
+				{Type: pb.ConfChangeRemoveNode, NodeID: 3},
+			}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
