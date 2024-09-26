@@ -167,11 +167,12 @@ func (rn *RawNode) tracedContext(ctx context.Context, rd Ready) context.Context 
 			return msg.Context
 		}
 	}
-	for _, e := range rd.CommittedEntries {
-		return rn.raft.lookupContext(ctx, e)
+
+	if ctx, found := rn.raft.contextForEntries(rd.CommittedEntries); found {
+		return ctx
 	}
-	for _, e := range rd.Entries {
-		return rn.raft.lookupContext(ctx, e)
+	if ctx, found := rn.raft.contextForEntries(rd.Entries); found {
+		return ctx
 	}
 	// FIXME: Remove. We have no entries or messages, so we can't attach a
 	// context. Instead create a traced context manually for now. This should be
@@ -315,13 +316,16 @@ func newStorageAppendMsg(ctx context.Context, r *raft, rd Ready) pb.ContextMessa
 	// entries are removed from the unstable log.
 	var mCtx context.Context
 	m.Responses, mCtx = stripContext(r.msgsAfterAppend)
+	if mCtx != nil {
+		ctx = mCtx
+	}
 	// Warning: there is code outside raft package depending on the order of
 	// Responses, particularly MsgStorageAppendResp being last in this list.
 	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
-		m.Responses = append(m.Responses, newStorageAppendRespMsg(mCtx, r, rd).Message)
+		m.Responses = append(m.Responses, newStorageAppendRespMsg(ctx, r, rd).Message)
 	}
-	return pb.NewContextMessage(rd.Context, m)
+	return pb.NewContextMessage(ctx, m)
 }
 
 func stripContext(m []pb.ContextMessage) ([]pb.Message, context.Context) {
@@ -398,14 +402,20 @@ func newStorageAppendRespMsg(ctx context.Context, r *raft, rd Ready) pb.ContextM
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
 		// TODO: Lookup all contexts until we find one that has tracing info.
-		ctx = r.lookupContext(ctx, rd.Entries[ln-1])
+		if eCtx, found := r.contextForEntries(rd.Entries); found {
+			ctx = eCtx
+		}
+
+		if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+			log.Fatalf(ctx, "expected span in context: %v, %v", ctx, rd.Entries)
+		}
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
 		m.LogTerm = r.raftLog.accTerm()
 	}
-	return pb.NewContextMessage(ctx, m)
+	return pb.NewContextMessage(rd.Context, m)
 }
 
 func needStorageApplyMsg(rd Ready) bool     { return len(rd.CommittedEntries) > 0 }

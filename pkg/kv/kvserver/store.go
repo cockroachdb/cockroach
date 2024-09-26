@@ -386,6 +386,7 @@ func newRaftConfig(
 	storeCfg StoreConfig,
 	storeLiveness raftstoreliveness.StoreLiveness,
 	tracer *tracing.Tracer,
+	lookupContext func(raftpb.Entry) (context.Context, bool),
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -405,6 +406,7 @@ func newRaftConfig(
 		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
 		CRDBVersion:                 storeCfg.Settings.Version,
 		Tracer:                      tracer,
+		LookupContext:               lookupContext,
 	}
 }
 

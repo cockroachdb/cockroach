@@ -266,6 +266,8 @@ type Config struct {
 	CRDBVersion clusterversion.Handle
 
 	Tracer *tracing.Tracer
+
+	LookupContext func(entry pb.Entry) (context.Context, bool)
 }
 
 func (c *Config) validate() error {
@@ -424,24 +426,20 @@ type raft struct {
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
 
-	ctxMap map[[2]uint64]context.Context
+	lookupContext func(entry pb.Entry) (context.Context, bool)
 }
 
-func (r *raft) storeContext(entry pb.Entry, ctx context.Context) {
-	r.ctxMap[[2]uint64{entry.Term, entry.Index}] = ctx
-}
-
-// TODO - add lookupContext with multiple entries
-func (r *raft) lookupContext(ctx context.Context, entry pb.Entry) context.Context {
-	mCtx := r.ctxMap[[2]uint64{entry.Term, entry.Index}]
-	if mCtx == nil {
-		return ctx
+func (r *raft) contextForEntries(entries []pb.Entry) (context.Context, bool) {
+	if len(entries) == 0 {
+		return nil, false
 	}
-	ctx = mCtx
-	if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
-		log.Fatalf(ctx, "expected span in context: %v", ctx)
+	// TODO: Handle multiple contexts with a combined context.
+	for _, e := range entries {
+		if ctx, found := r.lookupContext(e); found {
+			return ctx, true
+		}
 	}
-	return ctx
+	return nil, false
 }
 
 func newRaft(ctx context.Context, c *Config) *raft {
@@ -471,12 +469,12 @@ func newRaft(ctx context.Context, c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		storeLiveness:               c.StoreLiveness,
 		crdbVersion:                 c.CRDBVersion,
+		lookupContext:               c.LookupContext,
 	}
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
 	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
-	r.ctxMap = make(map[[2]uint64]context.Context)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -923,7 +921,6 @@ func (r *raft) appendEntry(ctx context.Context, es ...pb.Entry) (accepted bool) 
 	for i := range es {
 		es[i].Term = r.Term
 		es[i].Index = last.index + 1 + uint64(i)
-		r.storeContext(es[i], ctx)
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(es) {

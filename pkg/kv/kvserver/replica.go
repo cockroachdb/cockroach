@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -984,6 +985,25 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 // ID returns the FullReplicaID for the Replica.
 func (r *Replica) ID() storage.FullReplicaID {
 	return storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
+}
+
+// TODO - create a function in raftlog for decoding for the id.
+func (r *Replica) lookupContextLocked(entry raftpb.Entry) (context.Context, bool) {
+	// FIXME: For testing only.
+	if r == nil {
+		return nil, false
+	}
+	if entry.Data != nil {
+		if key := raftlog.GetCmdBytes(entry); key != "" {
+			if p, ok := r.mu.proposals[key]; ok {
+				return p.ctx, true
+			}
+			log.Warningf(context.Background(), "entry not found in proposals map %v, %s, %v", entry, key, r.mu.proposals)
+		}
+	}
+
+	// Likely the command has completed and been removed from the proposals map.
+	return nil, false
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It

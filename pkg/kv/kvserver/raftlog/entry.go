@@ -143,6 +143,24 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 	return entry, nil
 }
 
+// TODO: Only retrieve the cmd bytes if the tracing bit is set.
+// TODO: How to handle encoding errors?
+func GetCmdBytes(e raftpb.Entry) kvserverbase.CmdIDKey {
+	typ, _, err := EncodingOf(e)
+	if err != nil {
+		return ""
+	}
+	switch typ {
+	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC,
+		EntryEncodingStandardWithACAndPriority, EntryEncodingSideloadedWithACAndPriority,
+		EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
+		raftCmdBytes, _ := DecomposeRaftEncodingStandardOrSideloaded(e.Data)
+		return raftCmdBytes
+	}
+	// We can't determine the CmdBytes for other types of entries.
+	return ""
+}
+
 func (e *Entry) load() error {
 	typ, _, err := EncodingOf(e.Entry)
 	if err != nil {

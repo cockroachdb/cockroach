@@ -321,6 +321,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 			r.store.cfg,
 			(*replicaRLockedStoreLiveness)(r),
 			r.AmbientContext.Tracer,
+			r.lookupContextLocked,
 		))
 	if err != nil {
 		return err
