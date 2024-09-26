@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -77,18 +79,133 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 			return errors.New("job hasn't run yet")
 		}
 		row := conn.Query(t,
-			`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
+			`SELECT running_status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
 			jobs.UpdateTableMetadataCacheJobID)
 		if !row.Next() {
 			return errors.New("last_run_time not updated")
 		}
 		var runningStatus string
-		require.NoError(t, row.Scan(&runningStatus))
+		var fractionCompleted float32
+		require.NoError(t, row.Scan(&runningStatus, &fractionCompleted))
 		if !strings.Contains(runningStatus, "Job completed at") {
 			return errors.New("running_status not updated")
 		}
+		if fractionCompleted != 1.0 {
+			return errors.New("fraction_completed not updated")
+		}
 		return nil
 	})
+}
+
+func TestUpdateTableMetadataCacheProgressUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "too slow under stress")
+	ctx := context.Background()
+
+	var conn *sqlutils.SQLRunner
+	jobCompleteCh := make(chan interface{})
+	updateCacheCh := make(chan interface{})
+	defer close(jobCompleteCh)
+	defer close(updateCacheCh)
+
+	oldUpdateCacheCallbackFn := updateCacheCallbackFn
+
+	getJobProgress := func() float32 {
+		var fractionCompleted float32
+		conn.QueryRow(t, `SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
+			jobs.UpdateTableMetadataCacheJobID).Scan(&fractionCompleted)
+		return fractionCompleted
+	}
+
+	var preUpdateProgress float32
+	var postUpdateProgress float32
+	defer testutils.TestingHook(&updateCacheCallbackFn, func(resumer *tableMetadataUpdateJobResumer) onBatchUpdateCallback {
+		cb := oldUpdateCacheCallbackFn(resumer)
+		return func(ctx context.Context, totalRowsToUpdate int, rowsUpdated int) {
+			preUpdateProgress = getJobProgress()
+			cb(ctx, totalRowsToUpdate, rowsUpdated)
+			postUpdateProgress = getJobProgress()
+			updateCacheCh <- struct{}{}
+		}
+	})()
+
+	// waitForJob will return once the signal has been sent to the jobCompleteCh. Before returning it asserts that
+	// the progress has been updated at least an expected number of times, which is done by comparing the progress
+	// before and after each batch update has completed in the update table metadata cache job.
+	// We don't care so much about what the progress value was update to, just that it has been increased.
+	waitForJob := func(expectedProgressUpdates int, timeout time.Duration) error {
+		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		updateProgressCount := 0
+		for {
+			select {
+			case <-jobCompleteCh:
+				require.GreaterOrEqual(t, updateProgressCount, expectedProgressUpdates)
+				require.Equal(t, float32(1.0), getJobProgress())
+				return nil
+			case <-updateCacheCh:
+				if postUpdateProgress > preUpdateProgress {
+					updateProgressCount++
+				}
+			case <-ctxWithCancel.Done():
+				return fmt.Errorf("timed out waiting for job run ")
+			}
+		}
+	}
+
+	// Server setup.
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableMetadata: &tablemetadatacacheutil.TestingKnobs{
+				OnJobComplete: func() {
+					jobCompleteCh <- struct{}{}
+				},
+			},
+		}})
+	defer s.Stopper().Stop(ctx)
+
+	conn = sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	// Wait for the job to be claimed by a node.
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.Query(t, `
+				SELECT claim_instance_id, status FROM system.jobs 
+				WHERE id = $1 AND claim_instance_id IS NOT NULL
+                      AND status = 'running'`,
+			jobs.UpdateTableMetadataCacheJobID)
+		if !row.Next() {
+			return errors.New("no node has claimed the job")
+		}
+		return nil
+	})
+
+	// Trigger update table metadata cache job with the base system tables.
+	_, err := s.GetStatusClient(t).UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	require.NoError(t, err)
+	// The job is only expected to update the progress once, since the amount of tables is under the
+	// threshold of how many tables should exist before considering updating progress incrementally .
+	require.NoError(t, waitForJob(1, 5*time.Second))
+
+	randomTableCount := 500
+	conn.Exec(t, fmt.Sprintf(`
+	SELECT crdb_internal.generate_test_objects('{
+	"names": "random_pattern",
+	"counts": [%d],
+	"randomize_columns": true
+	}'::JSONB);
+	`, randomTableCount))
+
+	var systemTablesCount int
+	conn.QueryRow(t, `SELECT count(*)::INT from [show tables from system]`).Scan(&systemTablesCount)
+
+	expectedProgressUpdates := int(math.Ceil(float64(randomTableCount+systemTablesCount)/float64(tableBatchSize)) / float64(batchesPerProgressUpdate))
+	_, err = s.GetStatusClient(t).UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	require.NoError(t, err)
+	require.NoError(t, waitForJob(expectedProgressUpdates, 5*time.Second))
+
 }
 
 // TestUpdateTableMetadataCacheAutomaticUpdates tests that:
@@ -109,7 +226,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	mockMutex := syncutil.RWMutex{}
 	jobRunCh := make(chan struct{})
 	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
-		func(ctx context.Context, ie isql.Executor) error {
+		func(ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer) error {
 			mockMutex.Lock()
 			defer mockMutex.Unlock()
 			mockCalls = append(mockCalls, timeutil.Now())

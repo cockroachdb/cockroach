@@ -13,6 +13,7 @@ package tablemetadatacache
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,9 +27,18 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+const (
+	// updateJobProgressBatchThreshold is used as the threshold when
+	// determining whether job progress should be incrementally updated
+	updateJobProgressBatchThreshold = 10
+	// batchesPerProgressUpdate is used to determine how many batches
+	// should be processed before updating the job progress
+	batchesPerProgressUpdate = 5
+)
+
 // updateJobExecFn specifies the function that is run on each iteration of the
 // table metadata update job. It can be overriden in tests.
-var updateJobExecFn func(context.Context, isql.Executor) error = updateTableMetadataCache
+var updateJobExecFn func(context.Context, isql.Executor, *tableMetadataUpdateJobResumer) error = updateTableMetadataCache
 
 type tableMetadataUpdateJobResumer struct {
 	job *jobs.Job
@@ -106,13 +116,19 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		// Run table metadata update job.
 		metrics.NumRuns.Inc(1)
 		j.markAsRunning(ctx)
-		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
+		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor(), j); err != nil {
 			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
 		j.markAsCompleted(ctx)
 		if onJobCompleteKnob != nil {
 			onJobCompleteKnob()
 		}
+	}
+}
+
+func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
+	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+		log.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }
 
@@ -126,6 +142,9 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
 		details.LastStartTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 0,
+		}
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
@@ -143,6 +162,9 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
 		details.LastCompletedTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 1.0,
+		}
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
@@ -152,16 +174,38 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 
 // updateTableMetadataCache performs a full update of system.table_metadata by collecting
 // metadata from the system.namespace, system.descriptor tables and table span stats RPC.
-func updateTableMetadataCache(ctx context.Context, ie isql.Executor) error {
+func updateTableMetadataCache(
+	ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer,
+) error {
 	updater := newTableMetadataUpdater(ie)
 	if _, err := updater.pruneCache(ctx); err != nil {
 		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
 	}
 
+	resumer.updateProgress(ctx, .01)
 	// We'll use the updated ret val in a follow-up to update metrics and
 	// fractional job progress.
-	_, err := updater.updateCache(ctx)
+	_, err := updater.updateCache(ctx, updateCacheCallbackFn(resumer))
 	return err
+}
+
+// updateCacheCallbackFn creates a onBatchUpdateCallback closure with access to tableMetadataUpdateJobResumer.
+var updateCacheCallbackFn func(resumer *tableMetadataUpdateJobResumer) onBatchUpdateCallback = func(resumer *tableMetadataUpdateJobResumer) onBatchUpdateCallback {
+	batchNum := 0
+	return func(ctx context.Context, totalRowsToUpdate int, rowsUpdated int) {
+		batchNum++
+		// Only update progress if the update will happen in more than 10 batches.
+		estimatedBatches := int(math.Ceil(float64(totalRowsToUpdate) / float64(tableBatchSize)))
+		if batchNum == estimatedBatches {
+			resumer.updateProgress(ctx, .99)
+		} else if estimatedBatches < updateJobProgressBatchThreshold {
+			// If there are less than 10 batches expected to run, don't bother updating progress till the end.
+			return
+		} else if batchNum%batchesPerProgressUpdate == 0 && estimatedBatches > 0 {
+			progress := float32(batchNum) / float32(estimatedBatches)
+			resumer.updateProgress(ctx, progress)
+		}
+	}
 }
 
 // OnFailOrCancel implements jobs.Resumer.

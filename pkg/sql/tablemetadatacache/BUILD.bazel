@@ -51,6 +51,7 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/isql",
+        "//pkg/sql/tablemetadatacache/util",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
