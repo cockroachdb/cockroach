@@ -181,14 +181,16 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		b := sm.NewBatch().(*replicaAppBatch)
 		defer b.Close()
 
+		r.raftMu.Lock()
 		r.mu.Lock()
 		raftAppliedIndex := r.mu.state.RaftAppliedIndex
 		truncatedIndex := r.mu.state.TruncatedState.Index
-		raftLogSize := r.mu.raftLogSize
+		raftLogSize := r.mu.orRaftMu.raftLogSize
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
-		r.mu.raftLogSizeTrusted = true
+		r.mu.orRaftMu.raftLogSizeTrusted = true
 		r.mu.Unlock()
+		r.raftMu.Unlock()
 
 		expectedFirstIndex := truncatedIndex + 1
 		if !accurate {
@@ -250,8 +252,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			if expectedSize < 0 {
 				expectedSize = 0
 			}
-			require.Equal(t, expectedSize, r.mu.raftLogSize)
-			require.Equal(t, accurate, r.mu.raftLogSizeTrusted)
+			require.Equal(t, expectedSize, r.mu.orRaftMu.raftLogSize)
+			require.Equal(t, accurate, r.mu.orRaftMu.raftLogSizeTrusted)
 			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
 			require.NoError(t, err)
 			require.Equal(t, r.mu.state.TruncatedState.Index, truncState.Index)
@@ -297,10 +299,10 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			r.mu.Lock()
 			raftAppliedIndex := r.mu.state.RaftAppliedIndex
 			truncatedIndex := r.mu.state.TruncatedState.Index
-			raftLogSize := r.mu.raftLogSize
+			raftLogSize := r.mu.orRaftMu.raftLogSize
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
-			r.mu.raftLogSizeTrusted = true
+			r.mu.orRaftMu.raftLogSizeTrusted = true
 			r.mu.Unlock()
 			expectedFirstIndex := truncatedIndex + 1
 			if !accurate {
@@ -352,12 +354,12 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			_, err = sm.ApplySideEffects(checkedCmd.Ctx(), checkedCmd)
 			require.NoError(t, err)
 			func() {
-				r.mu.Lock()
+				r.mu.Lock() // TODO(pav-kv): don't need these
 				defer r.mu.Unlock()
 				require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
 				// No truncation.
 				require.Equal(t, truncatedIndex, r.mu.state.TruncatedState.Index)
-				require.True(t, r.mu.raftLogSizeTrusted)
+				require.True(t, r.mu.orRaftMu.raftLogSizeTrusted)
 			}()
 			require.False(t, r.pendingLogTruncations.isEmptyLocked())
 			trunc := r.pendingLogTruncations.frontLocked()
@@ -383,10 +385,10 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			if r.mu.state.TruncatedState.Index != truncatedIndex+1 {
 				return errors.Errorf("not truncated")
 			}
-			if r.mu.raftLogSize != expectedSize {
+			if r.mu.orRaftMu.raftLogSize != expectedSize {
 				return errors.Errorf("not truncated")
 			}
-			if accurate != r.mu.raftLogSizeTrusted {
+			if accurate != r.mu.orRaftMu.raftLogSizeTrusted {
 				return errors.Errorf("not truncated")
 			}
 			r.pendingLogTruncations.mu.Lock()

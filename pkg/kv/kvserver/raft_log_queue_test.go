@@ -335,7 +335,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
-	raftLogSize := r.mu.raftLogSize
+	raftLogSize := r.mu.orRaftMu.raftLogSize
 	r.mu.Unlock()
 	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
 	if err != nil {
@@ -866,7 +866,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	trusted := func() bool {
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
-		return repl.mu.raftLogSizeTrusted
+		return repl.mu.orRaftMu.raftLogSizeTrusted
 	}
 
 	put := func() {
@@ -890,11 +890,13 @@ func TestTruncateLogRecompute(t *testing.T) {
 	// Should never trust initially, until recomputed at least once.
 	assert.False(t, trusted())
 
+	repl.raftMu.Lock()
 	repl.mu.Lock()
-	repl.mu.raftLogSizeTrusted = false
-	repl.mu.raftLogSize += 12          // garbage
-	repl.mu.raftLogLastCheckSize += 12 // garbage
+	repl.mu.orRaftMu.raftLogSizeTrusted = false
+	repl.mu.orRaftMu.raftLogSize += 12          // garbage
+	repl.mu.orRaftMu.raftLogLastCheckSize += 12 // garbage
 	repl.mu.Unlock()
+	repl.raftMu.Unlock()
 
 	// Force a raft log queue run. The result should be a nonzero Raft log of
 	// size below the threshold (though we won't check that since it could have

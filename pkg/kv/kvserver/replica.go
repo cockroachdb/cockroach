@@ -473,13 +473,42 @@ type Replica struct {
 		// The state of the Raft state machine. Updated only when raftMu and mu are
 		// both held.
 		state kvserverpb.ReplicaState
-		// Last index/term written to the raft log (not necessarily durable locally
-		// or committed by the group). Note that lastTermNotDurable may be 0 (and
-		// thus invalid) even when lastIndexNotDurable is known, in which case the
-		// term will have to be retrieved from the Raft log entry. Use the
-		// invalidLastTerm constant for this case.
-		lastIndexNotDurable kvpb.RaftIndex
-		lastTermNotDurable  kvpb.RaftTerm
+
+		// orRaftMu contains fields which are mutated while both raftMu and mu are
+		// held. They can be accessed when either of the two mutexes is held.
+		orRaftMu struct {
+			// Last index/term written to the raft log (not necessarily durable locally
+			// or committed by the group). Note that lastTermNotDurable may be 0 (and
+			// thus invalid) even when lastIndexNotDurable is known, in which case the
+			// term will have to be retrieved from the Raft log entry. Use the
+			// invalidLastTerm constant for this case.
+			lastIndexNotDurable kvpb.RaftIndex
+			lastTermNotDurable  kvpb.RaftTerm
+			// raftLogSize is the approximate size in bytes of the persisted raft
+			// log, including sideloaded entries' payloads. The value itself is not
+			// persisted and is computed lazily, paced by the raft log truncation
+			// queue which will recompute the log size when it finds it
+			// uninitialized. This recomputation mechanism isn't relevant for ranges
+			// which see regular write activity (for those the log size will deviate
+			// from zero quickly, and so it won't be recomputed but will undercount
+			// until the first truncation is carried out), but it prevents a large
+			// dormant Raft log from sitting around forever, which has caused problems
+			// in the past.
+			//
+			// Note that both raftLogSize and raftLogSizeTrusted do not include the
+			// effect of pending log truncations (see Replica.pendingLogTruncations).
+			// Hence, they are fine for metrics etc., but not for deciding whether we
+			// should create another pending truncation. For the latter, we compute
+			// the post-pending-truncation size using pendingLogTruncations.
+			raftLogSize int64
+			// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
+			// it has been recomputed.
+			raftLogSizeTrusted bool
+			// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
+			// log was checked for truncation or at the time of the last Raft log
+			// truncation.
+			raftLogLastCheckSize int64
+		}
 		// A map of raft log index of pending snapshots to deadlines.
 		// Used to prohibit raft log truncations that would leave a gap between
 		// the snapshot and the new first index. The map entry has a zero
@@ -493,30 +522,6 @@ type Replica struct {
 		// already finished snapshot "pending" for extended periods of time
 		// (preventing log truncation).
 		snapshotLogTruncationConstraints map[uuid.UUID]snapTruncationInfo
-		// raftLogSize is the approximate size in bytes of the persisted raft
-		// log, including sideloaded entries' payloads. The value itself is not
-		// persisted and is computed lazily, paced by the raft log truncation
-		// queue which will recompute the log size when it finds it
-		// uninitialized. This recomputation mechanism isn't relevant for ranges
-		// which see regular write activity (for those the log size will deviate
-		// from zero quickly, and so it won't be recomputed but will undercount
-		// until the first truncation is carried out), but it prevents a large
-		// dormant Raft log from sitting around forever, which has caused problems
-		// in the past.
-		//
-		// Note that both raftLogSize and raftLogSizeTrusted do not include the
-		// effect of pending log truncations (see Replica.pendingLogTruncations).
-		// Hence, they are fine for metrics etc., but not for deciding whether we
-		// should create another pending truncation. For the latter, we compute
-		// the post-pending-truncation size using pendingLogTruncations.
-		raftLogSize int64
-		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
-		// it has been recomputed.
-		raftLogSizeTrusted bool
-		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
-		// log was checked for truncation or at the time of the last Raft log
-		// truncation.
-		raftLogLastCheckSize int64
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
 		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only
@@ -1668,10 +1673,10 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)
-	ri.LastIndex = r.mu.lastIndexNotDurable
+	ri.LastIndex = r.mu.orRaftMu.lastIndexNotDurable
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
-	ri.RaftLogSize = r.mu.raftLogSize
-	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted
+	ri.RaftLogSize = r.mu.orRaftMu.raftLogSize
+	ri.RaftLogSizeTrusted = r.mu.orRaftMu.raftLogSizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())

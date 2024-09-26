@@ -229,12 +229,12 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 // TODO(pav-kv): make it possible to read with only raftMu held.
 func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.AssertHeld()
-	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
-	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
+	// TODO(nvanbenschoten): should we set lastTermNotDurable when
+	//   lastIndexNotDurable == i && lastTermNotDurable == invalidLastTerm?
 	// TODO(pav-kv): we should rather always remember the last entry term, and
 	// remove invalidLastTerm special case.
-	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
-		return r.mu.lastTermNotDurable, nil
+	if r.mu.orRaftMu.lastIndexNotDurable == i && r.mu.orRaftMu.lastTermNotDurable != invalidLastTerm {
+		return r.mu.orRaftMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
@@ -257,7 +257,7 @@ func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 
 // raftLastIndexRLocked requires that r.mu is held for reading.
 func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
-	return r.mu.lastIndexNotDurable
+	return r.mu.orRaftMu.lastIndexNotDurable
 }
 
 // LastIndex implements the raft.Storage interface.
@@ -892,14 +892,14 @@ func (r *Replica) applySnapshot(
 	// performance implications are not likely to be drastic. If our
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	r.mu.lastIndexNotDurable = state.RaftAppliedIndex
+	r.mu.orRaftMu.lastIndexNotDurable = state.RaftAppliedIndex
 
 	// TODO(sumeer): We should be able to set this to
 	// nonemptySnap.Metadata.Term. See
 	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
 	// for a discussion regarding this.
-	r.mu.lastTermNotDurable = invalidLastTerm
-	r.mu.raftLogSize = 0
+	r.mu.orRaftMu.lastTermNotDurable = invalidLastTerm
+	r.mu.orRaftMu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
@@ -911,7 +911,7 @@ func (r *Replica) applySnapshot(
 	r.mu.state = state
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
-	r.mu.raftLogSizeTrusted = false
+	r.mu.orRaftMu.raftLogSizeTrusted = false
 
 	// Invoke the leasePostApply method to ensure we properly initialize the
 	// replica according to whether it holds the lease. We allow jumps in the

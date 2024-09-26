@@ -445,7 +445,7 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.raftLogSize, r.mu.raftLogSizeTrusted
+	return r.mu.orRaftMu.raftLogSize, r.mu.orRaftMu.raftLogSizeTrusted
 }
 
 // GetCachedLastTerm returns the cached last term value. May return
@@ -453,7 +453,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastTermNotDurable
+	return r.mu.orRaftMu.lastTermNotDurable
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
