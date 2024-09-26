@@ -1861,6 +1861,20 @@ func (s *systemStatusServer) Nodes(
 	return resp, nil
 }
 
+func (s *statusServer) Nodes(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.sqlServer.tenantConnect.Nodes(ctx, req)
+}
+
 // TODO: Enhance with redaction middleware, refer: https://github.com/cockroachdb/cockroach/issues/109594
 func (s *statusServer) redactNodesResponse(resp *serverpb.NodesResponse) *serverpb.NodesResponse {
 	for i := range resp.Nodes {
