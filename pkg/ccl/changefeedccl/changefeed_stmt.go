@@ -244,6 +244,7 @@ func changefeedPlanHook(
 		// of protected timestamps.
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+		jr.JobID = jobID
 		{
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
@@ -263,7 +264,7 @@ func changefeedPlanHook(
 				// must have specified transaction to use, and is responsible for committing
 				// transaction.
 
-				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jobID, p.InternalSQLTxn())
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jr.JobID, p.InternalSQLTxn())
 				if err != nil {
 					return err
 				}
@@ -286,7 +287,7 @@ func changefeedPlanHook(
 			}
 
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
+				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
 				}
 				if ptr != nil {
@@ -1528,7 +1529,7 @@ func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID)
 	}
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
@@ -1545,7 +1546,7 @@ func logChangefeedFailedTelemetry(
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
 	}
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
@@ -1556,8 +1557,8 @@ func logChangefeedFailedTelemetry(
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
-func getCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string,
+func makeCommonChangefeedEventDetails(
+	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID,
 ) eventpb.CommonChangefeedEventDetails {
 	opts := details.Opts
 
@@ -1602,6 +1603,7 @@ func getCommonChangefeedEventDetails(
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,
+		JobId:       int64(jobID),
 	}
 
 	return changefeedEventDetails

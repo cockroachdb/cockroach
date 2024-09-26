@@ -980,15 +980,6 @@ func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.Reda
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
 
-	if m.JobId != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"JobId\":"...)
-		b = strconv.AppendInt(b, int64(m.JobId), 10)
-	}
-
 	if m.EmittedBytes != 0 {
 		if printComma {
 			b = append(b, ',')
@@ -1594,6 +1585,15 @@ func (m *CommonChangefeedEventDetails) AppendJSONFields(printComma bool, b redac
 		b = append(b, "\"Format\":\""...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Format)))
 		b = append(b, '"')
+	}
+
+	if m.JobId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobId\":"...)
+		b = strconv.AppendInt(b, int64(m.JobId), 10)
 	}
 
 	return printComma, b
