@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rafttype",
+    srcs = [
+        "confchange.go",
+        "confstate.go",
+        "types.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/rafttype",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft/raftpb",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "rafttype_test",
+    srcs = ["confstate_test.go"],
+    embed = [":rafttype"],
+)
