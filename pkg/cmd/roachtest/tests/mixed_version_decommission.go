@@ -126,25 +126,17 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 			return nil
 		})
 
-	mvt.AfterUpgradeFinalized(
-		"fully decommission on last upgrade",
-		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			sleepDur := 2 * suspectDuration
-			l.Printf("sleeping for %s", sleepDur)
-			sleepCtx(ctx, sleepDur)
-
-			if h.Context().ToVersion.IsCurrent() {
-				l.Printf("fully decommissioning n1 via n2")
-
-				n1Version, _ := h.System.NodeVersion(n1) // safe to ignore error as n1 is part of the cluster
-				return fullyDecommission(ctx, c, n1, n2, clusterupgrade.CockroachPathForVersion(t, n1Version))
-			} else {
-				l.Printf("skipping -- still more upgrades to go through")
-				return nil
-			}
-		})
-
 	mvt.Run()
+
+	// Make sure we can fully decommission a node after the upgrade is complete.
+	sleepDur := 2 * suspectDuration
+	t.L().Printf("sleeping for %s", sleepDur)
+	sleepCtx(ctx, sleepDur)
+
+	t.L().Printf("fully decommissioning n1 via n2")
+	if err := fullyDecommission(ctx, c, n1, n2, test.DefaultCockroachPath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // partialDecommission runs `cockroach node decommission --wait=none`
