@@ -103,7 +103,7 @@ func (w *workloadRunner) runWorkloadStep(
 		}
 	}()
 
-	cmd.Start()
+	_ = cmd.Start()
 	if err := cmd.Wait(); err != nil {
 		w.errChan <- err
 		return
