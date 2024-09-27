@@ -68,11 +68,24 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(eventType tree.TriggerEve
 		triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
 
 		// Project a column that invokes the trigger function.
-		mb.buildTriggerFunction(
+		triggerFnColID := mb.buildTriggerFunction(
 			triggers[i], triggerScope, eventType, tableTyp, oldColID, newColID,
 		)
+
+		// For INSERT and UPDATE triggers, the NEW column takes on the result of the
+		// trigger function. This allows subsequent trigger functions to see the
+		// modified row.
+		if eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate {
+			newColID = triggerFnColID
+		}
 	}
 	triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
+
+	// INSERT and UPDATE triggers can modify the row to be inserted or updated
+	// via the return value of the trigger function.
+	if eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate {
+		mb.applyChangesFromTriggers(triggerScope, eventType, tableTyp, visibleColOrds, newColID)
+	}
 	mb.outScope = triggerScope
 	return true
 }
@@ -299,4 +312,47 @@ func (mb *mutationBuilder) buildTriggerFunctionArgs(
 		f.ConstructConstVal(tgNumArgs, types.Int),        // TG_NARGS
 		f.ConstructConstVal(tgArgV, types.StringArray),   // TG_ARGV
 	}
+}
+
+// applyChangesFromTriggers updates triggerScope and mutationBuilder to reflect
+// changes made by row-level BEFORE triggers. It updates triggerScope to project
+// new column values and mutationBuilder to track the new column IDs. Note that
+// applyChangesFromTriggers is only valid for INSERT and UPDATE triggers, since
+// DELETE triggers cannot modify the row.
+func (mb *mutationBuilder) applyChangesFromTriggers(
+	triggerScope *scope,
+	eventType tree.TriggerEventType,
+	tableTyp *types.T,
+	visibleColOrds []int,
+	newColID opt.ColumnID,
+) {
+	if eventType != tree.TriggerEventInsert && eventType != tree.TriggerEventUpdate {
+		panic(errors.AssertionFailedf("unexpected trigger event type: %v", eventType))
+	}
+	if newColID == 0 {
+		panic(errors.AssertionFailedf("missing NEW column for trigger"))
+	}
+	f := mb.b.factory
+	passThroughCols := triggerScope.colSet()
+	projections := make(memo.ProjectionsExpr, len(tableTyp.TupleContents()))
+	for i, colTyp := range tableTyp.TupleContents() {
+		colName := mb.tab.Column(visibleColOrds[i]).ColName()
+		colNameForScope := scopeColName(colName).WithMetadataName(string(colName) + "_new")
+		elem := f.ConstructColumnAccess(f.ConstructVariable(newColID), memo.TupleOrdinal(i))
+		elemCol := mb.b.synthesizeColumn(triggerScope, colNameForScope, colTyp, nil /* expr */, elem)
+		if eventType == tree.TriggerEventInsert {
+			if existing := triggerScope.getColumn(mb.insertColIDs[visibleColOrds[i]]); existing != nil {
+				// Clear the name of the previous INSERT columns, so that the
+				// replacements will be resolved instead when referenced via the
+				// special "excluded" data source.
+				existing.clearName()
+			}
+			mb.insertColIDs[visibleColOrds[i]] = elemCol.id
+			elemCol.table = excludedTableName
+		} else {
+			mb.updateColIDs[visibleColOrds[i]] = elemCol.id
+		}
+		projections[i] = f.ConstructProjectionsItem(elem, elemCol.id)
+	}
+	triggerScope.expr = f.ConstructProject(triggerScope.expr, projections, passThroughCols)
 }
