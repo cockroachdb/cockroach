@@ -289,9 +289,10 @@ func (tg *tokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
 // tokens, which are based on disk bandwidth as a constrained resource, and
 // apply to all the elastic incoming bytes into the LSM.
 type kvStoreTokenGranter struct {
-	coord            *GrantCoordinator
-	regularRequester requester
-	elasticRequester requester
+	coord             *GrantCoordinator
+	regularRequester  requester
+	elasticRequester  requester
+	snapshotRequester requester
 
 	coordMu struct { // holds fields protected by coord.mu.Lock
 		// There is no rate limiting in granting these tokens. That is, they are
@@ -329,8 +330,8 @@ var _ granterWithIOTokens = &kvStoreTokenGranter{}
 // kvStoreTokenChildGranter handles a particular workClass. Its methods
 // pass-through to the parent after adding the workClass as a parameter.
 type kvStoreTokenChildGranter struct {
-	workClass admissionpb.WorkClass
-	parent    *kvStoreTokenGranter
+	workType admissionpb.StoreWorkType
+	parent   *kvStoreTokenGranter
 }
 
 var _ granterWithStoreReplicatedWorkAdmitted = &kvStoreTokenChildGranter{}
@@ -343,17 +344,17 @@ func (cg *kvStoreTokenChildGranter) grantKind() grantKind {
 
 // tryGet implements granter.
 func (cg *kvStoreTokenChildGranter) tryGet(count int64) bool {
-	return cg.parent.tryGet(cg.workClass, count)
+	return cg.parent.tryGet(cg.workType, count)
 }
 
 // returnGrant implements granter.
 func (cg *kvStoreTokenChildGranter) returnGrant(count int64) {
-	cg.parent.returnGrant(cg.workClass, count)
+	cg.parent.returnGrant(cg.workType, count)
 }
 
 // tookWithoutPermission implements granter.
 func (cg *kvStoreTokenChildGranter) tookWithoutPermission(count int64) {
-	cg.parent.tookWithoutPermission(cg.workClass, count)
+	cg.parent.tookWithoutPermission(cg.workType, count)
 }
 
 // continueGrantChain implements granter.
@@ -373,23 +374,23 @@ func (cg *kvStoreTokenChildGranter) storeWriteDone(
 	// granter was previously exhausted but is no longer so, we're allowed to
 	// admit other waiting requests.
 	return cg.parent.storeReplicatedWorkAdmittedLocked(
-		cg.workClass, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo), true /* canGrantAnother */)
+		cg.workType, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo), true /* canGrantAnother */)
 }
 
 // storeReplicatedWorkAdmitted implements granterWithStoreReplicatedWorkAdmitted.
 func (cg *kvStoreTokenChildGranter) storeReplicatedWorkAdmittedLocked(
 	originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
 ) (additionalTokens int64) {
-	return cg.parent.storeReplicatedWorkAdmittedLocked(cg.workClass, originalTokens, admittedInfo, false /* canGrantAnother */)
+	return cg.parent.storeReplicatedWorkAdmittedLocked(cg.workType, originalTokens, admittedInfo, false /* canGrantAnother */)
 }
 
-func (sg *kvStoreTokenGranter) tryGet(workClass admissionpb.WorkClass, count int64) bool {
-	return sg.coord.tryGet(KVWork, count, int8(workClass))
+func (sg *kvStoreTokenGranter) tryGet(workType admissionpb.StoreWorkType, count int64) bool {
+	return sg.coord.tryGet(KVWork, count, int8(workType))
 }
 
 // tryGetLocked implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
-	wc := admissionpb.WorkClass(demuxHandle)
+	wt := admissionpb.StoreWorkType(demuxHandle)
 	// NB: ideally if regularRequester.hasWaitingRequests() returns true and
 	// wc==elasticWorkClass we should reject this request, since it means that
 	// more important regular work is waiting. However, we rely on the
@@ -416,56 +417,88 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 	// needed. We are generally okay with this since the model changes
 	// infrequently (every 15s), and the disk bandwidth limiter is designed to
 	// generally under admit and only pace elastic work.
-	adjustedDiskWriteTokens := sg.writeAmpLM.applyLinearModel(count)
-	switch wc {
-	case admissionpb.RegularWorkClass:
+	diskWriteTokens := count
+	if wt != admissionpb.SnapshotIngestStoreWorkType {
+		// Snapshot ingests do not incur the write amplification described above so
+		// we skip applying the model for those writes.
+		diskWriteTokens = sg.writeAmpLM.applyLinearModel(count)
+	}
+	switch wt {
+	case admissionpb.RegularStoreWorkType:
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractTokensLocked(count, count, false)
-			sg.coordMu.diskTokensAvailable.writeByteTokens -= adjustedDiskWriteTokens
-			sg.coordMu.diskTokensUsed[wc].writeByteTokens += adjustedDiskWriteTokens
+			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensUsed[admissionpb.RegularWorkClass].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
-	case admissionpb.ElasticWorkClass:
+	case admissionpb.ElasticStoreWorkType:
 		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] > 0 {
 			sg.subtractTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
-			sg.coordMu.diskTokensAvailable.writeByteTokens -= adjustedDiskWriteTokens
-			sg.coordMu.diskTokensUsed[wc].writeByteTokens += adjustedDiskWriteTokens
+			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensUsed[admissionpb.ElasticWorkClass].writeByteTokens += diskWriteTokens
+			return grantSuccess
+		}
+	case admissionpb.SnapshotIngestStoreWorkType:
+		// Snapshot ingests do not go into L0, so we only subject them to
+		// writeByteTokens.
+		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 {
+			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensUsed[admissionpb.ElasticWorkClass].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
 	}
 	return grantFailLocal
 }
 
-func (sg *kvStoreTokenGranter) returnGrant(workClass admissionpb.WorkClass, count int64) {
-	sg.coord.returnGrant(KVWork, count, int8(workClass))
+func (sg *kvStoreTokenGranter) returnGrant(workType admissionpb.StoreWorkType, count int64) {
+	sg.coord.returnGrant(KVWork, count, int8(workType))
 }
 
 // returnGrantLocked implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) returnGrantLocked(count int64, demuxHandle int8) {
-	wc := admissionpb.WorkClass(demuxHandle)
-	// Return count tokens to the "IO tokens".
-	sg.subtractTokensLocked(-count, -count, false)
-	if wc == admissionpb.ElasticWorkClass {
-		sg.coordMu.elasticIOTokensUsedByElastic -= count
+	wt := admissionpb.StoreWorkType(demuxHandle)
+	if wt != admissionpb.SnapshotIngestStoreWorkType {
+		// Return count tokens to the "IO tokens".
+		sg.subtractTokensLocked(-count, -count, false)
 	}
-	// Return tokens to disk bandwidth bucket.
-	diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
-	sg.coordMu.diskTokensAvailable.writeByteTokens += diskTokenCount
-	sg.coordMu.diskTokensUsed[wc].writeByteTokens -= diskTokenCount
+	wc := admissionpb.WorkClassFromStoreWorkType(wt)
+	switch wt {
+	case admissionpb.RegularStoreWorkType:
+		// Return tokens to disk bandwidth bucket.
+		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
+		sg.coordMu.diskTokensAvailable.writeByteTokens += diskTokenCount
+		sg.coordMu.diskTokensUsed[wc].writeByteTokens -= diskTokenCount
+	case admissionpb.ElasticStoreWorkType:
+		sg.coordMu.elasticIOTokensUsedByElastic -= count
+		// Return tokens to disk bandwidth bucket.
+		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
+		sg.coordMu.diskTokensAvailable.writeByteTokens += diskTokenCount
+		sg.coordMu.diskTokensUsed[wc].writeByteTokens -= diskTokenCount
+	case admissionpb.SnapshotIngestStoreWorkType:
+		// Return tokens to disk bandwidth bucket. Do not apply the writeAmpLM since
+		// these writes do not incur additional write-amp.
+		sg.coordMu.diskTokensAvailable.writeByteTokens += count
+		sg.coordMu.diskTokensUsed[wc].writeByteTokens -= count
+	}
 }
 
-func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass admissionpb.WorkClass, count int64) {
-	sg.coord.tookWithoutPermission(KVWork, count, int8(workClass))
+func (sg *kvStoreTokenGranter) tookWithoutPermission(
+	workType admissionpb.StoreWorkType, count int64,
+) {
+	sg.coord.tookWithoutPermission(KVWork, count, int8(workType))
 }
 
 // tookWithoutPermissionLocked implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
-	wc := admissionpb.WorkClass(demuxHandle)
-	sg.subtractTokensLocked(count, count, false)
-	if wc == admissionpb.ElasticWorkClass {
+	wt := admissionpb.StoreWorkType(demuxHandle)
+	wc := admissionpb.WorkClassFromStoreWorkType(wt)
+	if wt != admissionpb.SnapshotIngestStoreWorkType {
+		sg.subtractTokensLocked(count, count, false)
+	}
+	if wt == admissionpb.ElasticStoreWorkType {
 		sg.coordMu.elasticIOTokensUsedByElastic += count
 	}
 	diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
@@ -514,31 +547,39 @@ func (sg *kvStoreTokenGranter) subtractTokensLockedForWorkClass(
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) requesterHasWaitingRequests() bool {
-	return sg.regularRequester.hasWaitingRequests() || sg.elasticRequester.hasWaitingRequests()
+	return sg.regularRequester.hasWaitingRequests() ||
+		sg.elasticRequester.hasWaitingRequests() ||
+		sg.snapshotRequester.hasWaitingRequests()
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
-	// First try granting to regular requester.
-	for wc := range sg.coordMu.diskTokensUsed {
+	// NB: We grant work in the following priority order: regular, snapshot
+	// ingest, elastic work. Snapshot ingests are a special type of elastic work.
+	// They queue separately in the SnapshotQueue and get priority over other
+	// elastic work since they are used for node re-balancing and up-replication,
+	// which are typically higher priority than other background writes.
+	for wt := 0; wt < admissionpb.NumStoreWorkTypes; wt++ {
 		req := sg.regularRequester
-		if admissionpb.WorkClass(wc) == admissionpb.ElasticWorkClass {
+		if admissionpb.StoreWorkType(wt) == admissionpb.ElasticStoreWorkType {
 			req = sg.elasticRequester
+		} else if admissionpb.StoreWorkType(wt) == admissionpb.SnapshotIngestStoreWorkType {
+			req = sg.snapshotRequester
 		}
 		if req.hasWaitingRequests() {
-			res := sg.tryGetLocked(1, int8(wc))
+			res := sg.tryGetLocked(1, int8(wt))
 			if res == grantSuccess {
 				tookTokenCount := req.granted(grantChainID)
 				if tookTokenCount == 0 {
 					// Did not accept grant.
-					sg.returnGrantLocked(1, int8(wc))
+					sg.returnGrantLocked(1, int8(wt))
 					// Continue with the loop since this requester does not have waiting
 					// requests. If the loop terminates we will correctly return
 					// grantFailLocal.
 				} else {
 					// May have taken more.
 					if tookTokenCount > 1 {
-						sg.tookWithoutPermissionLocked(tookTokenCount-1, int8(wc))
+						sg.tookWithoutPermissionLocked(tookTokenCount-1, int8(wt))
 					}
 					return grantSuccess
 				}
@@ -637,12 +678,13 @@ func (sg *kvStoreTokenGranter) setLinearModels(
 }
 
 func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
-	wc admissionpb.WorkClass,
+	wt admissionpb.StoreWorkType,
 	originalTokens int64,
 	admittedInfo storeReplicatedWorkAdmittedInfo,
 	canGrantAnother bool,
 ) (additionalTokens int64) {
 	// Reminder: coord.mu protects the state in the kvStoreTokenGranter.
+	wc := admissionpb.WorkClassFromStoreWorkType(wt)
 	exhaustedFunc := func() bool {
 		return sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] <= 0 ||
 			(wc == admissionpb.ElasticWorkClass && (sg.coordMu.diskTokensAvailable.writeByteTokens <= 0 ||
@@ -654,7 +696,7 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	actualL0Tokens := actualL0WriteTokens + actualL0IngestTokens
 	additionalL0TokensNeeded := actualL0Tokens - originalTokens
 	sg.subtractTokensLocked(additionalL0TokensNeeded, additionalL0TokensNeeded, false)
-	if wc == admissionpb.ElasticWorkClass {
+	if wc == admissionpb.ElasticWorkClass && wt == admissionpb.ElasticStoreWorkType {
 		sg.coordMu.elasticIOTokensUsedByElastic += additionalL0TokensNeeded
 	}
 
