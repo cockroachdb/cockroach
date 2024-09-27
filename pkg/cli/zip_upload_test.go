@@ -172,16 +172,12 @@ func TestUploadZipEndToEnd(t *testing.T) {
 			case "upload-profiles":
 				includeFlag = "--include=profiles"
 			case "upload-logs":
-				var logFormat string
+				includeFlag = "--include=logs"
 				if d.HasArg("log-format") {
+					var logFormat string
 					d.ScanArgs(t, "log-format", &logFormat)
+					includeFlag = fmt.Sprintf("%s --log-format=%s", includeFlag, logFormat)
 				}
-
-				if logFormat == "" {
-					logFormat = "crdb-v1"
-				}
-
-				includeFlag = fmt.Sprintf("--include=logs --log-format=%s", logFormat)
 			}
 
 			debugDir, cleanup := setupZipDir(t, testInput)
