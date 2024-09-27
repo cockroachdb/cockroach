@@ -78,7 +78,7 @@ func (u *tableMetadataUpdater) pruneCache(ctx context.Context) (removed int, err
 			ctx,
 			"prune-table-metadata",
 			nil, // txn
-			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride, `
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride, `
 DELETE FROM system.table_metadata
 WHERE table_id IN (
   SELECT table_id
@@ -129,7 +129,7 @@ func (u *tableMetadataUpdater) upsertBatch(
 		ctx,
 		"batch-upsert-table-metadata",
 		nil, // txn
-		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
 		u.upsertQuery.getQuery(),
 		u.upsertQuery.args...,
 	)

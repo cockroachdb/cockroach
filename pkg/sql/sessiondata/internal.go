@@ -101,3 +101,11 @@ var NodeUserWithLowUserPrioritySessionDataOverride = InternalExecutorOverride{
 	User:             username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
 	QualityOfService: &sessiondatapb.UserLowQoS,
 }
+
+// NodeUserWithBulkLowPriSessionDataOverride is an InternalExecutorOverride
+// which overrides the user to the NodeUser and sets the quality of service to
+// sessiondatapb.BulkLow.
+var NodeUserWithBulkLowPriSessionDataOverride = InternalExecutorOverride{
+	User:             username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+	QualityOfService: &sessiondatapb.BulkLowQoS,
+}
