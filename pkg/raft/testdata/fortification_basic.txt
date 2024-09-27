@@ -74,7 +74,7 @@ stabilize 1
   1->4 MsgVote Term:1 Log:1/2
   INFO 1 received MsgVoteResp from 1 at term 1
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
-  
+
 stabilize 2 3 4
 ----
 > 2 receiving messages
