@@ -1552,18 +1552,19 @@ func mvccGet(
 	// specify an empty key for the end key which will ensure we don't retrieve a
 	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
-		parent:           iter,
-		memAccount:       memAccount,
-		lockTable:        opts.LockTable,
-		start:            key,
-		ts:               timestamp,
-		maxKeys:          1,
-		inconsistent:     opts.Inconsistent,
-		skipLocked:       opts.SkipLocked,
-		tombstones:       opts.Tombstones,
-		rawMVCCValues:    opts.ReturnRawMVCCValues,
-		failOnMoreRecent: opts.FailOnMoreRecent,
-		keyBuf:           mvccScanner.keyBuf,
+		parent:            iter,
+		memAccount:        memAccount,
+		lockTable:         opts.LockTable,
+		start:             key,
+		ts:                timestamp,
+		maxKeys:           1,
+		inconsistent:      opts.Inconsistent,
+		skipLocked:        opts.SkipLocked,
+		tombstones:        opts.Tombstones,
+		rawMVCCValues:     opts.ReturnRawMVCCValues,
+		failOnMoreRecent:  opts.FailOnMoreRecent,
+		keyBuf:            mvccScanner.keyBuf,
+		decodeMVCCHeaders: true,
 	}
 
 	results := &mvccScanner.alloc.pebbleResults
@@ -8057,7 +8058,7 @@ func mvccExportToWriter(
 			for _, v := range rangeKeys.Versions {
 				mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
 				if !ok && err == nil {
-					mvccValue, err = decodeExtendedMVCCValue(v.Value)
+					mvccValue, err = decodeExtendedMVCCValue(v.Value, false)
 				}
 				if err != nil {
 					return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err,
@@ -8133,7 +8134,7 @@ func mvccExportToWriter(
 		if unsafeKey.IsValue() {
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
 			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
+				mvccValue, err = decodeExtendedMVCCValue(unsafeValue, opts.IncludeMVCCValueHeader)
 			}
 			if err != nil {
 				return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
@@ -8244,7 +8245,7 @@ func mvccExportToWriter(
 		for _, v := range rangeKeys.Versions {
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
 			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(v.Value)
+				mvccValue, err = decodeExtendedMVCCValue(v.Value, false)
 			}
 			if err != nil {
 				return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err,
