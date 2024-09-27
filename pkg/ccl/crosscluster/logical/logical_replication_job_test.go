@@ -1116,13 +1116,13 @@ func TestMultipleSourcesIntoSingleDest(t *testing.T) {
 	dbC.CheckQueryResults(t, "SELECT * from tab", expectedRowsDest)
 }
 
-// TestFullyConnectedReplication tests 4 tables that are all streaming
+// TestFourWayReplication tests 4 tables that are all streaming
 // from each other and how they handle conflicts
-func TestFullyConnectedReplication(t *testing.T) {
+func TestFourWayReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "Replication doesn't complete in time")
+	skip.UnderDuress(t, "running 12 LDR jobs on one server is too much")
 
 	ctx := context.Background()
 

@@ -109,7 +109,7 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 			ctx,
 			"fetch-table-metadata-batch",
 			nil, /* txn */
-			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride, `
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride, `
 WITH tables AS (SELECT n.id,
                        n.name,
                        n."parentID",
