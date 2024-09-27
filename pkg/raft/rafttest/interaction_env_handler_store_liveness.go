@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -24,7 +24,7 @@ import (
 
 // livenessEntry is an entry in the liveness fabric.
 type livenessEntry struct {
-	epoch       pb.Epoch
+	epoch       rt.Epoch
 	isSupported bool
 }
 
@@ -110,12 +110,12 @@ func (l *livenessFabric) String() string {
 // storeLiveness is a per-peer view of the store liveness state.
 type storeLiveness struct {
 	livenessFabric *livenessFabric
-	nodeID         pb.PeerID
+	nodeID         rt.PeerID
 }
 
 var _ raftstoreliveness.StoreLiveness = &storeLiveness{}
 
-func newStoreLiveness(livenessFabric *livenessFabric, nodeID pb.PeerID) *storeLiveness {
+func newStoreLiveness(livenessFabric *livenessFabric, nodeID rt.PeerID) *storeLiveness {
 	return &storeLiveness{
 		nodeID:         nodeID,
 		livenessFabric: livenessFabric,
@@ -123,13 +123,13 @@ func newStoreLiveness(livenessFabric *livenessFabric, nodeID pb.PeerID) *storeLi
 }
 
 // SupportFor implements the StoreLiveness interface.
-func (s *storeLiveness) SupportFor(id pb.PeerID) (pb.Epoch, bool) {
+func (s *storeLiveness) SupportFor(id rt.PeerID) (rt.Epoch, bool) {
 	entry := s.livenessFabric.state[s.nodeID][id]
 	return entry.epoch, entry.isSupported
 }
 
 // SupportFrom implements the StoreLiveness interface.
-func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+func (s *storeLiveness) SupportFrom(id rt.PeerID) (rt.Epoch, hlc.Timestamp) {
 	entry := s.livenessFabric.state[id][s.nodeID]
 	if !entry.isSupported {
 		return 0, hlc.Timestamp{}

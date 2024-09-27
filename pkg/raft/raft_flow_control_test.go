@@ -20,7 +20,7 @@ package raft
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // TestMsgAppFlowControlFull ensures:
@@ -37,9 +37,9 @@ func TestMsgAppFlowControlFull(t *testing.T) {
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
-		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
+		if len(ms) != 1 || ms[0].Type != rt.MsgApp {
 			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", i, len(ms))
 		}
 	}
@@ -51,7 +51,7 @@ func TestMsgAppFlowControlFull(t *testing.T) {
 
 	// ensure 2
 	for i := 0; i < 10; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
 		if len(ms) != 0 {
 			t.Fatalf("#%d: len(ms) = %d, want 0", i, len(ms))
@@ -73,7 +73,7 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 		r.readMessages()
 	}
 
@@ -81,13 +81,13 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 	// so we start with 2.
 	for tt := 2; tt < r.maxInflight; tt++ {
 		// move forward the window
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(tt)})
+		r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: uint64(tt)})
 		r.readMessages()
 
 		// fill in the inflights window again
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 		ms := r.readMessages()
-		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
+		if len(ms) != 1 || ms[0].Type != rt.MsgApp {
 			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", tt, len(ms))
 		}
 
@@ -98,7 +98,7 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 
 		// ensure 2
 		for i := 0; i < tt; i++ {
-			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(i)})
+			r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: uint64(i)})
 			if !pr2.IsPaused() {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
@@ -118,7 +118,7 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 		r.readMessages()
 	}
 
@@ -129,9 +129,9 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
 			// Unpauses the progress, sends an empty MsgApp, and pauses it again.
-			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+			r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeatResp})
 			ms := r.readMessages()
-			if len(ms) != 1 || ms[0].Type != pb.MsgApp || len(ms[0].Entries) != 0 {
+			if len(ms) != 1 || ms[0].Type != rt.MsgApp || len(ms[0].Entries) != 0 {
 				t.Fatalf("#%d.%d: len(ms) == %d, want 1 empty MsgApp", tt, i, len(ms))
 			}
 		}
@@ -141,7 +141,7 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 			if !pr2.IsPaused() {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
-			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+			r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 			ms := r.readMessages()
 			if len(ms) != 0 {
 				t.Fatalf("#%d.%d: len(ms) = %d, want 0", tt, i, len(ms))
@@ -149,7 +149,7 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 		}
 
 		// clear all pending messages.
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+		r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeatResp})
 		r.readMessages()
 	}
 }

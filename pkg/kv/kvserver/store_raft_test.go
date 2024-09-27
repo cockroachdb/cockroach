@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -64,9 +64,9 @@ func TestRaftReceiveQueue(t *testing.T) {
 	}
 	require.Zero(t, m.AllocBytes())
 
-	e1 := &kvserverpb.RaftMessageRequest{Message: raftpb.Message{Entries: []raftpb.Entry{
+	e1 := &kvserverpb.RaftMessageRequest{Message: rafttype.Message{Entries: []rafttype.Entry{
 		{Data: []byte("foo bar baz")}}}}
-	e5 := &kvserverpb.RaftMessageRequest{Message: raftpb.Message{Entries: []raftpb.Entry{
+	e5 := &kvserverpb.RaftMessageRequest{Message: rafttype.Message{Entries: []rafttype.Entry{
 		{Data: []byte("xxxxlxlxlxlxllxlxlxlxlxxlxllxlxlxlxlxl")}}}}
 	n1 := int64(e1.Size())
 	n5 := int64(e5.Size())

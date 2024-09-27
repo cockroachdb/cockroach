@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -57,7 +57,7 @@ type Iterator struct {
 	// TODO(tbg): we're not reusing memory here. Since all of our allocs come
 	// from protobuf marshaling, this is hard to avoid but we can do a little
 	// better and at least avoid a few allocations.
-	entry raftpb.Entry
+	entry rafttype.Entry
 }
 
 // IterOptions are options to NewIterator.
@@ -133,7 +133,7 @@ func (it *Iterator) Next() (bool, error) {
 
 // Entry returns the raft entry the iterator is currently positioned at. This
 // must only be called after a prior successful call to SeekGE or Next.
-func (it *Iterator) Entry() raftpb.Entry {
+func (it *Iterator) Entry() rafttype.Entry {
 	return it.entry
 }
 
@@ -149,7 +149,7 @@ func Visit(
 	eng Reader,
 	rangeID roachpb.RangeID,
 	lo, hi kvpb.RaftIndex,
-	fn func(raftpb.Entry) error,
+	fn func(rafttype.Entry) error,
 ) error {
 	it, err := NewIterator(ctx, rangeID, eng, IterOptions{Hi: hi})
 	if err != nil {

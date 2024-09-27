@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -174,10 +174,10 @@ func TestComputeTruncateDecision(t *testing.T) {
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := raft.Status{
-				Progress: make(map[raftpb.PeerID]tracker.Progress),
+				Progress: make(map[rafttype.PeerID]tracker.Progress),
 			}
 			for j, v := range c.progress {
-				status.Progress[raftpb.PeerID(j)] = tracker.Progress{
+				status.Progress[rafttype.PeerID(j)] = tracker.Progress{
 					RecentActive: true,
 					State:        tracker.StateReplicate,
 					Match:        v,
@@ -247,7 +247,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "tooLarge", func(t *testing.T, tooLarge bool) {
 		testutils.RunTrueAndFalse(t, "active", func(t *testing.T, active bool) {
 			status := raft.Status{
-				Progress: make(map[raftpb.PeerID]tracker.Progress),
+				Progress: make(map[rafttype.PeerID]tracker.Progress),
 			}
 			progress := []kvpb.RaftIndex{100, 200, 300, 400, 500}
 			lastIndex := kvpb.RaftIndex(500)
@@ -273,7 +273,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 						State:        tracker.StateReplicate,
 					}
 				}
-				status.Progress[raftpb.PeerID(i)] = pr
+				status.Progress[rafttype.PeerID(i)] = pr
 			}
 
 			input := truncateDecisionInput{
@@ -311,7 +311,7 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	status := raft.Status{
-		Progress: map[raftpb.PeerID]tracker.Progress{
+		Progress: map[rafttype.PeerID]tracker.Progress{
 			// Fully caught up.
 			5: {State: tracker.StateReplicate, Match: 11, Next: 12},
 			// Behind.
@@ -396,13 +396,13 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
-			prs := make(map[raftpb.PeerID]tracker.Progress)
+			prs := make(map[rafttype.PeerID]tracker.Progress)
 			for i, pr := range tc.prs {
-				prs[raftpb.PeerID(i+1)] = pr
+				prs[rafttype.PeerID(i+1)] = pr
 			}
-			expPRs := make(map[raftpb.PeerID]tracker.Progress)
+			expPRs := make(map[rafttype.PeerID]tracker.Progress)
 			for i, pr := range tc.exp {
-				expPRs[raftpb.PeerID(i+1)] = pr
+				expPRs[rafttype.PeerID(i+1)] = pr
 			}
 			updateRaftProgressFromActivity(ctx, prs, tc.replicas,
 				func(replicaID roachpb.ReplicaID) bool {

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	rafttracker "github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,7 +65,7 @@ type testProposer struct {
 	onRejectProposalWithErrLocked func(err error)
 	// If not nil, this is called by onErrProposalDropped.
 	onProposalsDropped func(
-		ents []raftpb.Entry, proposalData []*ProposalData, stateType raft.StateType,
+		ents []rafttype.Entry, proposalData []*ProposalData, stateType raft.StateType,
 	)
 	// validLease is returned by ownsValidLease.
 	validLease bool
@@ -93,14 +93,14 @@ type testProposerRaft struct {
 	// proposals are the commands that the propBuf flushed (i.e. passed to the
 	// Raft group) and have not yet been consumed with consumeProposals().
 	proposals  []kvserverpb.RaftCommand
-	onProp     func(raftpb.Message) error // invoked on Step with MsgProp
+	onProp     func(rafttype.Message) error // invoked on Step with MsgProp
 	campaigned bool
 }
 
 var _ proposerRaft = &testProposerRaft{}
 
-func (t *testProposerRaft) Step(msg raftpb.Message) error {
-	if msg.Type != raftpb.MsgProp {
+func (t *testProposerRaft) Step(msg rafttype.Message) error {
+	if msg.Type != rafttype.MsgProp {
 		return nil
 	}
 	if t.onProp != nil {
@@ -194,7 +194,7 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 }
 
 func (rp *testProposer) onErrProposalDropped(
-	ents []raftpb.Entry, props []*ProposalData, typ raft.StateType,
+	ents []rafttype.Entry, props []*ProposalData, typ raft.StateType,
 ) {
 	if rp.onProposalsDropped == nil {
 		return
@@ -516,14 +516,14 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	self := raftpb.PeerID(1)
+	self := rafttype.PeerID(1)
 	// Each subtest will try to propose a lease acquisition in a different Raft
 	// scenario. Some proposals should be allowed, some should be rejected.
 	for _, tc := range []struct {
 		name  string
 		state raft.StateType
 		// raft.None means there's no leader, or the leader is unknown.
-		leader raftpb.PeerID
+		leader rafttype.PeerID
 		// Empty means VOTER_FULL.
 		leaderRepType roachpb.ReplicaType
 		// Set to simulate situations where the local replica is so behind that the
@@ -609,8 +609,8 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			var pc proposalCreator
 			// p.getReplicaID() is hardcoded; it'd better be hardcoded to what this
 			// test expects.
-			require.Equal(t, self, raftpb.PeerID(p.getStoreID()))
-			require.Equal(t, self, raftpb.PeerID(p.getReplicaID()))
+			require.Equal(t, self, rafttype.PeerID(p.getStoreID()))
+			require.Equal(t, self, rafttype.PeerID(p.getReplicaID()))
 
 			var rejected bool
 			var rejectedLease *roachpb.Lease
@@ -683,9 +683,9 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	proposer := raftpb.PeerID(1)
+	proposer := rafttype.PeerID(1)
 	proposerFirstIndex := kvpb.RaftIndex(5)
-	target := raftpb.PeerID(2)
+	target := rafttype.PeerID(2)
 
 	// Each subtest will try to propose a lease transfer in a different Raft
 	// scenario. Some proposals should be allowed, some should be rejected.
@@ -758,8 +758,8 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var p testProposer
 			var pc proposalCreator
-			require.Equal(t, proposer, raftpb.PeerID(p.getStoreID()))
-			require.Equal(t, proposer, raftpb.PeerID(p.getReplicaID()))
+			require.Equal(t, proposer, rafttype.PeerID(p.getStoreID()))
+			require.Equal(t, proposer, rafttype.PeerID(p.getReplicaID()))
 
 			var rejectedErr error
 			if tc.expRejection {
@@ -780,7 +780,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			raftStatus.RaftState = tc.proposerState
 			if tc.proposerState == raft.StateLeader {
 				raftStatus.Lead = proposer
-				raftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
+				raftStatus.Progress = map[rafttype.PeerID]rafttracker.Progress{
 					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
 				}
 				if tc.targetState != math.MaxUint64 {
@@ -836,10 +836,10 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 
 	var matchingDroppedProposalsSeen int
 	p := testProposer{
-		onProposalsDropped: func(ents []raftpb.Entry, props []*ProposalData, _ raft.StateType) {
+		onProposalsDropped: func(ents []rafttype.Entry, props []*ProposalData, _ raft.StateType) {
 			require.Equal(t, len(ents), len(props))
 			for i := range ents {
-				if ents[i].Type == raftpb.EntryNormal {
+				if ents[i].Type == rafttype.EntryNormal {
 					require.Nil(t, props[i].command.ReplicatedEvalResult.ChangeReplicas)
 				} else {
 					require.NotNil(t, props[i].command.ReplicatedEvalResult.ChangeReplicas)
@@ -853,7 +853,7 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 
 	// Drop all proposals, since then we'll see the (ents,props) pair in
 	// onErrProposalDropped.
-	r := &testProposerRaft{onProp: func(msg raftpb.Message) error {
+	r := &testProposerRaft{onProp: func(msg rafttype.Message) error {
 		return raft.ErrProposalDropped
 	}}
 	p.raftGroup = r
@@ -1103,7 +1103,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			r := &testProposerRaft{}
 			r.status.Lead = 1
 			r.status.RaftState = raft.StateLeader
-			r.status.Progress = map[raftpb.PeerID]rafttracker.Progress{
+			r.status.Progress = map[rafttype.PeerID]rafttracker.Progress{
 				1: {State: rafttracker.StateReplicate},
 			}
 			p := testProposer{

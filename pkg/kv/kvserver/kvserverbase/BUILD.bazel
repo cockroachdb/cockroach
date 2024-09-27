@@ -17,7 +17,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/raft/raftpb",
+        "//pkg/raft/rafttype",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

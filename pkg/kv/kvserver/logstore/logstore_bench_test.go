@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -80,13 +80,13 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		LastTerm: 1,
 		ByteSize: 0,
 	}
-	var ents []raftpb.Entry
+	var ents []rafttype.Entry
 	data := make([]byte, bytes)
 	rand.New(rand.NewSource(0)).Read(data)
-	ents = append(ents, raftpb.Entry{
+	ents = append(ents, rafttype.Entry{
 		Term:  1,
 		Index: 1,
-		Type:  raftpb.EntryNormal,
+		Type:  rafttype.EntryNormal,
 		Data: raftlog.EncodeCommandBytes(
 			raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data, 0 /* pri */),
 	})

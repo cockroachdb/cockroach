@@ -25,14 +25,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type node struct {
 	raft.Node
-	id     raftpb.PeerID
+	id     rafttype.PeerID
 	iface  iface
 	stopc  chan struct{}
 	pausec chan bool
@@ -41,10 +41,10 @@ type node struct {
 	storage *raft.MemoryStorage
 
 	mu    sync.Mutex // guards state
-	state raftpb.HardState
+	state rafttype.HardState
 }
 
-func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
+func startNode(id rafttype.PeerID, peers []raft.Peer, iface iface) *node {
 	st := raft.NewMemoryStorage()
 	c := &raft.Config{
 		ID:                        id,
@@ -106,7 +106,7 @@ func (n *node) start() {
 				close(n.stopc)
 				return
 			case p := <-n.pausec:
-				recvms := make([]raftpb.Message, 0)
+				recvms := make([]rafttype.Message, 0)
 				for p {
 					select {
 					case m := <-n.iface.recv():

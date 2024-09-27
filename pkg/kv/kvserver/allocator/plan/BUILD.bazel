@@ -20,7 +20,7 @@ go_library(
         "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/raft",
-        "//pkg/raft/raftpb",
+        "//pkg/raft/rafttype",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",

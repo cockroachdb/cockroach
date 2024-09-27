@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -43,7 +43,7 @@ func TestDataDriven(t *testing.T) {
 			// Two majority configs. The first one is always used (though it may
 			// be empty) and the second one is used iff joint is true.
 			var joint bool
-			var ids, idsj []pb.PeerID
+			var ids, idsj []rt.PeerID
 			// The committed indexes for the nodes in the config in the order in
 			// which they appear in (ids,idsj), without repetition. An underscore
 			// denotes an omission (i.e. no information for this voter); this is
@@ -68,7 +68,7 @@ func TestDataDriven(t *testing.T) {
 					case "cfg":
 						var n uint64
 						arg.Scan(t, i, &n)
-						ids = append(ids, pb.PeerID(n))
+						ids = append(ids, rt.PeerID(n))
 					case "cfgj":
 						joint = true
 						if arg.Vals[i] == "zero" {
@@ -78,7 +78,7 @@ func TestDataDriven(t *testing.T) {
 						} else {
 							var n uint64
 							arg.Scan(t, i, &n)
-							idsj = append(idsj, pb.PeerID(n))
+							idsj = append(idsj, rt.PeerID(n))
 						}
 					case "idx":
 						var n uint64
@@ -123,10 +123,10 @@ func TestDataDriven(t *testing.T) {
 
 			// Helper that returns an AckedIndexer which has the specified indexes
 			// mapped to the right IDs.
-			makeLookuper := func(idxs []Index, ids, idsj []pb.PeerID) mapAckIndexer {
+			makeLookuper := func(idxs []Index, ids, idsj []rt.PeerID) mapAckIndexer {
 				l := mapAckIndexer{}
 				var p int // next to consume from idxs
-				for _, id := range append(append([]pb.PeerID(nil), ids...), idsj...) {
+				for _, id := range append(append([]rt.PeerID(nil), ids...), idsj...) {
 					if _, ok := l[id]; ok {
 						continue
 					}
@@ -187,7 +187,7 @@ func TestDataDriven(t *testing.T) {
 					if aIdx := JointConfig([2]MajorityConfig{c, c}).CommittedIndex(l); aIdx != idx {
 						fmt.Fprintf(&buf, "%s <-- via self-joint quorum\n", aIdx)
 					}
-					overlay := func(c MajorityConfig, l AckedIndexer, id pb.PeerID, idx Index) AckedIndexer {
+					overlay := func(c MajorityConfig, l AckedIndexer, id rt.PeerID, idx Index) AckedIndexer {
 						ll := mapAckIndexer{}
 						for iid := range c {
 							if iid == id {
@@ -227,7 +227,7 @@ func TestDataDriven(t *testing.T) {
 				}
 			case "vote":
 				ll := makeLookuper(votes, ids, idsj)
-				l := map[pb.PeerID]bool{}
+				l := map[rt.PeerID]bool{}
 				for id, v := range ll {
 					l[id] = v != 1 // NB: 1 == false, 2 == true
 				}

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	rafttracker "github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
@@ -59,8 +59,8 @@ func TestVerify(t *testing.T) {
 	}
 	makeRaftStatus := func(lead roachpb.ReplicaID, state raft.StateType) *raft.Status {
 		var status raft.Status
-		status.ID = raftpb.PeerID(repl1.ReplicaID)
-		status.Lead = raftpb.PeerID(lead)
+		status.ID = rafttype.PeerID(repl1.ReplicaID)
+		status.Lead = rafttype.PeerID(lead)
 		status.RaftState = state
 		return &status
 	}
@@ -234,11 +234,11 @@ func TestVerify(t *testing.T) {
 		defaultLeaderInput := func(targetState rafttracker.StateType, targetMatch kvpb.RaftIndex) VerifyInput {
 			in := defaultInput()
 			in.RaftStatus = makeRaftStatus(repl1.ReplicaID, raft.StateLeader)
-			in.RaftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
-				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftFirstIndex)},
+			in.RaftStatus.Progress = map[rafttype.PeerID]rafttracker.Progress{
+				rafttype.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftFirstIndex)},
 			}
 			if targetState != noTargetState {
-				in.RaftStatus.Progress[raftpb.PeerID(repl2.ReplicaID)] = rafttracker.Progress{
+				in.RaftStatus.Progress[rafttype.PeerID(repl2.ReplicaID)] = rafttracker.Progress{
 					State: targetState, Match: uint64(targetMatch),
 				}
 			}

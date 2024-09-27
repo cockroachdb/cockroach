@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/datadriven"
 )
@@ -54,7 +54,7 @@ func TestConfChangeDataDriven(t *testing.T) {
 			defer func() {
 				c.LastIndex++
 			}()
-			var ccs []pb.ConfChangeSingle
+			var ccs []rt.ConfChangeSingle
 			toks := strings.Split(strings.TrimSpace(d.Input), " ")
 			if toks[0] == "" {
 				toks = nil
@@ -63,16 +63,16 @@ func TestConfChangeDataDriven(t *testing.T) {
 				if len(tok) < 2 {
 					return fmt.Sprintf("unknown token %s", tok)
 				}
-				var cc pb.ConfChangeSingle
+				var cc rt.ConfChangeSingle
 				switch tok[0] {
 				case 'v':
-					cc.Type = pb.ConfChangeAddNode
+					cc.Type = rt.ConfChangeAddNode
 				case 'l':
-					cc.Type = pb.ConfChangeAddLearnerNode
+					cc.Type = rt.ConfChangeAddLearnerNode
 				case 'r':
-					cc.Type = pb.ConfChangeRemoveNode
+					cc.Type = rt.ConfChangeRemoveNode
 				case 'u':
-					cc.Type = pb.ConfChangeUpdateNode
+					cc.Type = rt.ConfChangeUpdateNode
 				default:
 					return fmt.Sprintf("unknown input: %s", tok)
 				}
@@ -80,7 +80,7 @@ func TestConfChangeDataDriven(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				cc.NodeID = pb.PeerID(id)
+				cc.NodeID = rt.PeerID(id)
 				ccs = append(ccs, cc)
 			}
 

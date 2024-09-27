@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -364,7 +364,7 @@ func buildReplicaDescriptorFromTestData(
 	roachpb.Key,
 	roachpb.RangeDescriptor,
 	kvserverpb.ReplicaState,
-	raftpb.HardState,
+	rafttype.HardState,
 	[]enginepb.MVCCMetadata,
 ) {
 	clock := hlc.NewClockForTesting(nil)
@@ -423,7 +423,7 @@ func buildReplicaDescriptorFromTestData(
 		Stats:               &enginepb.MVCCStats{},
 		RaftClosedTimestamp: clock.Now().Add(-30*time.Second.Nanoseconds(), 0),
 	}
-	hardState := raftpb.HardState{
+	hardState := rafttype.HardState{
 		Term:   0,
 		Vote:   0,
 		Commit: uint64(replica.RaftCommittedIndex),
@@ -491,10 +491,10 @@ func raftLogFromPendingDescriptorUpdate(
 	data := raftlog.EncodeCommandBytes(
 		raftlog.EntryEncodingStandardWithoutAC,
 		kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out, 0 /* pri */)
-	ent := raftpb.Entry{
+	ent := rafttype.Entry{
 		Term:  1,
 		Index: uint64(replica.RaftCommittedIndex + entryIndex),
-		Type:  raftpb.EntryNormal,
+		Type:  rafttype.EntryNormal,
 		Data:  data,
 	}
 	var value roachpb.Value

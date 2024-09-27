@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -52,22 +52,22 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 		func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
 				Term      uint64
-				Vote      raftpb.PeerID
+				Vote      rafttype.PeerID
 				Commit    uint64
-				Lead      raftpb.PeerID
-				LeadEpoch raftpb.Epoch
+				Lead      rafttype.PeerID
+				LeadEpoch rafttype.Epoch
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
-			var _ = expectedHardState(raftpb.HardState{})
+			var _ = expectedHardState(rafttype.HardState{})
 
 			n := r.Uint64()
-			return &raftpb.HardState{
+			return &rafttype.HardState{
 				Term:      n % 3,
-				Vote:      raftpb.PeerID(n % 7),
+				Vote:      rafttype.PeerID(n % 7),
 				Commit:    n % 11,
-				Lead:      raftpb.PeerID(n % 13),
-				LeadEpoch: raftpb.Epoch(n % 17),
+				Lead:      rafttype.PeerID(n % 13),
+				LeadEpoch: rafttype.Epoch(n % 17),
 			}
 		},
 		func(r *rand.Rand) protoutil.Message {

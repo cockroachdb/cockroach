@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -57,7 +57,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		newDesc := *desc
 		newDesc.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
 		var trigger roachpb.ChangeReplicasTrigger
-		var confChange raftpb.ConfChange
+		var confChange rafttype.ConfChange
 		if add {
 			// Add a new replica to the Range.
 			addedReplDesc := newDesc.AddReplica(replDesc.NodeID+1, replDesc.StoreID+1, roachpb.VOTER_FULL)
@@ -67,9 +67,9 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				InternalAddedReplicas: []roachpb.ReplicaDescriptor{addedReplDesc},
 			}
 
-			confChange = raftpb.ConfChange{
-				Type:   raftpb.ConfChangeAddNode,
-				NodeID: raftpb.PeerID(addedReplDesc.ReplicaID),
+			confChange = rafttype.ConfChange{
+				Type:   rafttype.ConfChangeAddNode,
+				NodeID: rafttype.PeerID(addedReplDesc.ReplicaID),
 			}
 		} else {
 			// Remove ourselves from the Range.
@@ -81,9 +81,9 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				InternalRemovedReplicas: []roachpb.ReplicaDescriptor{removedReplDesc},
 			}
 
-			confChange = raftpb.ConfChange{
-				Type:   raftpb.ConfChangeRemoveNode,
-				NodeID: raftpb.PeerID(removedReplDesc.ReplicaID),
+			confChange = rafttype.ConfChange{
+				Type:   rafttype.ConfChangeRemoveNode,
+				NodeID: rafttype.PeerID(removedReplDesc.ReplicaID),
 			}
 		}
 
@@ -93,9 +93,9 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			Entry: rafttype.Entry{
 				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
-				Type:  raftpb.EntryConfChange,
+				Type:  rafttype.EntryConfChange,
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
@@ -197,9 +197,9 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// Stage a command that truncates one raft log entry which we pretend has a
 		// byte size of 1.
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			Entry: rafttype.Entry{
 				Index: uint64(raftAppliedIndex + 1),
-				Type:  raftpb.EntryNormal,
+				Type:  rafttype.EntryNormal,
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
@@ -316,9 +316,9 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// Stage a command that truncates one raft log entry which we pretend has a
 			// byte size of 1.
 			ent := &raftlog.Entry{
-				Entry: raftpb.Entry{
+				Entry: rafttype.Entry{
 					Index: uint64(raftAppliedIndex + 1),
-					Type:  raftpb.EntryNormal,
+					Type:  rafttype.EntryNormal,
 				},
 				ID: raftlog.MakeCmdIDKey(),
 				Cmd: kvserverpb.RaftCommand{
@@ -447,9 +447,9 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	for _, s := range []string{"earlier", "later"} {
 		req, repr := descWriteRepr(s)
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			Entry: rafttype.Entry{
 				Index: uint64(raftAppliedIndex + 1),
-				Type:  raftpb.EntryNormal,
+				Type:  rafttype.EntryNormal,
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -389,7 +389,7 @@ type Replica struct {
 	ReplicaID roachpb.ReplicaID
 	Desc      *roachpb.RangeDescriptor // nil for uninitialized Replica
 
-	hardState raftpb.HardState // internal to kvstorage, see migration in LoadAndReconcileReplicas
+	hardState rafttype.HardState // internal to kvstorage, see migration in LoadAndReconcileReplicas
 }
 
 // ID returns the FullReplicaID.
@@ -438,7 +438,7 @@ func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.Repl
 	m[rangeID] = ent
 }
 
-func (m replicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
+func (m replicaMap) setHardState(rangeID roachpb.RangeID, hs rafttype.HardState) {
 	ent := m.getOrMake(rangeID)
 	ent.hardState = hs
 	m[rangeID] = ent
@@ -504,7 +504,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 
 		logEvery = log.Every(10 * time.Second)
 		i = 0
-		var hs raftpb.HardState
+		var hs rafttype.HardState
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftHardStateKey(rangeID)
 		}, &hs, func(rangeID roachpb.RangeID) error {

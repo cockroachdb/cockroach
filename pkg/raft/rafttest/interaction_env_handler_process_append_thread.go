@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -59,14 +59,14 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	m.Responses = nil
 	env.Output.WriteString("Processing:\n")
 	env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
-	st := raftpb.HardState{
+	st := rafttype.HardState{
 		Term:      m.Term,
 		Vote:      m.Vote,
 		Commit:    m.Commit,
 		Lead:      m.Lead,
 		LeadEpoch: m.LeadEpoch,
 	}
-	var snap raftpb.Snapshot
+	var snap rafttype.Snapshot
 	if m.Snapshot != nil {
 		snap = *m.Snapshot
 	}
@@ -82,7 +82,9 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	return nil
 }
 
-func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap raftpb.Snapshot) error {
+func processAppend(
+	n *Node, st rafttype.HardState, ents []rafttype.Entry, snap rafttype.Snapshot,
+) error {
 	// TODO(tbg): the order of operations here is not necessarily safe. See:
 	// https://github.com/etcd-io/etcd/pull/10861
 	s := n.Storage

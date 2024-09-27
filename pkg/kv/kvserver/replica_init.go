@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -227,7 +227,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
-	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]rafttype.Message{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
@@ -315,7 +315,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
 		(*replicaRaftStorage)(r),
-		raftpb.PeerID(r.replicaID),
+		rafttype.PeerID(r.replicaID),
 		r.mu.state.RaftAppliedIndex,
 		r.store.cfg,
 		&raftLogger{ctx: ctx},

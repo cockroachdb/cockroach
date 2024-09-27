@@ -13,7 +13,7 @@ package roachpb
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -323,14 +323,14 @@ func (d ReplicaSet) InAtomicReplicationChange() bool {
 }
 
 // ConfState returns the Raft configuration described by the set of replicas.
-func (d ReplicaSet) ConfState() raftpb.ConfState {
-	var cs raftpb.ConfState
+func (d ReplicaSet) ConfState() rafttype.ConfState {
+	var cs rafttype.ConfState
 	joint := d.InAtomicReplicationChange()
 	// The incoming config is taken verbatim from the full voters when the
 	// config is not joint. If it is joint, slot the voters into the right
 	// category.
 	for _, rep := range d.wrapped {
-		id := raftpb.PeerID(rep.ReplicaID)
+		id := rafttype.PeerID(rep.ReplicaID)
 		switch rep.Type {
 		case VOTER_FULL:
 			cs.Voters = append(cs.Voters, id)

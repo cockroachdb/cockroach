@@ -20,7 +20,7 @@ package raft
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/constraints"
 )
@@ -105,7 +105,7 @@ func TestFindConflictByTerm(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			st := NewMemoryStorage()
-			st.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
+			st.ApplySnapshot(rt.Snapshot{Metadata: rt.SnapshotMetadata{
 				Term:  tt.sl.prev.term,
 				Index: tt.sl.prev.index,
 			}})
@@ -173,7 +173,7 @@ func TestAppend(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.SetHardState(pb.HardState{Term: init.term}))
+			require.NoError(t, storage.SetHardState(rt.HardState{Term: init.term}))
 			require.NoError(t, storage.Append(init.entries))
 			raftLog := newLog(storage, discardLogger)
 
@@ -204,7 +204,7 @@ func TestLogMaybeAppend(t *testing.T) {
 
 	for _, tt := range []struct {
 		app   logSlice
-		want  []pb.Entry
+		want  []rt.Entry
 		notOk bool
 		panic bool
 	}{
@@ -265,7 +265,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	unstable := stable.lastEntryID().append(intRange[uint64](751, 1001)...)
 
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.SetHardState(pb.HardState{Term: stable.term}))
+	require.NoError(t, storage.SetHardState(rt.HardState{Term: stable.term}))
 	require.NoError(t, storage.Append(stable.entries))
 	raftLog := newLog(storage, discardLogger)
 	require.True(t, raftLog.append(unstable))
@@ -293,14 +293,14 @@ func TestCompactionSideEffects(t *testing.T) {
 	require.Equal(t, last.index+1, raftLog.lastIndex())
 
 	want := append(stable.entries[offset:], unstable.entries...)
-	want = append(want, pb.Entry{Term: last.term + 1, Index: last.index + 1})
+	want = append(want, rt.Entry{Term: last.term + 1, Index: last.index + 1})
 	require.Equal(t, want, raftLog.allEntries())
 }
 
 func TestHasNextCommittedEnts(t *testing.T) {
 	snap := snapshot{
 		term: 1,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
 	for _, tt := range []struct {
@@ -354,7 +354,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 func TestNextCommittedEnts(t *testing.T) {
 	snap := snapshot{
 		term: 1,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
 	for _, tt := range []struct {
@@ -363,7 +363,7 @@ func TestNextCommittedEnts(t *testing.T) {
 		allowUnstable bool
 		paused        bool
 		snap          bool
-		wents         []pb.Entry
+		wents         []rt.Entry
 	}{
 		{applied: 3, applying: 3, allowUnstable: true, wents: init.entries[:2]},
 		{applied: 3, applying: 4, allowUnstable: true, wents: init.entries[1:2]},
@@ -407,8 +407,8 @@ func TestNextCommittedEnts(t *testing.T) {
 
 func TestAcceptApplying(t *testing.T) {
 	maxSize := entryEncodingSize(100)
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
 	for _, tt := range []struct {
@@ -457,8 +457,8 @@ func TestAcceptApplying(t *testing.T) {
 func TestAppliedTo(t *testing.T) {
 	maxSize := entryEncodingSize(100)
 	overshoot := entryEncodingSize(5)
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
 	for _, tt := range []struct {
@@ -514,7 +514,7 @@ func TestNextUnstableEnts(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			// append stable entries to storage
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.SetHardState(pb.HardState{Term: init.term}))
+			require.NoError(t, storage.SetHardState(rt.HardState{Term: init.term}))
 			require.NoError(t, storage.Append(init.entries))
 
 			// append unstable entries to raftlog
@@ -587,7 +587,7 @@ func TestStableTo(t *testing.T) {
 
 func TestStableToWithSnap(t *testing.T) {
 	snapID := entryID{term: 2, index: 5}
-	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
+	snap := rt.Snapshot{Metadata: rt.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
 	for _, tt := range []struct {
 		sl   logSlice
 		to   LogMark
@@ -611,7 +611,7 @@ func TestStableToWithSnap(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			s := NewMemoryStorage()
-			require.NoError(t, s.SetHardState(pb.HardState{Term: snapID.term}))
+			require.NoError(t, s.SetHardState(rt.HardState{Term: snapID.term}))
 			require.NoError(t, s.ApplySnapshot(snap))
 			raftLog := newLog(s, discardLogger)
 			require.True(t, raftLog.append(tt.sl))
@@ -663,9 +663,9 @@ func TestCompaction(t *testing.T) {
 func TestLogRestore(t *testing.T) {
 	index := uint64(1000)
 	term := uint64(1000)
-	snap := pb.SnapshotMetadata{Index: index, Term: term}
+	snap := rt.SnapshotMetadata{Index: index, Term: term}
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(pb.Snapshot{Metadata: snap})
+	storage.ApplySnapshot(rt.Snapshot{Metadata: snap})
 	raftLog := newLog(storage, discardLogger)
 
 	require.Zero(t, len(raftLog.allEntries()))
@@ -679,7 +679,7 @@ func TestIsOutOfBounds(t *testing.T) {
 	offset := uint64(100)
 	num := uint64(100)
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: offset}})
+	storage.ApplySnapshot(rt.Snapshot{Metadata: rt.SnapshotMetadata{Term: 1, Index: offset}})
 	l := newLog(storage, discardLogger)
 	require.True(t, l.append(entryID{term: 1, index: offset}.
 		append(intRange(offset+1, offset+num+1)...)))
@@ -719,7 +719,7 @@ func TestTerm(t *testing.T) {
 	num := uint64(100)
 
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: offset, Term: 1}})
+	storage.ApplySnapshot(rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: offset, Term: 1}})
 	l := newLog(storage, discardLogger)
 	require.True(t, l.append(entryID{term: 1, index: offset}.append(intRange(1, num)...)))
 
@@ -747,11 +747,11 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	unstablesnapi := storagesnapi + 5
 
 	storage := NewMemoryStorage()
-	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: storagesnapi, Term: 1}})
+	storage.ApplySnapshot(rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: storagesnapi, Term: 1}})
 	l := newLog(storage, discardLogger)
 	require.True(t, l.restore(snapshot{
 		term: 1,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}},
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: unstablesnapi, Term: 1}},
 	}))
 
 	for _, tt := range []struct {
@@ -782,15 +782,15 @@ func TestSlice(t *testing.T) {
 	num := uint64(100)
 	last := offset + num
 	half := offset + num/2
-	halfe := pb.Entry{Index: half, Term: half}
+	halfe := rt.Entry{Index: half, Term: half}
 
-	entries := func(lo, hi uint64) []pb.Entry { // (lo, hi]
+	entries := func(lo, hi uint64) []rt.Entry { // (lo, hi]
 		return index(lo+1).termRange(lo+1, hi+1)
 	}
 
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.ApplySnapshot(pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Index: offset}}))
+	require.NoError(t, storage.ApplySnapshot(rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{Index: offset}}))
 	require.NoError(t, storage.Append(entries(offset, half)))
 	l := newLog(storage, discardLogger)
 	require.True(t, l.append(pbEntryID(&halfe).append(intRange(half+1, last+1)...)))
@@ -800,7 +800,7 @@ func TestSlice(t *testing.T) {
 		hi  uint64
 		lim uint64
 
-		w      []pb.Entry
+		w      []rt.Entry
 		wpanic bool
 	}{
 		// ErrCompacted.
@@ -869,14 +869,14 @@ func TestScan(t *testing.T) {
 	num := uint64(20)
 	last := offset + num
 	half := offset + num/2
-	entries := func(from, to uint64) []pb.Entry {
+	entries := func(from, to uint64) []rt.Entry {
 		return index(from).termRange(from, to)
 	}
 	entrySize := entsSize(entries(half, half+1))
 
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.ApplySnapshot(pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Index: offset}}))
+	require.NoError(t, storage.ApplySnapshot(rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{Index: offset}}))
 	require.NoError(t, storage.Append(entries(offset+1, half)))
 	l := newLog(storage, discardLogger)
 	require.True(t, l.append(entryID{term: half - 1, index: half - 1}.
@@ -886,8 +886,8 @@ func TestScan(t *testing.T) {
 	for _, pageSize := range []entryEncodingSize{0, 1, 10, 100, entrySize, entrySize + 1} {
 		for lo := offset; lo < last; lo++ {
 			for hi := lo + 1; hi <= last; hi++ {
-				var got []pb.Entry
-				require.NoError(t, l.scan(lo, hi, pageSize, func(e []pb.Entry) error {
+				var got []rt.Entry
+				require.NoError(t, l.scan(lo, hi, pageSize, func(e []rt.Entry) error {
 					got = append(got, e...)
 					require.True(t, len(e) == 1 || entsSize(e) <= pageSize)
 					return nil
@@ -901,7 +901,7 @@ func TestScan(t *testing.T) {
 
 	// Test that the callback error is propagated to the caller.
 	iters := 0
-	require.ErrorIs(t, errBreak, l.scan(offset+1, half, 0, func([]pb.Entry) error {
+	require.ErrorIs(t, errBreak, l.scan(offset+1, half, 0, func([]rt.Entry) error {
 		iters++
 		if iters == 2 {
 			return errBreak
@@ -912,7 +912,7 @@ func TestScan(t *testing.T) {
 
 	// Test that we max out the limit, and not just always return a single entry.
 	// NB: this test works only because the requested range length is even.
-	require.NoError(t, l.scan(offset+1, offset+11, entrySize*2, func(ents []pb.Entry) error {
+	require.NoError(t, l.scan(offset+1, offset+11, entrySize*2, func(ents []rt.Entry) error {
 		require.Len(t, ents, 2)
 		require.Equal(t, entrySize*2, entsSize(ents))
 		return nil
@@ -926,20 +926,20 @@ func mustTerm(term uint64, err error) uint64 {
 	return term
 }
 
-// index is a helper type for generating slices of pb.Entry. The value of index
+// index is a helper type for generating slices of rt.Entry. The value of index
 // is the first entry index in the generated slices.
 type index uint64
 
 // terms generates a slice of entries at indices [index, index+len(terms)), with
 // the given terms of each entry. Terms must be non-decreasing.
-func (i index) terms(terms ...uint64) []pb.Entry {
+func (i index) terms(terms ...uint64) []rt.Entry {
 	if len(terms) == 0 {
 		return nil
 	}
 	index := uint64(i)
-	entries := make([]pb.Entry, 0, len(terms))
+	entries := make([]rt.Entry, 0, len(terms))
 	for _, term := range terms {
-		entries = append(entries, pb.Entry{Term: term, Index: index})
+		entries = append(entries, rt.Entry{Term: term, Index: index})
 		index++
 	}
 	return entries
@@ -948,7 +948,7 @@ func (i index) terms(terms ...uint64) []pb.Entry {
 // termRange generates a slice of to-from entries, at consecutive indices
 // starting from i, and consecutive terms in [from, to).
 // TODO(pav-kv): remove.
-func (i index) termRange(from, to uint64) []pb.Entry {
+func (i index) termRange(from, to uint64) []rt.Entry {
 	return i.terms(intRange(from, to)...)
 }
 

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -889,7 +889,7 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	// initially go to n3, the previous leaseholder, but it will return NLHE. The
 	// DistSender will retry the other replicas, which eventually acquire a new
 	// lease and serve the write.
-	var leader raftpb.PeerID
+	var leader rafttype.PeerID
 	require.Eventually(t, func() bool {
 		for _, repl := range repls {
 			if l := repl.RaftStatus().Lead; l == 3 {

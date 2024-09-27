@@ -25,24 +25,24 @@ import (
 	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
-type rndConfChange pb.ConfState
+type rndConfChange rt.ConfState
 
 // Generate creates a random (valid) ConfState for use with quickcheck.
 func (rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
-	conv := func(sl []int) []pb.PeerID {
+	conv := func(sl []int) []rt.PeerID {
 		// We want IDs but the incoming slice is zero-indexed, so add one to
 		// each.
-		out := make([]pb.PeerID, len(sl))
+		out := make([]rt.PeerID, len(sl))
 		for i := range sl {
-			out[i] = pb.PeerID(sl[i] + 1)
+			out[i] = rt.PeerID(sl[i] + 1)
 		}
 		return out
 	}
-	var cs pb.ConfState
+	var cs rt.ConfState
 	// NB: never generate the empty ConfState, that one should be unit tested.
 	nVoters := 1 + rand.Intn(5)
 
@@ -70,7 +70,7 @@ func (rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// NB: this code avoids creating non-nil empty slices (here and below).
 	nOutgoingRetainedVoters := rand.Intn(nVoters + 1)
 	if nOutgoingRetainedVoters > 0 || nRemovedVoters > 0 {
-		cs.VotersOutgoing = append([]pb.PeerID(nil), cs.Voters[:nOutgoingRetainedVoters]...)
+		cs.VotersOutgoing = append([]rt.PeerID(nil), cs.Voters[:nOutgoingRetainedVoters]...)
 		cs.VotersOutgoing = append(cs.VotersOutgoing, ids[:nRemovedVoters]...)
 	}
 	// Only outgoing voters that are not also incoming voters can be in
@@ -88,7 +88,7 @@ func (rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 func TestRestore(t *testing.T) {
 	cfg := quick.Config{MaxCount: 1000}
 
-	f := func(cs pb.ConfState) bool {
+	f := func(cs rt.ConfState) bool {
 		chg := Changer{
 			Config:      quorum.MakeEmptyConfig(),
 			ProgressMap: tracker.MakeEmptyProgressMap(),
@@ -102,7 +102,7 @@ func TestRestore(t *testing.T) {
 		chg.Config = cfg
 		chg.ProgressMap = progressMap
 
-		for _, sl := range [][]pb.PeerID{
+		for _, sl := range [][]rt.PeerID{
 			cs.Voters,
 			cs.Learners,
 			cs.VotersOutgoing,
@@ -123,12 +123,12 @@ after:  %+#v`, cs, cs2)
 		return false
 	}
 
-	ids := func(sl ...pb.PeerID) []pb.PeerID {
+	ids := func(sl ...rt.PeerID) []rt.PeerID {
 		return sl
 	}
 
 	// Unit tests.
-	for _, cs := range []pb.ConfState{
+	for _, cs := range []rt.ConfState{
 		{},
 		{Voters: ids(1, 2, 3)},
 		{Voters: ids(1, 2, 3), Learners: ids(4, 5, 6)},
@@ -140,7 +140,7 @@ after:  %+#v`, cs, cs2)
 	}
 
 	if err := quick.Check(func(cs rndConfChange) bool {
-		return f(pb.ConfState(cs))
+		return f(rt.ConfState(cs))
 	}, &cfg); err != nil {
 		t.Error(err)
 	}

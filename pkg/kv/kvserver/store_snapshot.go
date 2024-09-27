@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -906,7 +906,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				SSTSize:                     sstSize,
 				SharedSize:                  sharedSize,
 				raftAppliedIndex:            header.State.RaftAppliedIndex,
-				msgAppRespCh:                make(chan raftpb.Message, 1),
+				msgAppRespCh:                make(chan rafttype.Message, 1),
 				sharedSSTs:                  sharedSSTs,
 				externalSSTs:                externalSSTs,
 				doExcise:                    doExcise,
@@ -1957,10 +1957,10 @@ func SendEmptySnapshot(
 		RangeID:     desc.RangeID,
 		FromReplica: from,
 		ToReplica:   to,
-		Message: raftpb.Message{
-			Type:     raftpb.MsgSnap,
-			To:       raftpb.PeerID(to.ReplicaID),
-			From:     raftpb.PeerID(from.ReplicaID),
+		Message: rafttype.Message{
+			Type:     rafttype.MsgSnap,
+			To:       rafttype.PeerID(to.ReplicaID),
+			From:     rafttype.PeerID(from.ReplicaID),
 			Term:     outgoingSnap.RaftSnap.Metadata.Term,
 			Snapshot: &outgoingSnap.RaftSnap,
 		},

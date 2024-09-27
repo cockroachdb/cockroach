@@ -25,7 +25,7 @@ import (
 	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -40,7 +40,7 @@ func TestConfChangeQuick(t *testing.T) {
 	// as intended.
 	const infoCount = 5
 
-	runWithJoint := func(c *Changer, ccs []pb.ConfChangeSingle) error {
+	runWithJoint := func(c *Changer, ccs []rt.ConfChangeSingle) error {
 		cfg, progressMap, err := c.EnterJoint(false /* autoLeave */, ccs...)
 		if err != nil {
 			return err
@@ -78,7 +78,7 @@ func TestConfChangeQuick(t *testing.T) {
 		return nil
 	}
 
-	runWithSimple := func(c *Changer, ccs []pb.ConfChangeSingle) error {
+	runWithSimple := func(c *Changer, ccs []rt.ConfChangeSingle) error {
 		for _, cc := range ccs {
 			cfg, trk, err := c.Simple(cc)
 			if err != nil {
@@ -89,7 +89,7 @@ func TestConfChangeQuick(t *testing.T) {
 		return nil
 	}
 
-	type testFunc func(*Changer, []pb.ConfChangeSingle) error
+	type testFunc func(*Changer, []rt.ConfChangeSingle) error
 
 	wrapper := func(invoke testFunc) func(setup initialChanges, ccs confChanges) (*Changer, error) {
 		return func(setup initialChanges, ccs confChanges) (*Changer, error) {
@@ -141,20 +141,20 @@ func TestConfChangeQuick(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Error("setup:", Describe(cErr.In[0].([]pb.ConfChangeSingle)...))
-	t.Error("ccs:", Describe(cErr.In[1].([]pb.ConfChangeSingle)...))
+	t.Error("setup:", Describe(cErr.In[0].([]rt.ConfChangeSingle)...))
+	t.Error("ccs:", Describe(cErr.In[1].([]rt.ConfChangeSingle)...))
 	t.Errorf("out1: %+v\nout2: %+v", cErr.Out1, cErr.Out2)
 }
 
-type confChanges []pb.ConfChangeSingle
+type confChanges []rt.ConfChangeSingle
 
 func genCC(
-	num func() int, id func() pb.PeerID, typ func() pb.ConfChangeType,
-) []pb.ConfChangeSingle {
-	var ccs []pb.ConfChangeSingle
+	num func() int, id func() rt.PeerID, typ func() rt.ConfChangeType,
+) []rt.ConfChangeSingle {
+	var ccs []rt.ConfChangeSingle
 	n := num()
 	for i := 0; i < n; i++ {
-		ccs = append(ccs, pb.ConfChangeSingle{Type: typ(), NodeID: id()})
+		ccs = append(ccs, rt.ConfChangeSingle{Type: typ(), NodeID: id()})
 	}
 	return ccs
 }
@@ -163,31 +163,31 @@ func (confChanges) Generate(rand *rand.Rand, _ int) reflect.Value {
 	num := func() int {
 		return 1 + rand.Intn(9)
 	}
-	id := func() pb.PeerID {
+	id := func() rt.PeerID {
 		// Note that num() >= 1, so we're never returning 1 from this method,
 		// meaning that we'll never touch NodeID one, which is special to avoid
 		// voterless configs altogether in this test.
-		return pb.PeerID(1 + num())
+		return rt.PeerID(1 + num())
 	}
-	typ := func() pb.ConfChangeType {
-		return pb.ConfChangeType(rand.Intn(len(pb.ConfChangeType_name)))
+	typ := func() rt.ConfChangeType {
+		return rt.ConfChangeType(rand.Intn(len(rt.ConfChangeType_name)))
 	}
 	return reflect.ValueOf(genCC(num, id, typ))
 }
 
-type initialChanges []pb.ConfChangeSingle
+type initialChanges []rt.ConfChangeSingle
 
 func (initialChanges) Generate(rand *rand.Rand, _ int) reflect.Value {
 	num := func() int {
 		return 1 + rand.Intn(5)
 	}
-	id := func() pb.PeerID { return pb.PeerID(num()) }
-	typ := func() pb.ConfChangeType {
-		return pb.ConfChangeAddNode
+	id := func() rt.PeerID { return rt.PeerID(num()) }
+	typ := func() rt.ConfChangeType {
+		return rt.ConfChangeAddNode
 	}
 	// NodeID one is special - it's in the initial config and will be a voter
 	// always (this is to avoid uninteresting edge cases where the simple conf
 	// changes can't easily make progress).
-	ccs := append([]pb.ConfChangeSingle{{Type: pb.ConfChangeAddNode, NodeID: 1}}, genCC(num, id, typ)...)
+	ccs := append([]rt.ConfChangeSingle{{Type: rt.ConfChangeAddNode, NodeID: 1}}, genCC(num, id, typ)...)
 	return reflect.ValueOf(ccs)
 }

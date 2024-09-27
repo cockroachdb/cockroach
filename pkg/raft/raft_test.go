@@ -24,8 +24,8 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ import (
 )
 
 // nextEnts returns the appliable entries and updates the applied index.
-func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
+func nextEnts(r *raft, s *MemoryStorage) (ents []rt.Entry) {
 	// Append unstable entries.
 	s.Append(r.raftLog.nextUnstableEnts())
 	r.raftLog.stableTo(r.raftLog.unstable.mark())
@@ -47,19 +47,19 @@ func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 	return ents
 }
 
-func mustAppendEntry(r *raft, ents ...pb.Entry) {
+func mustAppendEntry(r *raft, ents ...rt.Entry) {
 	if !r.appendEntry(ents...) {
 		panic("entry unexpectedly dropped")
 	}
 }
 
 type stateMachine interface {
-	Step(m pb.Message) error
-	readMessages() []pb.Message
+	Step(m rt.Message) error
+	readMessages() []rt.Message
 	advanceMessagesAfterAppend()
 }
 
-func (r *raft) readMessages() []pb.Message {
+func (r *raft) readMessages() []rt.Message {
 	r.advanceMessagesAfterAppend()
 	msgs := r.msgs
 	r.msgs = nil
@@ -76,13 +76,13 @@ func (r *raft) advanceMessagesAfterAppend() {
 	}
 }
 
-func (r *raft) takeMessagesAfterAppend() []pb.Message {
+func (r *raft) takeMessagesAfterAppend() []rt.Message {
 	msgs := r.msgsAfterAppend
 	r.msgsAfterAppend = nil
 	return msgs
 }
 
-func (r *raft) stepOrSend(msgs []pb.Message) error {
+func (r *raft) stepOrSend(msgs []rt.Message) error {
 	for _, m := range msgs {
 		if m.To == r.id {
 			if err := r.Step(m); err != nil {
@@ -103,7 +103,7 @@ func TestProgressLeader(t *testing.T) {
 	r.trk.Progress(2).BecomeReplicate()
 
 	// Send proposals to r1. The first 5 entries should be queued in the unstable log.
-	propMsg := pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("foo")}}}
+	propMsg := rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("foo")}}}
 	for i := 0; i < 5; i++ {
 		require.NoError(t, r.Step(propMsg), "#%d", i)
 	}
@@ -129,13 +129,13 @@ func TestProgressResumeByHeartbeatResp(t *testing.T) {
 
 	r.trk.Progress(2).MsgAppProbesPaused = true
 
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 	assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 
 	r.trk.Progress(2).BecomeReplicate()
 	assert.False(t, r.trk.Progress(2).MsgAppProbesPaused)
 	r.trk.Progress(2).MsgAppProbesPaused = true
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+	r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeatResp})
 	assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 }
 
@@ -143,9 +143,9 @@ func TestProgressPaused(t *testing.T) {
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
 	r.becomeCandidate()
 	r.becomeLeader()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 
 	ms := r.readMessages()
 	assert.Len(t, ms, 1)
@@ -172,7 +172,7 @@ func TestProgressFlowControl(t *testing.T) {
 		if i >= 10 && i < 16 { // Temporarily send large messages.
 			blob = large
 		}
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: blob}}})
+		r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: blob}}})
 	}
 
 	ms := r.readMessages()
@@ -180,7 +180,7 @@ func TestProgressFlowControl(t *testing.T) {
 	// election, and the first proposal (only one proposal gets sent
 	// because we're in probe state).
 	require.Len(t, ms, 1)
-	require.Equal(t, pb.MsgApp, ms[0].Type)
+	require.Equal(t, rt.MsgApp, ms[0].Type)
 
 	require.Len(t, ms[0].Entries, 2)
 
@@ -188,12 +188,12 @@ func TestProgressFlowControl(t *testing.T) {
 	require.Len(t, ms[0].Entries[1].Data, 1000)
 
 	ackAndVerify := func(index uint64, expEntries ...int) uint64 {
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: index})
+		r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: index})
 		ms := r.readMessages()
 		require.Equal(t, len(expEntries), len(ms))
 
 		for i, m := range ms {
-			assert.Equal(t, pb.MsgApp, m.Type, "#%d", i)
+			assert.Equal(t, rt.MsgApp, m.Type, "#%d", i)
 			assert.Len(t, m.Entries, expEntries[i], "#%d", i)
 		}
 		last := ms[len(ms)-1].Entries
@@ -225,10 +225,10 @@ func TestUncommittedEntryLimit(t *testing.T) {
 	// expect them, or because the final tally ends up nonzero. (At the time of
 	// writing, the former).
 	const maxEntries = 1024
-	testEntry := pb.Entry{Data: []byte("testdata")}
+	testEntry := rt.Entry{Data: []byte("testdata")}
 	maxEntrySize := maxEntries * payloadSize(testEntry)
 
-	require.Zero(t, payloadSize(pb.Entry{Data: nil}))
+	require.Zero(t, payloadSize(rt.Entry{Data: nil}))
 
 	cfg := newTestConfig(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	cfg.MaxUncommittedEntriesSize = uint64(maxEntrySize)
@@ -245,8 +245,8 @@ func TestUncommittedEntryLimit(t *testing.T) {
 	r.uncommittedSize = 0
 
 	// Send proposals to r1. The first 5 entries should be appended to the log.
-	propMsg := pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{testEntry}}
-	propEnts := make([]pb.Entry, maxEntries)
+	propMsg := rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{testEntry}}
+	propEnts := make([]rt.Entry, maxEntries)
 	for i := 0; i < maxEntries; i++ {
 		require.NoError(t, r.Step(propMsg), "#%d", i)
 		propEnts[i] = testEntry
@@ -264,11 +264,11 @@ func TestUncommittedEntryLimit(t *testing.T) {
 
 	// Send a single large proposal to r1. Should be accepted even though it
 	// pushes us above the limit because we were beneath it before the proposal.
-	propEnts = make([]pb.Entry, 2*maxEntries)
+	propEnts = make([]rt.Entry, 2*maxEntries)
 	for i := range propEnts {
 		propEnts[i] = testEntry
 	}
-	propMsgLarge := pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: propEnts}
+	propMsgLarge := rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: propEnts}
 	require.NoError(t, r.Step(propMsgLarge))
 
 	// Send one more proposal to r1. It should be rejected, again.
@@ -277,7 +277,7 @@ func TestUncommittedEntryLimit(t *testing.T) {
 	// But we can always append an entry with no Data. This is used both for the
 	// leader's first empty entry and for auto-transitioning out of joint config
 	// states.
-	require.NoError(t, r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}}))
+	require.NoError(t, r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}}))
 
 	// Read messages and reduce the uncommitted size as if we had committed
 	// these entries.
@@ -326,7 +326,7 @@ func testLeaderElection(t *testing.T, preVote bool) {
 	}
 
 	for i, tt := range tests {
-		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 		sm := tt.network.peers[1].(*raft)
 		assert.Equal(t, tt.state, sm.state, "#%d", i)
 		assert.Equal(t, tt.expTerm, sm.Term, "#%d", i)
@@ -375,10 +375,10 @@ func TestLearnerPromotion(t *testing.T) {
 	assert.Equal(t, StateLeader, n1.state)
 	assert.Equal(t, StateFollower, n2.state)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 
-	n1.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
-	n2.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
+	n1.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddNode}.AsV2())
+	n2.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddNode}.AsV2())
 	assert.False(t, n2.isLearner)
 
 	// n2 start election, should become leader
@@ -388,7 +388,7 @@ func TestLearnerPromotion(t *testing.T) {
 	}
 	n2.advanceMessagesAfterAppend()
 
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgBeat})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgBeat})
 
 	assert.Equal(t, StateFollower, n1.state)
 	assert.Equal(t, StateLeader, n2.state)
@@ -401,11 +401,11 @@ func TestLearnerCanVote(t *testing.T) {
 
 	n2.becomeFollower(1, None)
 
-	n2.Step(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgVote, LogTerm: 11, Index: 11})
+	n2.Step(rt.Message{From: 1, To: 2, Term: 2, Type: rt.MsgVote, LogTerm: 11, Index: 11})
 
 	msgs := n2.readMessages()
 	require.Len(t, msgs, 1)
-	require.Equal(t, msgs[0].Type, pb.MsgVoteResp)
+	require.Equal(t, msgs[0].Type, rt.MsgVoteResp)
 	require.False(t, msgs[0].Reject, "expected learner to not reject vote")
 }
 
@@ -427,8 +427,8 @@ func testLeaderCycle(t *testing.T, preVote bool) {
 		cfg = preVoteConfigWithFortificationDisabled
 	}
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
-	for campaignerID := pb.PeerID(1); campaignerID <= 3; campaignerID++ {
-		n.send(pb.Message{From: campaignerID, To: campaignerID, Type: pb.MsgHup})
+	for campaignerID := rt.PeerID(1); campaignerID <= 3; campaignerID++ {
+		n.send(rt.Message{From: campaignerID, To: campaignerID, Type: rt.MsgHup})
 
 		for _, peer := range n.peers {
 			sm := peer.(*raft)
@@ -482,13 +482,13 @@ func testLeaderElectionOverwriteNewerLogs(t *testing.T, preVote bool) {
 	// Node 1 campaigns. The election fails because a quorum of nodes
 	// know about the election that already happened at term 2. Node 1's
 	// term is pushed ahead to 2.
-	n.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	n.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	sm1 := n.peers[1].(*raft)
 	assert.Equal(t, StateFollower, sm1.state)
 	assert.Equal(t, uint64(2), sm1.Term)
 
 	// Node 1 campaigns again with a higher term. This time it succeeds.
-	n.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	n.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	assert.Equal(t, StateLeader, sm1.state)
 	assert.Equal(t, uint64(3), sm1.Term)
 
@@ -504,14 +504,14 @@ func testLeaderElectionOverwriteNewerLogs(t *testing.T, preVote bool) {
 }
 
 func TestVoteFromAnyState(t *testing.T) {
-	testVoteFromAnyState(t, pb.MsgVote)
+	testVoteFromAnyState(t, rt.MsgVote)
 }
 
 func TestPreVoteFromAnyState(t *testing.T) {
-	testVoteFromAnyState(t, pb.MsgPreVote)
+	testVoteFromAnyState(t, rt.MsgPreVote)
 }
 
-func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
+func testVoteFromAnyState(t *testing.T, vt rt.MessageType) {
 	for st := StateType(0); st < numStates; st++ {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 		r.Term = 1
@@ -533,7 +533,7 @@ func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
 		origTerm := r.Term
 		newTerm := r.Term + 1
 
-		msg := pb.Message{
+		msg := rt.Message{
 			From:    2,
 			To:      1,
 			Type:    vt,
@@ -550,10 +550,10 @@ func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
 		}
 
 		// If this was a real vote, we reset our state and term.
-		if vt == pb.MsgVote {
+		if vt == rt.MsgVote {
 			assert.Equal(t, StateFollower, r.state, "%s,%s", vt, st)
 			assert.Equal(t, newTerm, r.Term, "%s,%s", vt, st)
-			assert.Equal(t, pb.PeerID(2), r.Vote, "%s,%s", vt, st)
+			assert.Equal(t, rt.PeerID(2), r.Vote, "%s,%s", vt, st)
 		} else {
 			// In a prevote, nothing changes.
 			assert.Equal(t, st, r.state, "%s,%s", vt, st)
@@ -568,29 +568,29 @@ func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
 func TestLogReplication(t *testing.T) {
 	tests := []struct {
 		*network
-		msgs       []pb.Message
+		msgs       []rt.Message
 		wcommitted uint64
 	}{
 		{
 			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
-			[]pb.Message{
-				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
+			[]rt.Message{
+				{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}},
 			},
 			2,
 		},
 		{
 			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
-			[]pb.Message{
-				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
-				{From: 1, To: 2, Type: pb.MsgHup},
-				{From: 1, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
+			[]rt.Message{
+				{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}},
+				{From: 1, To: 2, Type: rt.MsgHup},
+				{From: 1, To: 2, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}},
 			},
 			4,
 		},
 	}
 
 	for i, tt := range tests {
-		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 		for _, m := range tt.msgs {
 			tt.send(m)
@@ -601,15 +601,15 @@ func TestLogReplication(t *testing.T) {
 
 			assert.Equal(t, tt.wcommitted, sm.raftLog.committed, "#%d.%d", i, j)
 
-			var ents []pb.Entry
+			var ents []rt.Entry
 			for _, e := range nextEnts(sm, tt.network.storage[j]) {
 				if e.Data != nil {
 					ents = append(ents, e)
 				}
 			}
-			var props []pb.Message
+			var props []rt.Message
 			for _, m := range tt.msgs {
-				if m.Type == pb.MsgProp {
+				if m.Type == rt.MsgProp {
 					props = append(props, m)
 				}
 			}
@@ -638,7 +638,7 @@ func TestLearnerLogReplication(t *testing.T) {
 	}
 	n1.advanceMessagesAfterAppend()
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 
 	// n1 is leader and n2 is learner
 	assert.Equal(t, StateLeader, n1.state)
@@ -646,7 +646,7 @@ func TestLearnerLogReplication(t *testing.T) {
 
 	nextCommitted := uint64(2)
 	{
-		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 	}
 
 	assert.Equal(t, nextCommitted, n1.raftLog.committed)
@@ -661,9 +661,9 @@ func TestSingleNodeCommit(t *testing.T) {
 	cfg := newTestConfig(1, 10, 1, s)
 	r := newRaft(cfg)
 	tt := newNetwork(r)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
 
 	sm := tt.peers[1].(*raft)
 	assert.Equal(t, uint64(3), sm.raftLog.committed)
@@ -674,15 +674,15 @@ func TestSingleNodeCommit(t *testing.T) {
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// 0 cannot reach 2,3,4
 	tt.cut(1, 3)
 	tt.cut(1, 4)
 	tt.cut(1, 5)
 
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
 
 	sm := tt.peers[1].(*raft)
 	assert.Equal(t, uint64(1), sm.raftLog.committed)
@@ -690,10 +690,10 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	// network recovery
 	tt.recover()
 	// avoid committing ChangeTerm proposal
-	tt.ignore(pb.MsgApp)
+	tt.ignore(rt.MsgApp)
 
 	// elect 2 as the new leader with term 2
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// no log entries from previous term should be committed
 	sm = tt.peers[2].(*raft)
@@ -701,9 +701,9 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 
 	tt.recover()
 	// send heartbeat; reset wait
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgBeat})
+	tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgBeat})
 	// append an entry at current term
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
 	// expect the committed to be advanced
 	assert.Equal(t, uint64(5), sm.raftLog.committed)
 }
@@ -712,15 +712,15 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 // when leader changes, no new proposal comes in.
 func TestCommitWithoutNewTermEntry(t *testing.T) {
 	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// 0 cannot reach 3,4,5
 	tt.cut(1, 3)
 	tt.cut(1, 4)
 	tt.cut(1, 5)
 
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
 
 	sm := tt.peers[1].(*raft)
 	assert.Equal(t, uint64(1), sm.raftLog.committed)
@@ -731,7 +731,7 @@ func TestCommitWithoutNewTermEntry(t *testing.T) {
 	// elect 2 as the new leader with term 2
 	// after append a ChangeTerm entry from the current term, all entries
 	// should be committed
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	assert.Equal(t, uint64(4), sm.raftLog.committed)
 }
@@ -747,8 +747,8 @@ func TestDuelingCandidates(t *testing.T) {
 	nt := newNetwork(a, b, c)
 	nt.cut(1, 3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// 1 becomes leader since it receives votes from 1 and 2
 	sm := nt.peers[1].(*raft)
@@ -763,7 +763,7 @@ func TestDuelingCandidates(t *testing.T) {
 	// candidate 3 now increases its term and tries to vote again
 	// we expect it to disrupt the leader 1 since it has a higher term
 	// 3 will be follower again since both 1 and 2 rejects its vote request since 3 does not have a long enough log
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 	assert.Equal(t, StateFollower, sm.state)
 
 	tests := []struct {
@@ -799,8 +799,8 @@ func TestDuelingPreCandidates(t *testing.T) {
 	nt.t = t
 	nt.cut(1, 3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// 1 becomes leader since it receives votes from 1 and 2
 	sm := nt.peers[1].(*raft)
@@ -814,7 +814,7 @@ func TestDuelingPreCandidates(t *testing.T) {
 
 	// Candidate 3 now increases its term and tries to vote again.
 	// With PreVote, it does not disrupt the leader.
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	tests := []struct {
 		sm        *raft
@@ -838,26 +838,26 @@ func TestCandidateConcede(t *testing.T) {
 	tt := newNetwork(nil, nil, nil)
 	tt.isolate(1)
 
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+	tt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// heal the partition
 	tt.recover()
 	// send heartbeat; reset wait
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgBeat})
+	tt.send(rt.Message{From: 3, To: 3, Type: rt.MsgBeat})
 
 	data := []byte("force follower")
 	// send a proposal to 3 to flush out a MsgApp to 1
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgProp, Entries: []pb.Entry{{Data: data}}})
+	tt.send(rt.Message{From: 3, To: 3, Type: rt.MsgProp, Entries: []rt.Entry{{Data: data}}})
 	// send heartbeat; flush out commit
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgBeat})
+	tt.send(rt.Message{From: 3, To: 3, Type: rt.MsgBeat})
 
 	a := tt.peers[1].(*raft)
 	assert.Equal(t, StateFollower, a.state)
 	assert.Equal(t, uint64(1), a.Term)
 
 	wantLog := ltoa(newLog(&MemoryStorage{
-		ents: []pb.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Index: 2, Data: data}},
+		ents: []rt.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Index: 2, Data: data}},
 	}, nil))
 	for i, p := range tt.peers {
 		if sm, ok := p.(*raft); ok {
@@ -871,7 +871,7 @@ func TestCandidateConcede(t *testing.T) {
 
 func TestSingleNodeCandidate(t *testing.T) {
 	tt := newNetwork(nil)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	sm := tt.peers[1].(*raft)
 	assert.Equal(t, StateLeader, sm.state)
@@ -879,7 +879,7 @@ func TestSingleNodeCandidate(t *testing.T) {
 
 func TestSingleNodePreCandidate(t *testing.T) {
 	tt := newNetworkWithConfig(preVoteConfig, nil)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	sm := tt.peers[1].(*raft)
 	assert.Equal(t, StateLeader, sm.state)
@@ -888,13 +888,13 @@ func TestSingleNodePreCandidate(t *testing.T) {
 func TestOldMessages(t *testing.T) {
 	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	// make 0 leader @ term 3
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+	tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	// pretend we're an old leader trying to make progress; this entry is expected to be ignored.
-	tt.send(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, Entries: index(3).terms(2)})
+	tt.send(rt.Message{From: 2, To: 1, Type: rt.MsgApp, Term: 2, Entries: index(3).terms(2)})
 	// commit a new entry
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 
 	ents := index(0).terms(0, 1, 2, 3, 3)
 	ents[4].Data = []byte("somedata")
@@ -925,7 +925,7 @@ func TestProposal(t *testing.T) {
 	}
 
 	for j, tt := range tests {
-		send := func(m pb.Message) {
+		send := func(m rt.Message) {
 			defer func() {
 				// only recover if we expect it to panic (success==false)
 				if !tt.success {
@@ -941,14 +941,14 @@ func TestProposal(t *testing.T) {
 		data := []byte("somedata")
 
 		// promote 1 to become leader
-		send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-		send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: data}}})
+		send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
+		send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: data}}})
 		r := tt.network.peers[1].(*raft)
 
 		wantLog := newLog(NewMemoryStorage(), raftLogger)
 		if tt.success {
 			wantLog = newLog(&MemoryStorage{
-				ents: []pb.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Index: 2, Data: data}},
+				ents: []rt.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Index: 2, Data: data}},
 			}, nil)
 		}
 		base := ltoa(wantLog)
@@ -973,13 +973,13 @@ func TestProposalByProxy(t *testing.T) {
 
 	for j, tt := range tests {
 		// promote 0 the leader
-		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		tt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 		// propose via follower
-		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		tt.send(rt.Message{From: 2, To: 2, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 
 		wantLog := newLog(&MemoryStorage{
-			ents: []pb.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Data: data, Index: 2}},
+			ents: []rt.Entry{{}, {Data: nil, Term: 1, Index: 1}, {Term: 1, Data: data, Index: 2}},
 		}, nil)
 		base := ltoa(wantLog)
 		for i, p := range tt.peers {
@@ -998,7 +998,7 @@ func TestProposalByProxy(t *testing.T) {
 func TestCommit(t *testing.T) {
 	tests := []struct {
 		matches []uint64
-		logs    []pb.Entry
+		logs    []rt.Entry
 		smTerm  uint64
 		w       uint64
 	}{
@@ -1026,13 +1026,13 @@ func TestCommit(t *testing.T) {
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1))
 		storage.Append(tt.logs)
-		storage.hardState = pb.HardState{Term: tt.smTerm}
+		storage.hardState = rt.HardState{Term: tt.smTerm}
 
 		sm := newTestRaft(1, 10, 2, storage)
 		for j := 0; j < len(tt.matches); j++ {
-			id := pb.PeerID(j + 1)
+			id := rt.PeerID(j + 1)
 			if id > 1 {
-				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
+				sm.applyConfChange(rt.ConfChange{Type: rt.ConfChangeAddNode, NodeID: id}.AsV2())
 			}
 			pr := sm.trk.Progress(id)
 			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
@@ -1078,14 +1078,14 @@ func TestPastElectionTimeout(t *testing.T) {
 // from old term and does not pass it to the actual stepX function.
 func TestStepIgnoreOldTermMsg(t *testing.T) {
 	called := false
-	fakeStep := func(r *raft, m pb.Message) error {
+	fakeStep := func(r *raft, m rt.Message) error {
 		called = true
 		return nil
 	}
 	sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 	sm.step = fakeStep
 	sm.Term = 2
-	sm.Step(pb.Message{Type: pb.MsgApp, Term: sm.Term - 1})
+	sm.Step(rt.Message{Type: rt.MsgApp, Term: sm.Term - 1})
 	assert.False(t, called)
 }
 
@@ -1096,27 +1096,27 @@ func TestStepIgnoreOldTermMsg(t *testing.T) {
 //  3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func TestHandleMsgApp(t *testing.T) {
 	tests := []struct {
-		m       pb.Message
+		m       rt.Message
 		wIndex  uint64
 		wCommit uint64
 		wReject bool
 	}{
 		// Ensure 1
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
+		{rt.Message{Type: rt.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
+		{rt.Message{Type: rt.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
 
 		// Ensure 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []pb.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []pb.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
+		{rt.Message{Type: rt.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []rt.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []rt.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []rt.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []rt.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
 
 		// Ensure 3
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
+		{rt.Message{Type: rt.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []rt.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
+		{rt.Message{Type: rt.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
 	}
 
 	for i, tt := range tests {
@@ -1138,19 +1138,19 @@ func TestHandleMsgApp(t *testing.T) {
 func TestHandleHeartbeat(t *testing.T) {
 	commit := uint64(2)
 	tests := []struct {
-		m       pb.Message
+		m       rt.Message
 		accTerm uint64
 		wCommit uint64
 	}{
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 2, commit + 1},
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 2, commit}, // do not decrease commit
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 1, commit},
+		{rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeat, Term: 2, Commit: commit + 1}, 2, commit + 1},
+		{rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeat, Term: 2, Commit: commit - 1}, 2, commit}, // do not decrease commit
+		{rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeat, Term: 2, Commit: commit - 1}, 1, commit},
 
 		// Do not increase the commit index if the log is not guaranteed to be a
 		// prefix of the leader's log.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 1, commit},
+		{rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeat, Term: 2, Commit: commit + 1}, 1, commit},
 		// Do not increase the commit index beyond our log size.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 10}, 2, commit + 1}, // do not decrease commit
+		{rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeat, Term: 2, Commit: commit + 10}, 2, commit + 1}, // do not decrease commit
 	}
 
 	for i, tt := range tests {
@@ -1163,14 +1163,14 @@ func TestHandleHeartbeat(t *testing.T) {
 		sm.handleHeartbeat(tt.m)
 		m := sm.readMessages()
 		require.Len(t, m, 1, "#%d", i)
-		assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type, "#%d", i)
+		assert.Equal(t, rt.MsgHeartbeatResp, m[0].Type, "#%d", i)
 	}
 }
 
 // TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
 func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
-	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
+	require.NoError(t, storage.SetHardState(rt.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
@@ -1178,28 +1178,28 @@ func TestHandleHeartbeatResp(t *testing.T) {
 	sm.raftLog.commitTo(LogMark{Term: 3, Index: sm.raftLog.lastIndex()})
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
-	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
+	sm.Step(rt.Message{From: 2, Type: rt.MsgHeartbeatResp})
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgApp, msgs[0].Type)
+	assert.Equal(t, rt.MsgApp, msgs[0].Type)
 
 	// A second heartbeat response generates another MsgApp re-send
-	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
+	sm.Step(rt.Message{From: 2, Type: rt.MsgHeartbeatResp})
 	msgs = sm.readMessages()
 	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgApp, msgs[0].Type)
+	assert.Equal(t, rt.MsgApp, msgs[0].Type)
 
 	// Once we have an MsgAppResp, heartbeats no longer send MsgApp.
-	sm.Step(pb.Message{
+	sm.Step(rt.Message{
 		From:   2,
-		Type:   pb.MsgAppResp,
+		Type:   rt.MsgAppResp,
 		Index:  msgs[0].Index + uint64(len(msgs[0].Entries)),
 		Commit: sm.raftLog.lastIndex(),
 	})
 	// Consume the message sent in response to MsgAppResp
 	sm.readMessages()
 
-	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
+	sm.Step(rt.Message{From: 2, Type: rt.MsgHeartbeatResp})
 	msgs = sm.readMessages()
 	require.Empty(t, msgs)
 }
@@ -1217,9 +1217,9 @@ func TestMsgAppRespWaitReset(t *testing.T) {
 	nextEnts(sm, s)
 
 	// Node 2 acks the first entry, making it committed.
-	sm.Step(pb.Message{
+	sm.Step(rt.Message{
 		From:  2,
-		Type:  pb.MsgAppResp,
+		Type:  rt.MsgAppResp,
 		Index: 1,
 	})
 	require.Equal(t, uint64(1), sm.raftLog.committed)
@@ -1228,48 +1228,48 @@ func TestMsgAppRespWaitReset(t *testing.T) {
 	sm.readMessages()
 
 	// A new command is now proposed on node 1.
-	sm.Step(pb.Message{
+	sm.Step(rt.Message{
 		From:    1,
-		Type:    pb.MsgProp,
-		Entries: []pb.Entry{{}},
+		Type:    rt.MsgProp,
+		Entries: []rt.Entry{{}},
 	})
 
 	// The command is broadcast to all nodes not in the wait state.
 	// Node 2 left the wait state due to its MsgAppResp, but node 3 is still waiting.
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgApp, msgs[0].Type)
-	assert.Equal(t, pb.PeerID(2), msgs[0].To)
+	assert.Equal(t, rt.MsgApp, msgs[0].Type)
+	assert.Equal(t, rt.PeerID(2), msgs[0].To)
 	assert.Len(t, msgs[0].Entries, 1)
 	assert.Equal(t, uint64(2), msgs[0].Entries[0].Index)
 
 	// Now Node 3 acks the first entry. This releases the wait and entry 2 is sent.
-	sm.Step(pb.Message{
+	sm.Step(rt.Message{
 		From:  3,
-		Type:  pb.MsgAppResp,
+		Type:  rt.MsgAppResp,
 		Index: 1,
 	})
 	msgs = sm.readMessages()
 	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgApp, msgs[0].Type)
-	assert.Equal(t, pb.PeerID(3), msgs[0].To)
+	assert.Equal(t, rt.MsgApp, msgs[0].Type)
+	assert.Equal(t, rt.PeerID(3), msgs[0].To)
 	assert.Len(t, msgs[0].Entries, 1)
 	assert.Equal(t, uint64(2), msgs[0].Entries[0].Index)
 }
 
 func TestRecvMsgVote(t *testing.T) {
-	testRecvMsgVote(t, pb.MsgVote)
+	testRecvMsgVote(t, rt.MsgVote)
 }
 
 func TestRecvMsgPreVote(t *testing.T) {
-	testRecvMsgVote(t, pb.MsgPreVote)
+	testRecvMsgVote(t, rt.MsgPreVote)
 }
 
-func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
+func testRecvMsgVote(t *testing.T, msgType rt.MessageType) {
 	tests := []struct {
 		state          StateType
 		index, logTerm uint64
-		voteFor        pb.PeerID
+		voteFor        rt.PeerID
 		wreject        bool
 	}{
 		{StateFollower, 0, 0, None, true},
@@ -1324,7 +1324,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		// be the same.
 		term := max(sm.raftLog.lastEntryID().term, tt.logTerm)
 		sm.Term = term
-		sm.Step(pb.Message{Type: msgType, Term: term, From: 2, Index: tt.index, LogTerm: tt.logTerm})
+		sm.Step(rt.Message{Type: msgType, Term: term, From: 2, Index: tt.index, LogTerm: tt.logTerm})
 
 		msgs := sm.readMessages()
 		require.Len(t, msgs, 1, "#%d", i)
@@ -1339,7 +1339,7 @@ func TestStateTransition(t *testing.T) {
 		to     StateType
 		wallow bool
 		wterm  uint64
-		wlead  pb.PeerID
+		wlead  rt.PeerID
 	}{
 		{StateFollower, StateFollower, true, 1, None},
 		{StateFollower, StatePreCandidate, true, 0, None},
@@ -1404,7 +1404,7 @@ func TestAllServerStepdown(t *testing.T) {
 		{StateLeader, StateFollower, 3, 1},
 	}
 
-	tmsgTypes := [...]pb.MessageType{pb.MsgVote, pb.MsgApp}
+	tmsgTypes := [...]rt.MessageType{rt.MsgVote, rt.MsgApp}
 	tterm := uint64(3)
 
 	for i, tt := range tests {
@@ -1422,15 +1422,15 @@ func TestAllServerStepdown(t *testing.T) {
 		}
 
 		for j, msgType := range tmsgTypes {
-			sm.Step(pb.Message{From: 2, Type: msgType, Term: tterm, LogTerm: tterm})
+			sm.Step(rt.Message{From: 2, Type: msgType, Term: tterm, LogTerm: tterm})
 
 			assert.Equal(t, tt.wstate, sm.state, "#%d.%d", i, j)
 			assert.Equal(t, tt.wterm, sm.Term, "#%d.%d", i, j)
 			assert.Equal(t, tt.windex, sm.raftLog.lastIndex(), "#%d.%d", i, j)
 			assert.Len(t, sm.raftLog.allEntries(), int(tt.windex), "#%d.%d", i, j)
 
-			wlead := pb.PeerID(2)
-			if msgType == pb.MsgVote {
+			wlead := rt.PeerID(2)
+			if msgType == rt.MsgVote {
 				wlead = None
 			}
 			assert.Equal(t, wlead, sm.lead, "#%d.%d", i, j)
@@ -1439,17 +1439,17 @@ func TestAllServerStepdown(t *testing.T) {
 }
 
 func TestCandidateResetTermMsgHeartbeat(t *testing.T) {
-	testCandidateResetTerm(t, pb.MsgHeartbeat)
+	testCandidateResetTerm(t, rt.MsgHeartbeat)
 }
 
 func TestCandidateResetTermMsgApp(t *testing.T) {
-	testCandidateResetTerm(t, pb.MsgApp)
+	testCandidateResetTerm(t, rt.MsgApp)
 }
 
 // testCandidateResetTerm tests when a candidate receives a
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
-func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
+func testCandidateResetTerm(t *testing.T, mt rt.MessageType) {
 	a := newTestRaft(
 		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
 	)
@@ -1462,7 +1462,7 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 
 	nt := newNetwork(a, b, c)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, b.state)
@@ -1471,8 +1471,8 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 	// isolate 3 and increase term in rest
 	nt.isolate(3)
 
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, b.state)
@@ -1490,7 +1490,7 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 
 	// leader sends to isolated candidate
 	// and expects candidate to revert to follower
-	nt.send(pb.Message{From: 1, To: 3, Term: a.Term, Type: mt})
+	nt.send(rt.Message{From: 1, To: 3, Term: a.Term, Type: mt})
 
 	assert.Equal(t, StateFollower, c.state)
 	// follower c term is reset with leader's
@@ -1515,13 +1515,13 @@ func testCandidateSelfVoteAfterLostElection(t *testing.T, preVote bool) {
 	sm.preVote = preVote
 
 	// n1 calls an election.
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	steps := sm.takeMessagesAfterAppend()
 
 	// n1 hears that n2 already won the election before it has had a
 	// change to sync its vote to disk and account for its self-vote.
 	// Becomes a follower.
-	sm.Step(pb.Message{From: 2, To: 1, Term: sm.Term, Type: pb.MsgHeartbeat})
+	sm.Step(rt.Message{From: 2, To: 1, Term: sm.Term, Type: rt.MsgHeartbeat})
 	assert.Equal(t, StateFollower, sm.state)
 
 	// n1 remains a follower even after its self-vote is delivered.
@@ -1539,15 +1539,15 @@ func TestCandidateDeliversPreCandidateSelfVoteAfterBecomingCandidate(t *testing.
 	sm.preVote = true
 
 	// n1 calls an election.
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	assert.Equal(t, StatePreCandidate, sm.state)
 	steps := sm.takeMessagesAfterAppend()
 
 	// n1 receives pre-candidate votes from both other peers before
 	// voting for itself. n1 becomes a candidate.
 	// NB: pre-vote messages carry the local term + 1.
-	sm.Step(pb.Message{From: 2, To: 1, Term: sm.Term + 1, Type: pb.MsgPreVoteResp})
-	sm.Step(pb.Message{From: 3, To: 1, Term: sm.Term + 1, Type: pb.MsgPreVoteResp})
+	sm.Step(rt.Message{From: 2, To: 1, Term: sm.Term + 1, Type: rt.MsgPreVoteResp})
+	sm.Step(rt.Message{From: 3, To: 1, Term: sm.Term + 1, Type: rt.MsgPreVoteResp})
 	assert.Equal(t, StateCandidate, sm.state)
 
 	// n1 remains a candidate even after its delayed pre-vote self-vote is
@@ -1562,7 +1562,7 @@ func TestCandidateDeliversPreCandidateSelfVoteAfterBecomingCandidate(t *testing.
 	assert.Zero(t, granted)
 
 	// A single vote from n2 does not move n1 to the leader.
-	sm.Step(pb.Message{From: 2, To: 1, Term: sm.Term, Type: pb.MsgVoteResp})
+	sm.Step(rt.Message{From: 2, To: 1, Term: sm.Term, Type: rt.MsgVoteResp})
 	assert.Equal(t, StateCandidate, sm.state)
 
 	// n1 becomes the leader once its self-vote is received because now
@@ -1577,11 +1577,11 @@ func TestLeaderMsgAppSelfAckAfterTermChange(t *testing.T) {
 	sm.becomeLeader()
 
 	// n1 proposes a write.
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 	steps := sm.takeMessagesAfterAppend()
 
 	// n1 hears that n2 is the new leader.
-	sm.Step(pb.Message{From: 2, To: 1, Term: sm.Term + 1, Type: pb.MsgHeartbeat})
+	sm.Step(rt.Message{From: 2, To: 1, Term: sm.Term + 1, Type: rt.MsgHeartbeat})
 	assert.Equal(t, StateFollower, sm.state)
 
 	// n1 advances, ignoring its earlier self-ack of its MsgApp. The
@@ -1599,7 +1599,7 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 	sm.becomeLeader()
 
 	for i := 0; i < sm.electionTimeout+1; i++ {
-		sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp, Term: sm.Term})
+		sm.Step(rt.Message{From: 2, Type: rt.MsgHeartbeatResp, Term: sm.Term})
 		sm.tick()
 	}
 
@@ -1641,12 +1641,12 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, c.state)
 
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// Peer b rejected c's vote since its electionElapsed had not reached to electionTimeout
 	assert.Equal(t, StateCandidate, c.state)
@@ -1655,7 +1655,7 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, c.state)
 }
@@ -1681,7 +1681,7 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 
 	// Immediately after creation, votes are cast regardless of the
 	// election timeout.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, c.state)
@@ -1696,7 +1696,7 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateFollower, a.state)
 	assert.Equal(t, StateLeader, c.state)
@@ -1726,31 +1726,31 @@ func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
 	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	nt.isolate(1)
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateFollower, b.state)
 	assert.Equal(t, StateCandidate, c.state)
 	assert.Equal(t, b.Term+1, c.Term)
 
 	// Vote again for safety
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateFollower, b.state)
 	assert.Equal(t, StateCandidate, c.state)
 	assert.Equal(t, b.Term+2, c.Term)
 
 	nt.recover()
-	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: a.Term})
+	nt.send(rt.Message{From: 1, To: 3, Type: rt.MsgHeartbeat, Term: a.Term})
 
 	// Disrupt the leader so that the stuck peer is freed
 	assert.Equal(t, StateFollower, a.state)
 	assert.Equal(t, a.Term, c.Term)
 
 	// Vote again, should become leader this time
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, c.state)
 }
@@ -1765,18 +1765,18 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(a, b)
 	setRandomizedElectionTimeout(b, b.electionTimeout+1)
 	// Need to remove 2 again to make it a non-promotable node since newNetwork overwritten some internal states
-	b.applyConfChange(pb.ConfChange{Type: pb.ConfChangeRemoveNode, NodeID: 2}.AsV2())
+	b.applyConfChange(rt.ConfChange{Type: rt.ConfChangeRemoveNode, NodeID: 2}.AsV2())
 
 	require.False(t, b.promotable())
 
 	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, b.state)
-	assert.Equal(t, pb.PeerID(1), b.lead)
+	assert.Equal(t, rt.PeerID(1), b.lead)
 }
 
 // TestDisruptiveFollower tests isolated follower,
@@ -1805,7 +1805,7 @@ func TestDisruptiveFollower(t *testing.T) {
 
 	nt := newNetwork(n1, n2, n3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// check state
 	require.Equal(t, StateLeader, n1.state)
@@ -1822,7 +1822,7 @@ func TestDisruptiveFollower(t *testing.T) {
 	}
 
 	// ideally, before last election tick elapses,
-	// the follower n3 receives "pb.MsgApp" or "pb.MsgHeartbeat"
+	// the follower n3 receives "rt.MsgApp" or "rt.MsgHeartbeat"
 	// from leader n1, and then resets its "electionElapsed"
 	// however, last tick may elapse before receiving any
 	// messages from leader, thus triggering campaign
@@ -1845,9 +1845,9 @@ func TestDisruptiveFollower(t *testing.T) {
 	// leader heartbeat finally arrives at candidate n3
 	// however, due to delayed network from leader, leader
 	// heartbeat was sent with lower term than candidate's
-	nt.send(pb.Message{From: 1, To: 3, Term: n1.Term, Type: pb.MsgHeartbeat})
+	nt.send(rt.Message{From: 1, To: 3, Term: n1.Term, Type: rt.MsgHeartbeat})
 
-	// then candidate n3 responds with "pb.MsgAppResp" of higher term
+	// then candidate n3 responds with "rt.MsgAppResp" of higher term
 	// and leader steps down from a message with higher term
 	// this is to disrupt the current leader, so that candidate
 	// with higher term can be freed with following election
@@ -1883,7 +1883,7 @@ func TestDisruptiveFollowerPreVote(t *testing.T) {
 
 	nt := newNetwork(n1, n2, n3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// check state
 	require.Equal(t, StateLeader, n1.state)
@@ -1891,14 +1891,14 @@ func TestDisruptiveFollowerPreVote(t *testing.T) {
 	require.Equal(t, StateFollower, n3.state)
 
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 	n1.preVote = true
 	n2.preVote = true
 	n3.preVote = true
 	nt.recover()
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// check state
 	require.Equal(t, StateLeader, n1.state)
@@ -1911,7 +1911,7 @@ func TestDisruptiveFollowerPreVote(t *testing.T) {
 	require.Equal(t, uint64(2), n3.Term)
 
 	// delayed leader heartbeat does not force current leader to step down
-	nt.send(pb.Message{From: 1, To: 3, Term: n1.Term, Type: pb.MsgHeartbeat})
+	nt.send(rt.Message{From: 1, To: 3, Term: n1.Term, Type: rt.MsgHeartbeat})
 	require.Equal(t, StateLeader, n1.state)
 }
 
@@ -1949,9 +1949,9 @@ func TestLeaderAppResp(t *testing.T) {
 			sm.becomeLeader()
 			sm.readMessages()
 			require.NoError(t, sm.Step(
-				pb.Message{
+				rt.Message{
 					From:       2,
-					Type:       pb.MsgAppResp,
+					Type:       rt.MsgAppResp,
 					Index:      tt.index,
 					Term:       sm.Term,
 					Reject:     tt.reject,
@@ -1979,11 +1979,11 @@ func TestLeaderAppResp(t *testing.T) {
 func TestBcastBeat(t *testing.T) {
 	offset := uint64(1000)
 	// make a state machine with log.offset = 1000
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{
 			Index:     offset,
 			Term:      1,
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2, 3}},
 		},
 	}
 	storage := NewMemoryStorage()
@@ -1994,7 +1994,7 @@ func TestBcastBeat(t *testing.T) {
 	sm.becomeCandidate()
 	sm.becomeLeader()
 	for i := 0; i < 10; i++ {
-		mustAppendEntry(sm, pb.Entry{Index: uint64(i) + 1})
+		mustAppendEntry(sm, rt.Entry{Index: uint64(i) + 1})
 	}
 	sm.advanceMessagesAfterAppend()
 
@@ -2003,12 +2003,12 @@ func TestBcastBeat(t *testing.T) {
 	// normal follower
 	sm.trk.Progress(3).Match, sm.trk.Progress(3).Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
 
-	sm.Step(pb.Message{Type: pb.MsgBeat})
+	sm.Step(rt.Message{Type: rt.MsgBeat})
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 2)
 
 	for i, m := range msgs {
-		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
+		require.Equal(t, rt.MsgHeartbeat, m.Type, "#%d", i)
 		require.Zero(t, m.Index, "#%d", i)
 		require.Zero(t, m.LogTerm, "#%d", i)
 		require.Empty(t, m.Entries, "#%d", i)
@@ -2040,12 +2040,12 @@ func TestRecvMsgBeat(t *testing.T) {
 		case StateLeader:
 			sm.step = stepLeader
 		}
-		sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+		sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 
 		msgs := sm.readMessages()
 		assert.Len(t, msgs, tt.wMsg, "#%d", i)
 		for _, m := range msgs {
-			assert.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
+			assert.Equal(t, rt.MsgHeartbeat, m.Type, "#%d", i)
 		}
 	}
 }
@@ -2074,7 +2074,7 @@ func TestLeaderIncreaseNext(t *testing.T) {
 		sm.becomeLeader()
 		sm.trk.Progress(2).State = tt.state
 		sm.trk.Progress(2).Next = tt.next
-		sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 
 		p := sm.trk.Progress(2)
 		assert.Equal(t, tt.wnext, p.Next, "#%d", i)
@@ -2094,7 +2094,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 			// we expect that raft will only send out one msgAPP on the first
 			// loop. After that, the follower is paused until a heartbeat response is
 			// received.
-			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			mustAppendEntry(r, rt.Entry{Data: []byte("somedata")})
 			r.maybeSendAppend(2)
 			msg := r.readMessages()
 			assert.Len(t, msg, 1)
@@ -2103,25 +2103,25 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 		for j := 0; j < 10; j++ {
-			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			mustAppendEntry(r, rt.Entry{Data: []byte("somedata")})
 			r.maybeSendAppend(2)
 			assert.Empty(t, r.readMessages())
 		}
 
 		// do a heartbeat
 		for j := 0; j < r.heartbeatTimeout; j++ {
-			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+			r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 		}
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 
 		// consume the heartbeat
 		msg := r.readMessages()
 		assert.Len(t, msg, 1)
-		assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+		assert.Equal(t, rt.MsgHeartbeat, msg[0].Type)
 	}
 
 	// a heartbeat response will allow another message to be sent
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+	r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgHeartbeatResp})
 	msg := r.readMessages()
 	assert.Len(t, msg, 1)
 	assert.Zero(t, msg[0].Index)
@@ -2136,7 +2136,7 @@ func TestSendAppendForProgressReplicate(t *testing.T) {
 	r.trk.Progress(2).BecomeReplicate()
 
 	for i := 0; i < 10; i++ {
-		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+		mustAppendEntry(r, rt.Entry{Data: []byte("somedata")})
 		r.maybeSendAppend(2)
 		msgs := r.readMessages()
 		assert.Len(t, msgs, 1, "#%d", i)
@@ -2151,7 +2151,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 	r.trk.Progress(2).BecomeSnapshot(10)
 
 	for i := 0; i < 10; i++ {
-		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+		mustAppendEntry(r, rt.Entry{Data: []byte("somedata")})
 		r.maybeSendAppend(2)
 		msgs := r.readMessages()
 		assert.Empty(t, msgs, "#%d", i)
@@ -2161,7 +2161,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 func TestRecvMsgUnreachable(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	s := newTestMemoryStorage(withPeers(1, 2))
-	s.SetHardState(pb.HardState{Term: 3})
+	s.SetHardState(rt.HardState{Term: 3})
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
 	r.becomeCandidate()
@@ -2172,7 +2172,7 @@ func TestRecvMsgUnreachable(t *testing.T) {
 	r.trk.Progress(2).BecomeReplicate()
 	r.trk.Progress(2).Next = 6
 
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
+	r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgUnreachable})
 
 	assert.Equal(t, tracker.StateProbe, r.trk.Progress(2).State)
 	wnext := r.trk.Progress(2).Match + 1
@@ -2182,10 +2182,10 @@ func TestRecvMsgUnreachable(t *testing.T) {
 func TestRestore(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2, 3}},
 		}},
 	}
 
@@ -2207,10 +2207,10 @@ func TestRestore(t *testing.T) {
 func TestRestoreWithLearner(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}, Learners: []pb.PeerID{3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}, Learners: []rt.PeerID{3}},
 		}},
 	}
 
@@ -2240,10 +2240,10 @@ func TestRestoreWithLearner(t *testing.T) {
 func TestRestoreWithVotersOutgoing(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{2, 3, 4}, VotersOutgoing: []pb.PeerID{1, 2, 3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{2, 3, 4}, VotersOutgoing: []rt.PeerID{1, 2, 3}},
 		}},
 	}
 
@@ -2254,7 +2254,7 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 	assert.Equal(t, s.lastEntryID(), sm.raftLog.lastEntryID())
 
 	sg := sm.trk.VoterNodes()
-	assert.Equal(t, []pb.PeerID{1, 2, 3, 4}, sg)
+	assert.Equal(t, []rt.PeerID{1, 2, 3, 4}, sg)
 
 	require.False(t, sm.restore(s))
 
@@ -2276,10 +2276,10 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 func TestRestoreVoterToLearner(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}, Learners: []pb.PeerID{3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}, Learners: []rt.PeerID{3}},
 		}},
 	}
 
@@ -2295,10 +2295,10 @@ func TestRestoreVoterToLearner(t *testing.T) {
 func TestRestoreLearnerPromotion(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2, 3}},
 		}},
 	}
 
@@ -2315,15 +2315,15 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1}, Learners: []rt.PeerID{2}},
 		}},
 	}
 
 	store := newTestMemoryStorage(withPeers(1), withLearners(2))
-	store.SetHardState(pb.HardState{Term: 11})
+	store.SetHardState(rt.HardState{Term: 11})
 	n1 := newTestLearnerRaft(1, 10, 1, store)
 	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 
@@ -2339,7 +2339,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 		n1.tick()
 	}
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 
 	assert.Equal(t, n1.raftLog.committed, n2.raftLog.committed)
 }
@@ -2354,10 +2354,10 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 
 	s := snapshot{
 		term: 1,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     commit,
 			Term:      1,
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 		}},
 	}
 
@@ -2375,10 +2375,10 @@ func TestProvideSnap(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 		}},
 	}
 	storage := newTestMemoryStorage(withPeers(1))
@@ -2391,22 +2391,22 @@ func TestProvideSnap(t *testing.T) {
 
 	// force set the next of node 2, so that node 2 needs a snapshot
 	sm.trk.Progress(2).Next = sm.raftLog.firstIndex()
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
+	sm.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
 
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 1)
 	m := msgs[0]
-	assert.Equal(t, m.Type, pb.MsgSnap)
+	assert.Equal(t, m.Type, rt.MsgSnap)
 }
 
 func TestIgnoreProvidingSnap(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 		}},
 	}
 	storage := newTestMemoryStorage(withPeers(1))
@@ -2422,7 +2422,7 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 	sm.trk.Progress(2).Next = sm.raftLog.firstIndex() - 1
 	sm.trk.Progress(2).RecentActive = false
 
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 
 	msgs := sm.readMessages()
 	assert.Empty(t, msgs)
@@ -2431,51 +2431,51 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 func TestRestoreFromSnapMsg(t *testing.T) {
 	s := snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 		}},
 	}
-	m := pb.Message{Type: pb.MsgSnap, From: 1, Term: 2, Snapshot: &s.snap}
+	m := rt.Message{Type: rt.MsgSnap, From: 1, Term: 2, Snapshot: &s.snap}
 
 	sm := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	sm.Step(m)
 
-	assert.Equal(t, pb.PeerID(1), sm.lead)
+	assert.Equal(t, rt.PeerID(1), sm.lead)
 	// TODO(bdarnell): what should this test?
 }
 
 func TestSlowNodeRestore(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	nt.isolate(3)
 	for j := 0; j <= 100; j++ {
-		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+		nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 	}
 	lead := nt.peers[1].(*raft)
 	nextEnts(lead, nt.storage[1])
-	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.trk.VoterNodes()}, nil)
+	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &rt.ConfState{Voters: lead.trk.VoterNodes()}, nil)
 	nt.storage[1].Compact(lead.raftLog.applied)
 
 	nt.recover()
 	// send heartbeats so that the leader can learn everyone is active.
 	// node 3 will only be considered as active when node 1 receives a reply from it.
 	for {
-		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
+		nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgBeat})
 		if lead.trk.Progress(3).RecentActive {
 			break
 		}
 	}
 
 	// trigger a snapshot
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	follower := nt.peers[3].(*raft)
 
 	// trigger a commit
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 	assert.Equal(t, lead.raftLog.committed, follower.raftLog.committed)
 }
 
@@ -2487,7 +2487,7 @@ func TestStepConfig(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	index := r.raftLog.lastIndex()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Type: rt.EntryConfChange}}})
 	assert.Equal(t, index+1, r.raftLog.lastIndex())
 	assert.Equal(t, index+1, r.pendingConfIndex)
 }
@@ -2500,11 +2500,11 @@ func TestStepIgnoreConfig(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	r.becomeCandidate()
 	r.becomeLeader()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Type: rt.EntryConfChange}}})
 	index := r.raftLog.lastIndex()
 	pendingConfIndex := r.pendingConfIndex
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
-	wents := []pb.Entry{{Type: pb.EntryNormal, Term: 1, Index: 3, Data: nil}}
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Type: rt.EntryConfChange}}})
+	wents := []rt.Entry{{Type: rt.EntryNormal, Term: 1, Index: 3, Data: nil}}
 	ents, err := r.raftLog.entries(index, noLimit)
 	require.NoError(t, err)
 	assert.Equal(t, wents, ents)
@@ -2524,7 +2524,7 @@ func TestNewLeaderPendingConfig(t *testing.T) {
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 		if tt.addEntry {
-			mustAppendEntry(r, pb.Entry{Type: pb.EntryNormal})
+			mustAppendEntry(r, rt.Entry{Type: rt.EntryNormal})
 		}
 		r.becomeCandidate()
 		r.becomeLeader()
@@ -2535,32 +2535,32 @@ func TestNewLeaderPendingConfig(t *testing.T) {
 // TestAddNode tests that addNode could update nodes correctly.
 func TestAddNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddNode}.AsV2())
 	nodes := r.trk.VoterNodes()
-	assert.Equal(t, []pb.PeerID{1, 2}, nodes)
+	assert.Equal(t, []rt.PeerID{1, 2}, nodes)
 }
 
 // TestAddLearner tests that addLearner could update nodes correctly.
 func TestAddLearner(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 	// Add new learner peer.
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddLearnerNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddLearnerNode}.AsV2())
 	require.False(t, r.isLearner)
 	nodes := r.trk.LearnerNodes()
-	assert.Equal(t, []pb.PeerID{2}, nodes)
+	assert.Equal(t, []rt.PeerID{2}, nodes)
 	require.True(t, r.trk.Progress(2).IsLearner)
 
 	// Promote peer to voter.
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddNode}.AsV2())
 	require.False(t, r.trk.Progress(2).IsLearner)
 
 	// Demote r.
-	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddLearnerNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 1, Type: rt.ConfChangeAddLearnerNode}.AsV2())
 	require.True(t, r.trk.Progress(1).IsLearner)
 	require.True(t, r.isLearner)
 
 	// Promote r again.
-	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 1, Type: rt.ConfChangeAddNode}.AsV2())
 	require.False(t, r.trk.Progress(1).IsLearner)
 	require.False(t, r.isLearner)
 }
@@ -2578,7 +2578,7 @@ func TestAddNodeCheckQuorum(t *testing.T) {
 		r.tick()
 	}
 
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddNode}.AsV2())
 
 	// This tick will reach electionTimeout, which triggers a quorum check.
 	r.tick()
@@ -2599,23 +2599,23 @@ func TestAddNodeCheckQuorum(t *testing.T) {
 // removed list correctly.
 func TestRemoveNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
-	w := []pb.PeerID{1}
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeRemoveNode}.AsV2())
+	w := []rt.PeerID{1}
 	assert.Equal(t, w, r.trk.VoterNodes())
 
 	// Removing the remaining voter will panic.
 	defer func() {
 		assert.NotNil(t, recover(), "did not panic")
 	}()
-	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeRemoveNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 1, Type: rt.ConfChangeRemoveNode}.AsV2())
 }
 
 // TestRemoveLearner tests that removeNode could update nodes and
 // removed list correctly.
 func TestRemoveLearner(t *testing.T) {
 	r := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
-	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
-	w := []pb.PeerID{1}
+	r.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeRemoveNode}.AsV2())
+	w := []rt.PeerID{1}
 	assert.Equal(t, w, r.trk.VoterNodes())
 
 	w = nil
@@ -2625,19 +2625,19 @@ func TestRemoveLearner(t *testing.T) {
 	defer func() {
 		assert.NotNil(t, recover(), "did not panic")
 	}()
-	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeRemoveNode}.AsV2())
+	r.applyConfChange(rt.ConfChange{NodeID: 1, Type: rt.ConfChangeRemoveNode}.AsV2())
 }
 
 func TestPromotable(t *testing.T) {
-	id := pb.PeerID(1)
+	id := rt.PeerID(1)
 	tests := []struct {
-		peers []pb.PeerID
+		peers []rt.PeerID
 		wp    bool
 	}{
-		{[]pb.PeerID{1}, true},
-		{[]pb.PeerID{1, 2, 3}, true},
-		{[]pb.PeerID{}, false},
-		{[]pb.PeerID{2, 3}, false},
+		{[]rt.PeerID{1}, true},
+		{[]rt.PeerID{1, 2, 3}, true},
+		{[]rt.PeerID{}, false},
+		{[]rt.PeerID{2, 3}, false},
 	}
 	for i, tt := range tests {
 		r := newTestRaft(id, 5, 1, newTestMemoryStorage(withPeers(tt.peers...)))
@@ -2647,16 +2647,16 @@ func TestPromotable(t *testing.T) {
 
 func TestRaftNodes(t *testing.T) {
 	tests := []struct {
-		ids  []pb.PeerID
-		wids []pb.PeerID
+		ids  []rt.PeerID
+		wids []rt.PeerID
 	}{
 		{
-			[]pb.PeerID{1, 2, 3},
-			[]pb.PeerID{1, 2, 3},
+			[]rt.PeerID{1, 2, 3},
+			[]rt.PeerID{1, 2, 3},
 		},
 		{
-			[]pb.PeerID{3, 2, 1},
-			[]pb.PeerID{1, 2, 3},
+			[]rt.PeerID{3, 2, 1},
+			[]rt.PeerID{1, 2, 3},
 		},
 	}
 	for i, tt := range tests {
@@ -2680,12 +2680,12 @@ func testCampaignWhileLeader(t *testing.T, preVote bool) {
 	assert.Equal(t, StateFollower, r.state)
 	// We don't call campaign() directly because it comes after the check
 	// for our current state.
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	r.advanceMessagesAfterAppend()
 	assert.Equal(t, StateLeader, r.state)
 
 	term := r.Term
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	r.Step(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	r.advanceMessagesAfterAppend()
 	assert.Equal(t, StateLeader, r.state)
 	assert.Equal(t, term, r.Term)
@@ -2701,16 +2701,16 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 	r.becomeLeader()
 
 	// Begin to remove the second node.
-	cc := pb.ConfChange{
-		Type:   pb.ConfChangeRemoveNode,
+	cc := rt.ConfChange{
+		Type:   rt.ConfChangeRemoveNode,
 		NodeID: 2,
 	}
 	ccData, err := cc.Marshal()
 	require.NoError(t, err)
-	r.Step(pb.Message{
-		Type: pb.MsgProp,
-		Entries: []pb.Entry{
-			{Type: pb.EntryConfChange, Data: ccData},
+	r.Step(rt.Message{
+		Type: rt.MsgProp,
+		Entries: []rt.Entry{
+			{Type: rt.EntryConfChange, Data: ccData},
 		},
 	})
 
@@ -2719,31 +2719,31 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 	ccIndex := r.raftLog.lastIndex()
 
 	// While the config change is pending, make another proposal.
-	r.Step(pb.Message{
-		Type: pb.MsgProp,
-		Entries: []pb.Entry{
-			{Type: pb.EntryNormal, Data: []byte("hello")},
+	r.Step(rt.Message{
+		Type: rt.MsgProp,
+		Entries: []rt.Entry{
+			{Type: rt.EntryNormal, Data: []byte("hello")},
 		},
 	})
 
 	// Node 2 acknowledges the config change, committing it.
-	r.Step(pb.Message{
-		Type:  pb.MsgAppResp,
+	r.Step(rt.Message{
+		Type:  rt.MsgAppResp,
 		From:  2,
 		Index: ccIndex,
 	})
 	ents := nextEnts(r, s)
 	require.Len(t, ents, 2)
-	require.Equal(t, pb.EntryNormal, ents[0].Type)
+	require.Equal(t, rt.EntryNormal, ents[0].Type)
 	require.Nil(t, ents[0].Data)
-	require.Equal(t, pb.EntryConfChange, ents[1].Type)
+	require.Equal(t, rt.EntryConfChange, ents[1].Type)
 
 	// Apply the config change. This reduces quorum requirements so the
 	// pending command can now commit.
 	r.applyConfChange(cc.AsV2())
 	ents = nextEnts(r, s)
 	require.Len(t, ents, 1)
-	require.Equal(t, pb.EntryNormal, ents[0].Type)
+	require.Equal(t, rt.EntryNormal, ents[0].Type)
 	require.Equal(t, []byte("hello"), ents[0].Data)
 }
 
@@ -2752,21 +2752,21 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 // transfer is requested.
 func TestLeaderTransferToUpToDateNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	lead := nt.peers[1].(*raft)
 
-	require.Equal(t, pb.PeerID(1), lead.lead)
+	require.Equal(t, rt.PeerID(1), lead.lead)
 
 	// Transfer leadership to 2.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 
 	// After some log replication, transfer leadership back to 1.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
-	nt.send(pb.Message{From: 1, To: 2, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 1, To: 2, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
@@ -2778,21 +2778,21 @@ func TestLeaderTransferToUpToDateNode(t *testing.T) {
 // transfer message is sent to the follower and is redirected to the leader.
 func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	lead := nt.peers[1].(*raft)
 
-	require.Equal(t, pb.PeerID(1), lead.lead)
+	require.Equal(t, rt.PeerID(1), lead.lead)
 
 	// Transfer leadership to 2.
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 
 	// After some log replication, transfer leadership back to 1.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
@@ -2803,7 +2803,7 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 // MsgTimeoutNow and campaigns.
 func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3. It is up-to-date, so the leadership transfer will be
 	// initiated immediately, but node 3 will never receive the MsgTimeoutNow and
@@ -2812,11 +2812,11 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 
 	lead := nt.peers[1].(*raft)
 	require.Equal(t, uint64(1), lead.Term)
-	require.Equal(t, pb.PeerID(1), lead.lead)
+	require.Equal(t, rt.PeerID(1), lead.lead)
 
 	// Transfer leadership to 3. The leader steps down immediately in the same
 	// term, waiting for the transfer target to call an election.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 
 	require.Equal(t, uint64(1), lead.Term)
 	checkLeaderTransferState(t, lead, StateFollower, 1)
@@ -2841,7 +2841,7 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	for i := 1; i < 4; i++ {
-		r := nt.peers[pb.PeerID(i)].(*raft)
+		r := nt.peers[rt.PeerID(i)].(*raft)
 		r.checkQuorum = true
 		setRandomizedElectionTimeout(r, r.electionTimeout+i)
 	}
@@ -2852,34 +2852,34 @@ func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 		f.tick()
 	}
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	lead := nt.peers[1].(*raft)
 
 	require.Equal(t, StateLeader, lead.state)
 
 	// Transfer leadership to 2.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 
 	// After some log replication, transfer leadership back to 1.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
-	nt.send(pb.Message{From: 1, To: 2, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 1, To: 2, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
 func TestLeaderTransferToSlowFollower(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 	require.Equal(t, uint64(2), lead.trk.Progress(1).Match)
@@ -2889,39 +2889,39 @@ func TestLeaderTransferToSlowFollower(t *testing.T) {
 	// 3. The leader (node 1) will catch it up on log entries using MsgApps before
 	// transferring it leadership using MsgTimeoutNow.
 	nt.recover()
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 3)
 }
 
 func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	nt.isolate(3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 	lead := nt.peers[1].(*raft)
 	nextEnts(lead, nt.storage[1])
-	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.trk.VoterNodes()}, nil)
+	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &rt.ConfState{Voters: lead.trk.VoterNodes()}, nil)
 	nt.storage[1].Compact(lead.raftLog.applied)
 
 	nt.recover()
 	require.Equal(t, uint64(1), lead.trk.Progress(3).Match)
 
-	filtered := pb.Message{}
+	filtered := rt.Message{}
 	// Snapshot needs to be applied before sending MsgAppResp.
-	nt.msgHook = func(m pb.Message) bool {
-		if m.Type != pb.MsgAppResp || m.From != 3 || m.Reject {
+	nt.msgHook = func(m rt.Message) bool {
+		if m.Type != rt.MsgAppResp || m.From != 3 || m.Reject {
 			return true
 		}
 		filtered = m
 		return false
 	}
 	// Transfer leadership to 3 when node 3 is missing a snapshot.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 	require.Equal(t, StateLeader, lead.state)
-	require.NotEqual(t, pb.Message{}, filtered)
+	require.NotEqual(t, rt.Message{}, filtered)
 
 	// Apply snapshot and resume progress.
 	follower := nt.peers[3].(*raft)
@@ -2936,45 +2936,45 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 
 func TestLeaderTransferToSelf(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	lead := nt.peers[1].(*raft)
 
 	// Transfer leadership to self, there will be noop.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgTransferLeader})
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
 func TestLeaderTransferToNonExistingNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	lead := nt.peers[1].(*raft)
 	// Transfer leadership to non-existing node, there will be noop.
-	nt.send(pb.Message{From: 4, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 4, To: 1, Type: rt.MsgTransferLeader})
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
 func TestLeaderTransferTimeout(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately. If it were, we couldn't test the timeout.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
 	// Transfer leadership to isolated node, wait for timeout.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
@@ -2987,102 +2987,102 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1, 2, 3))
 	r := newTestRaft(1, 10, 1, s)
 	nt := newNetwork(r, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	// Transfer leadership to the isolated, behind node. This will leave the
 	// transfer in a pending state as the leader tries to catch up the target.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 	lead := nt.peers[1].(*raft)
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	// Then send proposal. This should be dropped.
-	err := lead.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	err := lead.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 	require.Equal(t, ErrProposalDropped, err)
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	require.Equal(t, uint64(2), lead.trk.Progress(1).Match)
 }
 
 func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
 	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
 	// Transfer leadership to the isolated, behind node. This will leave the
 	// transfer in a pending state as the leader tries to catch up the target.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup, Index: 1, Term: 2})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup, Index: 1, Term: 2})
 
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 }
 
 func TestLeaderTransferRemoveNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
 	// The leadTransferee is removed with leadership transfer in progress.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
-	lead.applyConfChange(pb.ConfChange{NodeID: 3, Type: pb.ConfChangeRemoveNode}.AsV2())
+	lead.applyConfChange(rt.ConfChange{NodeID: 3, Type: rt.ConfChangeRemoveNode}.AsV2())
 
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
 func TestLeaderTransferDemoteNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
 	// The leadTransferee is demoted with leadership transfer in progress.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
-	lead.applyConfChange(pb.ConfChangeV2{
-		Changes: []pb.ConfChangeSingle{
+	lead.applyConfChange(rt.ConfChangeV2{
+		Changes: []rt.ConfChangeSingle{
 			{
-				Type:   pb.ConfChangeRemoveNode,
+				Type:   rt.ConfChangeRemoveNode,
 				NodeID: 3,
 			},
 			{
-				Type:   pb.ConfChangeAddLearnerNode,
+				Type:   rt.ConfChangeAddLearnerNode,
 				NodeID: 3,
 			},
 		},
 	})
 
 	// Make the Raft group commit the LeaveJoint entry.
-	lead.applyConfChange(pb.ConfChangeV2{})
+	lead.applyConfChange(rt.ConfChangeV2{})
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
@@ -3090,21 +3090,21 @@ func TestLeaderTransferDemoteNode(t *testing.T) {
 // last transfer is pending, which cancels the transfer attempt.
 func TestLeaderTransferBack(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	// Transfer leadership back to self.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
@@ -3114,21 +3114,21 @@ func TestLeaderTransferBack(t *testing.T) {
 // transfer attempt and starts a new one.
 func TestLeaderTransferSecondTransferToAnotherNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	// Transfer leadership to another node.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 }
@@ -3138,24 +3138,24 @@ func TestLeaderTransferSecondTransferToAnotherNode(t *testing.T) {
 // pending.
 func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
 	// behind on its log, so that the leadership transfer won't be initiated
 	// immediately.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
+	require.Equal(t, rt.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 	// Second transfer leadership request to the same node.
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 
 	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
@@ -3164,7 +3164,7 @@ func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
-func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead pb.PeerID) {
+func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead rt.PeerID) {
 	require.Equal(t, state, r.state)
 	require.Equal(t, lead, r.lead)
 	require.Equal(t, None, r.leadTransferee)
@@ -3175,10 +3175,10 @@ func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead pb.Pe
 // the node also got votes, it would panic as it transitioned to StateLeader).
 func TestLeaderTransferNonMember(t *testing.T) {
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(2, 3, 4)))
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgTimeoutNow})
+	r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgTimeoutNow})
 
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgVoteResp})
-	r.Step(pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp})
+	r.Step(rt.Message{From: 2, To: 1, Type: rt.MsgVoteResp})
+	r.Step(rt.Message{From: 3, To: 1, Type: rt.MsgVoteResp})
 	require.Equal(t, StateFollower, r.state)
 }
 
@@ -3186,11 +3186,11 @@ func TestLeaderTransferNonMember(t *testing.T) {
 // respected if it is from the current term or from a new term.
 func TestLeaderTransferDifferentTerms(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Transfer leadership to node 2, then 3, to drive up the term.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
-	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 2, Type: rt.MsgTransferLeader})
 	for i, p := range nt.peers {
 		r := p.(*raft)
 		expState := StateFollower
@@ -3206,21 +3206,21 @@ func TestLeaderTransferDifferentTerms(t *testing.T) {
 	// election, which bypasses pre-vote and leader support safeguards. We don't
 	// want a stale MsgTimeoutNow sent from an old leader giving a follower
 	// permission to overthrow a newer leader.
-	nt.send(pb.Message{From: 2, To: 1, Term: 2, Type: pb.MsgTimeoutNow})
+	nt.send(rt.Message{From: 2, To: 1, Term: 2, Type: rt.MsgTimeoutNow})
 	n1 := nt.peers[1].(*raft)
 	require.Equal(t, StateFollower, n1.state)
 	require.Equal(t, uint64(3), n1.Term)
 
 	// Send a MsgTimeoutNow to node 1 from the current term. This should cause it
 	// to call an election for the _next_ term, which it will win.
-	nt.send(pb.Message{From: 3, To: 1, Term: 3, Type: pb.MsgTimeoutNow})
+	nt.send(rt.Message{From: 3, To: 1, Term: 3, Type: rt.MsgTimeoutNow})
 	require.Equal(t, StateLeader, n1.state)
 	require.Equal(t, uint64(4), n1.Term)
 
 	// Send a MsgTimeoutNow to node 2 from a new term. This should advance the
 	// term on node 2 and cause it to call an election for the _next_ term, which
 	// it will win.
-	nt.send(pb.Message{From: 1, To: 2, Term: 5, Type: pb.MsgTimeoutNow})
+	nt.send(rt.Message{From: 1, To: 2, Term: 5, Type: rt.MsgTimeoutNow})
 	n2 := nt.peers[2].(*raft)
 	require.Equal(t, StateLeader, n2.state)
 	require.Equal(t, uint64(6), n2.Term)
@@ -3231,7 +3231,7 @@ func TestLeaderTransferDifferentTerms(t *testing.T) {
 // to call an election which it can not win.
 func TestLeaderTransferStaleFollower(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
 	n3 := nt.peers[3].(*raft)
@@ -3241,7 +3241,7 @@ func TestLeaderTransferStaleFollower(t *testing.T) {
 	// immediately and node 1 steps down as leader, but node 3 does not receive
 	// the message due to a network partition.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 3, To: 1, Type: rt.MsgTransferLeader})
 	for _, n := range nodes {
 		require.Equal(t, StateFollower, n.state)
 		require.Equal(t, uint64(1), n.Term)
@@ -3275,7 +3275,7 @@ func TestLeaderTransferStaleFollower(t *testing.T) {
 	// had previously tried to send to it back in term 1. It calls an unsuccessful
 	// election, through which it learns about the new leadership term.
 	nt.recover()
-	nt.send(pb.Message{From: 1, To: 3, Term: 1, Type: pb.MsgTimeoutNow})
+	nt.send(rt.Message{From: 1, To: 3, Term: 1, Type: rt.MsgTimeoutNow})
 	for _, n := range nodes {
 		expState := StateFollower
 		if n == n1 {
@@ -3309,7 +3309,7 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 	nt.cut(1, 3)
 	nt.cut(2, 3)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	sm := nt.peers[1].(*raft)
 	assert.Equal(t, StateLeader, sm.state)
@@ -3317,11 +3317,11 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 	sm = nt.peers[2].(*raft)
 	assert.Equal(t, StateFollower, sm.state)
 
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 	sm = nt.peers[3].(*raft)
 	assert.Equal(t, StatePreCandidate, sm.state)
 
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// check whether the term values are expected
 	sm = nt.peers[1].(*raft)
@@ -3347,8 +3347,8 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 	nt.cut(2, 3)
 
 	// call for election
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// do we have a leader?
 	sma := nt.peers[1].(*raft)
@@ -3372,13 +3372,13 @@ func TestPreVoteWithSplitVote(t *testing.T) {
 	n3.preVote = true
 
 	nt := newNetwork(n1, n2, n3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// simulate leader down. followers start split vote.
 	nt.isolate(1)
-	nt.send([]pb.Message{
-		{From: 2, To: 2, Type: pb.MsgHup},
-		{From: 3, To: 3, Type: pb.MsgHup},
+	nt.send([]rt.Message{
+		{From: 2, To: 2, Type: rt.MsgHup},
+		{From: 3, To: 3, Type: rt.MsgHup},
 	}...)
 
 	// check whether the term values are expected
@@ -3394,7 +3394,7 @@ func TestPreVoteWithSplitVote(t *testing.T) {
 	assert.Equal(t, StateCandidate, sm.state)
 
 	// node 2 election timeout first
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// check whether the term values are expected
 	sm = nt.peers[2].(*raft)
@@ -3429,7 +3429,7 @@ func TestPreVoteWithCheckQuorum(t *testing.T) {
 	n3.checkQuorum = true
 
 	nt := newNetwork(n1, n2, n3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// isolate node 1. node 2 and node 3 have leader info
 	nt.isolate(1)
@@ -3445,8 +3445,8 @@ func TestPreVoteWithCheckQuorum(t *testing.T) {
 	require.Equal(t, StateFollower, sm.state)
 
 	// node 2 will ignore node 3's PreVote
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// Do we have a leader?
 	assert.True(t, n2.state == StateLeader || n3.state == StateFollower)
@@ -3456,24 +3456,24 @@ func TestPreVoteWithCheckQuorum(t *testing.T) {
 // a MsgHup or MsgTimeoutNow.
 func TestLearnerCampaign(t *testing.T) {
 	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-	n1.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddLearnerNode}.AsV2())
+	n1.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddLearnerNode}.AsV2())
 	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1)))
-	n2.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddLearnerNode}.AsV2())
+	n2.applyConfChange(rt.ConfChange{NodeID: 2, Type: rt.ConfChangeAddLearnerNode}.AsV2())
 	nt := newNetwork(n1, n2)
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	require.True(t, n2.isLearner)
 
 	require.Equal(t, StateFollower, n2.state)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	require.True(t, n1.state == StateLeader && n1.lead == 1)
 
 	// NB: TransferLeader already checks that the recipient is not a learner, but
 	// the check could have happened by the time the recipient becomes a learner,
 	// in which case it will receive MsgTimeoutNow as in this test case and we
 	// verify that it's ignored.
-	nt.send(pb.Message{From: 1, To: 2, Type: pb.MsgTimeoutNow})
+	nt.send(rt.Message{From: 1, To: 2, Type: rt.MsgTimeoutNow})
 	require.Equal(t, StateFollower, n2.state)
 }
 
@@ -3497,13 +3497,13 @@ func newPreVoteMigrationCluster(t *testing.T) *network {
 	// version cluster with replicas with PreVote enabled, and replicas without.
 
 	nt := newNetwork(n1, n2, n3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 
 	// Cause a network partition to isolate n3.
 	nt.isolate(3)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("some data")}}})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	// check state
 	require.Equal(t, StateLeader, n1.state)
@@ -3535,15 +3535,15 @@ func TestPreVoteMigrationCanCompleteElection(t *testing.T) {
 	nt.isolate(1)
 
 	// Call for elections from both n2 and n3.
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// check state
 	assert.Equal(t, StateFollower, n2.state)
 	assert.Equal(t, StatePreCandidate, n3.state)
 
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
+	nt.send(rt.Message{From: 2, To: 2, Type: rt.MsgHup})
 
 	// Do we have a leader?
 	assert.True(t, n2.state == StateLeader || n3.state == StateFollower)
@@ -3559,20 +3559,20 @@ func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
 	n2 := nt.peers[2].(*raft)
 	n3 := nt.peers[3].(*raft)
 
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, n1.state)
 	assert.Equal(t, StateFollower, n2.state)
 	assert.Equal(t, StatePreCandidate, n3.state)
 
 	// Pre-Vote again for safety
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 3, To: 3, Type: rt.MsgHup})
 
 	assert.Equal(t, StateLeader, n1.state)
 	assert.Equal(t, StateFollower, n2.state)
 	assert.Equal(t, StatePreCandidate, n3.state)
 
-	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: n1.Term})
+	nt.send(rt.Message{From: 1, To: 3, Type: rt.MsgHeartbeat, Term: n1.Term})
 
 	// Disrupt the leader so that the stuck peer is freed
 	assert.Equal(t, StateFollower, n1.state)
@@ -3584,31 +3584,31 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	nt.send(rt.Message{From: 1, To: 1, Type: rt.MsgHup})
 	assert.Equal(t, StateLeader, n1.state)
 
 	// Begin to remove the third node.
-	cc := pb.ConfChange{
-		Type:   pb.ConfChangeRemoveNode,
+	cc := rt.ConfChange{
+		Type:   rt.ConfChangeRemoveNode,
 		NodeID: 2,
 	}
 	var ccData []byte
 	var err error
-	var ty pb.EntryType
+	var ty rt.EntryType
 	if v2 {
 		ccv2 := cc.AsV2()
 		ccData, err = ccv2.Marshal()
-		ty = pb.EntryConfChangeV2
+		ty = rt.EntryConfChangeV2
 	} else {
 		ccData, err = cc.Marshal()
-		ty = pb.EntryConfChange
+		ty = rt.EntryConfChange
 	}
 	require.NoError(t, err)
-	nt.send(pb.Message{
+	nt.send(rt.Message{
 		From: 1,
 		To:   1,
-		Type: pb.MsgProp,
-		Entries: []pb.Entry{
+		Type: rt.MsgProp,
+		Entries: []rt.Entry{
 			{Type: ty, Data: ccData},
 		},
 	})
@@ -3621,7 +3621,7 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 	assert.Equal(t, StateFollower, n2.state)
 
 	// Transfer leadership to peer 2.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
 	// The outgoing leader steps down immediately.
 	assert.Equal(t, StateFollower, n1.state)
 	// The transfer target does not campaign immediately because the committed
@@ -3644,7 +3644,7 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 	nextEnts(n2, nt.storage[2])
 
 	// Transfer leadership to peer 2 again.
-	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(rt.Message{From: 2, To: 1, Type: rt.MsgTransferLeader})
 	// The outgoing leader steps down immediately.
 	assert.Equal(t, StateFollower, n1.state)
 	// The transfer target campaigns immediately now that the committed conf
@@ -3664,8 +3664,8 @@ func TestConfChangeV2CheckBeforeCampaign(t *testing.T) {
 
 func TestFastLogRejection(t *testing.T) {
 	tests := []struct {
-		leaderLog       []pb.Entry // Logs on the leader
-		followerLog     []pb.Entry // Logs on the follower
+		leaderLog       []rt.Entry // Logs on the leader
+		followerLog     []rt.Entry // Logs on the follower
 		followerCompact uint64     // Index at which the follower log is compacted.
 		rejectHintTerm  uint64     // Expected term included in rejected MsgAppResp.
 		rejectHintIndex uint64     // Expected index included in rejected MsgAppResp.
@@ -3778,10 +3778,10 @@ func TestFastLogRejection(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
-			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
+			s1.snapshot.Metadata.ConfState = rt.ConfState{Voters: []rt.PeerID{1, 2, 3}}
 			s1.Append(test.leaderLog)
 			last := test.leaderLog[len(test.leaderLog)-1]
-			s1.SetHardState(pb.HardState{
+			s1.SetHardState(rt.HardState{
 				Term:   last.Term - 1,
 				Commit: last.Index,
 			})
@@ -3790,9 +3790,9 @@ func TestFastLogRejection(t *testing.T) {
 			n1.becomeLeader()
 
 			s2 := NewMemoryStorage()
-			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
+			s2.snapshot.Metadata.ConfState = rt.ConfState{Voters: []rt.PeerID{1, 2, 3}}
 			s2.Append(test.followerLog)
-			s2.SetHardState(pb.HardState{
+			s2.SetHardState(rt.HardState{
 				Term:   last.Term,
 				Vote:   1,
 				Commit: 0,
@@ -3805,20 +3805,20 @@ func TestFastLogRejection(t *testing.T) {
 				// edge case behaviour, in case it still does happen in some other way.
 			}
 
-			require.NoError(t, n2.Step(pb.Message{From: 1, To: 2, Type: pb.MsgHeartbeat}))
+			require.NoError(t, n2.Step(rt.Message{From: 1, To: 2, Type: rt.MsgHeartbeat}))
 			msgs := n2.readMessages()
 			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
-			require.Equal(t, pb.MsgHeartbeatResp, msgs[0].Type)
+			require.Equal(t, rt.MsgHeartbeatResp, msgs[0].Type)
 
 			require.NoError(t, n1.Step(msgs[0]))
 			msgs = n1.readMessages()
 			require.Len(t, msgs, 1, "can't read 1 message from peer 1")
-			require.Equal(t, pb.MsgApp, msgs[0].Type)
+			require.Equal(t, rt.MsgApp, msgs[0].Type)
 
 			require.NoError(t, n2.Step(msgs[0]), "peer 2 step append fail")
 			msgs = n2.readMessages()
 			require.Len(t, msgs, 1, "can't read 1 message from peer 2")
-			require.Equal(t, pb.MsgAppResp, msgs[0].Type)
+			require.Equal(t, rt.MsgAppResp, msgs[0].Type)
 			require.True(t, msgs[0].Reject, "expected rejected append response from peer 2")
 			require.Equal(t, test.rejectHintTerm, msgs[0].LogTerm, "hint log term mismatch")
 			require.Equal(t, test.rejectHintIndex, msgs[0].RejectHint, "hint log index mismatch")
@@ -3834,7 +3834,7 @@ func TestFastLogRejection(t *testing.T) {
 func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 	storage := NewMemoryStorage()
 	for i, term := range terms {
-		storage.Append([]pb.Entry{{Index: uint64(i + 1), Term: term}})
+		storage.Append([]rt.Entry{{Index: uint64(i + 1), Term: term}})
 	}
 	cfg := newTestConfig(1, 5, 1, storage)
 	if configFunc != nil {
@@ -3848,9 +3848,9 @@ func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 // votedWithConfig creates a raft state machine with Vote and Term set
 // to the given value but no log entries (indicating that it voted in
 // the given term but has not received any logs).
-func votedWithConfig(configFunc func(*Config), vote pb.PeerID, term uint64) *raft {
+func votedWithConfig(configFunc func(*Config), vote rt.PeerID, term uint64) *raft {
 	storage := NewMemoryStorage()
-	storage.SetHardState(pb.HardState{Vote: vote, Term: term})
+	storage.SetHardState(rt.HardState{Vote: vote, Term: term})
 	cfg := newTestConfig(1, 5, 1, storage)
 	if configFunc != nil {
 		configFunc(cfg)
@@ -3870,10 +3870,10 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	r2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 
 	// r1 sends 2 MsgApp messages to r2.
-	mustAppendEntry(r1, pb.Entry{Data: []byte("somedata")})
+	mustAppendEntry(r1, rt.Entry{Data: []byte("somedata")})
 	r1.maybeSendAppend(2)
 	req1 := expectOneMessage(t, r1)
-	mustAppendEntry(r1, pb.Entry{Data: []byte("somedata")})
+	mustAppendEntry(r1, rt.Entry{Data: []byte("somedata")})
 	r1.maybeSendAppend(2)
 	req2 := expectOneMessage(t, r1)
 
@@ -3896,7 +3896,7 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	require.Equal(t, uint64(2), r1.trk.Progress(2).Match)
 
 	// r1 observes a transient network issue to r2, hence transits to probe state.
-	r1.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
+	r1.Step(rt.Message{From: 2, To: 1, Type: rt.MsgUnreachable})
 	require.Equal(t, tracker.StateProbe, r1.trk.Progress(2).State)
 
 	// now r1 receives the delayed resp2.
@@ -3906,7 +3906,7 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	require.Equal(t, r1.trk.Progress(2).Match, m.Index)
 }
 
-func expectOneMessage(t *testing.T, r *raft) pb.Message {
+func expectOneMessage(t *testing.T, r *raft) rt.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")
 	return msgs[0]
@@ -3915,14 +3915,14 @@ func expectOneMessage(t *testing.T, r *raft) pb.Message {
 type network struct {
 	t *testing.T // optional
 
-	peers   map[pb.PeerID]stateMachine
-	storage map[pb.PeerID]*MemoryStorage
+	peers   map[rt.PeerID]stateMachine
+	storage map[rt.PeerID]*MemoryStorage
 	dropm   map[connem]float64
-	ignorem map[pb.MessageType]bool
+	ignorem map[rt.MessageType]bool
 
 	// msgHook is called for each message sent. It may inspect the
 	// message and return true to send it or false to drop it.
-	msgHook func(pb.Message) bool
+	msgHook func(rt.Message) bool
 }
 
 // newNetwork initializes a network from peers.
@@ -3939,8 +3939,8 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 	size := len(peers)
 	peerAddrs := idsBySize(size)
 
-	npeers := make(map[pb.PeerID]stateMachine, size)
-	nstorage := make(map[pb.PeerID]*MemoryStorage, size)
+	npeers := make(map[rt.PeerID]stateMachine, size)
+	nstorage := make(map[rt.PeerID]*MemoryStorage, size)
 
 	for j, p := range peers {
 		id := peerAddrs[j]
@@ -3955,14 +3955,14 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 			npeers[id] = sm
 		case *raft:
 			// TODO(tbg): this is all pretty confused. Clean this up.
-			learners := make(map[pb.PeerID]bool, len(v.config.Learners))
+			learners := make(map[rt.PeerID]bool, len(v.config.Learners))
 			for i := range v.config.Learners {
 				learners[i] = true
 			}
 			v.id = id
 			v.trk = tracker.MakeProgressTracker(&v.config, tracker.MakeEmptyProgressMap())
 			if len(learners) > 0 {
-				v.config.Learners = map[pb.PeerID]struct{}{}
+				v.config.Learners = map[rt.PeerID]struct{}{}
 			}
 			for i := 0; i < size; i++ {
 				pr := &tracker.Progress{}
@@ -3986,7 +3986,7 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 		peers:   npeers,
 		storage: nstorage,
 		dropm:   make(map[connem]float64),
-		ignorem: make(map[pb.MessageType]bool),
+		ignorem: make(map[rt.MessageType]bool),
 	}
 }
 
@@ -4003,7 +4003,7 @@ func preVoteConfigWithFortificationDisabled(c *Config) {
 	c.StoreLiveness = raftstoreliveness.Disabled{}
 }
 
-func (nw *network) send(msgs ...pb.Message) {
+func (nw *network) send(msgs ...rt.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
 		p := nw.peers[m.To]
@@ -4016,18 +4016,18 @@ func (nw *network) send(msgs ...pb.Message) {
 	}
 }
 
-func (nw *network) drop(from, to pb.PeerID, perc float64) {
+func (nw *network) drop(from, to rt.PeerID, perc float64) {
 	nw.dropm[connem{from, to}] = perc
 }
 
-func (nw *network) cut(one, other pb.PeerID) {
+func (nw *network) cut(one, other rt.PeerID) {
 	nw.drop(one, other, 2.0) // always drop
 	nw.drop(other, one, 2.0) // always drop
 }
 
-func (nw *network) isolate(id pb.PeerID) {
+func (nw *network) isolate(id rt.PeerID) {
 	for i := 0; i < len(nw.peers); i++ {
-		nid := pb.PeerID(i + 1)
+		nid := rt.PeerID(i + 1)
 		if nid != id {
 			nw.drop(id, nid, 1.0) // always drop
 			nw.drop(nid, id, 1.0) // always drop
@@ -4035,23 +4035,23 @@ func (nw *network) isolate(id pb.PeerID) {
 	}
 }
 
-func (nw *network) ignore(t pb.MessageType) {
+func (nw *network) ignore(t rt.MessageType) {
 	nw.ignorem[t] = true
 }
 
 func (nw *network) recover() {
 	nw.dropm = make(map[connem]float64)
-	nw.ignorem = make(map[pb.MessageType]bool)
+	nw.ignorem = make(map[rt.MessageType]bool)
 }
 
-func (nw *network) filter(msgs []pb.Message) []pb.Message {
-	var mm []pb.Message
+func (nw *network) filter(msgs []rt.Message) []rt.Message {
+	var mm []rt.Message
 	for _, m := range msgs {
 		if nw.ignorem[m.Type] {
 			continue
 		}
 		switch m.Type {
-		case pb.MsgHup:
+		case rt.MsgHup:
 			// hups never go over the network, so don't drop them but panic
 			panic("unexpected msgHup")
 		default:
@@ -4071,21 +4071,21 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 }
 
 type connem struct {
-	from, to pb.PeerID
+	from, to rt.PeerID
 }
 
 type blackHole struct{}
 
-func (blackHole) Step(pb.Message) error       { return nil }
-func (blackHole) readMessages() []pb.Message  { return nil }
+func (blackHole) Step(rt.Message) error       { return nil }
+func (blackHole) readMessages() []rt.Message  { return nil }
 func (blackHole) advanceMessagesAfterAppend() {}
 
 var nopStepper = &blackHole{}
 
-func idsBySize(size int) []pb.PeerID {
-	ids := make([]pb.PeerID, size)
+func idsBySize(size int) []rt.PeerID {
+	ids := make([]rt.PeerID, size)
 	for i := 0; i < size; i++ {
-		ids[i] = pb.PeerID(1 + i)
+		ids[i] = rt.PeerID(1 + i)
 	}
 	return ids
 }
@@ -4125,7 +4125,7 @@ func withFortificationDisabled() testConfigModifierOpt {
 }
 
 func newTestConfig(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id rt.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *Config {
 	modifiers := testConfigModifiers{}
 	for _, opt := range opts {
@@ -4151,13 +4151,13 @@ func newTestConfig(
 
 type testMemoryStorageOptions func(*MemoryStorage)
 
-func withPeers(peers ...pb.PeerID) testMemoryStorageOptions {
+func withPeers(peers ...rt.PeerID) testMemoryStorageOptions {
 	return func(ms *MemoryStorage) {
 		ms.snapshot.Metadata.ConfState.Voters = peers
 	}
 }
 
-func withLearners(learners ...pb.PeerID) testMemoryStorageOptions {
+func withLearners(learners ...rt.PeerID) testMemoryStorageOptions {
 	return func(ms *MemoryStorage) {
 		ms.snapshot.Metadata.ConfState.Learners = learners
 	}
@@ -4172,13 +4172,13 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 }
 
 func newTestRaft(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id rt.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	return newRaft(newTestConfig(id, election, heartbeat, storage, opts...))
 }
 
 func newTestLearnerRaft(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id rt.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	return newRaft(cfg)
@@ -4186,7 +4186,7 @@ func newTestLearnerRaft(
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(id pb.PeerID, election, heartbeat int, storage Storage) *RawNode {
+func newTestRawNode(id rt.PeerID, election, heartbeat int, storage Storage) *RawNode {
 	cfg := newTestConfig(id, election, heartbeat, storage)
 	rn, err := NewRawNode(cfg)
 	if err != nil {

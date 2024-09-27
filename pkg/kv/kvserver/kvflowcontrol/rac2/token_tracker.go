@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -26,7 +26,7 @@ import (
 type Tracker struct {
 	// tracked entries are stored in increasing order of (term, index), per
 	// priority.
-	tracked [raftpb.NumPriorities][]tracked
+	tracked [rafttype.NumPriorities][]tracked
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -40,7 +40,7 @@ type tracked struct {
 
 func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	*dt = Tracker{
-		tracked: [raftpb.NumPriorities][]tracked{},
+		tracked: [rafttype.NumPriorities][]tracked{},
 		stream:  stream,
 	}
 }
@@ -60,7 +60,7 @@ func (t *Tracker) Empty() bool {
 
 // Track token deductions of the given priority with the given raft log index and term.
 func (t *Tracker) Track(
-	ctx context.Context, term uint64, index uint64, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
+	ctx context.Context, term uint64, index uint64, pri rafttype.Priority, tokens kvflowcontrol.Tokens,
 ) bool {
 	if len(t.tracked[pri]) >= 1 {
 		last := t.tracked[pri][len(t.tracked[pri])-1]
@@ -97,8 +97,8 @@ func (t *Tracker) Track(
 // equal to the leader term. evalTokensGEIndex is used to separately count the
 // untracked (eval) tokens that are for indices >= evalTokensGEIndex.
 func (t *Tracker) Untrack(
-	term uint64, admitted [raftpb.NumPriorities]uint64, evalTokensGEIndex uint64,
-) (returnedSend, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens) {
+	term uint64, admitted [rafttype.NumPriorities]uint64, evalTokensGEIndex uint64,
+) (returnedSend, returnedEval [rafttype.NumPriorities]kvflowcontrol.Tokens) {
 	for pri := range admitted {
 		uptoIndex := admitted[pri]
 		var untracked int
@@ -120,13 +120,13 @@ func (t *Tracker) Untrack(
 
 // UntrackAll iterates through all tracked token deductions, untracking all of them
 // and returning the sum of tokens for each priority.
-func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
+func (t *Tracker) UntrackAll() (returned [rafttype.NumPriorities]kvflowcontrol.Tokens) {
 	for pri, deductions := range t.tracked {
 		for _, deduction := range deductions {
 			returned[pri] += deduction.tokens
 		}
 	}
-	t.tracked = [raftpb.NumPriorities][]tracked{}
+	t.tracked = [rafttype.NumPriorities][]tracked{}
 
 	return returned
 }
@@ -143,7 +143,7 @@ func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 					Index: deduction.index,
 					Term:  deduction.term,
 				},
-				Priority: int32(RaftToAdmissionPriority(raftpb.Priority(pri))),
+				Priority: int32(RaftToAdmissionPriority(rafttype.Priority(pri))),
 			})
 		}
 	}

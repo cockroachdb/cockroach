@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -121,7 +121,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 
 	t.Run("inactive", func(t *testing.T) {
 		st := statusWithState(raft.StateLeader)
-		st.Progress = map[raftpb.PeerID]tracker.Progress{
+		st.Progress = map[rafttype.PeerID]tracker.Progress{
 			2: {State: tracker.StateProbe},
 		}
 		h := &testSplitDelayHelper{
@@ -138,7 +138,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 	for _, state := range []tracker.StateType{tracker.StateProbe, tracker.StateSnapshot} {
 		t.Run(state.String(), func(t *testing.T) {
 			st := statusWithState(raft.StateLeader)
-			st.Progress = map[raftpb.PeerID]tracker.Progress{
+			st.Progress = map[rafttype.PeerID]tracker.Progress{
 				2: {
 					State:              state,
 					RecentActive:       true,
@@ -161,7 +161,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 
 	t.Run("immediately-replicating", func(t *testing.T) {
 		st := statusWithState(raft.StateLeader)
-		st.Progress = map[raftpb.PeerID]tracker.Progress{
+		st.Progress = map[rafttype.PeerID]tracker.Progress{
 			2: {State: tracker.StateReplicate}, // intentionally not recently active
 		}
 		h := &testSplitDelayHelper{
@@ -176,7 +176,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 
 	t.Run("becomes-replicating", func(t *testing.T) {
 		st := statusWithState(raft.StateLeader)
-		st.Progress = map[raftpb.PeerID]tracker.Progress{
+		st.Progress = map[rafttype.PeerID]tracker.Progress{
 			2: {State: tracker.StateProbe, RecentActive: true, Inflights: &tracker.Inflights{}},
 		}
 		h := &testSplitDelayHelper{

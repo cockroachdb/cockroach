@@ -36,8 +36,8 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/raft",
-        "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
+        "//pkg/raft/rafttype",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -58,6 +58,6 @@ go_test(
     embed = [":rafttest"],
     deps = [
         "//pkg/raft",
-        "//pkg/raft/raftpb",
+        "//pkg/raft/rafttype",
     ],
 )

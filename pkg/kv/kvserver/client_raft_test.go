@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1050,7 +1050,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// to make the test pass reliably.
 					// NB: the Index on the message is the log index that _precedes_ any of the
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+					return req.Message.Type == rafttype.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
 				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
@@ -1475,17 +1475,17 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextReq *kvserverpb.SnapshotRequest
+	nextReq *kvserverrt.SnapshotRequest
 	nextErr error
 }
 
 // Recv implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotRequest, error) {
+func (c fakeSnapshotStream) Recv() (*kvserverrt.SnapshotRequest, error) {
 	return c.nextReq, c.nextErr
 }
 
 // Send implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotResponse) error {
+func (c fakeSnapshotStream) Send(request *kvserverrt.SnapshotResponse) error {
 	return nil
 }
 
@@ -1540,7 +1540,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 						Store: &kvserver.StoreTestingKnobs{
 							DisableRaftSnapshotQueue: true,
 							ThrottleEmptySnapshots:   true,
-							ReceiveSnapshot: func(ctx context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+							ReceiveSnapshot: func(ctx context.Context, _ *kvserverrt.SnapshotRequest_Header) error {
 								t.Logf("incoming snapshot on n2")
 								log.Event(ctx, dummyEventMsg)
 								signals.svrContextDone = ctx.Done()
@@ -1588,7 +1588,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 		errRegexp, err := regexp.Compile(`incoming snapshot stream failed with error`)
 		require.NoError(t, err)
 		foundEntry := false
-		var entry logpb.Entry
+		var entry logrt.Entry
 		for _, entry = range entries {
 			if errRegexp.MatchString(entry.Message) {
 				foundEntry = true
@@ -1695,7 +1695,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	desc.AddReplica(2, 2, roachpb.LEARNER)
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
-	header := kvserverpb.SnapshotRequest_Header{
+	header := kvserverrt.SnapshotRequest_Header{
 		RangeSize: 100,
 		State:     kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
@@ -1704,7 +1704,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 			ToReplica:   rep2Desc,
 		},
 	}
-	header.RaftMessageRequest.Message.Snapshot = &raftpb.Snapshot{
+	header.RaftMessageRequest.Message.Snapshot = &rafttype.Snapshot{
 		Data: uuid.UUID{}.GetBytes(),
 	}
 	// Cause this stream to return an error as soon as we ask it for something.
@@ -3286,12 +3286,12 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	respStream kvserver.RaftMessageResponseStream,
 ) *kvpb.Error {
 	for i, e := range req.Message.Entries {
-		if e.Type == raftpb.EntryConfChange {
-			var cc raftpb.ConfChange
+		if e.Type == rafttype.EntryConfChange {
+			var cc rafttype.ConfChange
 			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
-			var ccCtx kvserverpb.ConfChangeContext
+			var ccCtx kvserverrt.ConfChangeContext
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
@@ -3397,7 +3397,7 @@ func TestReplicaGCRace(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		status := repl.RaftStatus()
 		progressByID := status.Progress
-		progress, ok := progressByID[raftpb.PeerID(toReplicaDesc.ReplicaID)]
+		progress, ok := progressByID[rafttype.PeerID(toReplicaDesc.ReplicaID)]
 		if !ok {
 			return errors.Errorf("%+v does not yet contain %s", progressByID, toReplicaDesc)
 		}
@@ -3726,7 +3726,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ context.Context, _ *kvserverpb.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+	_ context.Context, _ *kvserverrt.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
@@ -3850,10 +3850,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		RangeID:     desc.RangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
-		Message: raftpb.Message{
-			From: raftpb.PeerID(replica0.ReplicaID),
-			To:   raftpb.PeerID(replica1.ReplicaID),
-			Type: raftpb.MsgVote,
+		Message: rafttype.Message{
+			From: rafttype.PeerID(replica0.ReplicaID),
+			To:   rafttype.PeerID(replica1.ReplicaID),
+			Type: rafttype.MsgVote,
 			Term: term + 1,
 		},
 	}, rpc.DefaultClass) {
@@ -4187,7 +4187,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 
 	status := repl0.RaftStatus()
 	require.NotNil(t, status)
-	require.Equal(t, raftpb.PeerID(rd0.ReplicaID), status.Lead)
+	require.Equal(t, rafttype.PeerID(rd0.ReplicaID), status.Lead)
 
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	// Transfer the lease. We'll then check that the leadership follows
@@ -4200,7 +4200,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if status := repl0.RaftStatus(); status == nil {
 			return errors.New("raft status is nil")
-		} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
+		} else if a, e := status.Lead, rafttype.PeerID(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
 		return nil
@@ -4358,7 +4358,7 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	// Block incoming snapshots on s2 until channel is signaled.
 	blockSnapshot := make(chan struct{})
 	handlerFuncs := noopRaftHandlerFuncs()
-	handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
+	handlerFuncs.snapErr = func(header *kvserverrt.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshot:
 		case <-tc.Stopper().ShouldQuiesce():
@@ -5205,7 +5205,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	}
 	getHardState := func(
 		t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
-	) raftpb.HardState {
+	) rafttype.HardState {
 		hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
 		require.NoError(t, err)
 		return hs
@@ -6951,10 +6951,10 @@ func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
 		RangeID:     1,
 		FromReplica: roachpb.ReplicaDescriptor{},
 		ToReplica:   roachpb.ReplicaDescriptor{},
-		Message: raftpb.Message{
+		Message: rafttype.Message{
 			From: 1,
 			To:   2,
-			Type: raftpb.MsgTimeoutNow,
+			Type: rafttype.MsgTimeoutNow,
 			Term: 1,
 		},
 	}

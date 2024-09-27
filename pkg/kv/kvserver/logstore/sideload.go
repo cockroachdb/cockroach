@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -78,15 +78,15 @@ type SideloadStorage interface {
 // The provided slice is not modified, though the returned slice may be backed
 // in parts or entirely by the same memory.
 func MaybeSideloadEntries(
-	ctx context.Context, input []raftpb.Entry, sideloaded SideloadStorage,
+	ctx context.Context, input []rafttype.Entry, sideloaded SideloadStorage,
 ) (
-	_ []raftpb.Entry,
+	_ []rafttype.Entry,
 	numSideloaded int,
 	sideloadedEntriesSize int64,
 	otherEntriesSize int64,
 	_ error,
 ) {
-	var output []raftpb.Entry
+	var output []rafttype.Entry
 	for i := range input {
 		typ, pri, err := raftlog.EncodingOf(input[i])
 		if err != nil {
@@ -103,7 +103,7 @@ func MaybeSideloadEntries(
 			// output slice with a copy of the input, so that we can replace
 			// individual entries.
 			log.Eventf(ctx, "copying entries slice of length %d", len(input))
-			output = append([]raftpb.Entry(nil), input...)
+			output = append([]rafttype.Entry(nil), input...)
 		}
 		outputEnt := &output[i]
 
@@ -167,10 +167,10 @@ func MaybeSideloadEntries(
 func MaybeInlineSideloadedRaftCommand(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
-	ent raftpb.Entry,
+	ent rafttype.Entry,
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
-) (*raftpb.Entry, error) {
+) (*rafttype.Entry, error) {
 	typ, pri, err := raftlog.EncodingOf(ent)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func MaybeInlineSideloadedRaftCommand(
 // sideloaded entry, then its payload has already been inlined. Doing so
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
-func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
+func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *rafttype.Entry) {
 	typ, _, err := raftlog.EncodingOf(*ent)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)

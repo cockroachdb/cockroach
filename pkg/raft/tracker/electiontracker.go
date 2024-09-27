@@ -12,7 +12,7 @@ package tracker
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // ElectionTracker is used to track votes from the currently active configuration
@@ -20,19 +20,19 @@ import (
 type ElectionTracker struct {
 	config *quorum.Config
 
-	votes map[pb.PeerID]bool
+	votes map[rt.PeerID]bool
 }
 
 func MakeElectionTracker(config *quorum.Config) ElectionTracker {
 	return ElectionTracker{
 		config: config,
-		votes:  map[pb.PeerID]bool{},
+		votes:  map[rt.PeerID]bool{},
 	}
 }
 
 // RecordVote records that the node with the given id voted for this Raft
 // instance if v == true (and declined it otherwise).
-func (e *ElectionTracker) RecordVote(id pb.PeerID, vote bool) {
+func (e *ElectionTracker) RecordVote(id rt.PeerID, vote bool) {
 	_, ok := e.votes[id]
 	if !ok {
 		e.votes[id] = vote
@@ -66,6 +66,6 @@ func (e *ElectionTracker) ResetVotes() {
 }
 
 // TestingGetVotes exports the votes map for testing.
-func (e *ElectionTracker) TestingGetVotes() map[pb.PeerID]bool {
+func (e *ElectionTracker) TestingGetVotes() map[rt.PeerID]bool {
 	return e.votes
 }

@@ -11,7 +11,7 @@
 package raftstoreliveness
 
 import (
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -30,7 +30,7 @@ type StoreLiveness interface {
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	// It is therefore important to ensure that the replica ID to store ID mapping
 	// is not lost during periods of support.
-	SupportFor(id pb.PeerID) (pb.Epoch, bool)
+	SupportFor(id rt.PeerID) (rt.Epoch, bool)
 
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support for the local store (S_local) from the store (S_remote)
@@ -47,7 +47,7 @@ type StoreLiveness interface {
 	//
 	// If S_local cannot map the replica ID to a store ID, 0 and an empty
 	// timestamp will be returned.
-	SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp)
+	SupportFrom(id rt.PeerID) (rt.Epoch, hlc.Timestamp)
 
 	// SupportFromEnabled returns whether StoreLiveness is currently active, and
 	// callers can rely on getting support from peers by calling SupportFrom.
@@ -72,13 +72,13 @@ type AlwaysLive struct{}
 var _ StoreLiveness = AlwaysLive{}
 
 // SupportFor implements the StoreLiveness interface.
-func (AlwaysLive) SupportFor(pb.PeerID) (pb.Epoch, bool) {
-	return pb.Epoch(1), true
+func (AlwaysLive) SupportFor(rt.PeerID) (rt.Epoch, bool) {
+	return rt.Epoch(1), true
 }
 
 // SupportFrom implements the StoreLiveness interface.
-func (AlwaysLive) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp) {
-	return pb.Epoch(1), hlc.MaxTimestamp
+func (AlwaysLive) SupportFrom(rt.PeerID) (rt.Epoch, hlc.Timestamp) {
+	return rt.Epoch(1), hlc.MaxTimestamp
 }
 
 // SupportFromEnabled implements the StoreLiveness interface.
@@ -98,12 +98,12 @@ type Disabled struct{}
 var _ StoreLiveness = Disabled{}
 
 // SupportFor implements the StoreLiveness interface.
-func (Disabled) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+func (Disabled) SupportFor(rt.PeerID) (rt.Epoch, bool) {
 	panic("unimplemented")
 }
 
 // SupportFrom implements the StoreLiveness interface.
-func (Disabled) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+func (Disabled) SupportFrom(rt.PeerID) (rt.Epoch, hlc.Timestamp) {
 	panic("should not be called without checking SupportFromEnabled")
 }
 

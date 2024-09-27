@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1166,7 +1166,7 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 
 	// Find the log entry to validate the trace output.
 	foundEntry := false
-	var entry logpb.Entry
+	var entry logrt.Entry
 	for _, entry = range entries {
 		if opRegexp.MatchString(entry.Message) {
 			foundEntry = true
@@ -1295,12 +1295,12 @@ func TestStoreRangeSplitWithMismatchedDesc(t *testing.T) {
 // request header before delegating to the underlying HandleSnapshot method.
 type RaftMessageHandlerInterceptor struct {
 	kvserver.IncomingRaftMessageHandler
-	handleSnapshotFilter func(header *kvserverpb.SnapshotRequest_Header)
+	handleSnapshotFilter func(header *kvserverrt.SnapshotRequest_Header)
 }
 
 func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
 	ctx context.Context,
-	header *kvserverpb.SnapshotRequest_Header,
+	header *kvserverrt.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	mh.handleSnapshotFilter(header)
@@ -1341,11 +1341,11 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 	// snapshot request headers.
 	messageRecorder := struct {
 		syncutil.Mutex
-		headers []*kvserverpb.SnapshotRequest_Header
+		headers []*kvserverrt.SnapshotRequest_Header
 	}{}
 	messageHandler := RaftMessageHandlerInterceptor{
 		IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
-		handleSnapshotFilter: func(header *kvserverpb.SnapshotRequest_Header) {
+		handleSnapshotFilter: func(header *kvserverrt.SnapshotRequest_Header) {
 			// Each snapshot request is handled in a new goroutine, so we need
 			// synchronization.
 			messageRecorder.Lock()
@@ -2576,10 +2576,10 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
-					Message: raftpb.Message{
-						Type: raftpb.MsgVote,
-						To:   raftpb.PeerID(replicas[0].ReplicaID),
-						From: raftpb.PeerID(replicas[1].ReplicaID),
+					Message: rafttype.Message{
+						Type: rafttype.MsgVote,
+						To:   rafttype.PeerID(replicas[0].ReplicaID),
+						From: rafttype.PeerID(replicas[1].ReplicaID),
 						Term: term,
 					},
 				}, rpc.DefaultClass); !sent {

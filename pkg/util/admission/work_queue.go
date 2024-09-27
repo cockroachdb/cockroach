@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -229,7 +229,7 @@ type ReplicatedWorkInfo struct {
 	// writes). Only populated for RACv1.
 	Origin roachpb.NodeID
 	// RaftPri is the raft priority of the entry. Only populated for RACv2.
-	RaftPri raftpb.Priority
+	RaftPri rafttype.Priority
 	// IsV2Protocol is true iff the v2 protocol requested this admission.
 	IsV2Protocol bool
 	// Ingested captures whether the write work corresponds to an ingest
@@ -2141,7 +2141,7 @@ type LogEntryAdmittedCallbackState struct {
 	// It is the raft priority for the entry. Technically, it could be derived
 	// from Pri, but we do not want the admission package to be aware of this
 	// translation.
-	RaftPri raftpb.Priority
+	RaftPri rafttype.Priority
 	// IsV2Protocol is true iff the v2 protocol requested this admission. It is
 	// used for de-multiplexing the callback correctly.
 	//

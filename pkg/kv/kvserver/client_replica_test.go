@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1616,7 +1616,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 
 	testutils.SucceedsSoon(t, func() error {
 		status := leader.RaftStatus()
-		progress, ok := status.Progress[raftpb.PeerID(follower.ReplicaID)]
+		progress, ok := status.Progress[rafttype.PeerID(follower.ReplicaID)]
 		if !ok {
 			return errors.Errorf(
 				"replica %v progress not found in progress map: %v",
@@ -2868,7 +2868,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
-		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
+		funcs.snapErr = func(*kvserverrt.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
 		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
@@ -3005,7 +3005,7 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
-		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
+		funcs.snapErr = func(*kvserverrt.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
 		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
@@ -3548,7 +3548,7 @@ func TestReplicaTombstone(t *testing.T) {
 					recordHeartbeat(hb.ToReplicaID)
 					return false
 				},
-				snapErr: func(*kvserverpb.SnapshotRequest_Header) error {
+				snapErr: func(*kvserverrt.SnapshotRequest_Header) error {
 					waitForSnapshot()
 					return errors.New("boom")
 				},
@@ -3639,7 +3639,7 @@ func TestReplicaTombstone(t *testing.T) {
 		partActive.Store(false)
 		raftFuncs := noopRaftHandlerFuncs()
 		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
-			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
+			return partActive.Load().(bool) && req.Message.Type == rafttype.MsgApp
 		}
 		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    lhsDesc.RangeID,

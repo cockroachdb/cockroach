@@ -20,7 +20,7 @@ package raft
 import (
 	"fmt"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // entryID uniquely identifies a raft log entry.
@@ -33,8 +33,8 @@ type entryID struct {
 	index uint64
 }
 
-// pbEntryID returns the ID of the given pb.Entry.
-func pbEntryID(entry *pb.Entry) entryID {
+// pbEntryID returns the ID of the given rt.Entry.
+func pbEntryID(entry *rt.Entry) entryID {
 	return entryID{term: entry.Term, index: entry.Index}
 }
 
@@ -96,7 +96,7 @@ type logSlice struct {
 	// prev is the ID of the entry immediately preceding the entries.
 	prev entryID
 	// entries contains the consecutive entries representing this slice.
-	entries []pb.Entry
+	entries []rt.Entry
 }
 
 // lastIndex returns the index of the last entry in this log slice. Returns
@@ -139,7 +139,7 @@ func (s logSlice) forward(index uint64) logSlice {
 }
 
 // sub returns the entries of this logSlice with indices in (after, to].
-func (s logSlice) sub(after, to uint64) []pb.Entry {
+func (s logSlice) sub(after, to uint64) []rt.Entry {
 	return s.entries[after-s.prev.index : to-s.prev.index]
 }
 
@@ -184,7 +184,7 @@ type snapshot struct {
 	// a Learner observing a later term.
 	term uint64
 	// snap is the content of the snapshot.
-	snap pb.Snapshot
+	snap rt.Snapshot
 }
 
 // lastIndex returns the index of the last entry in this snapshot.

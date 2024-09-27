@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,10 +32,10 @@ var testFormatter EntryFormatter = func(data []byte) string {
 }
 
 func TestDescribeEntry(t *testing.T) {
-	entry := pb.Entry{
+	entry := rt.Entry{
 		Term:  1,
 		Index: 2,
-		Type:  pb.EntryNormal,
+		Type:  rt.EntryNormal,
 		Data:  []byte("hello\x00world"),
 	}
 	require.Equal(t, `1/2 EntryNormal "hello\x00world"`, DescribeEntry(entry, nil))
@@ -43,13 +43,13 @@ func TestDescribeEntry(t *testing.T) {
 }
 
 func TestLimitSize(t *testing.T) {
-	ents := []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}
-	prefix := func(size int) []pb.Entry {
-		return append([]pb.Entry{}, ents[:size]...) // protect the original slice
+	ents := []rt.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}
+	prefix := func(size int) []rt.Entry {
+		return append([]rt.Entry{}, ents[:size]...) // protect the original slice
 	}
 	for _, tt := range []struct {
 		maxSize uint64
-		want    []pb.Entry
+		want    []rt.Entry
 	}{
 		{math.MaxUint64, prefix(len(ents))}, // all entries are returned
 		// Even if maxSize is zero, the first entry should be returned.
@@ -72,33 +72,33 @@ func TestLimitSize(t *testing.T) {
 
 func TestIsLocalMsg(t *testing.T) {
 	tests := []struct {
-		msgt    pb.MessageType
+		msgt    rt.MessageType
 		isLocal bool
 	}{
-		{pb.MsgHup, true},
-		{pb.MsgBeat, true},
-		{pb.MsgUnreachable, true},
-		{pb.MsgSnapStatus, true},
-		{pb.MsgCheckQuorum, true},
-		{pb.MsgTransferLeader, false},
-		{pb.MsgProp, false},
-		{pb.MsgApp, false},
-		{pb.MsgAppResp, false},
-		{pb.MsgVote, false},
-		{pb.MsgVoteResp, false},
-		{pb.MsgSnap, false},
-		{pb.MsgHeartbeat, false},
-		{pb.MsgHeartbeatResp, false},
-		{pb.MsgTimeoutNow, false},
-		{pb.MsgPreVote, false},
-		{pb.MsgPreVoteResp, false},
-		{pb.MsgStorageAppend, true},
-		{pb.MsgStorageAppendResp, true},
-		{pb.MsgStorageApply, true},
-		{pb.MsgStorageApplyResp, true},
-		{pb.MsgForgetLeader, false},
-		{pb.MsgFortifyLeader, false},
-		{pb.MsgFortifyLeaderResp, false},
+		{rt.MsgHup, true},
+		{rt.MsgBeat, true},
+		{rt.MsgUnreachable, true},
+		{rt.MsgSnapStatus, true},
+		{rt.MsgCheckQuorum, true},
+		{rt.MsgTransferLeader, false},
+		{rt.MsgProp, false},
+		{rt.MsgApp, false},
+		{rt.MsgAppResp, false},
+		{rt.MsgVote, false},
+		{rt.MsgVoteResp, false},
+		{rt.MsgSnap, false},
+		{rt.MsgHeartbeat, false},
+		{rt.MsgHeartbeatResp, false},
+		{rt.MsgTimeoutNow, false},
+		{rt.MsgPreVote, false},
+		{rt.MsgPreVoteResp, false},
+		{rt.MsgStorageAppend, true},
+		{rt.MsgStorageAppendResp, true},
+		{rt.MsgStorageApply, true},
+		{rt.MsgStorageApplyResp, true},
+		{rt.MsgForgetLeader, false},
+		{rt.MsgFortifyLeader, false},
+		{rt.MsgFortifyLeaderResp, false},
 	}
 
 	for _, tt := range tests {
@@ -110,33 +110,33 @@ func TestIsLocalMsg(t *testing.T) {
 
 func TestIsResponseMsg(t *testing.T) {
 	tests := []struct {
-		msgt       pb.MessageType
+		msgt       rt.MessageType
 		isResponse bool
 	}{
-		{pb.MsgHup, false},
-		{pb.MsgBeat, false},
-		{pb.MsgUnreachable, true},
-		{pb.MsgSnapStatus, false},
-		{pb.MsgCheckQuorum, false},
-		{pb.MsgTransferLeader, false},
-		{pb.MsgProp, false},
-		{pb.MsgApp, false},
-		{pb.MsgAppResp, true},
-		{pb.MsgVote, false},
-		{pb.MsgVoteResp, true},
-		{pb.MsgSnap, false},
-		{pb.MsgHeartbeat, false},
-		{pb.MsgHeartbeatResp, true},
-		{pb.MsgTimeoutNow, false},
-		{pb.MsgPreVote, false},
-		{pb.MsgPreVoteResp, true},
-		{pb.MsgStorageAppend, false},
-		{pb.MsgStorageAppendResp, true},
-		{pb.MsgStorageApply, false},
-		{pb.MsgStorageApplyResp, true},
-		{pb.MsgForgetLeader, false},
-		{pb.MsgFortifyLeader, false},
-		{pb.MsgFortifyLeaderResp, true},
+		{rt.MsgHup, false},
+		{rt.MsgBeat, false},
+		{rt.MsgUnreachable, true},
+		{rt.MsgSnapStatus, false},
+		{rt.MsgCheckQuorum, false},
+		{rt.MsgTransferLeader, false},
+		{rt.MsgProp, false},
+		{rt.MsgApp, false},
+		{rt.MsgAppResp, true},
+		{rt.MsgVote, false},
+		{rt.MsgVoteResp, true},
+		{rt.MsgSnap, false},
+		{rt.MsgHeartbeat, false},
+		{rt.MsgHeartbeatResp, true},
+		{rt.MsgTimeoutNow, false},
+		{rt.MsgPreVote, false},
+		{rt.MsgPreVoteResp, true},
+		{rt.MsgStorageAppend, false},
+		{rt.MsgStorageAppendResp, true},
+		{rt.MsgStorageApply, false},
+		{rt.MsgStorageApplyResp, true},
+		{rt.MsgForgetLeader, false},
+		{rt.MsgFortifyLeader, false},
+		{rt.MsgFortifyLeaderResp, true},
 	}
 
 	for i, tt := range tests {
@@ -149,33 +149,33 @@ func TestIsResponseMsg(t *testing.T) {
 
 func TestMsgFromLeader(t *testing.T) {
 	tests := []struct {
-		msgt       pb.MessageType
+		msgt       rt.MessageType
 		isResponse bool
 	}{
-		{pb.MsgHup, false},
-		{pb.MsgBeat, false},
-		{pb.MsgUnreachable, false},
-		{pb.MsgSnapStatus, false},
-		{pb.MsgCheckQuorum, false},
-		{pb.MsgTransferLeader, false},
-		{pb.MsgProp, false},
-		{pb.MsgApp, true},
-		{pb.MsgAppResp, false},
-		{pb.MsgVote, false},
-		{pb.MsgVoteResp, false},
-		{pb.MsgSnap, true},
-		{pb.MsgHeartbeat, true},
-		{pb.MsgHeartbeatResp, false},
-		{pb.MsgTimeoutNow, true},
-		{pb.MsgPreVote, false},
-		{pb.MsgPreVoteResp, false},
-		{pb.MsgStorageAppend, false},
-		{pb.MsgStorageAppendResp, false},
-		{pb.MsgStorageApply, false},
-		{pb.MsgStorageApplyResp, false},
-		{pb.MsgForgetLeader, false},
-		{pb.MsgFortifyLeader, true},
-		{pb.MsgFortifyLeaderResp, false},
+		{rt.MsgHup, false},
+		{rt.MsgBeat, false},
+		{rt.MsgUnreachable, false},
+		{rt.MsgSnapStatus, false},
+		{rt.MsgCheckQuorum, false},
+		{rt.MsgTransferLeader, false},
+		{rt.MsgProp, false},
+		{rt.MsgApp, true},
+		{rt.MsgAppResp, false},
+		{rt.MsgVote, false},
+		{rt.MsgVoteResp, false},
+		{rt.MsgSnap, true},
+		{rt.MsgHeartbeat, true},
+		{rt.MsgHeartbeatResp, false},
+		{rt.MsgTimeoutNow, true},
+		{rt.MsgPreVote, false},
+		{rt.MsgPreVoteResp, false},
+		{rt.MsgStorageAppend, false},
+		{rt.MsgStorageAppendResp, false},
+		{rt.MsgStorageApply, false},
+		{rt.MsgStorageApplyResp, false},
+		{rt.MsgForgetLeader, false},
+		{rt.MsgFortifyLeader, true},
+		{rt.MsgFortifyLeaderResp, false},
 	}
 
 	for i, tt := range tests {
@@ -190,6 +190,6 @@ func TestMsgFromLeader(t *testing.T) {
 // This property is important because new leaders append an empty entry to their log,
 // and we don't want this to count towards the uncommitted log quota.
 func TestPayloadSizeOfEmptyEntry(t *testing.T) {
-	e := pb.Entry{Data: nil}
+	e := rt.Entry{Data: nil}
 	require.Equal(t, 0, int(payloadSize(e)))
 }

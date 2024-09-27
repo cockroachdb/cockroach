@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -91,13 +91,13 @@ func EncodeCommand(
 		}
 	}
 	// pri is only used for the WithACAndPriority encodings.
-	var pri raftpb.Priority
+	var pri rafttype.Priority
 	if entryEncoding == EntryEncodingStandardWithACAndPriority ||
 		entryEncoding == EntryEncodingSideloadedWithACAndPriority {
-		pri = raftpb.Priority(opts.RaftAdmissionMeta.AdmissionPriority)
-		if buildutil.CrdbTestBuild && (opts.RaftAdmissionMeta.AdmissionPriority > int32(raftpb.HighPri) ||
-			opts.RaftAdmissionMeta.AdmissionPriority < int32(raftpb.LowPri)) {
-			panic(errors.AssertionFailedf("priority %d is not a valid raftpb.Priority",
+		pri = rafttype.Priority(opts.RaftAdmissionMeta.AdmissionPriority)
+		if buildutil.CrdbTestBuild && (opts.RaftAdmissionMeta.AdmissionPriority > int32(rafttype.HighPri) ||
+			opts.RaftAdmissionMeta.AdmissionPriority < int32(rafttype.LowPri)) {
+			panic(errors.AssertionFailedf("priority %d is not a valid rafttype.Priority",
 				opts.RaftAdmissionMeta.AdmissionPriority))
 		}
 	}

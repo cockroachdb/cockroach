@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -30,7 +30,7 @@ type FortificationTracker struct {
 	// fortification contains a map of nodes which have fortified the leader
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
-	fortification map[pb.PeerID]pb.Epoch
+	fortification map[rt.PeerID]rt.Epoch
 }
 
 // MakeFortificationTracker initializes a FortificationTracker.
@@ -40,14 +40,14 @@ func MakeFortificationTracker(
 	st := FortificationTracker{
 		config:        config,
 		storeLiveness: storeLiveness,
-		fortification: map[pb.PeerID]pb.Epoch{},
+		fortification: map[rt.PeerID]rt.Epoch{},
 	}
 	return st
 }
 
 // RecordFortification records that the node with the given id supported this
 // Raft instance until the supplied timestamp.
-func (st *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch) {
+func (st *FortificationTracker) RecordFortification(id rt.PeerID, epoch rt.Epoch) {
 	// The supported epoch should never regress. Guard against out of order
 	// delivery of fortify responses by using max.
 	st.fortification[id] = max(st.fortification[id], epoch)
@@ -65,7 +65,7 @@ func (st *FortificationTracker) Reset() {
 // If the follower's store doesn't support the leader's store in the store
 // liveness fabric, then both isSupported and isFortified will be false.
 // If isFortified is true, it implies that isSupported is also true.
-func (st *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, isSupported bool) {
+func (st *FortificationTracker) IsFortifiedBy(id rt.PeerID) (isFortified bool, isSupported bool) {
 	supportEpoch, curExp := st.storeLiveness.SupportFrom(id)
 	if st.storeLiveness.SupportExpired(curExp) {
 		return false, false
@@ -93,7 +93,7 @@ func (st *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, i
 func (st *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
-	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
+	supportExpMap := make(map[rt.PeerID]hlc.Timestamp)
 	for id, supportEpoch := range st.fortification {
 		curEpoch, curExp := st.storeLiveness.SupportFrom(id)
 		// NB: We can't assert that supportEpoch <= curEpoch because there may be a
@@ -119,7 +119,7 @@ func (st *FortificationTracker) String() string {
 		return "empty"
 	}
 	// Print the map in sorted order as we assert on its output in tests.
-	ids := make([]pb.PeerID, 0, len(st.fortification))
+	ids := make([]rt.PeerID, 0, len(st.fortification))
 	for id := range st.fortification {
 		ids = append(ids, id)
 	}

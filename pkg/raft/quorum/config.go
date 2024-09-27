@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // Config reflects the configuration of a raft group. It is used to make
@@ -34,7 +34,7 @@ type Config struct {
 	// learner it can't be in either half of the joint config. This invariant
 	// simplifies the implementation since it allows peers to have clarity about
 	// its current role without taking into account joint consensus.
-	Learners map[pb.PeerID]struct{}
+	Learners map[rt.PeerID]struct{}
 	// When we turn a voter into a learner during a joint consensus transition,
 	// we cannot add the learner directly when entering the joint state. This is
 	// because this would violate the invariant that the intersection of
@@ -69,7 +69,7 @@ type Config struct {
 	// also a voter in the joint config. In this case, the learner is added
 	// right away when entering the joint configuration, so that it is caught up
 	// as soon as possible.
-	LearnersNext map[pb.PeerID]struct{}
+	LearnersNext map[rt.PeerID]struct{}
 }
 
 // MakeEmptyConfig constructs and returns an empty Config.
@@ -101,11 +101,11 @@ func (c Config) String() string {
 
 // Clone returns a copy of the Config that shares no memory with the original.
 func (c *Config) Clone() Config {
-	clone := func(m map[pb.PeerID]struct{}) map[pb.PeerID]struct{} {
+	clone := func(m map[rt.PeerID]struct{}) map[rt.PeerID]struct{} {
 		if m == nil {
 			return nil
 		}
-		mm := make(map[pb.PeerID]struct{}, len(m))
+		mm := make(map[rt.PeerID]struct{}, len(m))
 		for k := range m {
 			mm[k] = struct{}{}
 		}
@@ -119,8 +119,8 @@ func (c *Config) Clone() Config {
 }
 
 // ConfState returns a ConfState representing the active configuration.
-func (c *Config) ConfState() pb.ConfState {
-	return pb.ConfState{
+func (c *Config) ConfState() rt.ConfState {
+	return rt.ConfState{
 		Voters:         c.Voters[0].Slice(),
 		VotersOutgoing: c.Voters[1].Slice(),
 		Learners:       MajorityConfig(c.Learners).Slice(),

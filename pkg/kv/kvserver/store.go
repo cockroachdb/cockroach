@@ -64,8 +64,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -381,7 +381,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 func newRaftConfig(
 	ctx context.Context,
 	strg raft.Storage,
-	id raftpb.PeerID,
+	id rafttype.PeerID,
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	logger raft.Logger,
@@ -768,7 +768,7 @@ prose below, and the source .dot file is in store_doc_replica_lifecycle.dot.
 
 When a Store starts, it iterates through all RangeDescriptors it can find on its
 Engine. Finding a RangeDescriptor by definition implies that the Replica is
-initialized. Raft state (a raftpb.HardState) for uninitialized Replicas may
+initialized. Raft state (a rafttype.HardState) for uninitialized Replicas may
 exist, however it would be ignored until a message arrives addressing that
 Replica, or a split trigger applies that instantiates and then initializes it.
 

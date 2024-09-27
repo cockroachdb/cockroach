@@ -22,15 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
-func ents(inds ...uint64) []raftpb.Entry {
-	sl := make([]raftpb.Entry, 0, len(inds))
+func ents(inds ...uint64) []rafttype.Entry {
+	sl := make([]rafttype.Entry, 0, len(inds))
 	for _, ind := range inds {
 		cmd := kvserverpb.RaftCommand{
 			MaxLeaseIndex: kvpb.LeaseAppliedIndex(ind), // just to have something nontrivial in here
@@ -43,15 +43,15 @@ func ents(inds ...uint64) []raftpb.Entry {
 		cmdID := kvserverbase.CmdIDKey(fmt.Sprintf("%8d", ind%100000000))
 
 		var data []byte
-		typ := raftpb.EntryType(ind % 3)
+		typ := rafttype.EntryType(ind % 3)
 		switch typ {
-		case raftpb.EntryNormal:
+		case rafttype.EntryNormal:
 			enc := EntryEncodingStandardWithAC
 			if ind%2 == 0 {
 				enc = EntryEncodingSideloadedWithAC
 			}
 			data = EncodeCommandBytes(enc, cmdID, b, 0 /* pri */)
-		case raftpb.EntryConfChangeV2:
+		case rafttype.EntryConfChangeV2:
 			c := kvserverpb.ConfChangeContext{
 				CommandID: string(cmdID),
 				Payload:   b,
@@ -67,7 +67,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 			if err != nil {
 				panic(err)
 			}
-		case raftpb.EntryConfChange:
+		case rafttype.EntryConfChange:
 			c := kvserverpb.ConfChangeContext{
 				CommandID: string(cmdID),
 				Payload:   b,
@@ -76,7 +76,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 			if err != nil {
 				panic(err)
 			}
-			var cc raftpb.ConfChange
+			var cc rafttype.ConfChange
 			cc.Context = ccContext
 			data, err = protoutil.Marshal(&cc)
 			if err != nil {
@@ -85,7 +85,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 		default:
 			panic(typ)
 		}
-		sl = append(sl, raftpb.Entry{
+		sl = append(sl, rafttype.Entry{
 			Term:  100 + ind, // overflow ok
 			Index: ind,
 			Type:  typ,
@@ -100,11 +100,11 @@ func ents(inds ...uint64) []raftpb.Entry {
 // validate its behaviors.
 type modelIter struct {
 	idx  int
-	ents []raftpb.Entry
+	ents []rafttype.Entry
 	hi   kvpb.RaftIndex
 }
 
-func (it *modelIter) load() (raftpb.Entry, error) {
+func (it *modelIter) load() (rafttype.Entry, error) {
 	// Only called when on valid position.
 	return it.ents[it.idx], nil
 }
@@ -142,7 +142,7 @@ func (it *modelIter) Next() (bool, error) {
 	return err == nil, err
 }
 
-func (it *modelIter) Entry() raftpb.Entry {
+func (it *modelIter) Entry() rafttype.Entry {
 	e, err := it.load()
 	if err != nil {
 		panic(err) // bug in modelIter
@@ -172,7 +172,7 @@ func TestIterator(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		ents []raftpb.Entry
+		ents []rafttype.Entry
 	}{
 		{
 			ents: ents(5),
@@ -280,7 +280,7 @@ func TestIterator(t *testing.T) {
 type iter interface {
 	SeekGE(idx kvpb.RaftIndex) (bool, error)
 	Next() (bool, error)
-	Entry() raftpb.Entry
+	Entry() rafttype.Entry
 }
 
 func consumeIter(it iter, lo kvpb.RaftIndex) ([]uint64, error) {

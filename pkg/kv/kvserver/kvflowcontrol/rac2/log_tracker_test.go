@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -195,11 +195,11 @@ func TestLogTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	readPri := func(t *testing.T, d *datadriven.TestData) raftpb.Priority {
+	readPri := func(t *testing.T, d *datadriven.TestData) rafttype.Priority {
 		var s string
 		d.ScanArgs(t, "pri", &s)
 		pri := priFromString(s)
-		if pri == raftpb.NumPriorities {
+		if pri == rafttype.NumPriorities {
 			t.Fatalf("unknown pri: %s", s)
 		}
 		return pri
@@ -274,17 +274,17 @@ func TestLogTracker(t *testing.T) {
 
 // priFromString converts a string to Priority.
 // TODO(pav-kv): move to the package next to Priority.
-func priFromString(s string) raftpb.Priority {
+func priFromString(s string) rafttype.Priority {
 	switch s {
 	case "LowPri":
-		return raftpb.LowPri
+		return rafttype.LowPri
 	case "NormalPri":
-		return raftpb.NormalPri
+		return rafttype.NormalPri
 	case "AboveNormalPri":
-		return raftpb.AboveNormalPri
+		return rafttype.AboveNormalPri
 	case "HighPri":
-		return raftpb.HighPri
+		return rafttype.HighPri
 	default:
-		return raftpb.NumPriorities
+		return rafttype.NumPriorities
 	}
 }

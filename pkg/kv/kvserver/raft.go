@@ -20,17 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.
-const maxRaftMsgType = raftpb.MsgFortifyLeaderResp
+const maxRaftMsgType = rafttype.MsgFortifyLeaderResp
 
 func init() {
-	for v := range raftpb.MessageType_name {
-		typ := raftpb.MessageType(v)
+	for v := range rafttype.MessageType_name {
+		typ := rafttype.MessageType(v)
 		if typ > maxRaftMsgType {
 			panic(fmt.Sprintf("raft.MessageType (%s) with value larger than maxRaftMsgType", typ))
 		}
@@ -216,7 +216,7 @@ func releaseRaftMessageRequest(m *kvserverpb.RaftMessageRequest) {
 // traceEntries records the provided event for all proposals corresponding
 // to the entries contained in ents. The vmodule level for raft must be at
 // least 1.
-func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
+func (r *Replica) traceEntries(ents []rafttype.Entry, event string) {
 	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		ids := extractIDs(nil, ents)
 		traceProposals(r, ids, event)
@@ -226,7 +226,7 @@ func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
 // traceMessageSends records the provided event for all proposals contained in
 // in entries contained in msgs. The vmodule level for raft must be at
 // least 1.
-func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
+func (r *Replica) traceMessageSends(msgs []rafttype.Message, event string) {
 	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		var ids []kvserverbase.CmdIDKey
 		for _, m := range msgs {
@@ -238,7 +238,7 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 
 // extractIDs decodes and appends each of the ids corresponding to the entries
 // in ents to ids and returns the result.
-func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
+func extractIDs(ids []kvserverbase.CmdIDKey, ents []rafttype.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
 		typ, _, err := raftlog.EncodingOf(e)
 		if err != nil {

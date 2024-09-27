@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 func (st StateType) MarshalJSON() ([]byte, error) {
@@ -30,70 +30,70 @@ func (st StateType) MarshalJSON() ([]byte, error) {
 }
 
 var isLocalMsg = [...]bool{
-	pb.MsgHup:               true,
-	pb.MsgBeat:              true,
-	pb.MsgUnreachable:       true,
-	pb.MsgSnapStatus:        true,
-	pb.MsgCheckQuorum:       true,
-	pb.MsgStorageAppend:     true,
-	pb.MsgStorageAppendResp: true,
-	pb.MsgStorageApply:      true,
-	pb.MsgStorageApplyResp:  true,
+	rt.MsgHup:               true,
+	rt.MsgBeat:              true,
+	rt.MsgUnreachable:       true,
+	rt.MsgSnapStatus:        true,
+	rt.MsgCheckQuorum:       true,
+	rt.MsgStorageAppend:     true,
+	rt.MsgStorageAppendResp: true,
+	rt.MsgStorageApply:      true,
+	rt.MsgStorageApplyResp:  true,
 }
 
 var isResponseMsg = [...]bool{
-	pb.MsgAppResp:           true,
-	pb.MsgVoteResp:          true,
-	pb.MsgHeartbeatResp:     true,
-	pb.MsgUnreachable:       true,
-	pb.MsgPreVoteResp:       true,
-	pb.MsgStorageAppendResp: true,
-	pb.MsgStorageApplyResp:  true,
-	pb.MsgFortifyLeaderResp: true,
+	rt.MsgAppResp:           true,
+	rt.MsgVoteResp:          true,
+	rt.MsgHeartbeatResp:     true,
+	rt.MsgUnreachable:       true,
+	rt.MsgPreVoteResp:       true,
+	rt.MsgStorageAppendResp: true,
+	rt.MsgStorageApplyResp:  true,
+	rt.MsgFortifyLeaderResp: true,
 }
 
 var isMsgFromLeader = [...]bool{
-	pb.MsgApp:           true,
-	pb.MsgSnap:          true,
-	pb.MsgHeartbeat:     true,
-	pb.MsgFortifyLeader: true,
-	pb.MsgTimeoutNow:    true,
+	rt.MsgApp:           true,
+	rt.MsgSnap:          true,
+	rt.MsgHeartbeat:     true,
+	rt.MsgFortifyLeader: true,
+	rt.MsgTimeoutNow:    true,
 }
 
-func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
+func isMsgInArray(msgt rt.MessageType, arr []bool) bool {
 	i := int(msgt)
 	return i < len(arr) && arr[i]
 }
 
-func IsLocalMsg(msgt pb.MessageType) bool {
+func IsLocalMsg(msgt rt.MessageType) bool {
 	return isMsgInArray(msgt, isLocalMsg[:])
 }
 
-func IsResponseMsg(msgt pb.MessageType) bool {
+func IsResponseMsg(msgt rt.MessageType) bool {
 	return isMsgInArray(msgt, isResponseMsg[:])
 }
 
-func IsMsgFromLeader(msgt pb.MessageType) bool {
+func IsMsgFromLeader(msgt rt.MessageType) bool {
 	return isMsgInArray(msgt, isMsgFromLeader[:])
 }
 
-func IsLocalMsgTarget(id pb.PeerID) bool {
+func IsLocalMsgTarget(id rt.PeerID) bool {
 	return id == LocalAppendThread || id == LocalApplyThread
 }
 
 // voteResponseType maps vote and prevote message types to their corresponding responses.
-func voteRespMsgType(msgt pb.MessageType) pb.MessageType {
+func voteRespMsgType(msgt rt.MessageType) rt.MessageType {
 	switch msgt {
-	case pb.MsgVote:
-		return pb.MsgVoteResp
-	case pb.MsgPreVote:
-		return pb.MsgPreVoteResp
+	case rt.MsgVote:
+		return rt.MsgVoteResp
+	case rt.MsgPreVote:
+		return rt.MsgPreVoteResp
 	default:
 		panic(fmt.Sprintf("not a vote message: %s", msgt))
 	}
 }
 
-func DescribeHardState(hs pb.HardState) string {
+func DescribeHardState(hs rt.HardState) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "Term:%d", hs.Term)
 	if hs.Vote != 0 {
@@ -109,7 +109,7 @@ func DescribeSoftState(ss SoftState) string {
 	return fmt.Sprintf("State:%s", ss.RaftState)
 }
 
-func DescribeSnapshot(snap pb.Snapshot) string {
+func DescribeSnapshot(snap rt.Snapshot) string {
 	m := snap.Metadata
 	return fmt.Sprintf("Index:%d Term:%d ConfState:%s",
 		m.Index, m.Term, m.ConfState.Describe())
@@ -155,11 +155,11 @@ type EntryFormatter func([]byte) string
 
 // DescribeMessage returns a concise human-readable description of a
 // Message for debugging.
-func DescribeMessage(m pb.Message, f EntryFormatter) string {
+func DescribeMessage(m rt.Message, f EntryFormatter) string {
 	return describeMessageWithIndent("", m, f)
 }
 
-func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) string {
+func describeMessageWithIndent(indent string, m rt.Message, f EntryFormatter) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s%s->%s %v Term:%d Log:%d/%d", indent,
 		describeTarget(m.From), describeTarget(m.To), m.Type, m.Term, m.LogTerm, m.Index)
@@ -202,7 +202,7 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	return buf.String()
 }
 
-func describeTarget(id pb.PeerID) string {
+func describeTarget(id rt.PeerID) string {
 	switch id {
 	case None:
 		return "None"
@@ -217,30 +217,30 @@ func describeTarget(id pb.PeerID) string {
 
 // DescribeEntry returns a concise human-readable description of an
 // Entry for debugging.
-func DescribeEntry(e pb.Entry, f EntryFormatter) string {
+func DescribeEntry(e rt.Entry, f EntryFormatter) string {
 	if f == nil {
 		f = func(data []byte) string { return fmt.Sprintf("%q", data) }
 	}
 
-	formatConfChange := func(cc pb.ConfChangeI) string {
+	formatConfChange := func(cc rt.ConfChangeI) string {
 		// TODO(tbg): give the EntryFormatter a type argument so that it gets
 		// a chance to expose the Context.
-		return pb.ConfChangesToString(cc.AsV2().Changes)
+		return rt.ConfChangesToString(cc.AsV2().Changes)
 	}
 
 	var formatted string
 	switch e.Type {
-	case pb.EntryNormal:
+	case rt.EntryNormal:
 		formatted = f(e.Data)
-	case pb.EntryConfChange:
-		var cc pb.ConfChange
+	case rt.EntryConfChange:
+		var cc rt.ConfChange
 		if err := cc.Unmarshal(e.Data); err != nil {
 			formatted = err.Error()
 		} else {
 			formatted = formatConfChange(cc)
 		}
-	case pb.EntryConfChangeV2:
-		var cc pb.ConfChangeV2
+	case rt.EntryConfChangeV2:
+		var cc rt.ConfChangeV2
 		if err := cc.Unmarshal(e.Data); err != nil {
 			formatted = err.Error()
 		} else {
@@ -255,7 +255,7 @@ func DescribeEntry(e pb.Entry, f EntryFormatter) string {
 
 // DescribeEntries calls DescribeEntry for each Entry, adding a newline to
 // each.
-func DescribeEntries(ents []pb.Entry, f EntryFormatter) string {
+func DescribeEntries(ents []rt.Entry, f EntryFormatter) string {
 	var buf bytes.Buffer
 	for _, e := range ents {
 		_, _ = buf.WriteString(DescribeEntry(e, f) + "\n")
@@ -267,7 +267,7 @@ func DescribeEntries(ents []pb.Entry, f EntryFormatter) string {
 // entries.
 type entryEncodingSize uint64
 
-func entsSize(ents []pb.Entry) entryEncodingSize {
+func entsSize(ents []rt.Entry) entryEncodingSize {
 	var size entryEncodingSize
 	for _, ent := range ents {
 		size += entryEncodingSize(ent.Size())
@@ -279,7 +279,7 @@ func entsSize(ents []pb.Entry) entryEncodingSize {
 // its total byte size does not exceed maxSize. Always returns a non-empty slice
 // if the input is non-empty, so, as an exception, if the size of the first
 // entry exceeds maxSize, a non-empty slice with just this entry is returned.
-func limitSize(ents []pb.Entry, maxSize entryEncodingSize) []pb.Entry {
+func limitSize(ents []rt.Entry, maxSize entryEncodingSize) []rt.Entry {
 	if len(ents) == 0 {
 		return ents
 	}
@@ -300,12 +300,12 @@ func limitSize(ents []pb.Entry, maxSize entryEncodingSize) []pb.Entry {
 type entryPayloadSize uint64
 
 // payloadSize is the size of the payload of the provided entry.
-func payloadSize(e pb.Entry) entryPayloadSize {
+func payloadSize(e rt.Entry) entryPayloadSize {
 	return entryPayloadSize(len(e.Data))
 }
 
 // payloadsSize is the size of the payloads of the provided entries.
-func payloadsSize(ents []pb.Entry) entryPayloadSize {
+func payloadsSize(ents []rt.Entry) entryPayloadSize {
 	var s entryPayloadSize
 	for _, e := range ents {
 		s += payloadSize(e)
@@ -313,7 +313,7 @@ func payloadsSize(ents []pb.Entry) entryPayloadSize {
 	return s
 }
 
-func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
+func assertConfStatesEquivalent(l Logger, cs1, cs2 rt.ConfState) {
 	err := cs1.Equivalent(cs2)
 	if err == nil {
 		return
@@ -335,12 +335,12 @@ func assertTrue(condition bool, msg string) {
 //
 // Use this instead of standard append in situations when this is the last
 // append to dst, so there is no sense in allocating more than needed.
-func extend(dst, vals []pb.Entry) []pb.Entry {
+func extend(dst, vals []rt.Entry) []rt.Entry {
 	need := len(dst) + len(vals)
 	if need <= cap(dst) {
 		return append(dst, vals...) // does not allocate
 	}
-	buf := make([]pb.Entry, need, need) // allocates precisely what's needed
+	buf := make([]rt.Entry, need, need) // allocates precisely what's needed
 	copy(buf, dst)
 	copy(buf[len(dst):], vals)
 	return buf

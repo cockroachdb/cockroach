@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -130,7 +130,7 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	onErrProposalDropped([]rafttype.Entry, []*ProposalData, raft.StateType)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -169,7 +169,7 @@ type proposer interface {
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
 // testing.
 type proposerRaft interface {
-	Step(raftpb.Message) error
+	Step(rafttype.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
 	Campaign() error
@@ -415,7 +415,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// Step can dramatically reduce the number of messages required to commit
 	// and apply them.
 
-	ents := make([]raftpb.Entry, 0, used)
+	ents := make([]rafttype.Entry, 0, used)
 	// Use this slice to track, for each entry that's proposed to raft, whether
 	// it's subject to replication admission control. Updated in tandem with
 	// slice above.
@@ -523,7 +523,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			firstProp, nextProp = i+1, i+1
 			admitHandles = admitHandles[len(admitHandles):]
 
-			confChangeCtx := kvserverpb.ConfChangeContext{
+			confChangeCtx := kvserverrt.ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   p.encodedCommand,
 			}
@@ -544,7 +544,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
-			sl := []raftpb.Entry{{Type: typ, Data: data}}
+			sl := []rafttype.Entry{{Type: typ, Data: data}}
 			// Send config change in a single-element batch. We go through
 			// proposeBatch since there's observability in there.
 			//
@@ -572,7 +572,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
+			ents = append(ents, rafttype.Entry{
 				Data: p.encodedCommand,
 			})
 			nextProp++
@@ -852,7 +852,7 @@ func proposeBatch(
 	ctx context.Context,
 	p singleBatchProposer,
 	raftGroup proposerRaft,
-	ents []raftpb.Entry,
+	ents []rafttype.Entry,
 	handles []admitEntHandle,
 	props []*ProposalData,
 ) (_ error) {
@@ -863,9 +863,9 @@ func proposeBatch(
 		return nil
 	}
 	replID := p.getReplicaID()
-	err := raftGroup.Step(raftpb.Message{
-		Type:    raftpb.MsgProp,
-		From:    raftpb.PeerID(replID),
+	err := raftGroup.Step(rafttype.Message{
+		Type:    rafttype.MsgProp,
+		From:    rafttype.PeerID(replID),
 		Entries: ents,
 	})
 	if err != nil && errors.Is(err, raft.ErrProposalDropped) {
@@ -897,7 +897,7 @@ func proposeBatch(
 }
 
 func maybeDeductFlowTokens(
-	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []raftpb.Entry,
+	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []rafttype.Entry,
 ) {
 	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
 		panic(
@@ -1190,7 +1190,7 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 }
 
 func (rp *replicaProposer) onErrProposalDropped(
-	ents []raftpb.Entry, _ []*ProposalData, stateType raft.StateType,
+	ents []rafttype.Entry, _ []*ProposalData, stateType raft.StateType,
 ) {
 	n := int64(len(ents))
 	rp.store.metrics.RaftProposalsDropped.Inc(n)

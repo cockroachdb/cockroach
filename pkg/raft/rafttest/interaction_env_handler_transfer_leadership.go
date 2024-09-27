@@ -20,7 +20,7 @@ package rafttest
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -28,19 +28,19 @@ func (env *InteractionEnv) handleTransferLeadership(t *testing.T, d datadriven.T
 	var fromRaw, toRaw uint64
 	d.ScanArgs(t, "from", &fromRaw)
 	d.ScanArgs(t, "to", &toRaw)
-	from := raftpb.PeerID(fromRaw)
-	to := raftpb.PeerID(toRaw)
-	if from == 0 || from > raftpb.PeerID(len(env.Nodes)) {
+	from := rafttype.PeerID(fromRaw)
+	to := rafttype.PeerID(toRaw)
+	if from == 0 || from > rafttype.PeerID(len(env.Nodes)) {
 		t.Fatalf(`expected valid "from" argument`)
 	}
-	if to == 0 || to > raftpb.PeerID(len(env.Nodes)) {
+	if to == 0 || to > rafttype.PeerID(len(env.Nodes)) {
 		t.Fatalf(`expected valid "to" argument`)
 	}
 	return env.transferLeadership(from, to)
 }
 
 // Initiate leadership transfer.
-func (env *InteractionEnv) transferLeadership(from, to raftpb.PeerID) error {
+func (env *InteractionEnv) transferLeadership(from, to rafttype.PeerID) error {
 	fromIdx := from - 1
 	env.Nodes[fromIdx].TransferLeader(to)
 	return nil

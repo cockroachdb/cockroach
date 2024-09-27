@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -209,7 +209,7 @@ func newTestDecoder() *testDecoder {
 	}
 }
 
-func (d *testDecoder) DecodeAndBind(_ context.Context, ents []raftpb.Entry) (bool, error) {
+func (d *testDecoder) DecodeAndBind(_ context.Context, ents []rafttype.Entry) (bool, error) {
 	d.cmds = make([]*cmd, len(ents))
 	for i, ent := range ents {
 		idx := kvpb.RaftIndex(ent.Index)
@@ -233,8 +233,8 @@ func (d *testDecoder) NewCommandIter() apply.CommandIterator {
 }
 func (d *testDecoder) Reset() {}
 
-func makeEntries(num int) []raftpb.Entry {
-	ents := make([]raftpb.Entry, num)
+func makeEntries(num int) []rafttype.Entry {
+	ents := make([]rafttype.Entry, num)
 	for i := range ents {
 		ents[i].Index = uint64(i + 1)
 	}

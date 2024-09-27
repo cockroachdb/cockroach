@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -38,9 +38,9 @@ func (env *InteractionEnv) SendSnapshot(fromIdx, toIdx int) error {
 	if err != nil {
 		return err
 	}
-	from, to := raftpb.PeerID(fromIdx+1), raftpb.PeerID(toIdx+1)
-	msg := raftpb.Message{
-		Type:     raftpb.MsgSnap,
+	from, to := rafttype.PeerID(fromIdx+1), rafttype.PeerID(toIdx+1)
+	msg := rafttype.Message{
+		Type:     rafttype.MsgSnap,
 		Term:     env.Nodes[fromIdx].BasicStatus().Term,
 		From:     from,
 		To:       to,

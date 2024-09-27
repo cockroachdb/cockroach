@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,7 +44,7 @@ var _ apply.CheckedCommand = (*ReplicatedCmd)(nil)
 var _ apply.AppliedCommand = (*ReplicatedCmd)(nil)
 
 // Decode populates the receiver from the provided entry.
-func (c *ReplicatedCmd) Decode(e *raftpb.Entry) error {
+func (c *ReplicatedCmd) Decode(e *rafttype.Entry) error {
 	if c.Entry != nil {
 		c.Entry.Release()
 		c.Entry = nil

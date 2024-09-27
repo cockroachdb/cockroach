@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
@@ -76,13 +76,13 @@ func TestStatus(t *testing.T) {
 
 	raftStatus := func(state raft.StateType, term uint64, leadSupport hlc.Timestamp) raft.LeadSupportStatus {
 		var s raft.LeadSupportStatus
-		s.ID = raftpb.PeerID(repl1.ReplicaID)
+		s.ID = rafttype.PeerID(repl1.ReplicaID)
 		s.RaftState = state
 		s.Term = term
 		if state == raft.StateLeader {
-			s.Lead = raftpb.PeerID(repl1.ReplicaID)
+			s.Lead = rafttype.PeerID(repl1.ReplicaID)
 		} else {
-			s.Lead = raftpb.PeerID(repl2.ReplicaID)
+			s.Lead = rafttype.PeerID(repl2.ReplicaID)
 		}
 		s.LeadSupportUntil = leadSupport
 		return s

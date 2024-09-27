@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -132,7 +132,7 @@ LIMIT
 	var lai kvpb.LeaseAppliedIndex
 	var lastTerm uint64
 	require.NoError(t, raftlog.Visit(
-		ctx, eng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
+		ctx, eng, rangeID, lastIndex, math.MaxUint64, func(entry rafttype.Entry) error {
 			ent, err := raftlog.NewEntry(it.Entry())
 			require.NoError(t, err)
 			if lai < ent.Cmd.MaxLeaseIndex {
@@ -151,7 +151,7 @@ LIMIT
 		b := storage.NewOpLoggerBatch(eng.NewBatch())
 		defer b.Batch.Close()
 
-		var ents []raftpb.Entry
+		var ents []rafttype.Entry
 		for i := 0; i < entsPerBatch; i++ {
 			lai++
 			c := &kvpb.ProbeRequest{}
@@ -197,25 +197,25 @@ LIMIT
 			idKey := raftlog.MakeCmdIDKey()
 			payload, err := raftlog.EncodeCommand(ctx, &raftCmd, idKey, raftlog.EncodeOptions{})
 			require.NoError(t, err)
-			ents = append(ents, raftpb.Entry{
+			ents = append(ents, rafttype.Entry{
 				Term:  lastTerm,
 				Index: uint64(lastIndex) + uint64(len(ents)) + 1,
-				Type:  raftpb.EntryNormal,
+				Type:  rafttype.EntryNormal,
 				Data:  payload,
 			})
 		}
 
 		stats := &logstore.AppendStats{}
 
-		msgApp := raftpb.Message{
-			Type:      raftpb.MsgStorageAppend,
+		msgApp := rafttype.Message{
+			Type:      rafttype.MsgStorageAppend,
 			To:        raft.LocalAppendThread,
 			Term:      lastTerm,
 			LogTerm:   lastTerm,
 			Index:     uint64(lastIndex),
 			Entries:   ents,
 			Commit:    uint64(lastIndex) + uint64(len(ents)),
-			Responses: []raftpb.Message{{}}, // need >0 responses so StoreEntries will sync
+			Responses: []rafttype.Message{{}}, // need >0 responses so StoreEntries will sync
 		}
 
 		fakeMeta := metric.Metadata{

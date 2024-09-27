@@ -40,7 +40,7 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/raftutil",
         "//pkg/raft",
-        "//pkg/raft/raftpb",
+        "//pkg/raft/rafttype",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/testutils/zerofields",

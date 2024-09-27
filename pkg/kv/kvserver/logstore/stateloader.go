@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -128,20 +128,20 @@ func (sl StateLoader) SetRaftTruncatedState(
 // LoadHardState loads the HardState.
 func (sl StateLoader) LoadHardState(
 	ctx context.Context, reader storage.Reader,
-) (raftpb.HardState, error) {
-	var hs raftpb.HardState
+) (rafttype.HardState, error) {
+	var hs rafttype.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
 		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
 
 	if !found || err != nil {
-		return raftpb.HardState{}, err
+		return rafttype.HardState{}, err
 	}
 	return hs, nil
 }
 
 // SetHardState overwrites the HardState.
 func (sl StateLoader) SetHardState(
-	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
+	ctx context.Context, writer storage.Writer, hs rafttype.HardState,
 ) error {
 	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
@@ -159,11 +159,11 @@ func (sl StateLoader) SetHardState(
 func (sl StateLoader) SynthesizeHardState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	oldHS raftpb.HardState,
+	oldHS rafttype.HardState,
 	truncState kvserverpb.RaftTruncatedState,
 	raftAppliedIndex kvpb.RaftIndex,
 ) error {
-	newHS := raftpb.HardState{
+	newHS := rafttype.HardState{
 		Term: uint64(truncState.Term),
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.

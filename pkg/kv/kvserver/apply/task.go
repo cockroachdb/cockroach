@@ -13,7 +13,7 @@ package apply
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,7 +102,7 @@ type Decoder interface {
 	// The method must only be called once per Decoder. It returns whether
 	// any of the commands were bound to local proposals waiting for
 	// acknowledgement.
-	DecodeAndBind(context.Context, []raftpb.Entry) (anyLocal bool, _ error)
+	DecodeAndBind(context.Context, []rafttype.Entry) (anyLocal bool, _ error)
 	// NewCommandIter creates an iterator over the replicated commands that
 	// were passed to DecodeAndBind. The method must not be called until
 	// after DecodeAndBind is called.
@@ -137,7 +137,7 @@ func MakeTask(sm StateMachine, dec Decoder) Task {
 
 // Decode decodes the committed raft entries into commands and prepared for the
 // commands to be applied to the replicated state machine.
-func (t *Task) Decode(ctx context.Context, committedEntries []raftpb.Entry) error {
+func (t *Task) Decode(ctx context.Context, committedEntries []rafttype.Entry) error {
 	var err error
 	t.anyLocal, err = t.dec.DecodeAndBind(ctx, committedEntries)
 	t.decoded = true

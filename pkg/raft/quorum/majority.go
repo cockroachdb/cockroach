@@ -24,15 +24,15 @@ import (
 	"sort"
 	"strings"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
-type MajorityConfig map[pb.PeerID]struct{}
+type MajorityConfig map[rt.PeerID]struct{}
 
 func (c MajorityConfig) String() string {
-	sl := make([]pb.PeerID, 0, len(c))
+	sl := make([]rt.PeerID, 0, len(c))
 	for id := range c {
 		sl = append(sl, id)
 	}
@@ -56,7 +56,7 @@ func (c MajorityConfig) Describe(l AckedIndexer) string {
 		return "<empty majority quorum>"
 	}
 	type tup struct {
-		id  pb.PeerID
+		id  rt.PeerID
 		idx Index
 		ok  bool // idx found?
 		bar int  // length of bar displayed for this tup
@@ -110,8 +110,8 @@ func (c MajorityConfig) Describe(l AckedIndexer) string {
 }
 
 // Slice returns the MajorityConfig as a sorted slice.
-func (c MajorityConfig) Slice() []pb.PeerID {
-	var sl []pb.PeerID
+func (c MajorityConfig) Slice() []rt.PeerID {
+	var sl []rt.PeerID
 	for id := range c {
 		sl = append(sl, id)
 	}
@@ -175,7 +175,7 @@ func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
 // a result indicating whether the vote is pending (i.e. neither a quorum of
 // yes/no has been reached), won (a quorum of yes has been reached), or lost (a
 // quorum of no has been reached).
-func (c MajorityConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
+func (c MajorityConfig) VoteResult(votes map[rt.PeerID]bool) VoteResult {
 	if len(c) == 0 {
 		// By convention, the elections on an empty config win. This comes in
 		// handy with joint quorums because it'll make a half-populated joint
@@ -209,7 +209,7 @@ func (c MajorityConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 // LeadSupportExpiration takes a mapping of timestamps peers have promised a
 // fortified leader support until and returns the timestamp until which the
 // leader is guaranteed support until.
-func (c MajorityConfig) LeadSupportExpiration(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+func (c MajorityConfig) LeadSupportExpiration(supported map[rt.PeerID]hlc.Timestamp) hlc.Timestamp {
 	if len(c) == 0 {
 		// There are no peers in the config, and therefore no leader, so we return
 		// MaxTimestamp as a sentinel value. This also plays well with joint quorums

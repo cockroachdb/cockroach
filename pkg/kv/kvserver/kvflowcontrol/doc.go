@@ -80,7 +80,7 @@ package kvflowcontrol
 //    our work item needs to include the CreateTime and AdmissionPriority. The
 //    tenant ID is plumbed to find the right tenant heap to queue it under (for
 //    inter-tenant isolation); the store ID to find the right store work queue
-//    on multi-store nodes. Since the raftpb.Entry encodes within it its origin
+//    on multi-store nodes. Since the rafttype.Entry encodes within it its origin
 //    node (AdmissionOriginNode), it's used post-admission to dispatch to the
 //    right node; see [7'] below.
 //

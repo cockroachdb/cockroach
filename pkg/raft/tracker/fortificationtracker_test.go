@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,7 +33,7 @@ func TestLeadSupportUntil(t *testing.T) {
 	}
 
 	mockLiveness3Peers := makeMockStoreLiveness(
-		map[pb.PeerID]mockLivenessEntry{
+		map[rt.PeerID]mockLivenessEntry{
 			1: makeMockLivenessEntry(10, ts(10)),
 			2: makeMockLivenessEntry(20, ts(15)),
 			3: makeMockLivenessEntry(30, ts(20)),
@@ -41,13 +41,13 @@ func TestLeadSupportUntil(t *testing.T) {
 	)
 
 	testCases := []struct {
-		ids           []pb.PeerID
+		ids           []rt.PeerID
 		storeLiveness raftstoreliveness.StoreLiveness
 		setup         func(tracker *FortificationTracker)
 		expTS         hlc.Timestamp
 	}{
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				// No fortification recorded.
@@ -55,7 +55,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: hlc.Timestamp{},
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				supportTracker.RecordFortification(1, 10)
@@ -63,7 +63,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: hlc.Timestamp{},
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				supportTracker.RecordFortification(1, 10)
@@ -72,7 +72,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: ts(10),
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				supportTracker.RecordFortification(1, 10)
@@ -82,7 +82,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: ts(15),
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				// Record fortification at epochs at expired epochs.
@@ -93,7 +93,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: hlc.Timestamp{},
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				// Record fortification at newer epochs than what are present in
@@ -108,7 +108,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: hlc.Timestamp{},
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				// One of the epochs being supported is expired.
@@ -119,7 +119,7 @@ func TestLeadSupportUntil(t *testing.T) {
 			expTS: ts(10),
 		},
 		{
-			ids:           []pb.PeerID{1, 2, 3},
+			ids:           []rt.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
 			setup: func(supportTracker *FortificationTracker) {
 				// Two of the epochs being supported is expired.
@@ -154,22 +154,22 @@ func TestIsSupportedBy(t *testing.T) {
 	}
 
 	mockLivenessOnePeer := makeMockStoreLiveness(
-		map[pb.PeerID]mockLivenessEntry{
+		map[rt.PeerID]mockLivenessEntry{
 			1: makeMockLivenessEntry(10, ts(20)),
 		},
 	)
 
 	testCases := []struct {
-		ids           []pb.PeerID
+		ids           []rt.PeerID
 		storeLiveness raftstoreliveness.StoreLiveness
 		setup         func(tracker *FortificationTracker)
 		expSupported  bool
 		expFortified  bool
 	}{
 		{
-			ids: []pb.PeerID{1},
+			ids: []rt.PeerID{1},
 			// No support recorded at the store liveness fabric.
-			storeLiveness: makeMockStoreLiveness(map[pb.PeerID]mockLivenessEntry{}),
+			storeLiveness: makeMockStoreLiveness(map[rt.PeerID]mockLivenessEntry{}),
 			setup: func(supportTracker *FortificationTracker) {
 				// No support recorded.
 			},
@@ -177,7 +177,7 @@ func TestIsSupportedBy(t *testing.T) {
 			expFortified: false,
 		},
 		{
-			ids:           []pb.PeerID{1},
+			ids:           []rt.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
 			setup: func(supportTracker *FortificationTracker) {
 				// No support recorded.
@@ -186,7 +186,7 @@ func TestIsSupportedBy(t *testing.T) {
 			expFortified: false,
 		},
 		{
-			ids:           []pb.PeerID{2},
+			ids:           []rt.PeerID{2},
 			storeLiveness: mockLivenessOnePeer,
 			setup: func(supportTracker *FortificationTracker) {
 				// Support recorded for a different follower than the one in
@@ -197,7 +197,7 @@ func TestIsSupportedBy(t *testing.T) {
 			expFortified: false,
 		},
 		{
-			ids:           []pb.PeerID{1},
+			ids:           []rt.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
 			setup: func(supportTracker *FortificationTracker) {
 				// Support recorded for an expired epoch.
@@ -207,7 +207,7 @@ func TestIsSupportedBy(t *testing.T) {
 			expFortified: false,
 		},
 		{
-			ids:           []pb.PeerID{1},
+			ids:           []rt.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
 			setup: func(supportTracker *FortificationTracker) {
 				// Record support at newer epochs than what are present in
@@ -221,7 +221,7 @@ func TestIsSupportedBy(t *testing.T) {
 			expFortified: false,
 		},
 		{
-			ids:           []pb.PeerID{1},
+			ids:           []rt.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
 			setup: func(supportTracker *FortificationTracker) {
 				// Record support at the same epoch as the storeLiveness.
@@ -258,7 +258,7 @@ func TestQuorumActive(t *testing.T) {
 		}
 	}
 	mockLiveness := makeMockStoreLiveness(
-		map[pb.PeerID]mockLivenessEntry{
+		map[rt.PeerID]mockLivenessEntry{
 			1: makeMockLivenessEntry(10, ts(10)),
 			2: makeMockLivenessEntry(20, ts(15)),
 			3: makeMockLivenessEntry(30, ts(20)),
@@ -367,7 +367,7 @@ func TestQuorumActive(t *testing.T) {
 		mockLiveness.curTS = tc.curTS
 		cfg := quorum.MakeEmptyConfig()
 
-		for _, id := range []pb.PeerID{1, 2, 3} {
+		for _, id := range []rt.PeerID{1, 2, 3} {
 			cfg.Voters[0][id] = struct{}{}
 		}
 		fortificationTracker := MakeFortificationTracker(&cfg, mockLiveness)
@@ -379,11 +379,11 @@ func TestQuorumActive(t *testing.T) {
 }
 
 type mockLivenessEntry struct {
-	epoch pb.Epoch
+	epoch rt.Epoch
 	ts    hlc.Timestamp
 }
 
-func makeMockLivenessEntry(epoch pb.Epoch, ts hlc.Timestamp) mockLivenessEntry {
+func makeMockLivenessEntry(epoch rt.Epoch, ts hlc.Timestamp) mockLivenessEntry {
 	return mockLivenessEntry{
 		epoch: epoch,
 		ts:    ts,
@@ -391,23 +391,23 @@ func makeMockLivenessEntry(epoch pb.Epoch, ts hlc.Timestamp) mockLivenessEntry {
 }
 
 type mockStoreLiveness struct {
-	liveness map[pb.PeerID]mockLivenessEntry
+	liveness map[rt.PeerID]mockLivenessEntry
 	curTS    hlc.Timestamp
 }
 
-func makeMockStoreLiveness(liveness map[pb.PeerID]mockLivenessEntry) mockStoreLiveness {
+func makeMockStoreLiveness(liveness map[rt.PeerID]mockLivenessEntry) mockStoreLiveness {
 	return mockStoreLiveness{
 		liveness: liveness,
 	}
 }
 
 // SupportFor implements the raftstoreliveness.StoreLiveness interface.
-func (mockStoreLiveness) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+func (mockStoreLiveness) SupportFor(rt.PeerID) (rt.Epoch, bool) {
 	panic("unimplemented")
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
-func (m mockStoreLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+func (m mockStoreLiveness) SupportFrom(id rt.PeerID) (rt.Epoch, hlc.Timestamp) {
 	entry := m.liveness[id]
 	return entry.epoch, entry.ts
 }

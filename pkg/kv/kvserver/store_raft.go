@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -209,7 +209,7 @@ func (s *Store) HandleSnapshot(
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
-		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
+		s.metrics.RaftRcvdMessages[rafttype.MsgSnap].Inc(1)
 
 		err := s.receiveSnapshot(ctx, header, stream)
 		if err != nil && ctx.Err() != nil {
@@ -226,7 +226,7 @@ func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []kvserverpb.RaftHeartbeat,
 	fromReplica, toReplica roachpb.ReplicaDescriptor,
-	msgT raftpb.MessageType,
+	msgT rafttype.MessageType,
 	respStream RaftMessageResponseStream,
 ) {
 	if len(beats) == 0 {
@@ -239,10 +239,10 @@ func (s *Store) uncoalesceBeats(
 	batch := s.scheduler.NewEnqueueBatch()
 	defer batch.Close()
 	for i, beat := range beats {
-		msg := raftpb.Message{
+		msg := rafttype.Message{
 			Type:   msgT,
-			From:   raftpb.PeerID(beat.FromReplicaID),
-			To:     raftpb.PeerID(beat.ToReplicaID),
+			From:   rafttype.PeerID(beat.FromReplicaID),
+			To:     rafttype.PeerID(beat.ToReplicaID),
 			Term:   uint64(beat.Term),
 			Commit: uint64(beat.Commit),
 		}
@@ -289,8 +289,8 @@ func (s *Store) HandleRaftRequest(
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
-		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
-		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
+		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, rafttype.MsgHeartbeat, respStream)
+		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, rafttype.MsgHeartbeatResp, respStream)
 		return nil
 	}
 	enqueue := s.HandleRaftUncoalescedRequest(ctx, req, respStream)
@@ -381,12 +381,12 @@ func (s *Store) processRaftRequestWithReplica(
 		log.Infof(ctx, "incoming raft message:\n%s", raft.DescribeMessage(req.Message, raftEntryFormatter))
 	}
 
-	if req.Message.Type == raftpb.MsgSnap {
+	if req.Message.Type == rafttype.MsgSnap {
 		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
 
 	if req.Quiesce {
-		if req.Message.Type != raftpb.MsgHeartbeat {
+		if req.Message.Type != rafttype.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
 		if r.maybeQuiesceOnNotify(
@@ -426,13 +426,13 @@ func (s *Store) processRaftRequestWithReplica(
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *kvserverpb.SnapshotRequest_Header, inSnap IncomingSnapshot,
-) (*raftpb.Message, *kvpb.Error) {
-	var msgAppResp *raftpb.Message
+) (*rafttype.Message, *kvpb.Error) {
+	var msgAppResp *rafttype.Message
 	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
-		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
+		if snapHeader.RaftMessageRequest.Message.Type != rafttype.MsgSnap {
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
@@ -895,14 +895,14 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 func (s *Store) sendQueuedHeartbeatsToNode(
 	ctx context.Context, beats, resps []kvserverpb.RaftHeartbeat, to roachpb.StoreIdent,
 ) int {
-	var msgType raftpb.MessageType
+	var msgType rafttype.MessageType
 
 	if len(beats) == 0 && len(resps) == 0 {
 		return 0
 	} else if len(resps) == 0 {
-		msgType = raftpb.MsgHeartbeat
+		msgType = rafttype.MsgHeartbeat
 	} else if len(beats) == 0 {
-		msgType = raftpb.MsgHeartbeatResp
+		msgType = rafttype.MsgHeartbeatResp
 	} else {
 		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
 	}
@@ -919,7 +919,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 			NodeID:  s.Ident.NodeID,
 			StoreID: s.Ident.StoreID,
 		},
-		Message: raftpb.Message{
+		Message: rafttype.Message{
 			Type: msgType,
 		},
 		Heartbeats:     beats,

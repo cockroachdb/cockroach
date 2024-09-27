@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -65,9 +65,9 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 				panic("unexpected local msg target")
 			}
 			switch m.Type {
-			case raftpb.MsgStorageAppend:
+			case rafttype.MsgStorageAppend:
 				n.AppendWork = append(n.AppendWork, m)
-			case raftpb.MsgStorageApply:
+			case rafttype.MsgStorageApply:
 				n.ApplyWork = append(n.ApplyWork, m)
 			default:
 				panic(fmt.Sprintf("unexpected message type %s", m.Type))

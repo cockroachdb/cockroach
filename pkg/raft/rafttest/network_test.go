@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 func TestNetworkDrop(t *testing.T) {
@@ -31,7 +31,7 @@ func TestNetworkDrop(t *testing.T) {
 	nt := newRaftNetwork(1, 2)
 	nt.drop(1, 2, droprate)
 	for i := 0; i < sent; i++ {
-		nt.send(raftpb.Message{From: 1, To: 2})
+		nt.send(rafttype.Message{From: 1, To: 2})
 	}
 
 	c := nt.recvFrom(2)
@@ -63,7 +63,7 @@ func TestNetworkDelay(t *testing.T) {
 	var total time.Duration
 	for i := 0; i < sent; i++ {
 		s := time.Now()
-		nt.send(raftpb.Message{From: 1, To: 2})
+		nt.send(rafttype.Message{From: 1, To: 2})
 		total += time.Since(s)
 	}
 

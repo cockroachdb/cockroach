@@ -18,7 +18,7 @@
 package quorum
 
 import (
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -35,8 +35,8 @@ func (c JointConfig) String() string {
 
 // IDs returns a newly initialized map representing the set of voters present
 // in the joint configuration.
-func (c JointConfig) IDs() map[pb.PeerID]struct{} {
-	m := map[pb.PeerID]struct{}{}
+func (c JointConfig) IDs() map[rt.PeerID]struct{} {
+	m := map[rt.PeerID]struct{}{}
 	for _, cc := range c {
 		for id := range cc {
 			m[id] = struct{}{}
@@ -66,7 +66,7 @@ func (c JointConfig) CommittedIndex(l AckedIndexer) Index {
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
 // a result indicating whether the vote is pending, lost, or won. A joint quorum
 // requires both majority quorums to vote in favor.
-func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
+func (c JointConfig) VoteResult(votes map[rt.PeerID]bool) VoteResult {
 	r1 := c[0].VoteResult(votes)
 	r2 := c[1].VoteResult(votes)
 
@@ -85,7 +85,7 @@ func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 // LeadSupportExpiration takes a mapping of timestamps peers have promised a
 // leader support until and returns the timestamp until which the leader is
 // guaranteed support until.
-func (c JointConfig) LeadSupportExpiration(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+func (c JointConfig) LeadSupportExpiration(supported map[rt.PeerID]hlc.Timestamp) hlc.Timestamp {
 	qse := c[0].LeadSupportExpiration(supported)
 	qse.Backward(c[1].LeadSupportExpiration(supported))
 	return qse

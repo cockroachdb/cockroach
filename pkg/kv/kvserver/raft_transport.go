@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -966,7 +966,7 @@ func (t *RaftTransport) SendAsync(
 		// needs an explicit range ID.
 		panic("only messages with coalesced heartbeats or heartbeat responses may be sent to range ID 0")
 	}
-	if req.Message.Type == raftpb.MsgSnap {
+	if req.Message.Type == rafttype.MsgSnap {
 		panic("snapshots must be sent using SendSnapshot")
 	}
 

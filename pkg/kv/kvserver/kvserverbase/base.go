@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -165,7 +165,7 @@ type ApplyFilterArgs struct {
 	kvserverpb.ReplicatedEvalResult
 	CmdID       CmdIDKey
 	Cmd         kvserverpb.RaftCommand
-	Entry       raftpb.Entry
+	Entry       rafttype.Entry
 	RangeID     roachpb.RangeID
 	StoreID     roachpb.StoreID
 	ReplicaID   roachpb.ReplicaID

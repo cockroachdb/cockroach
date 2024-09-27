@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -420,10 +420,10 @@ func shouldReplicaQuiesce(
 	var foundSelf bool
 	var lagging laggingReplicaSet
 	for _, rep := range q.descRLocked().Replicas().Descriptors() {
-		if raftpb.PeerID(rep.ReplicaID) == status.ID {
+		if rafttype.PeerID(rep.ReplicaID) == status.ID {
 			foundSelf = true
 		}
-		if progress, ok := status.Progress[raftpb.PeerID(rep.ReplicaID)]; !ok {
+		if progress, ok := status.Progress[rafttype.PeerID(rep.ReplicaID)]; !ok {
 			if log.V(4) {
 				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
 					rep.ReplicaID, progress)
@@ -502,10 +502,10 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			quiesce = false
 			curLagging = nil
 		}
-		msg := raftpb.Message{
-			From:   raftpb.PeerID(r.replicaID),
+		msg := rafttype.Message{
+			From:   rafttype.PeerID(r.replicaID),
 			To:     id,
-			Type:   raftpb.MsgHeartbeat,
+			Type:   rafttype.MsgHeartbeat,
 			Term:   status.Term,
 			Commit: commit,
 		}
@@ -520,7 +520,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 func shouldFollowerQuiesceOnNotify(
 	ctx context.Context,
 	q quiescer,
-	msg raftpb.Message,
+	msg rafttype.Message,
 	lagging laggingReplicaSet,
 	livenessMap livenesspb.IsLiveMap,
 ) bool {
@@ -597,7 +597,7 @@ func shouldFollowerQuiesceOnNotify(
 }
 
 func (r *Replica) maybeQuiesceOnNotify(
-	ctx context.Context, msg raftpb.Message, lagging laggingReplicaSet,
+	ctx context.Context, msg rafttype.Message, lagging laggingReplicaSet,
 ) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

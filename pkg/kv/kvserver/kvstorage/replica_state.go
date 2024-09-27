@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,7 +32,7 @@ type LoadedReplicaState struct {
 	LastIndex kvpb.RaftIndex
 	ReplState kvserverpb.ReplicaState
 
-	hardState raftpb.HardState
+	hardState rafttype.HardState
 }
 
 // LoadReplicaState loads the state necessary to create a Replica with the

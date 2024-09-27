@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -165,7 +165,7 @@ type EntryForAdmission struct {
 // admitted.
 type EntryForAdmissionCallbackState struct {
 	Mark     rac2.LogMark
-	Priority raftpb.Priority
+	Priority rafttype.Priority
 }
 
 // ACWorkQueue abstracts the behavior needed from admission.WorkQueue.
@@ -445,7 +445,7 @@ type processorImpl struct {
 		// using RACv2.
 		isLeaderUsingV2Protocol bool
 		// lowPriOverrideState records which raft log entries have their priority
-		// overridden to be raftpb.LowPri.
+		// overridden to be rafttype.LowPri.
 		lowPriOverrideState lowPriOverrideState
 	}
 
@@ -935,7 +935,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%d "+
 						"sideloaded=%t raft-entry=%d/%d lead-v2=%v",
-					raftpb.Priority(meta.AdmissionPriority),
+					rafttype.Priority(meta.AdmissionPriority),
 					meta.AdmissionCreateTime,
 					meta.AdmissionOriginNode,
 					p.opts.NodeID,
@@ -968,15 +968,15 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 		}
 
 		mark := rac2.LogMark{Term: e.Term, Index: entry.Index}
-		var raftPri raftpb.Priority
+		var raftPri rafttype.Priority
 		if isV2Encoding {
-			raftPri = raftpb.Priority(meta.AdmissionPriority)
+			raftPri = rafttype.Priority(meta.AdmissionPriority)
 			if raftPri != priBits {
 				panic(errors.AssertionFailedf("inconsistent priorities %s, %s", raftPri, priBits))
 			}
 			raftPri = p.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
 		} else {
-			raftPri = raftpb.LowPri
+			raftPri = rafttype.LowPri
 			if admissionpb.WorkClassFromPri(admissionpb.WorkPriority(meta.AdmissionPriority)) ==
 				admissionpb.RegularWorkClass && p.v1EncodingPriorityMismatch.ShouldLog() {
 				log.Errorf(ctx,
@@ -1020,7 +1020,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 	from roachpb.ReplicaID, state kvflowcontrolpb.AdmittedState,
 ) {
-	var admitted [raftpb.NumPriorities]uint64
+	var admitted [rafttype.NumPriorities]uint64
 	copy(admitted[:], state.Admitted)
 
 	p.leader.pendingAdmittedMu.Lock()

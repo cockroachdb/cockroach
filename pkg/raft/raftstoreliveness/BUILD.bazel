@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/raft/raftpb",
+        "//pkg/raft/rafttype",
         "//pkg/util/hlc",
     ],
 )

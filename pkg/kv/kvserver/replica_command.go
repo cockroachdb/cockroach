@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -3209,7 +3209,7 @@ func (r *Replica) followerSendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	req *kvserverpb.DelegateSendSnapshotRequest,
-) (*raftpb.Message, error) {
+) (*rafttype.Message, error) {
 	ctx = r.AnnotateCtx(ctx)
 	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
 	if sendThreshold > 0 {
@@ -3311,10 +3311,10 @@ func (r *Replica) followerSendSnapshot(
 			RangeID:     req.RangeID,
 			FromReplica: req.CoordinatorReplica,
 			ToReplica:   req.RecipientReplica,
-			Message: raftpb.Message{
-				Type:     raftpb.MsgSnap,
-				From:     raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
-				To:       raftpb.PeerID(req.RecipientReplica.ReplicaID),
+			Message: rafttype.Message{
+				Type:     rafttype.MsgSnap,
+				From:     rafttype.PeerID(req.CoordinatorReplica.ReplicaID),
+				To:       rafttype.PeerID(req.RecipientReplica.ReplicaID),
 				Term:     uint64(req.Term),
 				Snapshot: &snap.RaftSnap,
 			},
@@ -3365,7 +3365,7 @@ func (r *Replica) followerSendSnapshot(
 		}
 	}
 
-	var msgAppResp *raftpb.Message
+	var msgAppResp *rafttype.Message
 	if err := timeutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			resp, err := r.store.cfg.Transport.SendSnapshot(

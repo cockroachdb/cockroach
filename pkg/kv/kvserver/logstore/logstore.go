@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -62,20 +62,20 @@ var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 	envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RAFT_LOG_NON_BLOCKING_SYNCHRONIZATION", true),
 )
 
-// MsgStorageAppend is a raftpb.Message with type MsgStorageAppend.
-type MsgStorageAppend raftpb.Message
+// MsgStorageAppend is a rafttype.Message with type MsgStorageAppend.
+type MsgStorageAppend rafttype.Message
 
-// MakeMsgStorageAppend constructs a MsgStorageAppend from a raftpb.Message.
-func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
-	if m.Type != raftpb.MsgStorageAppend {
+// MakeMsgStorageAppend constructs a MsgStorageAppend from a rafttype.Message.
+func MakeMsgStorageAppend(m rafttype.Message) MsgStorageAppend {
+	if m.Type != rafttype.MsgStorageAppend {
 		panic(fmt.Sprintf("unexpected message type %s", m.Type))
 	}
 	return MsgStorageAppend(m)
 }
 
 // HardState returns the hard state assembled from the message.
-func (m *MsgStorageAppend) HardState() raftpb.HardState {
-	return raftpb.HardState{
+func (m *MsgStorageAppend) HardState() rafttype.HardState {
+	return rafttype.HardState{
 		Term:      m.Term,
 		Vote:      m.Vote,
 		Commit:    m.Commit,
@@ -94,10 +94,10 @@ func (m *MsgStorageAppend) OnDone() MsgStorageAppendDone { return m.Responses }
 
 // MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
 // done, such as sending messages back to raft node and its peers.
-type MsgStorageAppendDone []raftpb.Message
+type MsgStorageAppendDone []rafttype.Message
 
 // Responses returns the messages to send after the write/sync is completed.
-func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
+func (m MsgStorageAppendDone) Responses() []rafttype.Message { return m }
 
 // Mark returns the LogMark of the raft log in storage after the write/sync is
 // completed. Returns zero value if the write does not update the log mark.
@@ -111,12 +111,12 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 	// API to be more digestible outside the package.
 	if buildutil.CrdbTestBuild {
 		for _, msg := range m[:len(m)-1] {
-			if msg.Type == raftpb.MsgStorageAppendResp {
+			if msg.Type == rafttype.MsgStorageAppendResp {
 				panic("unexpected MsgStorageAppendResp not in last position")
 			}
 		}
 	}
-	if msg := m[len(m)-1]; msg.Type != raftpb.MsgStorageAppendResp {
+	if msg := m[len(m)-1]; msg.Type != rafttype.MsgStorageAppendResp {
 		return raft.LogMark{}
 	} else if msg.Index != 0 {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
@@ -438,7 +438,7 @@ func logAppend(
 	raftLogPrefix roachpb.Key,
 	rw storage.ReadWriter,
 	prev RaftState,
-	entries []raftpb.Entry,
+	entries []rafttype.Entry,
 ) (RaftState, error) {
 	if len(entries) == 0 {
 		return prev, nil
@@ -515,7 +515,7 @@ func LoadTerm(
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
-	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent rafttype.Entry) error {
 		if found {
 			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
@@ -540,7 +540,7 @@ func LoadTerm(
 			return 0, err
 		}
 		if !typ.IsSideloaded() {
-			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+			eCache.Add(rangeID, []rafttype.Entry{entry}, false /* truncate */)
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
@@ -584,7 +584,7 @@ func LoadEntries(
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
-) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
+) (_ []rafttype.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
@@ -593,7 +593,7 @@ func LoadEntries(
 	if n > 100 {
 		n = 100
 	}
-	ents := make([]raftpb.Entry, 0, n)
+	ents := make([]rafttype.Entry, 0, n)
 	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
 	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
@@ -621,7 +621,7 @@ func LoadEntries(
 	// stopping once we have enough.
 	expectedIndex := hitIndex
 
-	scanFunc := func(ent raftpb.Entry) error {
+	scanFunc := func(ent rafttype.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if kvpb.RaftIndex(ent.Index) != expectedIndex {
 			return iterutil.StopIteration()

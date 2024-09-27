@@ -22,13 +22,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // a network interface
 type iface interface {
-	send(m raftpb.Message)
-	recv() chan raftpb.Message
+	send(m rafttype.Message)
+	recv() chan rafttype.Message
 	disconnect()
 	connect()
 }
@@ -36,14 +36,14 @@ type iface interface {
 type raftNetwork struct {
 	rand         *rand.Rand
 	mu           sync.Mutex
-	disconnected map[raftpb.PeerID]bool
+	disconnected map[rafttype.PeerID]bool
 	dropmap      map[conn]float64
 	delaymap     map[conn]delay
-	recvQueues   map[raftpb.PeerID]chan raftpb.Message
+	recvQueues   map[rafttype.PeerID]chan rafttype.Message
 }
 
 type conn struct {
-	from, to raftpb.PeerID
+	from, to rafttype.PeerID
 }
 
 type delay struct {
@@ -51,26 +51,26 @@ type delay struct {
 	rate float64
 }
 
-func newRaftNetwork(nodes ...raftpb.PeerID) *raftNetwork {
+func newRaftNetwork(nodes ...rafttype.PeerID) *raftNetwork {
 	pn := &raftNetwork{
 		rand:         rand.New(rand.NewSource(1)),
-		recvQueues:   make(map[raftpb.PeerID]chan raftpb.Message),
+		recvQueues:   make(map[rafttype.PeerID]chan rafttype.Message),
 		dropmap:      make(map[conn]float64),
 		delaymap:     make(map[conn]delay),
-		disconnected: make(map[raftpb.PeerID]bool),
+		disconnected: make(map[rafttype.PeerID]bool),
 	}
 
 	for _, n := range nodes {
-		pn.recvQueues[n] = make(chan raftpb.Message, 1024)
+		pn.recvQueues[n] = make(chan rafttype.Message, 1024)
 	}
 	return pn
 }
 
-func (rn *raftNetwork) nodeNetwork(id raftpb.PeerID) iface {
+func (rn *raftNetwork) nodeNetwork(id rafttype.PeerID) iface {
 	return &nodeNetwork{id: id, raftNetwork: rn}
 }
 
-func (rn *raftNetwork) send(m raftpb.Message) {
+func (rn *raftNetwork) send(m rafttype.Message) {
 	rn.mu.Lock()
 	to := rn.recvQueues[m.To]
 	if rn.disconnected[m.To] {
@@ -98,7 +98,7 @@ func (rn *raftNetwork) send(m raftpb.Message) {
 		panic(err)
 	}
 
-	var cm raftpb.Message
+	var cm rafttype.Message
 	err = cm.Unmarshal(b)
 	if err != nil {
 		panic(err)
@@ -111,7 +111,7 @@ func (rn *raftNetwork) send(m raftpb.Message) {
 	}
 }
 
-func (rn *raftNetwork) recvFrom(from raftpb.PeerID) chan raftpb.Message {
+func (rn *raftNetwork) recvFrom(from rafttype.PeerID) chan rafttype.Message {
 	rn.mu.Lock()
 	fromc := rn.recvQueues[from]
 	if rn.disconnected[from] {
@@ -122,32 +122,32 @@ func (rn *raftNetwork) recvFrom(from raftpb.PeerID) chan raftpb.Message {
 	return fromc
 }
 
-func (rn *raftNetwork) drop(from, to raftpb.PeerID, rate float64) {
+func (rn *raftNetwork) drop(from, to rafttype.PeerID, rate float64) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.dropmap[conn{from, to}] = rate
 }
 
-func (rn *raftNetwork) delay(from, to raftpb.PeerID, d time.Duration, rate float64) {
+func (rn *raftNetwork) delay(from, to rafttype.PeerID, d time.Duration, rate float64) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.delaymap[conn{from, to}] = delay{d, rate}
 }
 
-func (rn *raftNetwork) disconnect(id raftpb.PeerID) {
+func (rn *raftNetwork) disconnect(id rafttype.PeerID) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.disconnected[id] = true
 }
 
-func (rn *raftNetwork) connect(id raftpb.PeerID) {
+func (rn *raftNetwork) connect(id rafttype.PeerID) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.disconnected[id] = false
 }
 
 type nodeNetwork struct {
-	id raftpb.PeerID
+	id rafttype.PeerID
 	*raftNetwork
 }
 
@@ -159,10 +159,10 @@ func (nt *nodeNetwork) disconnect() {
 	nt.raftNetwork.disconnect(nt.id)
 }
 
-func (nt *nodeNetwork) send(m raftpb.Message) {
+func (nt *nodeNetwork) send(m rafttype.Message) {
 	nt.raftNetwork.send(m)
 }
 
-func (nt *nodeNetwork) recv() chan raftpb.Message {
+func (nt *nodeNetwork) recv() chan rafttype.Message {
 	return nt.recvFrom(nt.id)
 }
