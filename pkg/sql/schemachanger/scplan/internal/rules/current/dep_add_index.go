@@ -209,7 +209,7 @@ func init() {
 
 	registerDepRule(
 		"primary index with new columns should exist before secondary indexes",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		"primary-index", "secondary-index",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{

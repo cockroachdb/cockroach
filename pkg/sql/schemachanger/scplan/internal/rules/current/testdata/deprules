@@ -3820,7 +3820,7 @@ deprules
     - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
 - name: primary index with new columns should exist before secondary indexes
   from: primary-index-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: secondary-index-Node
   query:
     - $primary-index[Type] = '*scpb.PrimaryIndex'
@@ -3943,7 +3943,7 @@ deprules
     - joinTargetNode($index, $index-Target, $index-Node)
 - name: replacement secondary index should be validated before the old one becomes invisible
   from: new-index-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: old-index-Node
   query:
     - $old-index[Type] = '*scpb.SecondaryIndex'
@@ -8196,7 +8196,7 @@ deprules
     - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
 - name: primary index with new columns should exist before secondary indexes
   from: primary-index-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: secondary-index-Node
   query:
     - $primary-index[Type] = '*scpb.PrimaryIndex'
@@ -8319,7 +8319,7 @@ deprules
     - joinTargetNode($index, $index-Target, $index-Node)
 - name: replacement secondary index should be validated before the old one becomes invisible
   from: new-index-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: old-index-Node
   query:
     - $old-index[Type] = '*scpb.SecondaryIndex'

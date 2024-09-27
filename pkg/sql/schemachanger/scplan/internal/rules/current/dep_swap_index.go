@@ -135,7 +135,7 @@ func init() {
 	// new enough version.
 	registerDepRule(
 		"replacement secondary index should be validated before the old one becomes invisible",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		"new-index", "old-index",
 		func(from, to NodeVars) rel.Clauses {
 			// Detect a potential secondary index recreation because of a ALTER

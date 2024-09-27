@@ -3191,7 +3191,7 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   rule: swapped primary index public before column
 - from: [PrimaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, BACKFILL_ONLY]
-  kind: Precedence
+  kind: SameStagePrecedence
   rule: primary index with new columns should exist before secondary indexes
 - from: [PrimaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 4}, DELETE_ONLY]
