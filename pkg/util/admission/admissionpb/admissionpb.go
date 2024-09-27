@@ -189,6 +189,38 @@ const (
 	NumWorkClasses
 )
 
+// StoreWorkType represents the type of work,
+type StoreWorkType int8
+
+// TODO(aaditya): update comments here.
+const (
+	// RegularStoreWorkType is for work corresponding to workloads that are
+	// throughput and latency sensitive.
+	RegularStoreWorkType StoreWorkType = iota
+	// SnapshotIngestStoreWorkType is for snapshot work type.
+	SnapshotIngestStoreWorkType = 1
+	// ElasticStoreWorkType is for work corresponding to workloads that can handle
+	// reduced throughput, possibly by taking longer to finish a workload. It is
+	// not latency sensitive.
+	ElasticStoreWorkType = 2
+	// NumStoreWorkTypes is the number of store work types.
+	NumStoreWorkTypes = 3
+)
+
+// WorkClassFromStoreWorkType translates StoreWorkType to a WorkClass
+func WorkClassFromStoreWorkType(workType StoreWorkType) WorkClass {
+	var class WorkClass
+	switch workType {
+	case RegularStoreWorkType:
+		class = RegularWorkClass
+	case ElasticStoreWorkType:
+		class = ElasticWorkClass
+	case SnapshotIngestStoreWorkType:
+		class = ElasticWorkClass
+	}
+	return class
+}
+
 // WorkClassFromPri translates a WorkPriority to its given WorkClass.
 func WorkClassFromPri(pri WorkPriority) WorkClass {
 	class := RegularWorkClass
