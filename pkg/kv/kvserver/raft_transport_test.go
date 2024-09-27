@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -93,7 +93,7 @@ func (s channelServer) HandleRaftResponse(
 
 func (s channelServer) HandleSnapshot(
 	_ context.Context,
-	header *kvserverpb.SnapshotRequest_Header,
+	header *kvserverrt.SnapshotRequest_Header,
 	stream kvserver.SnapshotResponseStream,
 ) error {
 	panic("unexpected HandleSnapshot")
@@ -238,10 +238,10 @@ func (rttc *raftTransportTestContext) ListenStore(
 
 // Send a message. Returns false if the message was dropped.
 func (rttc *raftTransportTestContext) Send(
-	from, to roachpb.ReplicaDescriptor, rangeID roachpb.RangeID, msg raftpb.Message,
+	from, to roachpb.ReplicaDescriptor, rangeID roachpb.RangeID, msg rafttype.Message,
 ) bool {
-	msg.To = raftpb.PeerID(to.ReplicaID)
-	msg.From = raftpb.PeerID(from.ReplicaID)
+	msg.To = rafttype.PeerID(to.ReplicaID)
+	msg.From = rafttype.PeerID(from.ReplicaID)
 	req := &kvserverpb.RaftMessageRequest{
 		RangeID:     rangeID,
 		Message:     msg,
@@ -282,8 +282,8 @@ func TestSendAndReceive(t *testing.T) {
 		5: 1,
 	}
 
-	messageTypes := map[raftpb.MessageType]struct{}{
-		raftpb.MsgHeartbeat: {},
+	messageTypes := map[rafttype.MessageType]struct{}{
+		rafttype.MsgHeartbeat: {},
 	}
 
 	for nodeIndex := 0; nodeIndex < numNodes; nodeIndex++ {
@@ -301,21 +301,21 @@ func TestSendAndReceive(t *testing.T) {
 		}
 	}
 
-	messageTypeCounts := make(map[roachpb.StoreID]map[raftpb.MessageType]int)
+	messageTypeCounts := make(map[roachpb.StoreID]map[rafttype.MessageType]int)
 
 	// Each store sends one snapshot and one heartbeat to each store, including
 	// itself.
 	for toStoreID, toNodeID := range storeNodes {
 		if _, ok := messageTypeCounts[toStoreID]; !ok {
-			messageTypeCounts[toStoreID] = make(map[raftpb.MessageType]int)
+			messageTypeCounts[toStoreID] = make(map[rafttype.MessageType]int)
 		}
 
 		for fromStoreID, fromNodeID := range storeNodes {
 			baseReq := kvserverpb.RaftMessageRequest{
 				RangeID: 1,
-				Message: raftpb.Message{
-					From: raftpb.PeerID(fromStoreID),
-					To:   raftpb.PeerID(toStoreID),
+				Message: rafttype.Message{
+					From: rafttype.PeerID(fromStoreID),
+					To:   rafttype.PeerID(toStoreID),
 				},
 				FromReplica: roachpb.ReplicaDescriptor{
 					NodeID:  fromNodeID,
@@ -346,7 +346,7 @@ func TestSendAndReceive(t *testing.T) {
 	for toStoreID := range storeNodes {
 		for len(messageTypeCounts[toStoreID]) > 0 {
 			req := <-channels[toStoreID].ch
-			if req.Message.To != raftpb.PeerID(toStoreID) {
+			if req.Message.To != rafttype.PeerID(toStoreID) {
 				t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 			}
 
@@ -383,10 +383,10 @@ func TestSendAndReceive(t *testing.T) {
 	toStoreID := roachpb.StoreID(5)
 	expReq := &kvserverpb.RaftMessageRequest{
 		RangeID: 1,
-		Message: raftpb.Message{
-			Type: raftpb.MsgApp,
-			From: raftpb.PeerID(replicaIDs[fromStoreID]),
-			To:   raftpb.PeerID(replicaIDs[toStoreID]),
+		Message: rafttype.Message{
+			Type: rafttype.MsgApp,
+			From: rafttype.PeerID(replicaIDs[fromStoreID]),
+			To:   rafttype.PeerID(replicaIDs[toStoreID]),
 		},
 		FromReplica: roachpb.ReplicaDescriptor{
 			NodeID:    storeNodes[fromStoreID],
@@ -442,7 +442,7 @@ func TestInOrderDelivery(t *testing.T) {
 	rttc.AddNode(clientReplica.NodeID)
 
 	for i := 0; i < numMessages; i++ {
-		if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: uint64(i)}) {
+		if !rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: uint64(i)}) {
 			t.Errorf("failed to send message %d", i)
 		}
 	}
@@ -491,7 +491,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	// Sending repeated messages should begin dropping once the circuit breaker
 	// does trip.
 	testutils.SucceedsSoon(t, func() error {
-		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+		if rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: 1}) {
 			return errors.Errorf("expected circuit breaker to trip")
 		}
 		return nil
@@ -504,7 +504,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	// first instance. It's possible an earlier message for commit=1
 	// snuck in.
 	testutils.SucceedsSoon(t, func() error {
-		if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 2}) {
+		if !rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: 2}) {
 			return errors.New("messages still dropped")
 		}
 		select {
@@ -547,7 +547,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 
 	for i := 0; i < numMessages; i++ {
 		for _, rangeID := range []roachpb.RangeID{1, 13} {
-			if !rttc.Send(client, server, rangeID, raftpb.Message{Commit: uint64(i)}) {
+			if !rttc.Send(client, server, rangeID, rafttype.Message{Commit: uint64(i)}) {
 				t.Errorf("failed to send message %d to range %s", i, rangeID)
 			}
 		}
@@ -611,7 +611,7 @@ func TestReopenConnection(t *testing.T) {
 	// With the old server down, nothing is listening no the address right now
 	// so the circuit breaker should trip.
 	testutils.SucceedsSoon(t, func() error {
-		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+		if rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: 1}) {
 			return errors.New("expected circuit breaker to trip")
 		}
 		return nil
@@ -638,7 +638,7 @@ func TestReopenConnection(t *testing.T) {
 	// Try sending a message to the old server's store (at the address its
 	// replacement is now running at) before its replacement has been gossiped.
 	// We just want to ensure that doing so doesn't deadlock the client transport.
-	if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+	if rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: 1}) {
 		t.Fatal("unexpectedly managed to send to recently downed node")
 	}
 
@@ -653,11 +653,11 @@ func TestReopenConnection(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		// Sending messages to the old store does not deadlock. See the comment above
 		// to understand why we don't check the returned value.
-		rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1})
+		rttc.Send(clientReplica, serverReplica, 1, rafttype.Message{Commit: 1})
 		// It won't be long until we can send to the new replica. The only reason
 		// this might fail is that the failed connection is still in the RPC
 		// connection pool and we have to wait out a health check interval.
-		if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 1}) {
+		if !rttc.Send(clientReplica, replacementReplica, 1, rafttype.Message{Commit: 1}) {
 			return errors.New("unable to send to replacement replica")
 		}
 		return nil
@@ -665,7 +665,7 @@ func TestReopenConnection(t *testing.T) {
 
 	// Send commit=2 to the replacement replica. This should work now because we've
 	// just used it successfully above and didn't change anything about the networking.
-	if !rttc.Send(clientReplica, replacementReplica, 1, raftpb.Message{Commit: 2}) {
+	if !rttc.Send(clientReplica, replacementReplica, 1, rafttype.Message{Commit: 2}) {
 		t.Fatal("replacement node still unhealthy")
 
 	}
@@ -717,7 +717,7 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 			NodeID:    from,
 			ReplicaID: from,
 		},
-		Message: raftpb.Message{To: to, From: from},
+		Message: rafttype.Message{To: to, From: from},
 	}, rpc.DefaultClass)
 }
 
@@ -758,7 +758,7 @@ func TestRaftTransportClockPropagation(t *testing.T) {
 	}
 
 	// Send a message from the client to the server.
-	sent := rttc.Send(clientReplica, serverReplica, 1 /* rangeID */, raftpb.Message{Commit: 10})
+	sent := rttc.Send(clientReplica, serverReplica, 1 /* rangeID */, rafttype.Message{Commit: 10})
 	require.True(t, sent, "failed to send message")
 	req := <-serverChannel.ch
 	require.Equal(t, uint64(10), req.Message.Commit)

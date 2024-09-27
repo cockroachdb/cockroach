@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -124,7 +124,7 @@ type replicaRaftStorage Replica
 var _ raft.Storage = (*replicaRaftStorage)(nil)
 
 // InitialState implements the raft.Storage interface.
-func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *replicaRaftStorage) InitialState() (rafttype.HardState, rafttype.ConfState, error) {
 	// The call must synchronize with raft IO. Called when raft is initialized
 	// under both r.raftMu and r.mu. We don't technically need r.mu here, but we
 	// know it is held.
@@ -135,11 +135,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
 	if err != nil {
 		r.reportRaftStorageError(err)
-		return raftpb.HardState{}, raftpb.ConfState{}, err
+		return rafttype.HardState{}, rafttype.ConfState{}, err
 	}
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) {
-		return raftpb.HardState{}, raftpb.ConfState{}, nil
+		return rafttype.HardState{}, rafttype.ConfState{}, nil
 	}
 	// NB: r.mu.state is guarded by both r.raftMu and r.mu.
 	cs := r.mu.state.Desc.Replicas().ConfState()
@@ -156,7 +156,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 //
 // Requires that r.mu is held for writing.
 // TODO(pav-kv): make it possible to call with only raftMu held.
-func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]rafttype.Entry, error) {
 	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
 		r.reportRaftStorageError(err)
@@ -166,7 +166,7 @@ func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.E
 
 func (r *replicaRaftStorage) TypedEntries(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
-) ([]raftpb.Entry, error) {
+) ([]rafttype.Entry, error) {
 	// The call is always initiated by RawNode, under r.mu. Need it locked for
 	// writes, for r.mu.stateLoader.
 	//
@@ -203,7 +203,7 @@ func (r *replicaRaftStorage) TypedEntries(
 // raftEntriesLocked requires that r.mu is held for writing.
 func (r *Replica) raftEntriesLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
-) ([]raftpb.Entry, error) {
+) ([]rafttype.Entry, error) {
 	return (*replicaRaftStorage)(r).TypedEntries(lo, hi, maxBytes)
 }
 
@@ -342,10 +342,10 @@ func (r *Replica) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 // and when its turn comes we look at the raft state for followers that want a
 // snapshot, and then send one. That actual sending path does not call this
 // Snapshot method.
-func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
+func (r *replicaRaftStorage) Snapshot() (rafttype.Snapshot, error) {
 	r.mu.AssertHeld()
-	return raftpb.Snapshot{
-		Metadata: raftpb.SnapshotMetadata{
+	return rafttype.Snapshot{
+		Metadata: rafttype.SnapshotMetadata{
 			Index: uint64(r.mu.state.RaftAppliedIndex),
 			Term:  uint64(r.mu.state.RaftAppliedIndexTerm),
 		},
@@ -362,7 +362,7 @@ func (r *replicaRaftStorage) reportRaftStorageError(err error) {
 }
 
 // raftSnapshotLocked requires that r.mu is held for writing.
-func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
+func (r *Replica) raftSnapshotLocked() (rafttype.Snapshot, error) {
 	return (*replicaRaftStorage)(r).Snapshot()
 }
 
@@ -438,7 +438,7 @@ func (r *Replica) GetSnapshot(
 type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
-	RaftSnap raftpb.Snapshot
+	RaftSnap rafttype.Snapshot
 	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The replica state within the snapshot.
@@ -482,8 +482,8 @@ type IncomingSnapshot struct {
 	SSTSize                     int64
 	SharedSize                  int64
 	placeholder                 *ReplicaPlaceholder
-	raftAppliedIndex            kvpb.RaftIndex      // logging only
-	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	raftAppliedIndex            kvpb.RaftIndex        // logging only
+	msgAppRespCh                chan rafttype.Message // receives MsgAppResp if/when snap is applied
 	sharedSSTs                  []pebble.SharedSSTMeta
 	externalSSTs                []pebble.ExternalFile
 	doExcise                    bool
@@ -536,12 +536,12 @@ func snapshot(
 		EngineSnap: snap,
 		State:      state,
 		SnapUUID:   snapUUID,
-		RaftSnap: raftpb.Snapshot{
+		RaftSnap: rafttype.Snapshot{
 			Data: snapUUID.GetBytes(),
-			Metadata: raftpb.SnapshotMetadata{
+			Metadata: rafttype.SnapshotMetadata{
 				Index: uint64(state.RaftAppliedIndex),
 				Term:  uint64(state.RaftAppliedIndexTerm),
-				// Synthesize our raftpb.ConfState from desc.
+				// Synthesize our rafttype.ConfState from desc.
 				ConfState: desc.Replicas().ConfState(),
 			},
 		},
@@ -602,8 +602,8 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 func (r *Replica) applySnapshot(
 	ctx context.Context,
 	inSnap IncomingSnapshot,
-	nonemptySnap raftpb.Snapshot,
-	hs raftpb.HardState,
+	nonemptySnap rafttype.Snapshot,
+	hs rafttype.HardState,
 	subsumedRepls []*Replica,
 ) (err error) {
 	desc := inSnap.Desc
@@ -889,7 +889,7 @@ func (r *Replica) applySnapshot(
 	// However, raft.MultiNode currently expects this behavior, and the
 	// performance implications are not likely to be drastic. If our
 	// feelings about this ever change, we can add a LastIndex field to
-	// raftpb.SnapshotMetadata.
+	// rafttype.SnapshotMetadata.
 	r.mu.lastIndexNotDurable = state.RaftAppliedIndex
 
 	// TODO(sumeer): We should be able to set this to
@@ -968,8 +968,8 @@ func writeUnreplicatedSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
 	st *cluster.Settings,
-	meta raftpb.SnapshotMetadata,
-	hs raftpb.HardState,
+	meta rafttype.SnapshotMetadata,
+	hs rafttype.HardState,
 	sl *logstore.StateLoader,
 ) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
 	unreplicatedSSTFile := &storage.MemObject{}

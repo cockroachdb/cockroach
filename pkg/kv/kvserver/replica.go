@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -331,10 +331,10 @@ type Replica struct {
 		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
 		// Scratch for populating RaftEvent for flowControlV2.
-		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
+		msgAppScratchForFlowControl map[roachpb.ReplicaID][]rafttype.Message
 	}
 
-	// localMsgs contains a collection of raftpb.Message that target the local
+	// localMsgs contains a collection of rafttype.Message that target the local
 	// RawNode. They are to be delivered on the next iteration of handleRaftReady.
 	//
 	// Locking notes:
@@ -345,7 +345,7 @@ type Replica struct {
 	// TODO(pav-kv): replace these with log marks for the latest completed write.
 	localMsgs struct {
 		syncutil.Mutex
-		active, recycled []raftpb.Message
+		active, recycled []rafttype.Message
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are

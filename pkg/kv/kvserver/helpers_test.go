@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -325,7 +325,7 @@ func (r *Replica) RaftUnlock() {
 
 func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
 	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		raftGroup.ReportUnreachable(raftpb.PeerID(id))
+		raftGroup.ReportUnreachable(rafttype.PeerID(id))
 		return false /* unquiesceAndWakeLeader */, nil
 	})
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -78,7 +78,7 @@ func splitPreApply(
 		// promote replicas without ensuring that a snapshot has been received. So
 		// we write it back (and the RaftReplicaID too, since it's an invariant that
 		// it's always present).
-		var hs raftpb.HardState
+		var hs rafttype.HardState
 		if rightRepl != nil {
 			rightRepl.raftMu.Lock()
 			defer rightRepl.raftMu.Unlock()

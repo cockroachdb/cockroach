@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -55,7 +55,7 @@ type Changer struct {
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 func (c Changer) EnterJoint(
-	autoLeave bool, ccs ...pb.ConfChangeSingle,
+	autoLeave bool, ccs ...rt.ConfChangeSingle,
 ) (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
@@ -133,7 +133,7 @@ func (c Changer) LeaveJoint() (quorum.Config, tracker.ProgressMap, error) {
 // will return an error if that is not the case, if the resulting quorum is
 // zero, or if the configuration is in a joint state (i.e. if there is an
 // outgoing configuration).
-func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (quorum.Config, tracker.ProgressMap, error) {
+func (c Changer) Simple(ccs ...rt.ConfChangeSingle) (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
@@ -156,7 +156,7 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (quorum.Config, tracker.Prog
 // always made to the incoming majority config Voters[0]. Voters[1] is either
 // empty or preserves the outgoing majority configuration while in a joint state.
 func (c Changer) apply(
-	cfg *quorum.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle,
+	cfg *quorum.Config, trk tracker.ProgressMap, ccs ...rt.ConfChangeSingle,
 ) error {
 	for _, cc := range ccs {
 		if cc.NodeID == 0 {
@@ -166,13 +166,13 @@ func (c Changer) apply(
 			continue
 		}
 		switch cc.Type {
-		case pb.ConfChangeAddNode:
+		case rt.ConfChangeAddNode:
 			c.makeVoter(cfg, trk, cc.NodeID)
-		case pb.ConfChangeAddLearnerNode:
+		case rt.ConfChangeAddLearnerNode:
 			c.makeLearner(cfg, trk, cc.NodeID)
-		case pb.ConfChangeRemoveNode:
+		case rt.ConfChangeRemoveNode:
 			c.remove(cfg, trk, cc.NodeID)
-		case pb.ConfChangeUpdateNode:
+		case rt.ConfChangeUpdateNode:
 		default:
 			return fmt.Errorf("unexpected conf type %d", cc.Type)
 		}
@@ -185,7 +185,7 @@ func (c Changer) apply(
 
 // makeVoter adds or promotes the given ID to be a voter in the incoming
 // majority config.
-func (c Changer) makeVoter(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) makeVoter(cfg *quorum.Config, trk tracker.ProgressMap, id rt.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, false /* isLearner */)
@@ -211,7 +211,7 @@ func (c Changer) makeVoter(cfg *quorum.Config, trk tracker.ProgressMap, id pb.Pe
 // simultaneously. Instead, we add the learner to LearnersNext, so that it will
 // be added to Learners the moment the outgoing config is removed by
 // LeaveJoint().
-func (c Changer) makeLearner(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) makeLearner(cfg *quorum.Config, trk tracker.ProgressMap, id rt.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, true /* isLearner */)
@@ -238,7 +238,7 @@ func (c Changer) makeLearner(cfg *quorum.Config, trk tracker.ProgressMap, id pb.
 }
 
 // remove this peer as a voter or learner from the incoming config.
-func (c Changer) remove(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) remove(cfg *quorum.Config, trk tracker.ProgressMap, id rt.PeerID) {
 	if _, ok := trk[id]; !ok {
 		return
 	}
@@ -255,7 +255,7 @@ func (c Changer) remove(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerI
 
 // initProgress initializes a new progress for the given node or learner.
 func (c Changer) initProgress(
-	cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID, isLearner bool,
+	cfg *quorum.Config, trk tracker.ProgressMap, id rt.PeerID, isLearner bool,
 ) {
 	if !isLearner {
 		incoming(cfg.Voters)[id] = struct{}{}
@@ -293,7 +293,7 @@ func checkInvariants(cfg quorum.Config, trk tracker.ProgressMap) error {
 	// during tests). Instead of having to hand-code this, we allow
 	// transitioning from an empty config into any other legal and non-empty
 	// config.
-	for _, ids := range []map[pb.PeerID]struct{}{
+	for _, ids := range []map[rt.PeerID]struct{}{
 		cfg.Voters.IDs(),
 		cfg.Learners,
 		cfg.LearnersNext,
@@ -376,15 +376,15 @@ func (c Changer) err(err error) (quorum.Config, tracker.ProgressMap, error) {
 }
 
 // nilAwareAdd populates a map entry, creating the map if necessary.
-func nilAwareAdd(m *map[pb.PeerID]struct{}, id pb.PeerID) {
+func nilAwareAdd(m *map[rt.PeerID]struct{}, id rt.PeerID) {
 	if *m == nil {
-		*m = map[pb.PeerID]struct{}{}
+		*m = map[rt.PeerID]struct{}{}
 	}
 	(*m)[id] = struct{}{}
 }
 
 // nilAwareDelete deletes from a map, nil'ing the map itself if it is empty after.
-func nilAwareDelete(m *map[pb.PeerID]struct{}, id pb.PeerID) {
+func nilAwareDelete(m *map[rt.PeerID]struct{}, id rt.PeerID) {
 	if *m == nil {
 		return
 	}
@@ -396,7 +396,7 @@ func nilAwareDelete(m *map[pb.PeerID]struct{}, id pb.PeerID) {
 
 // symdiff returns the count of the symmetric difference between the sets of
 // PeerIDs, i.e. len( (l - r) \union (r - l)).
-func symdiff(l, r map[pb.PeerID]struct{}) int {
+func symdiff(l, r map[rt.PeerID]struct{}) int {
 	var n int
 	pairs := [][2]quorum.MajorityConfig{
 		{l, r}, // count elems in l but not in r
@@ -422,7 +422,7 @@ func outgoingPtr(voters *quorum.JointConfig) *quorum.MajorityConfig { return &vo
 
 // Describe prints the type and NodeID of the configuration changes as a
 // space-delimited string.
-func Describe(ccs ...pb.ConfChangeSingle) string {
+func Describe(ccs ...rt.ConfChangeSingle) string {
 	var buf strings.Builder
 	for _, cc := range ccs {
 		if buf.Len() > 0 {

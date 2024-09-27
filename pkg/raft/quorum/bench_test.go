@@ -23,16 +23,16 @@ import (
 	"math/rand"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 func BenchmarkMajorityConfig_CommittedIndex(b *testing.B) {
 	// go test -run - -bench . -benchmem ./raft/quorum
-	for _, n := range []pb.PeerID{1, 3, 5, 7, 9, 11} {
+	for _, n := range []rt.PeerID{1, 3, 5, 7, 9, 11} {
 		b.Run(fmt.Sprintf("voters=%d", n), func(b *testing.B) {
 			c := MajorityConfig{}
 			l := mapAckIndexer{}
-			for i := pb.PeerID(0); i < n; i++ {
+			for i := rt.PeerID(0); i < n; i++ {
 				c[i+1] = struct{}{}
 				l[i+1] = Index(rand.Int63n(math.MaxInt64))
 			}

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -190,7 +190,7 @@ func TestFlowControlRaftTransport(t *testing.T) {
 						require.NoError(t, err)
 
 						testutils.SucceedsSoon(t, func() error {
-							if !rttc.Send(from, to, rangeID, raftpb.Message{Commit: uint64(c)}) {
+							if !rttc.Send(from, to, rangeID, rafttype.Message{Commit: uint64(c)}) {
 								breaker, ok := rttc.transports[from.NodeID].GetCircuitBreaker(to.NodeID, rpc.DefaultClass)
 								require.True(t, ok)
 								breaker.Reset()
@@ -656,7 +656,7 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 						require.NoError(t, err)
 
 						testutils.SucceedsSoon(t, func() error {
-							if !rttc.Send(from, to, rangeID, raftpb.Message{Commit: uint64(c)}) {
+							if !rttc.Send(from, to, rangeID, rafttype.Message{Commit: uint64(c)}) {
 								breaker, ok := rttc.transports[from.NodeID].GetCircuitBreaker(to.NodeID, rpc.DefaultClass)
 								require.True(t, ok)
 								breaker.Reset()

@@ -20,7 +20,7 @@ package raft
 import (
 	"errors"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -40,8 +40,8 @@ type RawNode struct {
 
 	// Mutable fields.
 	prevSoftSt     *SoftState
-	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	prevHardSt     rt.HardState
+	stepsOnAdvance []rt.Message
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -70,24 +70,24 @@ func (rn *RawNode) Tick() {
 
 // Campaign causes this RawNode to transition to candidate state.
 func (rn *RawNode) Campaign() error {
-	return rn.raft.Step(pb.Message{
-		Type: pb.MsgHup,
+	return rn.raft.Step(rt.Message{
+		Type: rt.MsgHup,
 	})
 }
 
 // Propose proposes data be appended to the raft log.
 func (rn *RawNode) Propose(data []byte) error {
-	return rn.raft.Step(pb.Message{
-		Type: pb.MsgProp,
+	return rn.raft.Step(rt.Message{
+		Type: rt.MsgProp,
 		From: rn.raft.id,
-		Entries: []pb.Entry{
+		Entries: []rt.Entry{
 			{Data: data},
 		}})
 }
 
 // ProposeConfChange proposes a config change. See (Node).ProposeConfChange for
 // details.
-func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
+func (rn *RawNode) ProposeConfChange(cc rt.ConfChangeI) error {
 	m, err := confChangeToMsg(cc)
 	if err != nil {
 		return err
@@ -98,13 +98,13 @@ func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 // ApplyConfChange applies a config change to the local node. The app must call
 // this when it applies a configuration change, except when it decides to reject
 // the configuration change, in which case no call must take place.
-func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
+func (rn *RawNode) ApplyConfChange(cc rt.ConfChangeI) *rt.ConfState {
 	cs := rn.raft.applyConfChange(cc.AsV2())
 	return &cs
 }
 
 // Step advances the state machine using the given message.
-func (rn *RawNode) Step(m pb.Message) error {
+func (rn *RawNode) Step(m rt.Message) error {
 	// Ignore unexpected local messages receiving over network.
 	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
 		return ErrStepLocalMsg
@@ -195,7 +195,7 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 // MustSync returns true if the hard state and count of Raft entries indicate
 // that a synchronous write to persistent storage is required.
 // NOTE: MustSync isn't used under AsyncStorageWrites mode.
-func MustSync(st, prevst pb.HardState, entsnum int) bool {
+func MustSync(st, prevst rt.HardState, entsnum int) bool {
 	// Persistent state on all servers:
 	// (Updated on stable storage before responding to RPCs)
 	// currentTerm
@@ -228,9 +228,9 @@ func needStorageAppendRespMsg(rd Ready) bool {
 // state, and apply a snapshot. The message also carries a set of responses
 // that should be delivered after the rest of the message is processed. Used
 // with AsyncStorageWrites.
-func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type:    pb.MsgStorageAppend,
+func newStorageAppendMsg(r *raft, rd Ready) rt.Message {
+	m := rt.Message{
+		Type:    rt.MsgStorageAppend,
 		To:      LocalAppendThread,
 		From:    r.id,
 		Entries: rd.Entries,
@@ -283,9 +283,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 // after the unstable log entries, hard state, and snapshot in the current Ready
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
-func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type: pb.MsgStorageAppendResp,
+func newStorageAppendRespMsg(r *raft, rd Ready) rt.Message {
+	m := rt.Message{
+		Type: rt.MsgStorageAppendResp,
 		To:   r.id,
 		From: LocalAppendThread,
 	}
@@ -358,15 +358,15 @@ func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
 // message is processed. Used with AsyncStorageWrites.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
+func newStorageApplyMsg(r *raft, rd Ready) rt.Message {
 	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
+	return rt.Message{
+		Type:    rt.MsgStorageApply,
 		To:      LocalApplyThread,
 		From:    r.id,
 		Term:    0, // committed entries don't apply under a specific term
 		Entries: ents,
-		Responses: []pb.Message{
+		Responses: []rt.Message{
 			newStorageApplyRespMsg(r, ents),
 		},
 	}
@@ -375,9 +375,9 @@ func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
 // newStorageApplyRespMsg creates the message that should be returned to node
 // after the committed entries in the current Ready (along with those in all
 // prior Ready structs) have been applied to the local state machine.
-func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
-	return pb.Message{
-		Type:    pb.MsgStorageApplyResp,
+func newStorageApplyRespMsg(r *raft, ents []rt.Entry) rt.Message {
+	return rt.Message{
+		Type:    rt.MsgStorageApplyResp,
 		To:      r.id,
 		From:    LocalApplyThread,
 		Term:    0, // committed entries don't apply under a specific term
@@ -466,7 +466,7 @@ func (rn *RawNode) Advance(_ Ready) {
 	}
 	for i, m := range rn.stepsOnAdvance {
 		_ = rn.raft.Step(m)
-		rn.stepsOnAdvance[i] = pb.Message{}
+		rn.stepsOnAdvance[i] = rt.Message{}
 	}
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
@@ -478,7 +478,7 @@ func (rn *RawNode) Term() uint64 {
 }
 
 // Lead returns the leader of Term(), or None if the leader is unknown.
-func (rn *RawNode) Lead() pb.PeerID {
+func (rn *RawNode) Lead() rt.PeerID {
 	return rn.raft.lead
 }
 
@@ -503,7 +503,7 @@ func (rn *RawNode) NextUnstableIndex() uint64 {
 // and there was no recent MsgApp to this peer.
 //
 // Returns true if the ping was added to the message queue.
-func (rn *RawNode) SendPing(to pb.PeerID) bool {
+func (rn *RawNode) SendPing(to rt.PeerID) bool {
 	return rn.raft.sendPing(to)
 }
 
@@ -544,31 +544,31 @@ const (
 
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
-func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+func (rn *RawNode) WithProgress(visitor func(id rt.PeerID, typ ProgressType, pr tracker.Progress)) {
 	withProgress(rn.raft, visitor)
 }
 
 // ReportUnreachable reports the given node is not reachable for the last send.
-func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
+func (rn *RawNode) ReportUnreachable(id rt.PeerID) {
+	_ = rn.raft.Step(rt.Message{Type: rt.MsgUnreachable, From: id})
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
-func (rn *RawNode) ReportSnapshot(id pb.PeerID, status SnapshotStatus) {
+func (rn *RawNode) ReportSnapshot(id rt.PeerID, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
+	_ = rn.raft.Step(rt.Message{Type: rt.MsgSnapStatus, From: id, Reject: rej})
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
-func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
+func (rn *RawNode) TransferLeader(transferee rt.PeerID) {
+	_ = rn.raft.Step(rt.Message{Type: rt.MsgTransferLeader, From: transferee})
 }
 
 // ForgetLeader forgets a follower's current leader, changing it to None.
 // See (Node).ForgetLeader for details.
 func (rn *RawNode) ForgetLeader() error {
-	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
+	return rn.raft.Step(rt.Message{Type: rt.MsgForgetLeader})
 }
 
 func (rn *RawNode) TestingStepDown() error {

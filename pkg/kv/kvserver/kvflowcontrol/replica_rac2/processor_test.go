@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -145,7 +145,7 @@ func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
 
 func (rn *testRaftNode) MakeMsgAppRaftMuLocked(
 	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
+) (rafttype.Message, error) {
 	panic("unimplemented")
 }
 
@@ -435,10 +435,10 @@ func TestProcessorBasic(t *testing.T) {
 				d.ScanArgs(t, "term", &term)
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "pri", &pri)
-				require.Less(t, pri, int(raftpb.NumPriorities))
+				require.Less(t, pri, int(rafttype.NumPriorities))
 				as := kvflowcontrolpb.AdmittedState{
 					Term:     uint64(term),
-					Admitted: make([]uint64, raftpb.NumPriorities),
+					Admitted: make([]uint64, rafttype.NumPriorities),
 				}
 				as.Admitted[pri] = uint64(index)
 
@@ -479,7 +479,7 @@ func TestProcessorBasic(t *testing.T) {
 				d.ScanArgs(t, "index", &cb.Mark.Index)
 				var pri int
 				d.ScanArgs(t, "pri", &pri)
-				cb.Priority = raftpb.Priority(pri)
+				cb.Priority = rafttype.Priority(pri)
 				p.AdmittedLogEntry(ctx, cb)
 				printLogTracker()
 				return builderStr()
@@ -541,7 +541,7 @@ func parseAdmissionPriority(t *testing.T, td *datadriven.TestData) admissionpb.W
 		}
 	}
 	t.Fatalf("unknown priority %s", priStr)
-	return admissionpb.NormalPri
+	return admissionrt.NormalPri
 }
 
 func parseEnabledLevel(
@@ -622,12 +622,12 @@ type entryInfo struct {
 	encoding   raftlog.EntryEncoding
 	index      uint64
 	term       uint64
-	pri        raftpb.Priority
+	pri        rafttype.Priority
 	createTime int64
 	length     int
 }
 
-func createEntry(t *testing.T, info entryInfo) raftpb.Entry {
+func createEntry(t *testing.T, info entryInfo) rafttype.Entry {
 	cmdID := kvserverbase.CmdIDKey("11111111")
 	var metaBuf []byte
 	if info.encoding.UsesAdmissionControl() {
@@ -640,8 +640,8 @@ func createEntry(t *testing.T, info entryInfo) raftpb.Entry {
 			meta.AdmissionPriority = int32(info.pri)
 		} else {
 			meta.AdmissionOriginNode = 10
-			require.Equal(t, raftpb.LowPri, info.pri)
-			meta.AdmissionPriority = int32(raftpb.LowPri)
+			require.Equal(t, rafttype.LowPri, info.pri)
+			meta.AdmissionPriority = int32(rafttype.LowPri)
 		}
 		var err error
 		metaBuf, err = protoutil.Marshal(&meta)
@@ -667,16 +667,16 @@ func createEntry(t *testing.T, info entryInfo) raftpb.Entry {
 	require.NoError(t, err)
 	data := append(cmdBufPrefix, metaBuf...)
 	data = append(data, cmdBuf...)
-	return raftpb.Entry{
+	return rafttype.Entry{
 		Term:  info.term,
 		Index: info.index,
-		Type:  raftpb.EntryNormal,
+		Type:  rafttype.EntryNormal,
 		Data:  data,
 	}
 }
 
-func createEntries(t *testing.T, infos []entryInfo) []raftpb.Entry {
-	var entries []raftpb.Entry
+func createEntries(t *testing.T, infos []entryInfo) []rafttype.Entry {
+	var entries []rafttype.Entry
 	for _, info := range infos {
 		entries = append(entries, createEntry(t, info))
 	}
@@ -712,7 +712,7 @@ func parseEntryInfo(t *testing.T, arg string) entryInfo {
 		encoding:   encoding,
 		index:      uint64(index),
 		term:       uint64(term),
-		pri:        raftpb.Priority(pri),
+		pri:        rafttype.Priority(pri),
 		createTime: int64(createTime),
 		length:     length,
 	}

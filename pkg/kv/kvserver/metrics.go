@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -1308,7 +1308,7 @@ or the delegate being too busy to send.
 	}
 	metaRaftProposalsDropped = metric.Metadata{
 		Name:        "raft.dropped",
-		Help:        "Number of Raft proposals dropped (this counts individial raftpb.Entry, not raftpb.MsgProp)",
+		Help:        "Number of Raft proposals dropped (this counts individial rafttype.Entry, not rafttype.MsgProp)",
 		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1316,7 +1316,7 @@ or the delegate being too busy to send.
 		Name: "raft.dropped_leader",
 		Help: "Number of Raft proposals dropped by a Replica that believes itself to be the leader; " +
 			"each update also increments `raft.dropped` " +
-			"(this counts individial raftpb.Entry, not raftpb.MsgProp)",
+			"(this counts individial rafttype.Entry, not rafttype.MsgProp)",
 		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1506,7 +1506,7 @@ of processing.
 	}
 	metaRaftStorageReadBytes = metric.Metadata{
 		Name: "raft.storage.read_bytes",
-		Help: `Counter of raftpb.Entry.Size() read from pebble for raft log entries.
+		Help: `Counter of rafttype.Entry.Size() read from pebble for raft log entries.
 
 These are the bytes returned from the (raft.Storage).Entries method that were not
 returned via the raft entry cache. This metric plus the raft.entrycache.read_bytes
@@ -1520,7 +1520,7 @@ overhead that would not be incurred would the entries be served from the raft
 entry cache.
 
 The bytes returned here do not correspond 1:1 to bytes read from pebble. This
-metric measures the in-memory size of the raftpb.Entry, whereas we read its
+metric measures the in-memory size of the rafttype.Entry, whereas we read its
 encoded representation from pebble. As there is no compression involved, these
 will generally be comparable.
 
@@ -3542,20 +3542,20 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{
-			raftpb.MsgProp:              metric.NewCounter(metaRaftRcvdProp),
-			raftpb.MsgApp:               metric.NewCounter(metaRaftRcvdApp),
-			raftpb.MsgAppResp:           metric.NewCounter(metaRaftRcvdAppResp),
-			raftpb.MsgVote:              metric.NewCounter(metaRaftRcvdVote),
-			raftpb.MsgVoteResp:          metric.NewCounter(metaRaftRcvdVoteResp),
-			raftpb.MsgPreVote:           metric.NewCounter(metaRaftRcvdPreVote),
-			raftpb.MsgPreVoteResp:       metric.NewCounter(metaRaftRcvdPreVoteResp),
-			raftpb.MsgSnap:              metric.NewCounter(metaRaftRcvdSnap),
-			raftpb.MsgHeartbeat:         metric.NewCounter(metaRaftRcvdHeartbeat),
-			raftpb.MsgHeartbeatResp:     metric.NewCounter(metaRaftRcvdHeartbeatResp),
-			raftpb.MsgTransferLeader:    metric.NewCounter(metaRaftRcvdTransferLeader),
-			raftpb.MsgTimeoutNow:        metric.NewCounter(metaRaftRcvdTimeoutNow),
-			raftpb.MsgFortifyLeader:     metric.NewCounter(metaRaftRcvdFortifyLeader),
-			raftpb.MsgFortifyLeaderResp: metric.NewCounter(metaRaftRcvdFortifyLeaderResp),
+			rafttype.MsgProp:              metric.NewCounter(metaRaftRcvdProp),
+			rafttype.MsgApp:               metric.NewCounter(metaRaftRcvdApp),
+			rafttype.MsgAppResp:           metric.NewCounter(metaRaftRcvdAppResp),
+			rafttype.MsgVote:              metric.NewCounter(metaRaftRcvdVote),
+			rafttype.MsgVoteResp:          metric.NewCounter(metaRaftRcvdVoteResp),
+			rafttype.MsgPreVote:           metric.NewCounter(metaRaftRcvdPreVote),
+			rafttype.MsgPreVoteResp:       metric.NewCounter(metaRaftRcvdPreVoteResp),
+			rafttype.MsgSnap:              metric.NewCounter(metaRaftRcvdSnap),
+			rafttype.MsgHeartbeat:         metric.NewCounter(metaRaftRcvdHeartbeat),
+			rafttype.MsgHeartbeatResp:     metric.NewCounter(metaRaftRcvdHeartbeatResp),
+			rafttype.MsgTransferLeader:    metric.NewCounter(metaRaftRcvdTransferLeader),
+			rafttype.MsgTimeoutNow:        metric.NewCounter(metaRaftRcvdTimeoutNow),
+			rafttype.MsgFortifyLeader:     metric.NewCounter(metaRaftRcvdFortifyLeader),
+			rafttype.MsgFortifyLeaderResp: metric.NewCounter(metaRaftRcvdFortifyLeaderResp),
 		},
 		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
 		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),

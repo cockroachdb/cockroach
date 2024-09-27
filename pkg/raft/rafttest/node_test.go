@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -33,7 +33,7 @@ func TestBasicProgress(t *testing.T) {
 	nodes := make([]*node, 0)
 
 	for i := 1; i <= 5; i++ {
-		n := startNode(pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
+		n := startNode(rt.PeerID(i), peers, nt.nodeNetwork(rt.PeerID(i)))
 		nodes = append(nodes, n)
 	}
 
@@ -59,7 +59,7 @@ func TestRestart(t *testing.T) {
 	nodes := make([]*node, 0)
 
 	for i := 1; i <= 5; i++ {
-		n := startNode(pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
+		n := startNode(rt.PeerID(i), peers, nt.nodeNetwork(rt.PeerID(i)))
 		nodes = append(nodes, n)
 	}
 
@@ -99,7 +99,7 @@ func TestPause(t *testing.T) {
 	nodes := make([]*node, 0)
 
 	for i := 1; i <= 5; i++ {
-		n := startNode(pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
+		n := startNode(rt.PeerID(i), peers, nt.nodeNetwork(rt.PeerID(i)))
 		nodes = append(nodes, n)
 	}
 
@@ -132,7 +132,7 @@ func TestPause(t *testing.T) {
 }
 
 func waitLeader(ns []*node) int {
-	l := make(map[pb.PeerID]struct{})
+	l := make(map[rt.PeerID]struct{})
 	for {
 		clear(l)
 		lindex := -1

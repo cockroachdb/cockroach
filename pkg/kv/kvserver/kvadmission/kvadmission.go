@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -184,7 +184,7 @@ type Controller interface {
 	// written to storage.
 	AdmitRaftEntry(
 		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
-		leaderTerm uint64, _ raftpb.Entry)
+		leaderTerm uint64, _ rafttype.Entry)
 	replica_rac2.ACWorkQueue
 }
 
@@ -356,7 +356,7 @@ func (n *controllerImpl) AdmitKVWork(
 					// NOTE: The priority is identical for v1 and v2, a
 					// admissionpb.WorkPriority,  until we encode the command in
 					// replica_raft, where if the range is using racv2 encoding we will
-					// convert the priority to a raftpb.Priority.
+					// convert the priority to a rafttype.Priority.
 					AdmissionPriority:   int32(admissionInfo.Priority),
 					AdmissionCreateTime: admissionInfo.CreateTime,
 					AdmissionOriginNode: n.nodeID.Get(),
@@ -586,7 +586,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	leaderTerm uint64,
-	entry raftpb.Entry,
+	entry rafttype.Entry,
 ) {
 	typ, _, err := raftlog.EncodingOf(entry)
 	if err != nil {

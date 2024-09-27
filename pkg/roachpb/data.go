@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -1562,7 +1562,7 @@ func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
 }
 
 // ConfChange returns the configuration change described by the trigger.
-func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (raftpb.ConfChangeI, error) {
+func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (rafttype.ConfChangeI, error) {
 	return confChangeImpl(crt, encodedCtx)
 }
 
@@ -1583,10 +1583,10 @@ func confChangeImpl(
 		alwaysV2() bool
 	},
 	encodedCtx []byte,
-) (raftpb.ConfChangeI, error) {
+) (rafttype.ConfChangeI, error) {
 	added, removed, replicas := crt.Added(), crt.Removed(), crt.Replicas()
 
-	var sl []raftpb.ConfChangeSingle
+	var sl []rafttype.ConfChangeSingle
 
 	checkExists := func(in ReplicaDescriptor) error {
 		for _, rDesc := range replicas {
@@ -1609,9 +1609,9 @@ func confChangeImpl(
 	}
 
 	for _, rDesc := range removed {
-		sl = append(sl, raftpb.ConfChangeSingle{
-			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: raftpb.PeerID(rDesc.ReplicaID),
+		sl = append(sl, rafttype.ConfChangeSingle{
+			Type:   rafttype.ConfChangeRemoveNode,
+			NodeID: rafttype.PeerID(rDesc.ReplicaID),
 		})
 
 		switch rDesc.Type {
@@ -1622,9 +1622,9 @@ func confChangeImpl(
 				return nil, err
 			}
 			// It's being re-added as a learner, not only removed.
-			sl = append(sl, raftpb.ConfChangeSingle{
-				Type:   raftpb.ConfChangeAddLearnerNode,
-				NodeID: raftpb.PeerID(rDesc.ReplicaID),
+			sl = append(sl, rafttype.ConfChangeSingle{
+				Type:   rafttype.ConfChangeAddLearnerNode,
+				NodeID: rafttype.PeerID(rDesc.ReplicaID),
 			})
 		case LEARNER:
 			// A learner could in theory show up in the descriptor if the removal was
@@ -1655,31 +1655,31 @@ func confChangeImpl(
 			return nil, err
 		}
 
-		var changeType raftpb.ConfChangeType
+		var changeType rafttype.ConfChangeType
 		switch rDesc.Type {
 		case VOTER_FULL:
 			// We're adding a new voter.
-			changeType = raftpb.ConfChangeAddNode
+			changeType = rafttype.ConfChangeAddNode
 		case VOTER_INCOMING:
 			// We're adding a voter, but will transition into a joint config
 			// first.
-			changeType = raftpb.ConfChangeAddNode
+			changeType = rafttype.ConfChangeAddNode
 		case LEARNER, NON_VOTER:
 			// We're adding a learner or non-voter.
 			// Note that we're guaranteed by virtue of the upstream ChangeReplicas txn
 			// that this learner/non-voter is not currently a voter. Demotions (i.e.
 			// transitioning from voter to learner/non-voter) are not represented in
 			// `added`; they're handled in `removed` above.
-			changeType = raftpb.ConfChangeAddLearnerNode
+			changeType = rafttype.ConfChangeAddLearnerNode
 		default:
 			// A voter that is demoting was just removed and re-added in the
 			// `removals` handler. We should not see it again here.
 			// A voter that's outgoing similarly has no reason to show up here.
 			return nil, errors.Errorf("can't add replica in state %v", rDesc.Type)
 		}
-		sl = append(sl, raftpb.ConfChangeSingle{
+		sl = append(sl, rafttype.ConfChangeSingle{
 			Type:   changeType,
-			NodeID: raftpb.PeerID(rDesc.ReplicaID),
+			NodeID: rafttype.PeerID(rDesc.ReplicaID),
 		})
 	}
 
@@ -1704,33 +1704,33 @@ func confChangeImpl(
 		return nil, errors.Errorf("descriptor enters joint state, but trigger is requesting to leave one")
 	}
 
-	var cc raftpb.ConfChangeI
+	var cc rafttype.ConfChangeI
 
 	if enteringJoint || crt.alwaysV2() {
 		// V2 membership changes, which allow atomic replication changes. We
 		// track the joint state in the range descriptor and thus we need to be
 		// in charge of when to leave the joint state.
-		transition := raftpb.ConfChangeTransitionJointExplicit
+		transition := rafttype.ConfChangeTransitionJointExplicit
 		if !enteringJoint {
 			// If we're using V2 just to avoid V1 (and not because we actually
 			// have a change that requires V2), then use an auto transition
 			// which skips the joint state. This is necessary: our descriptor
 			// says we're not supposed to go through one.
-			transition = raftpb.ConfChangeTransitionAuto
+			transition = rafttype.ConfChangeTransitionAuto
 		}
-		cc = raftpb.ConfChangeV2{
+		cc = rafttype.ConfChangeV2{
 			Transition: transition,
 			Changes:    sl,
 			Context:    encodedCtx,
 		}
 	} else if wantLeaveJoint {
 		// Transitioning out of a joint config.
-		cc = raftpb.ConfChangeV2{
+		cc = rafttype.ConfChangeV2{
 			Context: encodedCtx,
 		}
 	} else {
 		// Legacy path with exactly one change.
-		cc = raftpb.ConfChange{
+		cc = rafttype.ConfChange{
 			Type:    sl[0].Type,
 			NodeID:  sl[0].NodeID,
 			Context: encodedCtx,
@@ -1787,20 +1787,20 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // confChangesToRedactableString produces a safe representation for
 // the configuration changes.
-func confChangesToRedactableString(ccs []raftpb.ConfChangeSingle) redact.RedactableString {
+func confChangesToRedactableString(ccs []rafttype.ConfChangeSingle) redact.RedactableString {
 	return redact.Sprintfn(func(w redact.SafePrinter) {
 		for i, cc := range ccs {
 			if i > 0 {
 				w.SafeRune(' ')
 			}
 			switch cc.Type {
-			case raftpb.ConfChangeAddNode:
+			case rafttype.ConfChangeAddNode:
 				w.SafeRune('v')
-			case raftpb.ConfChangeAddLearnerNode:
+			case rafttype.ConfChangeAddLearnerNode:
 				w.SafeRune('l')
-			case raftpb.ConfChangeRemoveNode:
+			case rafttype.ConfChangeRemoveNode:
 				w.SafeRune('r')
-			case raftpb.ConfChangeUpdateNode:
+			case rafttype.ConfChangeUpdateNode:
 				w.SafeRune('u')
 			default:
 				w.SafeString("unknown")

@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,10 +64,10 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 
 			encodingBuf := make([]byte, RaftCommandPrefixLen+raftAdmissionMeta.Size()+len(marshaledRaftCmd))
 			raftEnt := Entry{
-				Entry: raftpb.Entry{
+				Entry: rafttype.Entry{
 					Term:  1,
 					Index: 1,
-					Type:  raftpb.EntryNormal,
+					Type:  rafttype.EntryNormal,
 					Data:  encodingBuf,
 				},
 			}
@@ -121,7 +121,7 @@ func TestRaftAdmissionEncodingDecoding(t *testing.T) {
 		AdmissionOriginNode: 1,
 	}
 	ramV2 := kvflowcontrolpb.RaftAdmissionMeta{
-		AdmissionPriority:   int32(raftpb.HighPri),
+		AdmissionPriority:   int32(rafttype.HighPri),
 		AdmissionCreateTime: 18581258253,
 	}
 	raftCmd := mkRaftCommand(100, int(bytes), int(bytes+200))
@@ -227,9 +227,9 @@ func TestRaftAdmissionEncodingDecoding(t *testing.T) {
 			cmdBytes, err := protoutil.Marshal(raftCmdMaybeWithRaftAdmissionMeta)
 			require.NoError(t, err)
 
-			var pri raftpb.Priority
+			var pri rafttype.Priority
 			if tc.opts.RaftAdmissionMeta != nil && tc.opts.EncodePriority {
-				pri = raftpb.Priority(tc.opts.RaftAdmissionMeta.AdmissionPriority)
+				pri = rafttype.Priority(tc.opts.RaftAdmissionMeta.AdmissionPriority)
 			}
 			buf2 := EncodeCommandBytes(tc.encoding, cmdIDKey, cmdBytes, pri)
 
@@ -246,7 +246,7 @@ func TestRaftAdmissionEncodingDecoding(t *testing.T) {
 				require.Equal(t, *tc.opts.RaftAdmissionMeta, meta2)
 			}
 			for _, buf := range [][]byte{buf1, buf2} {
-				ent := raftpb.Entry{Term: 1, Index: 1, Data: buf}
+				ent := rafttype.Entry{Term: 1, Index: 1, Data: buf}
 				// Decode via NewEntry.
 				entry, err := NewEntry(ent)
 				require.NoError(t, err)
@@ -258,7 +258,7 @@ func TestRaftAdmissionEncodingDecoding(t *testing.T) {
 				if tc.opts.RaftAdmissionMeta != nil {
 					require.True(t, ee.UsesAdmissionControl())
 					if tc.opts.EncodePriority {
-						require.Equal(t, raftpb.Priority(tc.opts.RaftAdmissionMeta.AdmissionPriority), pri)
+						require.Equal(t, rafttype.Priority(tc.opts.RaftAdmissionMeta.AdmissionPriority), pri)
 					} else {
 						require.Zero(t, pri)
 					}

@@ -11,52 +11,52 @@
 package rac2
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
 // AdmissionToRaftPriority maps the larger set of values in
-// admissionpb.WorkPriority to the smaller set of raftpb.Priority.
-func AdmissionToRaftPriority(pri admissionpb.WorkPriority) raftpb.Priority {
+// admissionpb.WorkPriority to the smaller set of rafttype.Priority.
+func AdmissionToRaftPriority(pri admissionpb.WorkPriority) rafttype.Priority {
 	if pri < admissionpb.NormalPri {
-		return raftpb.LowPri
+		return rafttype.LowPri
 	} else if pri < admissionpb.LockingNormalPri {
-		return raftpb.NormalPri
+		return rafttype.NormalPri
 	} else if pri < admissionpb.UserHighPri {
-		return raftpb.AboveNormalPri
+		return rafttype.AboveNormalPri
 	} else if pri <= admissionpb.HighPri {
-		return raftpb.HighPri
+		return rafttype.HighPri
 	} else {
 		panic("unknown priority")
 	}
 }
 
-// RaftToAdmissionPriority maps a raftpb.Priority to the lowest
+// RaftToAdmissionPriority maps a rafttype.Priority to the lowest
 // admissionpb.WorkPriority that could map to it. This is needed before
 // calling into the admission package, since it is possible for a mix of RACv2
 // entries and other entries to be competing in the same admission WorkQueue.
-func RaftToAdmissionPriority(rp raftpb.Priority) admissionpb.WorkPriority {
-	if rp < raftpb.NormalPri {
+func RaftToAdmissionPriority(rp rafttype.Priority) admissionpb.WorkPriority {
+	if rp < rafttype.NormalPri {
 		return admissionpb.LowPri
-	} else if rp < raftpb.AboveNormalPri {
+	} else if rp < rafttype.AboveNormalPri {
 		return admissionpb.NormalPri
-	} else if rp < raftpb.HighPri {
+	} else if rp < rafttype.HighPri {
 		return admissionpb.UserHighPri
-	} else if rp < raftpb.NumPriorities {
+	} else if rp < rafttype.NumPriorities {
 		return admissionpb.HighPri
 	} else {
 		panic("unknown priority")
 	}
 }
 
-// WorkClassFromRaftPriority maps a raftpb.Priority to the kinds of flow
+// WorkClassFromRaftPriority maps a rafttype.Priority to the kinds of flow
 // tokens needed. The result here should be equivalent to
 // admissionpb.WorkClassFromPri(RaftToAdmissionPriority(pri)).
-func WorkClassFromRaftPriority(pri raftpb.Priority) admissionpb.WorkClass {
+func WorkClassFromRaftPriority(pri rafttype.Priority) admissionpb.WorkClass {
 	switch pri {
-	case raftpb.LowPri:
+	case rafttype.LowPri:
 		return admissionpb.ElasticWorkClass
-	case raftpb.NormalPri, raftpb.AboveNormalPri, raftpb.HighPri:
+	case rafttype.NormalPri, rafttype.AboveNormalPri, rafttype.HighPri:
 		return admissionpb.RegularWorkClass
 	default:
 		panic("")

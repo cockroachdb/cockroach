@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -664,7 +664,7 @@ func mergeCheckingTimestampCaches(
 		partitionedLeaderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from leaseholder, except forwarded proposals.
 			return req.FromReplica.StoreID == lhsStore.StoreID() &&
-				req.Message.Type != raftpb.MsgProp
+				req.Message.Type != rafttype.MsgProp
 		}
 		partitionedLeaderFuncs.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 			// Ignore heartbeats from leaseholder, results in campaign.
@@ -683,7 +683,7 @@ func mergeCheckingTimestampCaches(
 			//
 			// NB: the Index on the message is the log index that _precedes_ any of the
 			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-			return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < truncIndex
+			return req.Message.Type == rafttype.MsgApp && kvpb.RaftIndex(req.Message.Index) < truncIndex
 		}
 
 		// Because we enter a split leader-leaseholder state, none of the
@@ -3334,7 +3334,7 @@ func (h *slowSnapRaftHandler) unblock() {
 
 func (h *slowSnapRaftHandler) HandleSnapshot(
 	ctx context.Context,
-	header *kvserverpb.SnapshotRequest_Header,
+	header *kvserverrt.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	if header.RaftMessageRequest.RangeID == h.rangeID {
@@ -4162,7 +4162,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				//
 				// NB: the Index on the message is the log index that _precedes_ any of the
 				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+				return req.Message.Type == rafttype.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 			},
 			// Don't drop heartbeats or responses.
 			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
@@ -4929,7 +4929,7 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 			1: {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						ReceiveSnapshot: func(_ context.Context, header *kvserverpb.SnapshotRequest_Header) error {
+						ReceiveSnapshot: func(_ context.Context, header *kvserverrt.SnapshotRequest_Header) error {
 							val := delaySnapshotTrap.Load()
 							if val != nil {
 								fn := val.(func() error)

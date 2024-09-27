@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -31,7 +31,7 @@ type AdmittedVector struct {
 	// Term is the leader term to which the admitted log indices relate to.
 	Term uint64
 	// Admitted contains admitted indices in the Term's log.
-	Admitted [raftpb.NumPriorities]uint64
+	Admitted [rafttype.NumPriorities]uint64
 }
 
 // Merge merges two admitted vectors into one. A higher-term vector always wins.
@@ -63,7 +63,7 @@ func (av AdmittedVector) SafeFormat(w redact.SafePrinter, _ rune) {
 		if pri > 0 {
 			buf.Printf(",")
 		}
-		buf.Printf("%s:%d", raftpb.Priority(pri), index)
+		buf.Printf("%s:%d", rafttype.Priority(pri), index)
 	}
 	buf.Printf("]")
 	w.Printf("%v", buf)
@@ -114,7 +114,7 @@ type LogTracker struct {
 	//	- waiting[pri][i].Term <= last.Term
 	//	- waiting[pri][i].Index < waiting[pri][i+1].Index
 	//	- waiting[pri][i].Term <= waiting[pri][i+1].Term
-	waiting [raftpb.NumPriorities][]LogMark
+	waiting [rafttype.NumPriorities][]LogMark
 }
 
 // NewLogTracker returns a LogTracker initialized to the given log mark. The
@@ -223,7 +223,7 @@ func (l *LogTracker) Append(ctx context.Context, after uint64, to LogMark) bool 
 // Typically, every batch of appended log entries should call Append once,
 // followed by a sequence of Register calls for individual entries that are
 // subject to admission control.
-func (l *LogTracker) Register(ctx context.Context, at LogMark, pri raftpb.Priority) {
+func (l *LogTracker) Register(ctx context.Context, at LogMark, pri rafttype.Priority) {
 	if at.Term != l.last.Term || at.Index <= l.stable {
 		// Does not happen. Entries must be registered before being sent to storage,
 		// so an entry can't become stable before the Register call.
@@ -288,7 +288,7 @@ func (l *LogTracker) LogSynced(ctx context.Context, stable LogMark) bool {
 // appear to happen after log syncs.
 //
 // Returns true if the admitted vector has advanced.
-func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Priority) bool {
+func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri rafttype.Priority) bool {
 	if at.After(l.last) {
 		// Does not happen. The write must have been registered with Append call.
 		l.errorf(ctx, "admitting mark %+v before appending it", at)
@@ -335,7 +335,7 @@ func (l *LogTracker) DebugString() string {
 		if len(marks) == 0 {
 			continue
 		}
-		fmt.Fprintf(&b, "\n%s:", raftpb.Priority(pri))
+		fmt.Fprintf(&b, "\n%s:", rafttype.Priority(pri))
 		for _, mark := range marks {
 			fmt.Fprintf(&b, " %+v", mark)
 		}

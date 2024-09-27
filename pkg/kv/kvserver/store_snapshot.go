@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -906,7 +907,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				SSTSize:                     sstSize,
 				SharedSize:                  sharedSize,
 				raftAppliedIndex:            header.State.RaftAppliedIndex,
-				msgAppRespCh:                make(chan raftpb.Message, 1),
+				msgAppRespCh:                make(chan rafttype.Message, 1),
 				sharedSSTs:                  sharedSSTs,
 				externalSSTs:                externalSSTs,
 				doExcise:                    doExcise,
@@ -1675,10 +1676,11 @@ func (s *Store) receiveSnapshot(
 		err = errors.Wrap(err, "failed to apply snapshot")
 		return sendSnapshotError(ctx, s, stream, err)
 	}
+	pbMessage := msgAppResp.Convert()
 	return stream.Send(&kvserverpb.SnapshotResponse{
 		Status:         kvserverpb.SnapshotResponse_APPLIED,
 		CollectedSpans: tracing.SpanFromContext(ctx).GetConfiguredRecording(),
-		MsgAppResp:     msgAppResp,
+		MsgAppResp:     &pbMessage,
 	})
 }
 
@@ -1962,7 +1964,7 @@ func SendEmptySnapshot(
 			To:       raftpb.PeerID(to.ReplicaID),
 			From:     raftpb.PeerID(from.ReplicaID),
 			Term:     outgoingSnap.RaftSnap.Metadata.Term,
-			Snapshot: &outgoingSnap.RaftSnap,
+			Snapshot: outgoingSnap.RaftSnap.Convert(),
 		},
 	}
 

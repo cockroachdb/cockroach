@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -30,19 +31,19 @@ import (
 
 // EncodingOf determines the EntryEncoding for a given Entry. When
 // EntryEncoding is one of the WithACAndPriority encodings, the
-// raftpb.Priority is populated.
-func EncodingOf(ent raftpb.Entry) (EntryEncoding, raftpb.Priority, error) {
+// rafttype.Priority is populated.
+func EncodingOf(ent rafttype.Entry) (EntryEncoding, rafttype.Priority, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
 		return EntryEncodingEmpty, 0, nil
 	}
 
 	switch ent.Type {
-	case raftpb.EntryConfChange:
+	case rafttype.EntryConfChange:
 		return EntryEncodingRaftConfChange, 0, nil
-	case raftpb.EntryConfChangeV2:
+	case rafttype.EntryConfChangeV2:
 		return EntryEncodingRaftConfChangeV2, 0, nil
-	case raftpb.EntryNormal:
+	case rafttype.EntryNormal:
 	default:
 		return 0, 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
@@ -67,22 +68,22 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, raftpb.Priority, error) {
 }
 
 // DecomposeRaftEncodingStandardOrSideloaded extracts the CmdIDKey and the
-// marshaled kvserverpb.RaftCommand from a raftpb.Entry slice known to have
+// marshaled kvserverpb.RaftCommand from a rafttype.Entry slice known to have
 // Entry with type EntryEncoding{Standard,Sideloaded}With{,out}AC.
 // All these variants, mod the prefix byte, share an encoding.
 func DecomposeRaftEncodingStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
-// Entry contains data related to a raft log entry. This is the raftpb.Entry
+// Entry contains data related to a raft log entry. This is the rafttype.Entry
 // itself but also all encapsulated data relevant for command application and
 // admission control.
 type Entry struct {
-	raftpb.Entry
+	rafttype.Entry
 	ID                kvserverbase.CmdIDKey // may be empty for zero Entry
 	Cmd               kvserverpb.RaftCommand
-	ConfChangeV1      *raftpb.ConfChange            // only set for config change
-	ConfChangeV2      *raftpb.ConfChangeV2          // only set for config change
+	ConfChangeV1      *rafttype.ConfChange          // only set for config change
+	ConfChangeV2      *rafttype.ConfChangeV2        // only set for config change
 	ConfChangeContext *kvserverpb.ConfChangeContext // only set for config change
 	// ApplyAdmissionControl determines whether this entry is subject to
 	// replication admission control. Only applies for entries with encoding
@@ -96,8 +97,8 @@ var entryPool = sync.Pool{
 	},
 }
 
-// NewEntry populates an Entry from the provided raftpb.Entry.
-func NewEntry(ent raftpb.Entry) (*Entry, error) {
+// NewEntry populates an Entry from the provided rafttype.Entry.
+func NewEntry(ent rafttype.Entry) (*Entry, error) {
 	e := entryPool.Get().(*Entry)
 	*e = Entry{Entry: ent}
 	if err := e.load(); err != nil {
@@ -116,8 +117,15 @@ func NewEntryFromRawValue(b []byte) (*Entry, error) {
 
 	e := entryPool.Get().(*Entry)
 
-	if err := storage.MakeValue(meta).GetProto(&e.Entry); err != nil {
+	pbEntry := raftpb.Entry{}
+	if err := storage.MakeValue(meta).GetProto(&pbEntry); err != nil {
 		return nil, errors.Wrap(err, "unmarshalling raft Entry")
+	}
+	e.Entry = rafttype.Entry{
+		Term:  pbEntry.Term,
+		Index: pbEntry.Index,
+		Type:  rafttype.EntryType(pbEntry.Type),
+		Data:  pbEntry.Data,
 	}
 
 	err := e.load()
@@ -131,16 +139,21 @@ func NewEntryFromRawValue(b []byte) (*Entry, error) {
 //
 // Same as NewEntryFromRawValue, but doesn't decode the command and doesn't use
 // the pool of entries.
-func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
+func raftEntryFromRawValue(b []byte) (rafttype.Entry, error) {
 	var meta enginepb.MVCCMetadata
 	if err := protoutil.Unmarshal(b, &meta); err != nil {
-		return raftpb.Entry{}, errors.Wrap(err, "decoding raft log MVCCMetadata")
+		return rafttype.Entry{}, errors.Wrap(err, "decoding raft log MVCCMetadata")
 	}
-	var entry raftpb.Entry
-	if err := storage.MakeValue(meta).GetProto(&entry); err != nil {
-		return raftpb.Entry{}, errors.Wrap(err, "unmarshalling raft Entry")
+	var pbEntry raftpb.Entry
+	if err := storage.MakeValue(meta).GetProto(&pbEntry); err != nil {
+		return rafttype.Entry{}, errors.Wrap(err, "unmarshalling raft Entry")
 	}
-	return entry, nil
+	return rafttype.Entry{
+		Term:  pbEntry.Term,
+		Index: pbEntry.Index,
+		Type:  rafttype.EntryType(pbEntry.Type),
+		Data:  pbEntry.Data,
+	}, nil
 }
 
 func (e *Entry) load() error {
@@ -153,12 +166,9 @@ func (e *Entry) load() error {
 	// kvserverpb.RaftCommand.
 	var raftCmdBytes []byte
 	// Set if this entry represents a raft configuration change, in which case
-	// ccTarget will be set to either a raftpb.ConfChange or raftpb.ConfChangeV2
+	// ccTarget will be set to either a rafttype.ConfChange or rafttype.ConfChangeV2
 	// and unmarshaled into, to further unwrap towards the kvserverpb.RaftCommand.
-	var ccTarget interface {
-		protoutil.Message
-		AsV2() raftpb.ConfChangeV2
-	}
+	var ccContext []byte
 	switch typ {
 	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC,
 		EntryEncodingStandardWithACAndPriority, EntryEncodingSideloadedWithACAndPriority:
@@ -167,26 +177,28 @@ func (e *Entry) load() error {
 	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
 		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 	case EntryEncodingEmpty:
-		// Nothing to load, the empty raftpb.Entry is represented by a trivial
+		// Nothing to load, the empty rafttype.Entry is represented by a trivial
 		// Entry.
 		return nil
 	case EntryEncodingRaftConfChange:
-		e.ConfChangeV1 = &raftpb.ConfChange{}
-		ccTarget = e.ConfChangeV1
+		e.ConfChangeV1 = &rafttype.ConfChange{}
+		if err := e.ConfChangeV1.Unmarshal(e.Entry.Data); err != nil {
+			return errors.Wrap(err, "unmarshalling ConfChange")
+		}
+		ccContext = e.ConfChangeV1.Context
 	case EntryEncodingRaftConfChangeV2:
-		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
-		ccTarget = e.ConfChangeV2
+		e.ConfChangeV2 = &rafttype.ConfChangeV2{}
+		if err := e.ConfChangeV2.Unmarshal(e.Entry.Data); err != nil {
+			return errors.Wrap(err, "unmarshalling ConfChangeV2")
+		}
+		ccContext = e.ConfChangeV2.Context
 	default:
 		return errors.AssertionFailedf("unknown entry type %d", e.Type)
 	}
 
-	if ccTarget != nil {
-		// Conf change - more unmarshaling to do.
-		if err := protoutil.Unmarshal(e.Entry.Data, ccTarget); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChange")
-		}
+	if ccContext != nil {
 		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
-		if err := protoutil.Unmarshal(ccTarget.AsV2().Context, e.ConfChangeContext); err != nil {
+		if err := protoutil.Unmarshal(ccContext, e.ConfChangeContext); err != nil {
 			return errors.Wrap(err, "unmarshalling ConfChangeContext")
 		}
 		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
@@ -205,7 +217,7 @@ func (e *Entry) load() error {
 
 // ConfChange returns ConfChangeV1 or ConfChangeV2 as an interface, if set.
 // Otherwise, returns nil.
-func (e *Entry) ConfChange() raftpb.ConfChangeI {
+func (e *Entry) ConfChange() rafttype.ConfChangeI {
 	if e.ConfChangeV1 != nil {
 		return e.ConfChangeV1
 	}
@@ -220,7 +232,13 @@ func (e *Entry) ConfChange() raftpb.ConfChangeI {
 // log, i.e. it is the inverse to NewEntryFromRawBytes.
 func (e *Entry) ToRawBytes() ([]byte, error) {
 	var value roachpb.Value
-	if err := value.SetProto(&e.Entry); err != nil {
+	pbEntry := raftpb.Entry{
+		Term:  e.Term,
+		Index: e.Index,
+		Type:  raftpb.EntryType(e.Type),
+		Data:  e.Data,
+	}
+	if err := value.SetProto(&pbEntry); err != nil {
 		return nil, err
 	}
 

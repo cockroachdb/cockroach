@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -1093,15 +1093,15 @@ func (r *testingRCRange) testingDeductTokens(
 		tokens: tokens,
 		pri:    AdmissionToRaftPriority(pri),
 	})
-	msgApps := map[roachpb.ReplicaID][]raftpb.Message{}
-	msgApp := raftpb.Message{
-		Type:    raftpb.MsgApp,
+	msgApps := map[roachpb.ReplicaID][]rafttype.Message{}
+	msgApp := rafttype.Message{
+		Type:    rafttype.MsgApp,
 		To:      0,
-		Entries: []raftpb.Entry{entry},
+		Entries: []rafttype.Entry{entry},
 	}
 	for k, testR := range r.mu.r.replicaSet {
-		msgApp.To = raftpb.PeerID(k)
-		msgApps[k] = append([]raftpb.Message(nil), msgApp)
+		msgApp.To = rafttype.PeerID(k)
+		msgApps[k] = append([]rafttype.Message(nil), msgApp)
 		testR.info.Next = r.mu.quorumPosition.Index + 1
 		r.mu.r.replicaSet[k] = testR
 	}
@@ -1109,7 +1109,7 @@ func (r *testingRCRange) testingDeductTokens(
 		MsgAppMode:        MsgAppPush,
 		ReplicasStateInfo: r.replicasStateInfo(),
 		Term:              r.mu.quorumPosition.Term,
-		Entries:           []raftpb.Entry{entry},
+		Entries:           []rafttype.Entry{entry},
 		MsgApps:           msgApps,
 	}))
 }
@@ -1223,7 +1223,7 @@ func (t *Tracker) testingString() string {
 		if len(deductions) == 0 {
 			continue
 		}
-		buf.WriteString(fmt.Sprintf("pri=%s\n", RaftToAdmissionPriority(raftpb.Priority(pri))))
+		buf.WriteString(fmt.Sprintf("pri=%s\n", RaftToAdmissionPriority(rafttype.Priority(pri))))
 		for _, deduction := range deductions {
 			buf.WriteString(fmt.Sprintf("  tokens=%s log-position=%v/%v\n",
 				testingPrintTrimmedTokens(deduction.tokens), deduction.term, deduction.index))

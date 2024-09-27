@@ -17,8 +17,8 @@ import (
 	"hash/fnv"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -50,7 +50,7 @@ type replicaRLockedStoreLiveness Replica
 var _ raftstoreliveness.StoreLiveness = (*replicaRLockedStoreLiveness)(nil)
 
 func (r *replicaRLockedStoreLiveness) getStoreIdent(
-	replicaID raftpb.PeerID,
+	replicaID rafttype.PeerID,
 ) (slpb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
@@ -61,7 +61,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(
 }
 
 // SupportFor implements the raftstoreliveness.StoreLiveness interface.
-func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftpb.Epoch, bool) {
+func (r *replicaRLockedStoreLiveness) SupportFor(replicaID rafttype.PeerID) (rafttype.Epoch, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, false
@@ -75,19 +75,19 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftp
 	if !ok {
 		return 0, false
 	}
-	return raftpb.Epoch(epoch), true
+	return rafttype.Epoch(epoch), true
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
-	replicaID raftpb.PeerID,
-) (raftpb.Epoch, hlc.Timestamp) {
+	replicaID rafttype.PeerID,
+) (rafttype.Epoch, hlc.Timestamp) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, hlc.Timestamp{}
 	}
 	epoch, exp := r.store.storeLiveness.SupportFrom(storeID)
-	return raftpb.Epoch(epoch), exp
+	return rafttype.Epoch(epoch), exp
 }
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.

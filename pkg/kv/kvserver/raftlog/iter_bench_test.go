@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -93,7 +93,7 @@ func mkRaftCommand(keySize, valSize, writeBatchSize int) *kvserverpb.RaftCommand
 	}
 }
 
-func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
+func mkBenchEnt(b *testing.B) (_ rafttype.Entry, metaB []byte) {
 	// A realistic-ish raft command for a ~1kb write.
 	cmd := mkRaftCommand(100, 1800, 2000)
 	cmdB, err := protoutil.Marshal(cmd)
@@ -101,10 +101,10 @@ func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 	data := EncodeCommandBytes(
 		EntryEncodingStandardWithoutAC, "cmd12345", cmdB, 0 /* pri */)
 
-	ent := raftpb.Entry{
+	ent := rafttype.Entry{
 		Term:  1,
 		Index: 1,
-		Type:  raftpb.EntryNormal,
+		Type:  rafttype.EntryNormal,
 		Data:  data,
 	}
 
@@ -194,7 +194,7 @@ func BenchmarkVisit(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Visit(ctx, eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
+		if err := Visit(ctx, eng, rangeID, 0, math.MaxUint64, func(entry rafttype.Entry) error {
 			return nil
 		}); err != nil {
 			b.Fatal(err)

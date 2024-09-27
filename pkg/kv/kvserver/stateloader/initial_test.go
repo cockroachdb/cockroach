@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,23 +32,23 @@ func TestSynthesizeHardState(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
-	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4, Lead: 5, LeadEpoch: 6}
+	tHS := rafttype.HardState{Term: 2, Vote: 3, Commit: 4, Lead: 5, LeadEpoch: 6}
 
 	testCases := []struct {
 		TruncTerm        kvpb.RaftTerm
 		RaftAppliedIndex kvpb.RaftIndex
-		OldHS            *raftpb.HardState
-		NewHS            raftpb.HardState
+		OldHS            *rafttype.HardState
+		NewHS            rafttype.HardState
 		Err              string
 	}{
-		{OldHS: nil, TruncTerm: 42, RaftAppliedIndex: 24, NewHS: raftpb.HardState{Term: 42, Vote: 0, Commit: 24}},
+		{OldHS: nil, TruncTerm: 42, RaftAppliedIndex: 24, NewHS: rafttype.HardState{Term: 42, Vote: 0, Commit: 24}},
 		// Can't wind back the committed index of the new HardState.
 		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit - 1), Err: "can't decrease HardState.Commit"},
 		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), NewHS: tHS},
-		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1, Lead: 5, LeadEpoch: 6}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: rafttype.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1, Lead: 5, LeadEpoch: 6}},
 		// Higher Term is picked up, but Vote, Lead, and LeadEpoch aren't carried
 		// over when the term changes.
-		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), TruncTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit, Lead: 0}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), TruncTerm: 11, NewHS: rafttype.HardState{Term: 11, Vote: 0, Commit: tHS.Commit, Lead: 0}},
 	}
 
 	for i, test := range testCases {

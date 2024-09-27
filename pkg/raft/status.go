@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -31,7 +31,7 @@ import (
 type Status struct {
 	BasicStatus
 	Config           quorum.Config
-	Progress         map[pb.PeerID]tracker.Progress
+	Progress         map[rt.PeerID]tracker.Progress
 	LeadSupportUntil hlc.Timestamp
 }
 
@@ -39,7 +39,7 @@ type Status struct {
 // which are expensive to copy.
 type SparseStatus struct {
 	BasicStatus
-	Progress map[pb.PeerID]tracker.Progress
+	Progress map[rt.PeerID]tracker.Progress
 }
 
 // LeadSupportStatus is a variant of Status without Config or Progress, which
@@ -51,14 +51,14 @@ type LeadSupportStatus struct {
 
 // BasicStatus contains basic information about the Raft peer. It does not allocate.
 type BasicStatus struct {
-	ID pb.PeerID
+	ID rt.PeerID
 
-	pb.HardState
+	rt.HardState
 	SoftState
 
 	Applied uint64
 
-	LeadTransferee pb.PeerID
+	LeadTransferee rt.PeerID
 }
 
 // Empty returns true if the receiver is empty.
@@ -68,8 +68,8 @@ func (b BasicStatus) Empty() bool {
 
 // withProgress calls the supplied visitor to introspect the progress for the
 // supplied raft group. Cannot be used to introspect p.Inflights.
-func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
-	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+func withProgress(r *raft, visitor func(id rt.PeerID, typ ProgressType, pr tracker.Progress)) {
+	r.trk.Visit(func(id rt.PeerID, pr *tracker.Progress) {
 		typ := ProgressTypePeer
 		if pr.IsLearner {
 			typ = ProgressTypeLearner
@@ -80,9 +80,9 @@ func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr track
 	})
 }
 
-func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
-	m := make(map[pb.PeerID]tracker.Progress, r.trk.Len())
-	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+func getProgressCopy(r *raft) map[rt.PeerID]tracker.Progress {
+	m := make(map[rt.PeerID]tracker.Progress, r.trk.Len())
+	r.trk.Visit(func(id rt.PeerID, pr *tracker.Progress) {
 		p := *pr
 		p.Inflights = pr.Inflights.Clone()
 		pr = nil
@@ -142,8 +142,8 @@ func getSparseStatus(r *raft) SparseStatus {
 	var s SparseStatus
 	s.BasicStatus = getBasicStatus(r)
 	if s.RaftState == StateLeader {
-		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
-		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
+		s.Progress = make(map[rt.PeerID]tracker.Progress, r.trk.Len())
+		withProgress(r, func(id rt.PeerID, _ ProgressType, pr tracker.Progress) {
 			s.Progress[id] = pr
 		})
 	}

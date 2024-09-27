@@ -10,10 +10,10 @@
 
 package replica_rac2
 
-import "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 
 // lowPriOverrideState records which raft log entries have their priority
-// overridden to be raftpb.LowPri. Used at follower replicas.
+// overridden to be rafttype.LowPri. Used at follower replicas.
 //
 // The lifetime of a particular log index begins when the entry is appended
 // to the in-memory log, and ends when the entry is sent to storage with the
@@ -159,8 +159,8 @@ func (p *lowPriOverrideState) sideChannelForV1Leader(leaderTerm uint64) bool {
 }
 
 func (p *lowPriOverrideState) getEffectivePriority(
-	index uint64, pri raftpb.Priority,
-) raftpb.Priority {
+	index uint64, pri rafttype.Priority,
+) rafttype.Priority {
 	// Garbage collect intervals ending before the given index.
 	drop := 0
 	for n := len(p.intervals); drop < n && p.intervals[drop].last < index; drop++ {
@@ -184,7 +184,7 @@ func (p *lowPriOverrideState) getEffectivePriority(
 		p.intervals = p.intervals[1:]
 	}
 	if lowPriOverride {
-		return raftpb.LowPri
+		return rafttype.LowPri
 	}
 	return pri
 }

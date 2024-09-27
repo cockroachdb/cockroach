@@ -20,11 +20,11 @@ package raft
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 )
 
-func newUnstableForTesting(ls logSlice, snap *pb.Snapshot) unstable {
+func newUnstableForTesting(ls logSlice, snap *rt.Snapshot) unstable {
 	return unstable{
 		snapshot:        snap,
 		logSlice:        ls,
@@ -51,10 +51,10 @@ func (u *unstable) checkInvariants(t testing.TB) {
 
 func TestUnstableMaybeFirstIndex(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
+	snap4 := &rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
 		ls   logSlice
-		snap *pb.Snapshot
+		snap *rt.Snapshot
 
 		wok    bool
 		windex uint64
@@ -91,10 +91,10 @@ func TestUnstableMaybeFirstIndex(t *testing.T) {
 
 func TestLastIndex(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
+	snap4 := &rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
 		ls     logSlice
-		snap   *pb.Snapshot
+		snap   *rt.Snapshot
 		windex uint64
 	}{
 		{prev4.append(1), nil, 5}, // last in entries
@@ -113,7 +113,7 @@ func TestLastIndex(t *testing.T) {
 func TestUnstableRestore(t *testing.T) {
 	u := newUnstableForTesting(
 		entryID{term: 1, index: 4}.append(1),
-		&pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
+		&rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}},
 	)
 	u.snapshotInProgress = true
 	u.entryInProgress = 5
@@ -121,7 +121,7 @@ func TestUnstableRestore(t *testing.T) {
 
 	s := snapshot{
 		term: 2,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 6, Term: 2}},
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 6, Term: 2}},
 	}
 	require.True(t, u.restore(s))
 	u.checkInvariants(t)
@@ -138,7 +138,7 @@ func TestUnstableNextEntries(t *testing.T) {
 		ls              logSlice
 		entryInProgress uint64
 
-		wentries []pb.Entry
+		wentries []rt.Entry
 	}{
 		// nothing in progress
 		{
@@ -167,13 +167,13 @@ func TestUnstableNextEntries(t *testing.T) {
 
 func TestUnstableNextSnapshot(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
+	snap4 := &rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
 		prev               entryID
-		snap               *pb.Snapshot
+		snap               *rt.Snapshot
 		snapshotInProgress bool
 
-		wsnapshot *pb.Snapshot
+		wsnapshot *rt.Snapshot
 	}{
 		// snapshot not unstable
 		{
@@ -202,10 +202,10 @@ func TestUnstableNextSnapshot(t *testing.T) {
 
 func TestUnstableAcceptInProgress(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
+	snap4 := &rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
 		ls                 logSlice
-		snap               *pb.Snapshot
+		snap               *rt.Snapshot
 		entryInProgress    uint64
 		snapshotInProgress bool
 
@@ -308,11 +308,11 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 
 func TestUnstableStableTo(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
+	snap4 := &rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
 		ls              logSlice
 		entryInProgress uint64
-		snap            *pb.Snapshot
+		snap            *rt.Snapshot
 		index, term     uint64
 
 		wprev            uint64
@@ -372,7 +372,7 @@ func TestUnstableStableTo(t *testing.T) {
 		},
 		{
 			entryID{term: 1, index: 5}.append(2), 6,
-			&pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 5, Term: 1}},
+			&rt.Snapshot{Metadata: rt.SnapshotMetadata{Index: 5, Term: 1}},
 			6, 1, // stable to the first entry and term mismatch
 			5, 6, 1,
 		},
@@ -411,7 +411,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 	for _, tt := range []struct {
 		ls              logSlice
 		entryInProgress uint64
-		snap            *pb.Snapshot
+		snap            *rt.Snapshot
 		app             logSlice
 
 		want             logSlice

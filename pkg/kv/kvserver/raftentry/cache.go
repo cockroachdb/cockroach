@@ -18,13 +18,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-// Cache is a specialized data structure for storing deserialized raftpb.Entry
+// Cache is a specialized data structure for storing deserialized rafttype.Entry
 // values tailored to the access patterns of the storage package.
 // Cache is safe for concurrent access.
 type Cache struct {
@@ -99,12 +99,12 @@ const partitionSize = int32(unsafe.Sizeof(partition{}))
 // It is never explicitly used but a new implementation to replace ringBuf must
 // implement the below interface.
 type rangeCache interface {
-	add(ent []raftpb.Entry) (bytesAdded, entriesAdded int32)
+	add(ent []rafttype.Entry) (bytesAdded, entriesAdded int32)
 	truncateFrom(lo kvpb.RaftIndex) (bytesRemoved, entriesRemoved int32)
 	clearTo(hi kvpb.RaftIndex) (bytesRemoved, entriesRemoved int32)
-	get(index kvpb.RaftIndex) (raftpb.Entry, bool)
-	scan(ents []raftpb.Entry, lo, hi kvpb.RaftIndex, maxBytes uint64) (
-		_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool)
+	get(index kvpb.RaftIndex) (rafttype.Entry, bool)
+	scan(ents []rafttype.Entry, lo, hi kvpb.RaftIndex, maxBytes uint64) (
+		_ []rafttype.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool)
 }
 
 // ringBuf implements rangeCache.
@@ -142,7 +142,7 @@ func (c *Cache) Drop(id roachpb.RangeID) {
 // all entries with indices equal to or greater than the indices of the entries
 // provided. ents is expected to consist of entries with a contiguous sequence
 // of indices.
-func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
+func (c *Cache) Add(id roachpb.RangeID, ents []rafttype.Entry, truncate bool) {
 	if len(ents) == 0 {
 		return
 	}
@@ -215,7 +215,7 @@ func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
 
 // Get returns the entry for the specified index and true for the second return
 // value. If the index is not present in the cache, false is returned.
-func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
+func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e rafttype.Entry, ok bool) {
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
@@ -240,8 +240,8 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 // cache miss occurs. The returned size reflects the size of the returned
 // entries.
 func (c *Cache) Scan(
-	ents []raftpb.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
-) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
+	ents []rafttype.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
+) (_ []rafttype.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
@@ -374,7 +374,7 @@ func (p *partition) setSize(orig, new cacheSize) bool {
 
 // analyzeEntries calculates the size in bytes of ents and ensures that the
 // entries in ents have contiguous indices.
-func analyzeEntries(ents []raftpb.Entry) (size int32) {
+func analyzeEntries(ents []rafttype.Entry) (size int32) {
 	var prevIndex uint64
 	var prevTerm uint64
 	for i, e := range ents {

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,11 +65,11 @@ func TestMaybeDropMsgApp(t *testing.T) {
 		{initialized: false, lhs: true, age: maxDelaySplitTriggerDur + 1}: false,
 	}
 
-	msgHeartbeat := &raftpb.Message{
-		Type: raftpb.MsgHeartbeat,
+	msgHeartbeat := &rafttype.Message{
+		Type: rafttype.MsgHeartbeat,
 	}
-	msgApp := &raftpb.Message{
-		Type: raftpb.MsgApp,
+	msgApp := &rafttype.Message{
+		Type: rafttype.MsgApp,
 	}
 	ctx := context.Background()
 	for dropper, exp := range testCases {

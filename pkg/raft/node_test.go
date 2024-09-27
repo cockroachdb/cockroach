@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,15 +54,15 @@ func readyWithTimeout(n Node) Ready {
 // TestNodeStep ensures that node.Step sends msgProp to propc chan
 // and other kinds of messages to recvc chan.
 func TestNodeStep(t *testing.T) {
-	for i, msgn := range raftpb.MessageType_name {
+	for i, msgn := range rafttype.MessageType_name {
 		n := &node{
 			propc: make(chan msgWithResult, 1),
-			recvc: make(chan raftpb.Message, 1),
+			recvc: make(chan rafttype.Message, 1),
 		}
-		msgt := raftpb.MessageType(i)
-		n.Step(context.TODO(), raftpb.Message{Type: msgt})
+		msgt := rafttype.MessageType(i)
+		n.Step(context.TODO(), rafttype.Message{Type: msgt})
 		// Proposal goes to proc chan. Others go to recvc chan.
-		if msgt == raftpb.MsgProp {
+		if msgt == rafttype.MsgProp {
 			select {
 			case <-n.propc:
 			default:
@@ -108,7 +108,7 @@ func TestNodeStepUnblock(t *testing.T) {
 	for i, tt := range tests {
 		errc := make(chan error, 1)
 		go func() {
-			err := n.Step(ctx, raftpb.Message{Type: raftpb.MsgProp})
+			err := n.Step(ctx, rafttype.Message{Type: rafttype.MsgProp})
 			errc <- err
 		}()
 		tt.unblock()
@@ -132,10 +132,10 @@ func TestNodeStepUnblock(t *testing.T) {
 
 // TestNodePropose ensures that node.Propose sends the given proposal to the underlying raft.
 func TestNodePropose(t *testing.T) {
-	var msgs []raftpb.Message
-	appendStep := func(r *raft, m raftpb.Message) error {
+	var msgs []rafttype.Message
+	appendStep := func(r *raft, m rafttype.Message) error {
 		t.Log(DescribeMessage(m, nil))
-		if m.Type == raftpb.MsgAppResp {
+		if m.Type == rafttype.MsgAppResp {
 			return nil // injected by (*raft).advance
 		}
 		msgs = append(msgs, m)
@@ -163,8 +163,8 @@ func TestNodePropose(t *testing.T) {
 	n.Stop()
 
 	require.Len(t, msgs, 2)
-	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
-	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, rafttype.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, rafttype.MsgProp, msgs[1].Type)
 	assert.Equal(t, []byte("somedata"), msgs[1].Entries[0].Data)
 }
 
@@ -179,18 +179,18 @@ func TestDisableProposalForwarding(t *testing.T) {
 	nt := newNetwork(r1, r2, r3)
 
 	// elect r1 as leader
-	nt.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgHup})
+	nt.send(rafttype.Message{From: 1, To: 1, Type: rafttype.MsgHup})
 
-	var testEntries = []raftpb.Entry{{Data: []byte("testdata")}}
+	var testEntries = []rafttype.Entry{{Data: []byte("testdata")}}
 
 	// send proposal to r2(follower) where DisableProposalForwarding is false
-	r2.Step(raftpb.Message{From: 2, To: 2, Type: raftpb.MsgProp, Entries: testEntries})
+	r2.Step(rafttype.Message{From: 2, To: 2, Type: rafttype.MsgProp, Entries: testEntries})
 
 	// verify r2(follower) does forward the proposal when DisableProposalForwarding is false
 	require.Len(t, r2.msgs, 1)
 
 	// send proposal to r3(follower) where DisableProposalForwarding is true
-	r3.Step(raftpb.Message{From: 3, To: 3, Type: raftpb.MsgProp, Entries: testEntries})
+	r3.Step(rafttype.Message{From: 3, To: 3, Type: rafttype.MsgProp, Entries: testEntries})
 
 	// verify r3(follower) does not forward the proposal when DisableProposalForwarding is true
 	require.Empty(t, r3.msgs)
@@ -199,9 +199,9 @@ func TestDisableProposalForwarding(t *testing.T) {
 // TestNodeProposeConfig ensures that node.ProposeConfChange sends the given configuration proposal
 // to the underlying raft.
 func TestNodeProposeConfig(t *testing.T) {
-	var msgs []raftpb.Message
-	appendStep := func(r *raft, m raftpb.Message) error {
-		if m.Type == raftpb.MsgAppResp {
+	var msgs []rafttype.Message
+	appendStep := func(r *raft, m rafttype.Message) error {
+		if m.Type == rafttype.MsgAppResp {
 			return nil // injected by (*raft).advance
 		}
 		msgs = append(msgs, m)
@@ -225,15 +225,15 @@ func TestNodeProposeConfig(t *testing.T) {
 		}
 		n.Advance()
 	}
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
+	cc := rafttype.ConfChange{Type: rafttype.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
 	n.ProposeConfChange(context.TODO(), cc)
 	n.Stop()
 
 	require.Len(t, msgs, 2)
-	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
-	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, rafttype.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, rafttype.MsgProp, msgs[1].Type)
 	assert.Equal(t, ccdata, msgs[1].Entries[0].Data)
 }
 
@@ -245,7 +245,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
 	defer cancel()
 	n.Campaign(ctx)
-	allCommittedEntries := make([]raftpb.Entry, 0)
+	allCommittedEntries := make([]rafttype.Entry, 0)
 	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
 	goroutineStopped := make(chan struct{})
@@ -270,9 +270,9 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 				for _, e := range rd.CommittedEntries {
 					allCommittedEntries = append(allCommittedEntries, e)
 					switch e.Type {
-					case raftpb.EntryNormal:
-					case raftpb.EntryConfChange:
-						var cc raftpb.ConfChange
+					case rafttype.EntryNormal:
+					case rafttype.EntryConfChange:
+						var cc rafttype.ConfChange
 						cc.Unmarshal(e.Data)
 						n.ApplyConfChange(cc)
 						applied = true
@@ -286,7 +286,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 		}
 	}()
 
-	cc1 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
+	cc1 := rafttype.ConfChange{Type: rafttype.ConfChangeAddNode, NodeID: 1}
 	ccdata1, _ := cc1.Marshal()
 	n.ProposeConfChange(ctx, cc1)
 	<-applyConfChan
@@ -296,7 +296,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 	<-applyConfChan
 
 	// the new node join should be ok
-	cc2 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 2}
+	cc2 := rafttype.ConfChange{Type: rafttype.ConfChangeAddNode, NodeID: 2}
 	ccdata2, _ := cc2.Marshal()
 	n.ProposeConfChange(ctx, cc2)
 	<-applyConfChan
@@ -345,14 +345,14 @@ func TestBlockProposal(t *testing.T) {
 }
 
 func TestNodeProposeWaitDropped(t *testing.T) {
-	var msgs []raftpb.Message
+	var msgs []rafttype.Message
 	droppingMsg := []byte("test_dropping")
-	dropStep := func(r *raft, m raftpb.Message) error {
-		if m.Type == raftpb.MsgProp && strings.Contains(m.String(), string(droppingMsg)) {
+	dropStep := func(r *raft, m rafttype.Message) error {
+		if m.Type == rafttype.MsgProp && strings.Contains(m.String(), string(droppingMsg)) {
 			t.Logf("dropping message: %v", m.String())
 			return ErrProposalDropped
 		}
-		if m.Type == raftpb.MsgAppResp {
+		if m.Type == rafttype.MsgAppResp {
 			// This is produced by raft internally, see (*raft).advance.
 			return nil
 		}
@@ -381,7 +381,7 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 
 	n.Stop()
 	require.Len(t, msgs, 1)
-	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, rafttype.MsgFortifyLeaderResp, msgs[0].Type)
 }
 
 // TestNodeTick ensures that node.Tick() will increase the
@@ -438,30 +438,30 @@ func TestNodeStop(t *testing.T) {
 // start with correct configuration change entries, and can accept and commit
 // proposals.
 func TestNodeStart(t *testing.T) {
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
+	cc := rafttype.ConfChange{Type: rafttype.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
 	wants := []Ready{
 		{
-			HardState: raftpb.HardState{Term: 1, Commit: 1, Vote: 0, Lead: 0},
-			Entries: []raftpb.Entry{
-				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
+			HardState: rafttype.HardState{Term: 1, Commit: 1, Vote: 0, Lead: 0},
+			Entries: []rafttype.Entry{
+				{Type: rafttype.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
-			CommittedEntries: []raftpb.Entry{
-				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
+			CommittedEntries: []rafttype.Entry{
+				{Type: rafttype.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
 			MustSync: true,
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
-			Entries:          []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 2, Data: nil}},
+			HardState:        rafttype.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:          []rafttype.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			CommittedEntries: []rafttype.Entry{{Term: 2, Index: 2, Data: nil}},
 			MustSync:         true,
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+			HardState:        rafttype.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 			Entries:          nil,
-			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			CommittedEntries: []rafttype.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
 			MustSync:         true,
 		},
 	}
@@ -523,15 +523,15 @@ func TestNodeStart(t *testing.T) {
 }
 
 func TestNodeRestart(t *testing.T) {
-	entries := []raftpb.Entry{
+	entries := []rafttype.Entry{
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := raftpb.HardState{Term: 1, Commit: 1}
+	st := rafttype.HardState{Term: 1, Commit: 1}
 
 	want := Ready{
 		// No HardState is emitted because there was no change.
-		HardState: raftpb.HardState{},
+		HardState: rafttype.HardState{},
 		// commit up to index commit index in st
 		CommittedEntries: entries[:st.Commit],
 		// MustSync is false because no HardState or new entries are provided.
@@ -564,22 +564,22 @@ func TestNodeRestart(t *testing.T) {
 }
 
 func TestNodeRestartFromSnapshot(t *testing.T) {
-	snap := raftpb.Snapshot{
-		Metadata: raftpb.SnapshotMetadata{
-			ConfState: raftpb.ConfState{Voters: []raftpb.PeerID{1, 2}},
+	snap := rafttype.Snapshot{
+		Metadata: rafttype.SnapshotMetadata{
+			ConfState: rafttype.ConfState{Voters: []rafttype.PeerID{1, 2}},
 			Index:     2,
 			Term:      1,
 		},
 	}
-	entries := []raftpb.Entry{
+	entries := []rafttype.Entry{
 		{Term: 1, Index: 3, Data: []byte("foo")},
 	}
-	st := raftpb.HardState{Term: 1, Commit: 3}
+	st := rafttype.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
 		// No HardState is emitted because nothing changed relative to what is
 		// already persisted.
-		HardState: raftpb.HardState{},
+		HardState: rafttype.HardState{},
 		// commit up to index commit index in st
 		CommittedEntries: entries,
 		// MustSync is only true when there is a new HardState or new entries;
@@ -665,14 +665,14 @@ func TestSoftStateEqual(t *testing.T) {
 
 func TestIsHardStateEqual(t *testing.T) {
 	tests := []struct {
-		ht raftpb.HardState
+		ht rafttype.HardState
 		we bool
 	}{
 		{emptyState, true},
-		{raftpb.HardState{Vote: 1}, false},
-		{raftpb.HardState{Commit: 1}, false},
-		{raftpb.HardState{Term: 1}, false},
-		{raftpb.HardState{Lead: 1}, false},
+		{rafttype.HardState{Vote: 1}, false},
+		{rafttype.HardState{Commit: 1}, false},
+		{rafttype.HardState{Term: 1}, false},
+		{rafttype.HardState{Lead: 1}, false},
 	}
 
 	for i, tt := range tests {
@@ -703,10 +703,10 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 				s.Append(rd.Entries)
 				t.Logf("raft: %v", rd.Entries)
 				for _, ent := range rd.Entries {
-					if ent.Type != raftpb.EntryConfChange {
+					if ent.Type != rafttype.EntryConfChange {
 						continue
 					}
-					var cc raftpb.ConfChange
+					var cc rafttype.ConfChange
 					cc.Unmarshal(ent.Data)
 					state := n.ApplyConfChange(cc)
 					assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.NodeID && cc.NodeID == 2,
@@ -721,7 +721,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 			}
 		}
 	}()
-	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddLearnerNode, NodeID: 2}
+	cc := rafttype.ConfChange{Type: rafttype.ConfChangeAddLearnerNode, NodeID: 2}
 	n.ProposeConfChange(context.TODO(), cc)
 	<-applyConfChan
 	close(stop)
@@ -738,8 +738,8 @@ func TestAppendPagination(t *testing.T) {
 	seenFullMessage := false
 	// Inspect all messages to see that we never exceed the limit, but
 	// we do see messages of larger than half the limit.
-	n.msgHook = func(m raftpb.Message) bool {
-		if m.Type == raftpb.MsgApp {
+	n.msgHook = func(m rafttype.Message) bool {
+		if m.Type == rafttype.MsgApp {
 			size := 0
 			for _, e := range m.Entries {
 				size += len(e.Data)
@@ -752,20 +752,20 @@ func TestAppendPagination(t *testing.T) {
 		return true
 	}
 
-	n.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgHup})
+	n.send(rafttype.Message{From: 1, To: 1, Type: rafttype.MsgHup})
 
 	// Partition the network while we make our proposals. This forces
 	// the entries to be batched into larger messages.
 	n.isolate(1)
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 5; i++ {
-		n.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgProp, Entries: []raftpb.Entry{{Data: blob}}})
+		n.send(rafttype.Message{From: 1, To: 1, Type: rafttype.MsgProp, Entries: []rafttype.Entry{{Data: blob}}})
 	}
 	n.recover()
 
 	// After the partition recovers, tick the clock to wake everything
 	// back up and send the messages.
-	n.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgBeat})
+	n.send(rafttype.Message{From: 1, To: 1, Type: rafttype.MsgBeat})
 	assert.True(t, seenFullMessage, "didn't see any messages more than half the max size; something is wrong with this test")
 }
 
@@ -830,7 +830,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	rd := readyWithTimeout(n)
 	require.Len(t, rd.Messages, 1)
 	m := rd.Messages[0]
-	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Equal(t, rafttype.MsgStorageAppend, m.Type)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
 		require.NoError(t, n.Step(ctx, resp))
@@ -839,7 +839,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	rd = readyWithTimeout(n)
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
-	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Equal(t, rafttype.MsgStorageAppend, m.Type)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
 		require.NoError(t, n.Step(ctx, resp))
@@ -849,12 +849,12 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	require.Len(t, rd.Messages, 2)
 	for _, m := range rd.Messages {
 		switch m.Type {
-		case raftpb.MsgStorageAppend:
+		case rafttype.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
 				require.NoError(t, n.Step(ctx, resp))
 			}
-		case raftpb.MsgStorageApply:
+		case rafttype.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
 			require.Len(t, m.Responses, 1)
 			require.NoError(t, n.Step(ctx, m.Responses[0]))
@@ -871,7 +871,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	rd = readyWithTimeout(n)
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
-	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Equal(t, rafttype.MsgStorageAppend, m.Type)
 	require.Len(t, m.Entries, 1)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
@@ -884,15 +884,15 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	// Append second entry. Don't apply first entry yet.
 	rd = readyWithTimeout(n)
 	require.Len(t, rd.Messages, 2)
-	var applyResps []raftpb.Message
+	var applyResps []rafttype.Message
 	for _, m := range rd.Messages {
 		switch m.Type {
-		case raftpb.MsgStorageAppend:
+		case rafttype.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
 				require.NoError(t, n.Step(ctx, resp))
 			}
-		case raftpb.MsgStorageApply:
+		case rafttype.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
 			require.Len(t, m.Responses, 1)
 			applyResps = append(applyResps, m.Responses[0])
@@ -909,12 +909,12 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	require.Len(t, rd.Messages, 2)
 	for _, m := range rd.Messages {
 		switch m.Type {
-		case raftpb.MsgStorageAppend:
+		case rafttype.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
 				require.NoError(t, n.Step(ctx, resp))
 			}
-		case raftpb.MsgStorageApply:
+		case rafttype.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
 			require.Len(t, m.Responses, 1)
 			applyResps = append(applyResps, m.Responses[0])
@@ -930,7 +930,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 		select {
 		case rd := <-n.Ready():
 			for _, m := range rd.Messages {
-				require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
+				require.NotEqual(t, rafttype.MsgStorageApply, m.Type, "unexpected message: %v", m)
 			}
 		case <-time.After(10 * time.Millisecond):
 			drain = false
@@ -945,7 +945,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	rd = readyWithTimeout(n)
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
-	require.Equal(t, raftpb.MsgStorageApply, m.Type)
+	require.Equal(t, rafttype.MsgStorageApply, m.Type)
 	require.Len(t, m.Entries, 1)
 	applyResps = append(applyResps, m.Responses[0])
 
@@ -960,7 +960,7 @@ type ignoreSizeHintMemStorage struct {
 	*MemoryStorage
 }
 
-func (s *ignoreSizeHintMemStorage) Entries(lo, hi uint64, _ uint64) ([]raftpb.Entry, error) {
+func (s *ignoreSizeHintMemStorage) Entries(lo, hi uint64, _ uint64) ([]rafttype.Entry, error) {
 	return s.MemoryStorage.Entries(lo, hi, math.MaxUint64)
 }
 
@@ -984,20 +984,20 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	s := &ignoreSizeHintMemStorage{
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
-	persistedHardState := raftpb.HardState{
+	persistedHardState := rafttype.HardState{
 		Term:   1,
 		Vote:   1,
 		Commit: 10,
 	}
 
 	s.hardState = persistedHardState
-	s.ents = make([]raftpb.Entry, 10)
+	s.ents = make([]rafttype.Entry, 10)
 	var size uint64
 	for i := range s.ents {
-		ent := raftpb.Entry{
+		ent := rafttype.Entry{
 			Term:  1,
 			Index: uint64(i + 1),
-			Type:  raftpb.EntryNormal,
+			Type:  rafttype.EntryNormal,
 			Data:  []byte("a"),
 		}
 

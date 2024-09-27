@@ -14,7 +14,7 @@ package raftlog
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +41,7 @@ func TestNewEntry(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			ent, err := NewEntry(raftpb.Entry{
+			ent, err := NewEntry(rafttype.Entry{
 				Term:  1,
 				Index: 1,
 				Data:  tc.data,
@@ -54,7 +54,7 @@ func TestNewEntry(t *testing.T) {
 
 			// Clear out the passed Raft entry, and only assert on the decoded entry.
 			require.NotNil(t, ent)
-			ent.Entry = raftpb.Entry{}
+			ent.Entry = rafttype.Entry{}
 			if tc.expectEmpty {
 				require.Zero(t, *ent)
 			} else {

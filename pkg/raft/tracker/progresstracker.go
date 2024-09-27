@@ -22,7 +22,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // ProgressTracker tracks the progress made by each peer in the currently active
@@ -44,7 +44,7 @@ func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) Progres
 }
 
 // Progress returns the progress associated with the supplied ID.
-func (p *ProgressTracker) Progress(id pb.PeerID) *Progress {
+func (p *ProgressTracker) Progress(id rt.PeerID) *Progress {
 	return p.progress[id]
 }
 
@@ -61,16 +61,16 @@ func (p *ProgressTracker) Len() int {
 	return len(p.progress)
 }
 
-func (p *ProgressTracker) TestingSetProgress(id pb.PeerID, progress *Progress) {
+func (p *ProgressTracker) TestingSetProgress(id rt.PeerID, progress *Progress) {
 	p.progress[id] = progress
 }
 
-type matchAckIndexer map[pb.PeerID]*Progress
+type matchAckIndexer map[rt.PeerID]*Progress
 
 var _ quorum.AckedIndexer = matchAckIndexer(nil)
 
 // AckedIndex implements AckedIndexer interface.
-func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
+func (l matchAckIndexer) AckedIndex(id rt.PeerID) (quorum.Index, bool) {
 	pr, ok := l[id]
 	if !ok {
 		return 0, false
@@ -85,17 +85,17 @@ func (p *ProgressTracker) Committed() uint64 {
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
-func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
+func (p *ProgressTracker) Visit(f func(id rt.PeerID, pr *Progress)) {
 	n := len(p.progress)
 	// We need to sort the IDs and don't want to allocate since this is hot code.
 	// The optimization here mirrors that in `(MajorityConfig).CommittedIndex`,
 	// see there for details.
-	var sl [7]pb.PeerID
-	var ids []pb.PeerID
+	var sl [7]rt.PeerID
+	var ids []rt.PeerID
 	if len(sl) >= n {
 		ids = sl[:n]
 	} else {
-		ids = make([]pb.PeerID, n)
+		ids = make([]rt.PeerID, n)
 	}
 	for id := range p.progress {
 		n--
@@ -110,8 +110,8 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 // QuorumActive returns true if the quorum is active from the view of the local
 // raft state machine. Otherwise, it returns false.
 func (p *ProgressTracker) QuorumActive() bool {
-	votes := map[pb.PeerID]bool{}
-	p.Visit(func(id pb.PeerID, pr *Progress) {
+	votes := map[rt.PeerID]bool{}
+	p.Visit(func(id rt.PeerID, pr *Progress) {
 		if pr.IsLearner {
 			return
 		}
@@ -122,9 +122,9 @@ func (p *ProgressTracker) QuorumActive() bool {
 }
 
 // VoterNodes returns a sorted slice of voters.
-func (p *ProgressTracker) VoterNodes() []pb.PeerID {
+func (p *ProgressTracker) VoterNodes() []rt.PeerID {
 	m := p.config.Voters.IDs()
-	nodes := make([]pb.PeerID, 0, len(m))
+	nodes := make([]rt.PeerID, 0, len(m))
 	for id := range m {
 		nodes = append(nodes, id)
 	}
@@ -133,11 +133,11 @@ func (p *ProgressTracker) VoterNodes() []pb.PeerID {
 }
 
 // LearnerNodes returns a sorted slice of learners.
-func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
+func (p *ProgressTracker) LearnerNodes() []rt.PeerID {
 	if len(p.config.Learners) == 0 {
 		return nil
 	}
-	nodes := make([]pb.PeerID, 0, len(p.config.Learners))
+	nodes := make([]rt.PeerID, 0, len(p.config.Learners))
 	for id := range p.config.Learners {
 		nodes = append(nodes, id)
 	}

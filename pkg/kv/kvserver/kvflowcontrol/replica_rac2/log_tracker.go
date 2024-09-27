@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -79,7 +79,7 @@ func (l *logTracker) append(ctx context.Context, after uint64, to rac2.LogMark) 
 	}
 }
 
-func (l *logTracker) register(ctx context.Context, at rac2.LogMark, pri raftpb.Priority) {
+func (l *logTracker) register(ctx context.Context, at rac2.LogMark, pri rafttype.Priority) {
 	l.Lock()
 	defer l.Unlock()
 	l.lt.Register(ctx, at, pri)
@@ -100,7 +100,7 @@ func (l *logTracker) logSynced(ctx context.Context, stable rac2.LogMark) {
 // The returned bool helps to avoid scheduling Ready many times in a row, in
 // situations when there are many consecutive logAdmitted calls. The next
 // scheduling event will be allowed after the next admitted(true) call.
-func (l *logTracker) logAdmitted(ctx context.Context, at rac2.LogMark, pri raftpb.Priority) bool {
+func (l *logTracker) logAdmitted(ctx context.Context, at rac2.LogMark, pri rafttype.Priority) bool {
 	l.Lock()
 	defer l.Unlock()
 	if !l.lt.LogAdmitted(ctx, at, pri) {

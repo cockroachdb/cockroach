@@ -13,7 +13,7 @@ package quorum
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,38 +33,38 @@ func TestLeadSupportExpiration(t *testing.T) {
 	}
 
 	testCases := []struct {
-		ids     []pb.PeerID
-		support map[pb.PeerID]hlc.Timestamp
+		ids     []rt.PeerID
+		support map[rt.PeerID]hlc.Timestamp
 		exp     hlc.Timestamp
 	}{
 		{
-			ids:     []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
+			ids:     []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
 			exp:     ts(15),
 		},
 		{
-			ids:     []pb.PeerID{1, 2, 3, 4},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20)},
+			ids:     []rt.PeerID{1, 2, 3, 4},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20)},
 			exp:     ts(15),
 		},
 		{
-			ids:     []pb.PeerID{1, 2, 3, 4, 5},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(20)},
+			ids:     []rt.PeerID{1, 2, 3, 4, 5},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(20)},
 			exp:     ts(20),
 		},
 		{
-			ids:     []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20)},
+			ids:     []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20)},
 			exp:     ts(10),
 		},
 		{
-			ids:     []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10)},
+			ids:     []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10)},
 			exp:     hlc.Timestamp{},
 		},
 		{
-			ids:     []pb.PeerID{},
-			support: map[pb.PeerID]hlc.Timestamp{},
+			ids:     []rt.PeerID{},
+			support: map[rt.PeerID]hlc.Timestamp{},
 			exp:     hlc.MaxTimestamp,
 		},
 	}
@@ -93,33 +93,33 @@ func TestLeadSupportExpirationJointConfig(t *testing.T) {
 	}
 
 	testCases := []struct {
-		cfg1    []pb.PeerID
-		cfg2    []pb.PeerID
-		support map[pb.PeerID]hlc.Timestamp
+		cfg1    []rt.PeerID
+		cfg2    []rt.PeerID
+		support map[rt.PeerID]hlc.Timestamp
 		exp     hlc.Timestamp
 	}{
 		{
-			cfg1:    []pb.PeerID{1, 2, 3},
-			cfg2:    []pb.PeerID{},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
+			cfg1:    []rt.PeerID{1, 2, 3},
+			cfg2:    []rt.PeerID{},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
 			exp:     ts(15), // cfg2 is empty, should behave like the (cfg1) majority config case
 		},
 		{
-			cfg1:    []pb.PeerID{},
-			cfg2:    []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
+			cfg1:    []rt.PeerID{},
+			cfg2:    []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
 			exp:     ts(15), // cfg1 is empty, should behave like the (cfg2) majority config case
 		},
 		{
-			cfg1:    []pb.PeerID{3, 4, 5},
-			cfg2:    []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(25)},
+			cfg1:    []rt.PeerID{3, 4, 5},
+			cfg2:    []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(25)},
 			exp:     ts(15), // lower of the two
 		},
 		{
-			cfg1:    []pb.PeerID{3, 4, 5},
-			cfg2:    []pb.PeerID{1, 2, 3},
-			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(10), 5: ts(10)},
+			cfg1:    []rt.PeerID{3, 4, 5},
+			cfg2:    []rt.PeerID{1, 2, 3},
+			support: map[rt.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(10), 5: ts(10)},
 			exp:     ts(10), // lower of the two; this time, cfg2 has the lower expiration
 		},
 	}

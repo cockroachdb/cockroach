@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -3023,7 +3023,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 
 	// Wrap the snapshot in a minimal header. The request will be dropped because
 	// replica 2 is not in the ConfState.
-	req := &kvserverpb.SnapshotRequest_Header{
+	req := &kvserverrt.SnapshotRequest_Header{
 		State: kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID: 1,
@@ -3037,11 +3037,11 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 				StoreID:   2,
 				ReplicaID: 3,
 			},
-			Message: raftpb.Message{
-				Type: raftpb.MsgSnap,
-				Snapshot: &raftpb.Snapshot{
+			Message: rafttype.Message{
+				Type: rafttype.MsgSnap,
+				Snapshot: &rafttype.Snapshot{
 					Data: []byte{},
-					Metadata: raftpb.SnapshotMetadata{
+					Metadata: rafttype.SnapshotMetadata{
 						Index: 1,
 						Term:  1,
 					},
@@ -3087,15 +3087,15 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextResp *kvserverpb.SnapshotResponse
+	nextResp *kvserverrt.SnapshotResponse
 	nextErr  error
 }
 
-func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotResponse, error) {
+func (c fakeSnapshotStream) Recv() (*kvserverrt.SnapshotResponse, error) {
 	return c.nextResp, c.nextErr
 }
 
-func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotRequest) error {
+func (c fakeSnapshotStream) Send(request *kvserverrt.SnapshotRequest) error {
 	return nil
 }
 
@@ -3127,7 +3127,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	tr := tracing.NewTracer()
 
-	header := kvserverpb.SnapshotRequest_Header{
+	header := kvserverrt.SnapshotRequest_Header{
 		State: kvserverpb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
@@ -3153,8 +3153,8 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	// Test that an errored snapshot causes a fail throttle.
 	{
 		sp := &fakeStorePool{}
-		resp := &kvserverpb.SnapshotResponse{
-			Status:       kvserverpb.SnapshotResponse_ERROR,
+		resp := &kvserverrt.SnapshotResponse{
+			Status:       kvserverrt.SnapshotResponse_ERROR,
 			EncodedError: errors.EncodeError(ctx, errors.New("boom")),
 		}
 		c := fakeSnapshotStream{resp, nil}
@@ -3189,12 +3189,12 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
 	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
-		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueueName:     kvserverrt.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
 	require.NoError(t, err)
 	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
-		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueueName:     kvserverrt.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
 	require.NoError(t, err)
@@ -3206,7 +3206,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	// the queue length set to 0 - this will fail since the first tasks are still
 	// running.
 	_, err = s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
-		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueueName:     kvserverrt.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 		QueueOnDelegateLen:  0,
 	}, 1)
@@ -3220,7 +3220,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	go func() {
 		before := timeutil.Now()
 		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
-			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+			SenderQueueName:     kvserverrt.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
 			QueueOnDelegateLen:  -1,
 		}, 1)
@@ -3241,7 +3241,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		// This will time out since the deadline is set artificially low. Make sure
 		// the permit is released.
 		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSendSnapshotRequest{
-			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+			SenderQueueName:     kvserverrt.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
 			QueueOnDelegateLen:  -1,
 		}, 1)
@@ -3275,7 +3275,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverrt.SnapshotRequest_Header{
 		RangeSize: 10,
 	})
 	if err != nil {
@@ -3294,7 +3294,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		"unexpected snapshots in progress")
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
+	cleanupEmpty, err := s.reserveReceiveSnapshot(ctx, &kvserverrt.SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3342,7 +3342,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverrt.SnapshotRequest_Header{
 		RangeSize: 10,
 	})
 	if err != nil {
@@ -3397,7 +3397,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	}
 
 	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
+	cleanupAccepted, err := s.reserveReceiveSnapshot(ctx, &kvserverrt.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -3471,7 +3471,7 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 				if err := func() error {
 					snapCtx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
-					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
+					cleanup, err := s.reserveReceiveSnapshot(snapCtx, &kvserverrt.SnapshotRequest_Header{RangeSize: 1})
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil

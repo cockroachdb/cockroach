@@ -13,7 +13,7 @@ package raftutil
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -32,11 +32,11 @@ func ReplicaIsBehind(st *raft.Status, replicaID roachpb.ReplicaID) bool {
 		// so we can't be sure it's not behind.
 		return true
 	}
-	progress, ok := st.Progress[raftpb.PeerID(replicaID)]
+	progress, ok := st.Progress[rafttype.PeerID(replicaID)]
 	if !ok {
 		return true
 	}
-	if raftpb.PeerID(replicaID) == st.Lead {
+	if rafttype.PeerID(replicaID) == st.Lead {
 		// If the replica is the leader, it cannot be behind on the log.
 		return false
 	}
@@ -141,7 +141,7 @@ func ReplicaMayNeedSnapshot(
 		// so we can't be sure it does not need a snapshot.
 		return LocalReplicaNotLeader
 	}
-	progress, ok := st.Progress[raftpb.PeerID(replicaID)]
+	progress, ok := st.Progress[rafttype.PeerID(replicaID)]
 	if !ok {
 		// We don't know about the specified replica.
 		return ReplicaUnknown

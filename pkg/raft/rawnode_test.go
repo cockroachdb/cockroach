@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ type rawNodeAdapter struct {
 var _ Node = (*rawNodeAdapter)(nil)
 
 // TransferLeadership is to test when node specifies lead, which is pointless, can just be filled in.
-func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee pb.PeerID) {
+func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee rt.PeerID) {
 	a.RawNode.TransferLeader(transferee)
 }
 
@@ -63,24 +63,24 @@ func (a *rawNodeAdapter) Ready() <-chan Ready { return nil }
 // Node takes more contexts. Easy enough to fix.
 
 func (a *rawNodeAdapter) Campaign(context.Context) error             { return a.RawNode.Campaign() }
-func (a *rawNodeAdapter) Step(_ context.Context, m pb.Message) error { return a.RawNode.Step(m) }
+func (a *rawNodeAdapter) Step(_ context.Context, m rt.Message) error { return a.RawNode.Step(m) }
 func (a *rawNodeAdapter) Propose(_ context.Context, data []byte) error {
 	return a.RawNode.Propose(data)
 }
-func (a *rawNodeAdapter) ProposeConfChange(_ context.Context, cc pb.ConfChangeI) error {
+func (a *rawNodeAdapter) ProposeConfChange(_ context.Context, cc rt.ConfChangeI) error {
 	return a.RawNode.ProposeConfChange(cc)
 }
 
 // TestRawNodeStep ensures that RawNode.Step ignore local message.
 func TestRawNodeStep(t *testing.T) {
-	for i, msgn := range pb.MessageType_name {
+	for i, msgn := range rt.MessageType_name {
 		t.Run(msgn, func(t *testing.T) {
 			s := NewMemoryStorage()
-			s.SetHardState(pb.HardState{Term: 1, Commit: 1})
-			s.Append([]pb.Entry{{Term: 1, Index: 1}})
-			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
-				ConfState: pb.ConfState{
-					Voters: []pb.PeerID{1},
+			s.SetHardState(rt.HardState{Term: 1, Commit: 1})
+			s.Append([]rt.Entry{{Term: 1, Index: 1}})
+			require.NoError(t, s.ApplySnapshot(rt.Snapshot{Metadata: rt.SnapshotMetadata{
+				ConfState: rt.ConfState{
+					Voters: []rt.PeerID{1},
 				},
 				Index: 1,
 				Term:  1,
@@ -89,8 +89,8 @@ func TestRawNodeStep(t *testing.T) {
 			// vote requests) are ignored and don't trigger assertions.
 			rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 			require.NoError(t, err, "#%d", i)
-			msgt := pb.MessageType(i)
-			err = rawNode.Step(pb.Message{Type: msgt})
+			msgt := rt.MessageType(i)
+			err = rawNode.Step(rt.Message{Type: msgt})
 			// LocalMsg should be ignored.
 			if IsLocalMsg(msgt) {
 				assert.Equal(t, ErrStepLocalMsg, err, "#%d", i)
@@ -108,111 +108,111 @@ func TestRawNodeStep(t *testing.T) {
 // joint configurations makes sure that they are exited successfully.
 func TestRawNodeProposeAndConfChange(t *testing.T) {
 	testCases := []struct {
-		cc   pb.ConfChangeI
-		exp  pb.ConfState
-		exp2 *pb.ConfState
+		cc   rt.ConfChangeI
+		exp  rt.ConfState
+		exp2 *rt.ConfState
 	}{
 		// V1 config change.
 		{
-			pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 2},
-			pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			rt.ConfChange{Type: rt.ConfChangeAddNode, NodeID: 2},
+			rt.ConfState{Voters: []rt.PeerID{1, 2}},
 			nil,
 		},
 		// Proposing the same as a V2 change works just the same, without entering
 		// a joint config.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{Type: pb.ConfChangeAddNode, NodeID: 2},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{Type: rt.ConfChangeAddNode, NodeID: 2},
 			},
 			},
-			pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			rt.ConfState{Voters: []rt.PeerID{1, 2}},
 			nil,
 		},
 		// Ditto if we add it as a learner instead.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{Type: rt.ConfChangeAddLearnerNode, NodeID: 2},
 			},
 			},
-			pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+			rt.ConfState{Voters: []rt.PeerID{1}, Learners: []rt.PeerID{2}},
 			nil,
 		},
 		// We can ask explicitly for joint consensus if we want it.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{Type: rt.ConfChangeAddLearnerNode, NodeID: 2},
 			},
-				Transition: pb.ConfChangeTransitionJointExplicit,
+				Transition: rt.ConfChangeTransitionJointExplicit,
 			},
-			pb.ConfState{Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
-			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+			rt.ConfState{Voters: []rt.PeerID{1}, VotersOutgoing: []rt.PeerID{1}, Learners: []rt.PeerID{2}},
+			&rt.ConfState{Voters: []rt.PeerID{1}, Learners: []rt.PeerID{2}},
 		},
 		// Ditto, but with implicit transition (the harness checks this).
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{Type: rt.ConfChangeAddLearnerNode, NodeID: 2},
 			},
-				Transition: pb.ConfChangeTransitionJointImplicit,
+				Transition: rt.ConfChangeTransitionJointImplicit,
 			},
-			pb.ConfState{
-				Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
+			rt.ConfState{
+				Voters: []rt.PeerID{1}, VotersOutgoing: []rt.PeerID{1}, Learners: []rt.PeerID{2},
 				AutoLeave: true,
 			},
-			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+			&rt.ConfState{Voters: []rt.PeerID{1}, Learners: []rt.PeerID{2}},
 		},
 		// Add a new node and demote n1. This exercises the interesting case in
 		// which we really need joint config changes and also need LearnersNext.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{NodeID: 2, Type: pb.ConfChangeAddNode},
-				{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
-				{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{NodeID: 2, Type: rt.ConfChangeAddNode},
+				{NodeID: 1, Type: rt.ConfChangeAddLearnerNode},
+				{NodeID: 3, Type: rt.ConfChangeAddLearnerNode},
 			},
 			},
-			pb.ConfState{
-				Voters:         []pb.PeerID{2},
-				VotersOutgoing: []pb.PeerID{1},
-				Learners:       []pb.PeerID{3},
-				LearnersNext:   []pb.PeerID{1},
+			rt.ConfState{
+				Voters:         []rt.PeerID{2},
+				VotersOutgoing: []rt.PeerID{1},
+				Learners:       []rt.PeerID{3},
+				LearnersNext:   []rt.PeerID{1},
 				AutoLeave:      true,
 			},
-			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
+			&rt.ConfState{Voters: []rt.PeerID{2}, Learners: []rt.PeerID{1, 3}},
 		},
 		// Ditto explicit.
 		{
-			pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-				{NodeID: 2, Type: pb.ConfChangeAddNode},
-				{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
-				{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
+			rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+				{NodeID: 2, Type: rt.ConfChangeAddNode},
+				{NodeID: 1, Type: rt.ConfChangeAddLearnerNode},
+				{NodeID: 3, Type: rt.ConfChangeAddLearnerNode},
 			},
-				Transition: pb.ConfChangeTransitionJointExplicit,
+				Transition: rt.ConfChangeTransitionJointExplicit,
 			},
-			pb.ConfState{
-				Voters:         []pb.PeerID{2},
-				VotersOutgoing: []pb.PeerID{1},
-				Learners:       []pb.PeerID{3},
-				LearnersNext:   []pb.PeerID{1},
+			rt.ConfState{
+				Voters:         []rt.PeerID{2},
+				VotersOutgoing: []rt.PeerID{1},
+				Learners:       []rt.PeerID{3},
+				LearnersNext:   []rt.PeerID{1},
 			},
-			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
+			&rt.ConfState{Voters: []rt.PeerID{2}, Learners: []rt.PeerID{1, 3}},
 		},
 		// Ditto implicit.
 		{
-			pb.ConfChangeV2{
-				Changes: []pb.ConfChangeSingle{
-					{NodeID: 2, Type: pb.ConfChangeAddNode},
-					{NodeID: 1, Type: pb.ConfChangeAddLearnerNode},
-					{NodeID: 3, Type: pb.ConfChangeAddLearnerNode},
+			rt.ConfChangeV2{
+				Changes: []rt.ConfChangeSingle{
+					{NodeID: 2, Type: rt.ConfChangeAddNode},
+					{NodeID: 1, Type: rt.ConfChangeAddLearnerNode},
+					{NodeID: 3, Type: rt.ConfChangeAddLearnerNode},
 				},
-				Transition: pb.ConfChangeTransitionJointImplicit,
+				Transition: rt.ConfChangeTransitionJointImplicit,
 			},
-			pb.ConfState{
-				Voters:         []pb.PeerID{2},
-				VotersOutgoing: []pb.PeerID{1},
-				Learners:       []pb.PeerID{3},
-				LearnersNext:   []pb.PeerID{1},
+			rt.ConfState{
+				Voters:         []rt.PeerID{2},
+				VotersOutgoing: []rt.PeerID{1},
+				Learners:       []rt.PeerID{3},
+				LearnersNext:   []rt.PeerID{1},
 				AutoLeave:      true,
 			},
-			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
+			&rt.ConfState{Voters: []rt.PeerID{2}, Learners: []rt.PeerID{1, 3}},
 		},
 	}
 
@@ -230,18 +230,18 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			)
 			// Propose the ConfChange, wait until it applies, save the resulting
 			// ConfState.
-			var cs *pb.ConfState
+			var cs *rt.ConfState
 			for cs == nil {
 				rd := rawNode.Ready()
 				s.Append(rd.Entries)
 				for _, ent := range rd.CommittedEntries {
-					var cc pb.ConfChangeI
-					if ent.Type == pb.EntryConfChange {
-						var ccc pb.ConfChange
+					var cc rt.ConfChangeI
+					if ent.Type == rt.EntryConfChange {
+						var ccc rt.ConfChange
 						require.NoError(t, ccc.Unmarshal(ent.Data))
 						cc = ccc
-					} else if ent.Type == pb.EntryConfChangeV2 {
-						var ccc pb.ConfChangeV2
+					} else if ent.Type == rt.EntryConfChangeV2 {
+						var ccc rt.ConfChangeV2
 						require.NoError(t, ccc.Unmarshal(ent.Data))
 						cc = ccc
 					}
@@ -277,9 +277,9 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			require.Len(t, entries, 2)
 			assert.Equal(t, []byte("somedata"), entries[0].Data)
 
-			typ := pb.EntryConfChange
+			typ := rt.EntryConfChange
 			if _, ok := tc.cc.AsV1(); !ok {
-				typ = pb.EntryConfChangeV2
+				typ = rt.EntryConfChangeV2
 			}
 			require.Equal(t, typ, entries[1].Type)
 			assert.Equal(t, ccdata, entries[1].Data)
@@ -312,16 +312,16 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				}
 				context = []byte("manual")
 				t.Log("leaving joint state manually")
-				require.NoError(t, rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}))
+				require.NoError(t, rawNode.ProposeConfChange(rt.ConfChangeV2{Context: context}))
 				rd = rawNode.Ready()
 			}
 
 			// Check that the right ConfChange comes out.
 			require.Len(t, rd.Entries, 1)
-			require.Equal(t, pb.EntryConfChangeV2, rd.Entries[0].Type)
-			var cc pb.ConfChangeV2
+			require.Equal(t, rt.EntryConfChangeV2, rd.Entries[0].Type)
+			var cc rt.ConfChangeV2
 			require.NoError(t, cc.Unmarshal(rd.Entries[0].Data))
-			require.Equal(t, pb.ConfChangeV2{Context: context}, cc)
+			require.Equal(t, rt.ConfChangeV2{Context: context}, cc)
 
 			// Lie and pretend the ConfChange applied. It won't do so because now
 			// we require the joint quorum and we're only running one node.
@@ -336,16 +336,16 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 // TestRawNodeJointAutoLeave tests the configuration change auto leave even leader
 // lost leadership.
 func TestRawNodeJointAutoLeave(t *testing.T) {
-	testCc := pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
-		{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
+	testCc := rt.ConfChangeV2{Changes: []rt.ConfChangeSingle{
+		{Type: rt.ConfChangeAddLearnerNode, NodeID: 2},
 	},
-		Transition: pb.ConfChangeTransitionJointImplicit,
+		Transition: rt.ConfChangeTransitionJointImplicit,
 	}
-	expCs := pb.ConfState{
-		Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
+	expCs := rt.ConfState{
+		Voters: []rt.PeerID{1}, VotersOutgoing: []rt.PeerID{1}, Learners: []rt.PeerID{2},
 		AutoLeave: true,
 	}
-	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
+	exp2Cs := rt.ConfState{Voters: []rt.PeerID{1}, Learners: []rt.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, withFortificationDisabled()))
@@ -359,20 +359,20 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	)
 	// Propose the ConfChange, wait until it applies, save the resulting
 	// ConfState.
-	var cs *pb.ConfState
+	var cs *rt.ConfState
 	for cs == nil {
 		rd := rawNode.Ready()
 		s.Append(rd.Entries)
 		for _, ent := range rd.CommittedEntries {
-			var cc pb.ConfChangeI
-			if ent.Type == pb.EntryConfChangeV2 {
-				var ccc pb.ConfChangeV2
+			var cc rt.ConfChangeI
+			if ent.Type == rt.EntryConfChangeV2 {
+				var ccc rt.ConfChangeV2
 				require.NoError(t, ccc.Unmarshal(ent.Data))
 				cc = &ccc
 			}
 			if cc != nil {
 				// Force it step down.
-				rawNode.Step(pb.Message{Type: pb.MsgHeartbeatResp, From: 1, Term: rawNode.raft.Term + 1})
+				rawNode.Step(rt.Message{Type: rt.MsgHeartbeatResp, From: 1, Term: rawNode.raft.Term + 1})
 				cs = rawNode.ApplyConfChange(cc)
 			}
 		}
@@ -396,7 +396,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, []byte("somedata"), entries[0].Data)
-	require.Equal(t, pb.EntryConfChangeV2, entries[1].Type)
+	require.Equal(t, rt.EntryConfChangeV2, entries[1].Type)
 	assert.Equal(t, ccdata, entries[1].Data)
 
 	require.Equal(t, &expCs, cs)
@@ -427,10 +427,10 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	s.Append(rd.Entries)
 	// Check that the right ConfChange comes out.
 	require.Len(t, rd.Entries, 1)
-	require.Equal(t, pb.EntryConfChangeV2, rd.Entries[0].Type)
-	var cc pb.ConfChangeV2
+	require.Equal(t, rt.EntryConfChangeV2, rd.Entries[0].Type)
+	var cc rt.ConfChangeV2
 	require.NoError(t, cc.Unmarshal(rd.Entries[0].Data))
-	require.Equal(t, pb.ConfChangeV2{Context: nil}, cc)
+	require.Equal(t, rt.ConfChangeV2{Context: nil}, cc)
 	// Lie and pretend the ConfChange applied. It won't do so because now
 	// we require the joint quorum and we're only running one node.
 	cs = rawNode.ApplyConfChange(cc)
@@ -459,13 +459,13 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 		rawNode.Advance(rd)
 	}
 
-	proposeConfChangeAndApply := func(cc pb.ConfChange) {
+	proposeConfChangeAndApply := func(cc rt.ConfChange) {
 		rawNode.ProposeConfChange(cc)
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
 		for _, entry := range rd.CommittedEntries {
-			if entry.Type == pb.EntryConfChange {
-				var cc pb.ConfChange
+			if entry.Type == rt.EntryConfChange {
+				var cc rt.ConfChange
 				cc.Unmarshal(entry.Data)
 				rawNode.ApplyConfChange(cc)
 			}
@@ -473,7 +473,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 		rawNode.Advance(rd)
 	}
 
-	cc1 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 1}
+	cc1 := rt.ConfChange{Type: rt.ConfChangeAddNode, NodeID: 1}
 	ccdata1, err := cc1.Marshal()
 	require.NoError(t, err)
 	proposeConfChangeAndApply(cc1)
@@ -482,7 +482,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	proposeConfChangeAndApply(cc1)
 
 	// the new node join should be ok
-	cc2 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 2}
+	cc2 := rt.ConfChange{Type: rt.ConfChangeAddNode, NodeID: 2}
 	ccdata2, err := cc2.Marshal()
 	require.NoError(t, err)
 	proposeConfChangeAndApply(cc2)
@@ -509,13 +509,13 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 // requires the application to bootstrap the state, i.e. it does not accept peers
 // and will not create faux configuration change entries.
 func TestRawNodeStart(t *testing.T) {
-	entries := []pb.Entry{
+	entries := []rt.Entry{
 		{Term: 1, Index: 2, Data: nil},           // empty entry
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
 		SoftState:        &SoftState{RaftState: StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+		HardState:        rt.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
 		MustSync:         true, // because we are advancing the commit index
@@ -537,9 +537,9 @@ func TestRawNodeStart(t *testing.T) {
 	// index 10, so empty followers (at index 1) always need a snapshot first.
 	type appenderStorage interface {
 		Storage
-		ApplySnapshot(pb.Snapshot) error
+		ApplySnapshot(rt.Snapshot) error
 	}
-	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
+	bootstrap := func(storage appenderStorage, cs rt.ConfState) error {
 		require.NotEmpty(t, cs.Voters, "no voters specified")
 		fi := storage.FirstIndex()
 		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
@@ -557,16 +557,16 @@ func TestRawNodeStart(t *testing.T) {
 		require.True(t, IsEmptyHardState(hs))
 		require.Empty(t, ics.Voters)
 
-		meta := pb.SnapshotMetadata{
+		meta := rt.SnapshotMetadata{
 			Index:     1,
 			Term:      0,
 			ConfState: cs,
 		}
-		snap := pb.Snapshot{Metadata: meta}
+		snap := rt.Snapshot{Metadata: meta}
 		return storage.ApplySnapshot(snap)
 	}
 
-	require.NoError(t, bootstrap(storage, pb.ConfState{Voters: []pb.PeerID{1}}))
+	require.NoError(t, bootstrap(storage, rt.ConfState{Voters: []rt.PeerID{1}}))
 
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
 	require.NoError(t, err)
@@ -597,11 +597,11 @@ func TestRawNodeStart(t *testing.T) {
 }
 
 func TestRawNodeRestart(t *testing.T) {
-	entries := []pb.Entry{
+	entries := []rt.Entry{
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 1, Lead: 1, LeadEpoch: 1}
+	st := rt.HardState{Term: 1, Commit: 1, Lead: 1, LeadEpoch: 1}
 
 	want := Ready{
 		HardState: emptyState, // no HardState is emitted because there was no change
@@ -622,9 +622,9 @@ func TestRawNodeRestart(t *testing.T) {
 	// Ensure that the HardState was correctly loaded post restart.
 	assert.Equal(t, uint64(1), rawNode.raft.Term)
 	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
-	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
+	assert.Equal(t, rt.PeerID(1), rawNode.raft.lead)
 	assert.True(t, rawNode.raft.state == StateFollower)
-	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
+	assert.Equal(t, rt.Epoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
 	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
@@ -638,17 +638,17 @@ func TestRawNodeRestart(t *testing.T) {
 }
 
 func TestRawNodeRestartFromSnapshot(t *testing.T) {
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+	snap := rt.Snapshot{
+		Metadata: rt.SnapshotMetadata{
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 			Index:     2,
 			Term:      1,
 		},
 	}
-	entries := []pb.Entry{
+	entries := []rt.Entry{
 		{Term: 1, Index: 3, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 3}
+	st := rt.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
 		HardState: emptyState,
@@ -683,7 +683,7 @@ func TestRawNodeStatus(t *testing.T) {
 	s.Append(rd.Entries)
 	rn.Advance(rd)
 	status := rn.Status()
-	require.Equal(t, pb.PeerID(1), status.Lead)
+	require.Equal(t, rt.PeerID(1), status.Lead)
 	require.Equal(t, StateLeader, status.RaftState)
 	require.Equal(t, *rn.raft.trk.Progress(1), status.Progress[1])
 
@@ -713,20 +713,20 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	s := &ignoreSizeHintMemStorage{
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
-	persistedHardState := pb.HardState{
+	persistedHardState := rt.HardState{
 		Term:   1,
 		Vote:   1,
 		Commit: 10,
 	}
 
 	s.hardState = persistedHardState
-	s.ents = make([]pb.Entry, 10)
+	s.ents = make([]rt.Entry, 10)
 	var size uint64
 	for i := range s.ents {
-		ent := pb.Entry{
+		ent := rt.Entry{
 			Term:  1,
 			Index: uint64(i + 1),
-			Type:  pb.EntryNormal,
+			Type:  rt.EntryNormal,
 			Data:  []byte("a"),
 		}
 
@@ -740,10 +740,10 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
 	cfg.MaxSizePerMsg = size - uint64(s.ents[len(s.ents)-1].Size()) - 1
 
-	s.ents = append(s.ents, pb.Entry{
+	s.ents = append(s.ents, rt.Entry{
 		Term:  1,
 		Index: uint64(11),
-		Type:  pb.EntryNormal,
+		Type:  rt.EntryNormal,
 		Data:  []byte("boom"),
 	})
 
@@ -760,8 +760,8 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 
 		highestApplied = rd.CommittedEntries[n-1].Index
 		rawNode.Advance(rd)
-		rawNode.Step(pb.Message{
-			Type:    pb.MsgApp,
+		rawNode.Step(rt.Message{
+			Type:    rt.MsgApp,
 			To:      1,
 			From:    2, // illegal, but we get away with it
 			Term:    1,
@@ -783,7 +783,7 @@ func TestRawNodePersistenceRegression(t *testing.T) {
 	newNode := func() *RawNode {
 		s := newTestMemoryStorage(withPeers(1, 2))
 		require.NoError(t, s.Append(index(1).terms(1, 2, 5)))
-		require.NoError(t, s.SetHardState(pb.HardState{
+		require.NoError(t, s.SetHardState(rt.HardState{
 			Term:   5,
 			Vote:   1,
 			Commit: 3,
@@ -793,8 +793,8 @@ func TestRawNodePersistenceRegression(t *testing.T) {
 
 	t.Run("MsgApp", func(t *testing.T) {
 		node := newNode()
-		msg := pb.Message{
-			From: 2, To: 1, Type: pb.MsgApp,
+		msg := rt.Message{
+			From: 2, To: 1, Type: rt.MsgApp,
 			Term: 5, Index: 3, LogTerm: 5, Commit: 3,
 		}
 		// Don't panic if we haven't reported a higher match index.
@@ -809,8 +809,8 @@ func TestRawNodePersistenceRegression(t *testing.T) {
 
 	t.Run("MsgHeartbeat", func(t *testing.T) {
 		node := newNode()
-		msg := pb.Message{
-			From: 2, To: 1, Type: pb.MsgHeartbeat,
+		msg := rt.Message{
+			From: 2, To: 1, Type: rt.MsgHeartbeat,
 			Term: 5, Commit: 3,
 		}
 		// Don't panic if we haven't reported a higher match index.
@@ -831,7 +831,7 @@ func TestRawNodePersistenceRegression(t *testing.T) {
 func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	const maxEntries = 16
 	data := []byte("testdata")
-	testEntry := pb.Entry{Data: data}
+	testEntry := rt.Entry{Data: data}
 	maxEntrySize := maxEntries * payloadSize(testEntry)
 	t.Log("maxEntrySize", maxEntrySize)
 
@@ -887,9 +887,9 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 
 func BenchmarkStatus(b *testing.B) {
 	setup := func(members int) *RawNode {
-		peers := make([]pb.PeerID, members)
+		peers := make([]rt.PeerID, members)
 		for i := range peers {
-			peers[i] = pb.PeerID(i + 1)
+			peers[i] = rt.PeerID(i + 1)
 		}
 		cfg := newTestConfig(1, 3, 1, newTestMemoryStorage(withPeers(peers...)))
 		cfg.Logger = discardLogger
@@ -932,7 +932,7 @@ func BenchmarkStatus(b *testing.B) {
 
 			b.Run("WithProgress", func(b *testing.B) {
 				b.ReportAllocs()
-				visit := func(pb.PeerID, ProgressType, tracker.Progress) {}
+				visit := func(rt.PeerID, ProgressType, tracker.Progress) {}
 
 				for i := 0; i < b.N; i++ {
 					rn.WithProgress(visit)
@@ -942,7 +942,7 @@ func BenchmarkStatus(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					var n uint64
-					visit := func(_ pb.PeerID, _ ProgressType, pr tracker.Progress) {
+					visit := func(_ rt.PeerID, _ ProgressType, pr tracker.Progress) {
 						n += pr.Match
 					}
 					rn.WithProgress(visit)
@@ -958,8 +958,8 @@ func TestRawNodeConsumeReady(t *testing.T) {
 	// the messages) but Ready() does.
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 3, 1, s)
-	m1 := pb.Message{Context: []byte("foo")}
-	m2 := pb.Message{Context: []byte("bar")}
+	m1 := rt.Message{Context: []byte("foo")}
+	m2 := rt.Message{Context: []byte("bar")}
 
 	// Inject first message, make sure it's visible via readyWithoutAccept.
 	rn.raft.msgs = append(rn.raft.msgs, m1)
@@ -986,15 +986,15 @@ func TestRawNodeConsumeReady(t *testing.T) {
 func BenchmarkRawNode(b *testing.B) {
 	cases := []struct {
 		name  string
-		peers []pb.PeerID
+		peers []rt.PeerID
 	}{
 		{
 			name:  "single-voter",
-			peers: []pb.PeerID{1},
+			peers: []rt.PeerID{1},
 		},
 		{
 			name:  "two-voters",
-			peers: []pb.PeerID{1, 2},
+			peers: []rt.PeerID{1, 2},
 		},
 		// You can easily add more cases here.
 	}
@@ -1006,7 +1006,7 @@ func BenchmarkRawNode(b *testing.B) {
 	}
 }
 
-func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
+func benchmarkRawNodeImpl(b *testing.B, peers ...rt.PeerID) {
 
 	const debug = false
 
@@ -1036,19 +1036,19 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 			}
 			s.Append(rd.Entries)
 			for _, m := range rd.Messages {
-				if m.Type == pb.MsgVote {
-					resp := pb.Message{To: m.From, From: m.To, Term: m.Term, Type: pb.MsgVoteResp}
+				if m.Type == rt.MsgVote {
+					resp := rt.Message{To: m.From, From: m.To, Term: m.Term, Type: rt.MsgVoteResp}
 					if debug {
 						b.Log(DescribeMessage(resp, nil))
 					}
 					rn.Step(resp)
 				}
-				if m.Type == pb.MsgApp {
+				if m.Type == rt.MsgApp {
 					idx := m.Index
 					if n := len(m.Entries); n > 0 {
 						idx = m.Entries[n-1].Index
 					}
-					resp := pb.Message{To: m.From, From: m.To, Type: pb.MsgAppResp, Term: m.Term, Index: idx}
+					resp := rt.Message{To: m.From, From: m.To, Type: rt.MsgAppResp, Term: m.Term, Index: idx}
 					if debug {
 						b.Log(DescribeMessage(resp, nil))
 					}

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -142,7 +142,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	var receivedSnap int64
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 		if atomic.CompareAndSwapInt64(&receivedSnap, 0, 1) {
 			close(blockUntilSnapshotCh)
 		} else {
@@ -238,7 +238,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	activateBlocking := int64(1)
 	var count int64
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&activateBlocking) > 0 {
 			// Signal waitForRebalanceToBlockCh to indicate the testing knob was hit.
 			close(waitForRebalanceToBlockCh)
@@ -387,7 +387,7 @@ func TestDelegateSnapshot(t *testing.T) {
 		// TODO(abaptist): Remove this condition once 96841 is fixed. This
 		// accounts spurious raft snapshots that are sent. Also disable the raft
 		// snapshot queue using ltk.storeKnobs.DisableRaftSnapshotQueue = true.
-		if request.SenderQueueName != kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
+		if request.SenderQueueName != kvserverrt.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			requestChannel <- request
 		}
 	}
@@ -493,7 +493,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 	}
 
 	setupFn := func(t *testing.T,
-		receiveFunc func(context.Context, *kvserverpb.SnapshotRequest_Header) error,
+		receiveFunc func(context.Context, *kvserverrt.SnapshotRequest_Header) error,
 		sendFunc func(*kvserverpb.DelegateSendSnapshotRequest),
 		processRaft func(roachpb.StoreID) bool,
 	) (
@@ -619,9 +619,9 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		var block atomic.Int32
 		tc, scratchKey := setupFn(
 			t,
-			func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+			func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 				// TODO(abaptist): Remove this check once #96841 is fixed.
-				if h.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
+				if h.SenderQueueName == kvserverrt.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 					return nil
 				}
 				if val := block.Load(); val > 0 {
@@ -788,7 +788,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 				if status == nil {
 					return errors.Errorf(`%s is still waking up`, repl)
 				}
-				if _, ok := status.Config.Learners[raftpb.PeerID(id)]; !ok {
+				if _, ok := status.Config.Learners[rafttype.PeerID(id)]; !ok {
 					return errors.Errorf(`%s thinks %d is not a learner`, repl, id)
 				}
 			}
@@ -863,7 +863,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	runTest := func(t *testing.T, replicaType roachpb.ReplicaType) {
 		var rejectSnapshotErr atomic.Value // error
 		knobs, ltk := makeReplicationTestKnobs()
-		ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+		ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 			if err := rejectSnapshotErr.Load().(error); err != nil {
 				return err
 			}
@@ -1371,7 +1371,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
-	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshotsCh:
 		case <-time.After(10 * time.Second):
@@ -1435,7 +1435,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverrt.SnapshotRequest_Header) error {
 		blockUntilSnapshotCh <- struct{}{}
 		<-blockSnapshotsCh
 		return nil
@@ -1992,7 +1992,7 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 						// Disable load-based splitting, so that the absence of sufficient
 						// QPS measurements do not prevent ranges from merging.
 						DisableLoadBasedSplitting: true,
-						ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+						ReceiveSnapshot: func(_ context.Context, _ *kvserverrt.SnapshotRequest_Header) error {
 							if atomic.LoadInt64(&activateSnapshotTestingKnob) == 1 {
 								// While the snapshot RPC should only happen once given
 								// that the cluster is running under manual replication,

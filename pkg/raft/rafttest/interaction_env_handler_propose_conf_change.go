@@ -22,14 +22,14 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.TestData) error {
 	idx := firstAsNodeIdx(t, d)
 	var v1 bool
-	transition := raftpb.ConfChangeTransitionAuto
+	transition := rafttype.ConfChangeTransitionAuto
 	for _, arg := range d.CmdArgs[1:] {
 		for _, val := range arg.Vals {
 			switch arg.Key {
@@ -42,11 +42,11 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 			case "transition":
 				switch val {
 				case "auto":
-					transition = raftpb.ConfChangeTransitionAuto
+					transition = rafttype.ConfChangeTransitionAuto
 				case "implicit":
-					transition = raftpb.ConfChangeTransitionJointImplicit
+					transition = rafttype.ConfChangeTransitionJointImplicit
 				case "explicit":
-					transition = raftpb.ConfChangeTransitionJointExplicit
+					transition = rafttype.ConfChangeTransitionJointExplicit
 				default:
 					return fmt.Errorf("unknown transition %s", val)
 				}
@@ -56,22 +56,22 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 		}
 	}
 
-	ccs, err := raftpb.ConfChangesFromString(d.Input)
+	ccs, err := rafttype.ConfChangesFromString(d.Input)
 	if err != nil {
 		return err
 	}
 
-	var c raftpb.ConfChangeI
+	var c rafttype.ConfChangeI
 	if v1 {
-		if len(ccs) > 1 || transition != raftpb.ConfChangeTransitionAuto {
+		if len(ccs) > 1 || transition != rafttype.ConfChangeTransitionAuto {
 			return fmt.Errorf("v1 conf change can only have one operation and no transition")
 		}
-		c = raftpb.ConfChange{
+		c = rafttype.ConfChange{
 			Type:   ccs[0].Type,
 			NodeID: ccs[0].NodeID,
 		}
 	} else {
-		c = raftpb.ConfChangeV2{
+		c = rafttype.ConfChangeV2{
 			Transition: transition,
 			Changes:    ccs,
 		}
@@ -80,6 +80,6 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 }
 
 // ProposeConfChange proposes a configuration change on the node with the given index.
-func (env *InteractionEnv) ProposeConfChange(idx int, c raftpb.ConfChangeI) error {
+func (env *InteractionEnv) ProposeConfChange(idx int, c rafttype.ConfChangeI) error {
 	return env.Nodes[idx].ProposeConfChange(c)
 }

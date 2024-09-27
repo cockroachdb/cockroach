@@ -17,7 +17,7 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
 // "log" can be represented by a snapshot, and/or a contiguous slice of entries.
@@ -66,7 +66,7 @@ type unstable struct {
 	// The last invariant enforces the order of handling a situation when there is
 	// both a snapshot and entries. The snapshot write must be acknowledged first,
 	// before entries are acknowledged and the logSlice moves forward.
-	snapshot *pb.Snapshot
+	snapshot *rt.Snapshot
 
 	// logSlice is the suffix of the raft log that is not yet written to storage.
 	// If all the entries are written, or covered by the pending snapshot, then
@@ -133,7 +133,7 @@ func (u *unstable) maybeFirstIndex() (uint64, bool) {
 
 // nextEntries returns the unstable entries that are not already in the process
 // of being written to storage.
-func (u *unstable) nextEntries() []pb.Entry {
+func (u *unstable) nextEntries() []rt.Entry {
 	if u.entryInProgress == u.lastIndex() {
 		return nil
 	}
@@ -142,7 +142,7 @@ func (u *unstable) nextEntries() []pb.Entry {
 
 // nextSnapshot returns the unstable snapshot, if one exists that is not already
 // in the process of being written to storage.
-func (u *unstable) nextSnapshot() *pb.Snapshot {
+func (u *unstable) nextSnapshot() *rt.Snapshot {
 	if u.snapshot == nil || u.snapshotInProgress {
 		return nil
 	}
@@ -208,7 +208,7 @@ func (u *unstable) shrinkEntriesArray() {
 	if len(u.entries) == 0 {
 		u.entries = nil
 	} else if len(u.entries)*lenMultiple < cap(u.entries) {
-		newEntries := make([]pb.Entry, len(u.entries))
+		newEntries := make([]rt.Entry, len(u.entries))
 		copy(newEntries, u.entries)
 		u.entries = newEntries
 	}

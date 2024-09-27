@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -325,7 +325,7 @@ func calcBehindCount(
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {
-		if progress, ok := raftStatus.Progress[raftpb.PeerID(rd.ReplicaID)]; ok {
+		if progress, ok := raftStatus.Progress[rafttype.PeerID(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
 				behindCount += int64(raftStatus.Commit) - int64(progress.Match)

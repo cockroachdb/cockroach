@@ -108,7 +108,7 @@ restart), or you can supply your own disk-backed implementation.
 
 Third, when you receive a message from another node, pass it to Node.Step:
 
-	func recvRaftRPC(ctx context.Context, m raftpb.Message) {
+	func recvRaftRPC(ctx context.Context, m rafttype.Message) {
 		n.Step(ctx, m)
 	}
 
@@ -131,8 +131,8 @@ The total state machine handling loop will look something like this:
 	    }
 	    for _, entry := range rd.CommittedEntries {
 	      process(entry)
-	      if entry.Type == raftpb.EntryConfChange {
-	        var cc raftpb.ConfChange
+	      if entry.Type == rafttype.EntryConfChange {
+	        var cc rafttype.ConfChange
 	        cc.Unmarshal(entry.Data)
 	        s.Node.ApplyConfChange(cc)
 	      }
@@ -149,7 +149,7 @@ data, serialize it into a byte slice and call:
 	n.Propose(ctx, data)
 
 If the proposal is committed, data will appear in committed entries with type
-raftpb.EntryNormal. There is no guarantee that a proposed command will be
+rafttype.EntryNormal. There is no guarantee that a proposed command will be
 committed; you may have to re-propose after a timeout.
 
 To add or remove a node in a cluster, build ConfChange struct 'cc' and call:
@@ -157,9 +157,9 @@ To add or remove a node in a cluster, build ConfChange struct 'cc' and call:
 	n.ProposeConfChange(ctx, cc)
 
 After config change is committed, some committed entry with type
-raftpb.EntryConfChange will be returned. You must apply it to node through:
+rafttype.EntryConfChange will be returned. You must apply it to node through:
 
-	var cc raftpb.ConfChange
+	var cc rafttype.ConfChange
 	cc.Unmarshal(data)
 	n.ApplyConfChange(cc)
 
@@ -243,8 +243,8 @@ application to the local state machine (apply). Those will look something like:
 	    case m := <-toApply:
 	      for _, entry := range m.CommittedEntries {
 	        process(entry)
-	        if entry.Type == raftpb.EntryConfChange {
-	          var cc raftpb.ConfChange
+	        if entry.Type == rafttype.EntryConfChange {
+	          var cc rafttype.ConfChange
 	          cc.Unmarshal(entry.Data)
 	          s.Node.ApplyConfChange(cc)
 	        }
@@ -286,8 +286,8 @@ every cluster.
 Package raft sends and receives message in Protocol Buffer format (defined
 in raftpb package). Each state (follower, candidate, leader) implements its
 own 'step' method ('stepFollower', 'stepCandidate', 'stepLeader') when
-advancing with the given raftpb.Message. Each step is determined by its
-raftpb.MessageType. Note that every step is checked by one common method
+advancing with the given rafttype.Message. Each step is determined by its
+rafttype.MessageType. Note that every step is checked by one common method
 'Step' that safety-checks the terms of node and incoming message to prevent
 stale log entries:
 
@@ -304,7 +304,7 @@ stale log entries:
 
 	'MsgProp' proposes to append data to its log entries. This is a special
 	type to redirect proposals to leader. Therefore, send method overwrites
-	raftpb.Message's term with its HardState's term to avoid attaching its
+	rafttype.Message's term with its HardState's term to avoid attaching its
 	local term to 'MsgProp'. When 'MsgProp' is passed to the leader's 'Step'
 	method, the leader first calls the 'appendEntry' method to append entries
 	to its log, and then calls 'bcastAppend' method to send those entries to

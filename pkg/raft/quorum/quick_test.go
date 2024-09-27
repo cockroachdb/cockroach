@@ -24,7 +24,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // TestQuick uses quickcheck to heuristically assert that the main
@@ -49,7 +49,7 @@ func TestQuick(t *testing.T) {
 }
 
 // smallRandIdxMap returns a reasonably sized map of ids to commit indexes.
-func smallRandIdxMap(rand *rand.Rand, _ int) map[pb.PeerID]Index {
+func smallRandIdxMap(rand *rand.Rand, _ int) map[rt.PeerID]Index {
 	// Hard-code a reasonably small size here (quick will hard-code 50, which
 	// is not useful here).
 	size := 10
@@ -61,25 +61,25 @@ func smallRandIdxMap(rand *rand.Rand, _ int) map[pb.PeerID]Index {
 		idxs[i] = rand.Intn(n)
 	}
 
-	m := map[pb.PeerID]Index{}
+	m := map[rt.PeerID]Index{}
 	for i := range ids {
-		m[pb.PeerID(ids[i])] = Index(idxs[i])
+		m[rt.PeerID(ids[i])] = Index(idxs[i])
 	}
 	return m
 }
 
-type idxMap map[pb.PeerID]Index
+type idxMap map[rt.PeerID]Index
 
 func (idxMap) Generate(rand *rand.Rand, size int) reflect.Value {
 	m := smallRandIdxMap(rand, size)
 	return reflect.ValueOf(m)
 }
 
-type memberMap map[pb.PeerID]struct{}
+type memberMap map[rt.PeerID]struct{}
 
 func (memberMap) Generate(rand *rand.Rand, size int) reflect.Value {
 	m := smallRandIdxMap(rand, size)
-	mm := map[pb.PeerID]struct{}{}
+	mm := map[rt.PeerID]struct{}{}
 	for id := range m {
 		mm[id] = struct{}{}
 	}
@@ -92,7 +92,7 @@ func alternativeMajorityCommittedIndex(c MajorityConfig, l AckedIndexer) Index {
 		return math.MaxUint64
 	}
 
-	idToIdx := map[pb.PeerID]Index{}
+	idToIdx := map[rt.PeerID]Index{}
 	for id := range c {
 		if idx, ok := l.AckedIndex(id); ok {
 			idToIdx[id] = idx

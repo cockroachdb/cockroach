@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -283,7 +283,7 @@ type testingRCRange struct {
 	// snapshots contain snapshots of the tracker state for different replicas,
 	// at various points in time. It is used in TestUsingSimulation.
 	snapshots []testingTrackerSnapshot
-	entries   []raftpb.Entry
+	entries   []rafttype.Entry
 
 	mu struct {
 		syncutil.Mutex
@@ -325,7 +325,7 @@ func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
 
 func (r *testingRCRange) MakeMsgAppRaftMuLocked(
 	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
+) (rafttype.Message, error) {
 	panic("unimplemented")
 }
 
@@ -555,11 +555,11 @@ func scanReplica(t *testing.T, line string) testingReplica {
 func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 	switch input {
 	case "LowPri":
-		return admissionpb.LowPri
+		return admissionrt.LowPri
 	case "NormalPri":
-		return admissionpb.NormalPri
+		return admissionrt.NormalPri
 	case "HighPri":
-		return admissionpb.HighPri
+		return admissionrt.HighPri
 	default:
 		require.Failf(t, "unknown work class", "%v", input)
 		return admissionpb.WorkPriority(-1)
@@ -676,11 +676,11 @@ type entryInfo struct {
 	term   uint64
 	index  uint64
 	enc    raftlog.EntryEncoding
-	pri    raftpb.Priority
+	pri    rafttype.Priority
 	tokens kvflowcontrol.Tokens
 }
 
-func testingCreateEntry(t *testing.T, info entryInfo) raftpb.Entry {
+func testingCreateEntry(t *testing.T, info entryInfo) rafttype.Entry {
 	cmdID := kvserverbase.CmdIDKey("11111111")
 	var metaBuf []byte
 	if info.enc.UsesAdmissionControl() {
@@ -711,10 +711,10 @@ func testingCreateEntry(t *testing.T, info entryInfo) raftpb.Entry {
 	require.NoError(t, err)
 	data := append(cmdBufPrefix, metaBuf...)
 	data = append(data, cmdBuf...)
-	return raftpb.Entry{
+	return rafttype.Entry{
 		Term:  info.term,
 		Index: info.index,
-		Type:  raftpb.EntryNormal,
+		Type:  rafttype.EntryNormal,
 		Data:  data,
 	}
 }
@@ -1031,15 +1031,15 @@ func TestRangeController(t *testing.T) {
 			case "raft_event":
 				for _, event := range parseRaftEvents(t, d.Input) {
 					raftEvent := RaftEvent{
-						Entries:           make([]raftpb.Entry, len(event.entries)),
-						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
+						Entries:           make([]rafttype.Entry, len(event.entries)),
+						MsgApps:           map[roachpb.ReplicaID][]rafttype.Message{},
 						ReplicasStateInfo: state.ranges[event.rangeID].replicasStateInfo(),
 					}
 					for i, entry := range event.entries {
 						raftEvent.Entries[i] = testingCreateEntry(t, entry)
 					}
-					msgApp := raftpb.Message{
-						Type: raftpb.MsgApp,
+					msgApp := rafttype.Message{
+						Type: rafttype.MsgApp,
 						To:   0,
 						// We will selectively include a prefix of the new entries, and a
 						// suffix of entries that were previously appended, down below.
@@ -1053,7 +1053,7 @@ func TestRangeController(t *testing.T) {
 
 						for replicaID, testR := range testRC.mu.r.replicaSet {
 							msgApp.Entries = nil
-							msgApp.To = raftpb.PeerID(replicaID)
+							msgApp.To = rafttype.PeerID(replicaID)
 							if event.sendingEntryRange == nil ||
 								testingFirst(0, event.sendingEntryRange[replicaID]) == nil {
 								// When sendingEntryRange is not specified, include all
@@ -1068,7 +1068,7 @@ func TestRangeController(t *testing.T) {
 									}
 								}
 							}
-							raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
+							raftEvent.MsgApps[replicaID] = append([]rafttype.Message(nil), msgApp)
 							if len(msgApp.Entries) > 0 {
 								// Bump the Next and Index fields for replicas that have
 								// MsgApps being sent to them. The Match index is only updated
@@ -1144,13 +1144,13 @@ func TestGetEntryFCState(t *testing.T) {
 				term:   1,
 				index:  1,
 				enc:    raftlog.EntryEncodingStandardWithAC,
-				pri:    raftpb.NormalPri,
+				pri:    rafttype.NormalPri,
 				tokens: 100,
 			},
 			expectedFCState: entryFCState{
 				term:            1,
 				index:           1,
-				pri:             raftpb.LowPri,
+				pri:             rafttype.LowPri,
 				usesFlowControl: true,
 				tokens:          100,
 			},
@@ -1162,13 +1162,13 @@ func TestGetEntryFCState(t *testing.T) {
 				term:   2,
 				index:  2,
 				enc:    raftlog.EntryEncodingSideloadedWithAC,
-				pri:    raftpb.HighPri,
+				pri:    rafttype.HighPri,
 				tokens: 200,
 			},
 			expectedFCState: entryFCState{
 				term:            2,
 				index:           2,
-				pri:             raftpb.LowPri,
+				pri:             rafttype.LowPri,
 				usesFlowControl: true,
 				tokens:          200,
 			},
@@ -1195,13 +1195,13 @@ func TestGetEntryFCState(t *testing.T) {
 				term:   4,
 				index:  4,
 				enc:    raftlog.EntryEncodingStandardWithACAndPriority,
-				pri:    raftpb.NormalPri,
+				pri:    rafttype.NormalPri,
 				tokens: 400,
 			},
 			expectedFCState: entryFCState{
 				term:            4,
 				index:           4,
-				pri:             raftpb.NormalPri,
+				pri:             rafttype.NormalPri,
 				usesFlowControl: true,
 				tokens:          400,
 			},
@@ -1213,13 +1213,13 @@ func TestGetEntryFCState(t *testing.T) {
 				term:   5,
 				index:  5,
 				enc:    raftlog.EntryEncodingSideloadedWithACAndPriority,
-				pri:    raftpb.AboveNormalPri,
+				pri:    rafttype.AboveNormalPri,
 				tokens: 500,
 			},
 			expectedFCState: entryFCState{
 				term:            5,
 				index:           5,
-				pri:             raftpb.AboveNormalPri,
+				pri:             rafttype.AboveNormalPri,
 				usesFlowControl: true,
 				tokens:          500,
 			},
@@ -1241,47 +1241,47 @@ func testingFirst(args ...interface{}) interface{} {
 }
 
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
-	// raftpb.Entry and raftpb.Message are only partially populated below, which
+	// rafttype.Entry and rafttype.Message are only partially populated below, which
 	// could be improved in the future.
-	appendMsg := raftpb.Message{
-		Type:     raftpb.MsgStorageAppend,
+	appendMsg := rafttype.Message{
+		Type:     rafttype.MsgStorageAppend,
 		LogTerm:  10,
-		Snapshot: &raftpb.Snapshot{},
-		Entries: []raftpb.Entry{
+		Snapshot: &rafttype.Snapshot{},
+		Entries: []rafttype.Entry{
 			{
 				Term: 9,
 			},
 		},
 	}
-	outboundMsgs := []raftpb.Message{
+	outboundMsgs := []rafttype.Message{
 		{
-			Type: raftpb.MsgApp,
+			Type: rafttype.MsgApp,
 			To:   20,
-			Entries: []raftpb.Entry{
+			Entries: []rafttype.Entry{
 				{
 					Term: 9,
 				},
 			},
 		},
 		{
-			Type: raftpb.MsgBeat,
+			Type: rafttype.MsgBeat,
 			To:   22,
 		},
 		{
-			Type: raftpb.MsgApp,
+			Type: rafttype.MsgApp,
 			To:   21,
 		},
 		{
-			Type: raftpb.MsgApp,
+			Type: rafttype.MsgApp,
 			To:   20,
-			Entries: []raftpb.Entry{
+			Entries: []rafttype.Entry{
 				{
 					Term: 10,
 				},
 			},
 		},
 	}
-	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
+	msgAppScratch := map[roachpb.ReplicaID][]rafttype.Message{}
 
 	// No outbound msgs.
 	event := RaftEventFromMsgStorageAppendAndMsgApps(
@@ -1292,7 +1292,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	require.Nil(t, event.MsgApps)
 	// Zero value.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raftpb.Message{}, nil, msgAppScratch)
+		MsgAppPush, 20, rafttype.Message{}, nil, msgAppScratch)
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
 	// is for the leader.
@@ -1310,14 +1310,14 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		require.Equal(t, uint64(10), event.Term)
 		require.Equal(t, appendMsg.Snapshot, event.Snap)
 		require.Equal(t, appendMsg.Entries, event.Entries)
-		var msgApps []raftpb.Message
+		var msgApps []rafttype.Message
 		for _, v := range msgAppScratch {
 			msgApps = append(msgApps, v...)
 		}
-		slices.SortStableFunc(msgApps, func(a, b raftpb.Message) int {
+		slices.SortStableFunc(msgApps, func(a, b rafttype.Message) int {
 			return cmp.Compare(a.To, b.To)
 		})
-		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
+		require.Equal(t, []rafttype.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
 	}
 }
 
@@ -1329,13 +1329,13 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 		startingIndex uint64 = 10
 		startingTerm  uint64 = 1
 		tokenMult            = 100
-		defaultPri           = raftpb.NormalPri
+		defaultPri           = rafttype.NormalPri
 		defaultUseFC         = true
 	)
 
-	makeEntry := func(t *testing.T, info entryInfo) raftpb.Entry {
+	makeEntry := func(t *testing.T, info entryInfo) rafttype.Entry {
 		if info.pri == 0 {
-			info.pri = raftpb.NormalPri
+			info.pri = rafttype.NormalPri
 		}
 		if info.enc == raftlog.EntryEncodingEmpty {
 			info.enc = raftlog.EntryEncodingStandardWithACAndPriority
@@ -1343,8 +1343,8 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 		return testingCreateEntry(t, info)
 	}
 
-	makeEntries := func(t *testing.T, n int) []raftpb.Entry {
-		var entries []raftpb.Entry
+	makeEntries := func(t *testing.T, n int) []rafttype.Entry {
+		var entries []rafttype.Entry
 		for i := 0; i < n; i++ {
 			entries = append(entries, makeEntry(t, entryInfo{
 				index:  startingIndex + uint64(i),
@@ -1375,7 +1375,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 		raftEventAppendState     raftEventAppendState
 		latestReplicaStateInfo   ReplicaStateInfo
 		existingSendStreamState  existingSendStreamState
-		msgApps                  []raftpb.Message
+		msgApps                  []rafttype.Message
 		scratchSendingEntries    []entryFCState
 		expectedRaftEventReplica raftEventForReplica
 		expectedScratchEntries   []entryFCState
@@ -1396,9 +1396,9 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
-					Type:    raftpb.MsgApp,
+					Type:    rafttype.MsgApp,
 					Entries: makeEntries(t, 2),
 				},
 			},
@@ -1430,7 +1430,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			existingSendStreamState: existingSendStreamState{
 				existsAndInStateReplicate: false,
 			},
-			msgApps:               []raftpb.Message{},
+			msgApps:               []rafttype.Message{},
 			scratchSendingEntries: []entryFCState{},
 			expectedRaftEventReplica: raftEventForReplica{
 				replicaStateInfo: ReplicaStateInfo{
@@ -1460,10 +1460,10 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
-					Type: raftpb.MsgApp,
-					Entries: []raftpb.Entry{
+					Type: rafttype.MsgApp,
+					Entries: []rafttype.Entry{
 						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
 						// Inconsistent index.
 						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 200}),
@@ -1498,7 +1498,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			existingSendStreamState: existingSendStreamState{
 				existsAndInStateReplicate: false,
 			},
-			msgApps:               []raftpb.Message{},
+			msgApps:               []rafttype.Message{},
 			scratchSendingEntries: []entryFCState{},
 			expectedRaftEventReplica: raftEventForReplica{
 				replicaStateInfo: ReplicaStateInfo{
@@ -1528,7 +1528,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps:               []raftpb.Message{},
+			msgApps:               []rafttype.Message{},
 			scratchSendingEntries: []entryFCState{},
 			expectedRaftEventReplica: raftEventForReplica{
 				replicaStateInfo: ReplicaStateInfo{
@@ -1547,8 +1547,8 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			name: "msgapps with entries before new entries",
 			raftEventAppendState: raftEventAppendState{
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: rafttype.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: rafttype.NormalPri},
 				},
 				rewoundNextRaftIndex: 12,
 			},
@@ -1561,10 +1561,10 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
 
-					Type:    raftpb.MsgApp,
+					Type:    rafttype.MsgApp,
 					Entries: makeEntries(t, 4),
 				},
 			},
@@ -1577,8 +1577,8 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				},
 				nextRaftIndex: 12,
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: rafttype.NormalPri},
+					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: rafttype.NormalPri},
 				},
 				sendingEntries:     makeEntryFCStates(t, 4),
 				recreateSendStream: false,
@@ -1600,9 +1600,9 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               11, // Regression
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
-					Type:    raftpb.MsgApp,
+					Type:    rafttype.MsgApp,
 					Entries: makeEntries(t, 2),
 				},
 			},
@@ -1636,9 +1636,9 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				// Forward jump.
 				indexToSend: 9,
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
-					Type:    raftpb.MsgApp,
+					Type:    rafttype.MsgApp,
 					Entries: makeEntries(t, 2),
 				},
 			},
@@ -1671,7 +1671,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps:               []raftpb.Message{},
+			msgApps:               []rafttype.Message{},
 			scratchSendingEntries: []entryFCState{},
 			expectFatal:           true,
 		},
@@ -1690,16 +1690,16 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				existsAndInStateReplicate: true,
 				indexToSend:               10,
 			},
-			msgApps: []raftpb.Message{
+			msgApps: []rafttype.Message{
 				{
-					Type: raftpb.MsgApp,
-					Entries: []raftpb.Entry{
+					Type: rafttype.MsgApp,
+					Entries: []rafttype.Entry{
 						makeEntry(t, entryInfo{index: 10, term: 1, tokens: 100}),
 					},
 				},
 				{
-					Type: raftpb.MsgApp,
-					Entries: []raftpb.Entry{
+					Type: rafttype.MsgApp,
+					Entries: []rafttype.Entry{
 						makeEntry(t, entryInfo{index: 11, term: 1, tokens: 200}),
 						makeEntry(t, entryInfo{index: 12, term: 1, tokens: 300}),
 					},

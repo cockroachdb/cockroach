@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -27,13 +27,13 @@ import (
 
 const noLimit = math.MaxUint64
 
-func newEntry(index kvpb.RaftIndex, size int) raftpb.Entry {
+func newEntry(index kvpb.RaftIndex, size int) rafttype.Entry {
 	r := rand.New(rand.NewSource(int64(index) * int64(size)))
 	data := make([]byte, size)
 	if _, err := r.Read(data); err != nil {
 		panic(err)
 	}
-	ent := raftpb.Entry{
+	ent := rafttype.Entry{
 		Index: uint64(index),
 		Data:  data,
 	}
@@ -53,15 +53,15 @@ func newEntry(index kvpb.RaftIndex, size int) raftpb.Entry {
 	}
 }
 
-func newEntries(lo, hi kvpb.RaftIndex, size int) []raftpb.Entry {
-	var ents []raftpb.Entry
+func newEntries(lo, hi kvpb.RaftIndex, size int) []rafttype.Entry {
+	var ents []rafttype.Entry
 	for i := lo; i < hi; i++ {
 		ents = append(ents, newEntry(i, size))
 	}
 	return ents
 }
 
-func addEntries(c *Cache, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex) []raftpb.Entry {
+func addEntries(c *Cache, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex) []rafttype.Entry {
 	ents := newEntries(lo, hi, 9)
 	c.Add(rangeID, ents, false)
 	return ents
@@ -72,7 +72,7 @@ func verifyGet(
 	c *Cache,
 	rangeID roachpb.RangeID,
 	lo, hi kvpb.RaftIndex,
-	expEnts []raftpb.Entry,
+	expEnts []rafttype.Entry,
 	expNextIndex kvpb.RaftIndex,
 	allowEviction bool,
 ) {
@@ -127,7 +127,7 @@ func TestEntryCache(t *testing.T) {
 	rangeID := roachpb.RangeID(2)
 	otherRangeID := rangeID + 1
 	// Note 9 bytes per entry with data size of 1
-	verify := func(rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, ents []raftpb.Entry, expNextIndex kvpb.RaftIndex) {
+	verify := func(rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, ents []rafttype.Entry, expNextIndex kvpb.RaftIndex) {
 		t.Helper()
 		verifyGet(t, c, rangeID, lo, hi, ents, expNextIndex, false)
 	}
@@ -139,13 +139,13 @@ func TestEntryCache(t *testing.T) {
 	// Fetch point entry.
 	verify(rangeID, 1, 2, ents[0:1], 2)
 	// Fetch overlapping first half.
-	verify(rangeID, 0, 3, []raftpb.Entry{}, 0)
+	verify(rangeID, 0, 3, []rafttype.Entry{}, 0)
 	// Fetch overlapping second half.
 	verify(rangeID, 5, 9, ents[4:], 9)
 	// Fetch data from earlier range.
-	verify(roachpb.RangeID(1), 1, 11, []raftpb.Entry{}, 1)
+	verify(roachpb.RangeID(1), 1, 11, []rafttype.Entry{}, 1)
 	// Fetch data from later range.
-	verify(roachpb.RangeID(3), 1, 11, []raftpb.Entry{}, 1)
+	verify(roachpb.RangeID(3), 1, 11, []rafttype.Entry{}, 1)
 	// Add another range which we can evict.
 	otherEnts := addEntries(c, otherRangeID, 1, 3)
 	verifyMetrics(t, c, 10, 90+2*int64(partitionSize))
@@ -156,7 +156,7 @@ func TestEntryCache(t *testing.T) {
 	verifyMetrics(t, c, 10, 90+int64(partitionSize))
 	// Ensure other range got evicted but first range did not.
 	verify(rangeID, 1, 11, ents[:], 11)
-	verify(otherRangeID, 1, 11, []raftpb.Entry{}, 1)
+	verify(otherRangeID, 1, 11, []rafttype.Entry{}, 1)
 	// Clear and show that it makes space.
 	c.Clear(rangeID, 10)
 	verify(rangeID, 10, 11, ents[9:], 11)
@@ -221,21 +221,21 @@ func TestIgnoredAdd(t *testing.T) {
 
 	// Cache has entries 4, 5, 6. Offer an oversize entry at index 7 (which is
 	// notably after 6) and request truncation. This should be a no-op.
-	c.Add(rangeID, []raftpb.Entry{newEntry(7, int(c.maxBytes+1))}, true /* truncate */)
+	c.Add(rangeID, []rafttype.Entry{newEntry(7, int(c.maxBytes+1))}, true /* truncate */)
 	requireEqual(t, c, rangeID, 4, 5, 6)
 	verifyGet(t, c, rangeID, 4, 7, ents, 7, false)
 
 	// Cache has entries 4, 5, 6. Offer an oversize entry at index 6 and request
 	// truncation. This should remove index 6 (as requested due to the truncation)
 	// without replacing it with the input entry.
-	c.Add(rangeID, []raftpb.Entry{newEntry(6, int(c.maxBytes+1))}, true /* truncate */)
+	c.Add(rangeID, []rafttype.Entry{newEntry(6, int(c.maxBytes+1))}, true /* truncate */)
 	requireEqual(t, c, rangeID, 4, 5)
 	verifyGet(t, c, rangeID, 4, 7, ents[:len(ents)-1], 6, false)
 
 	// Cache has entries 4, 5. Offer an oversize entry at index 3 (which is
 	// notably before 4) and request truncation. This should clear all entries
 	// >= 3, i.e. everything.
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, int(c.maxBytes+1))}, true /* truncate */)
+	c.Add(rangeID, []rafttype.Entry{newEntry(3, int(c.maxBytes+1))}, true /* truncate */)
 	// And it did.
 	requireEqual(t, c, rangeID)
 	verifyGet(t, c, rangeID, 0, 0, nil, 0, false)
@@ -365,7 +365,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100)
-	c.Add(rangeID, []raftpb.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
+	c.Add(rangeID, []rafttype.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
 	c.Clear(rangeID, 21)
 	c.Clear(rangeID, 18)
 	if ents, _, _, _ := c.Scan(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
@@ -403,7 +403,7 @@ func TestConcurrentEvictions(t *testing.T) {
 	const N = 8000
 	const numRanges = 200
 	const maxEntriesPerWrite = 111
-	rangeData := make(map[roachpb.RangeID][]raftpb.Entry)
+	rangeData := make(map[roachpb.RangeID][]rafttype.Entry)
 	rangeInUse := make(map[roachpb.RangeID]bool)
 	c := NewCache(1000)
 	rangeDoneChan := make(chan roachpb.RangeID)
@@ -436,7 +436,7 @@ func TestConcurrentEvictions(t *testing.T) {
 		ents := rangeData[r]
 		offset := rand.Intn(len(ents)+1) - 1
 		length := rand.Intn(maxEntriesPerWrite)
-		var toAdd []raftpb.Entry
+		var toAdd []rafttype.Entry
 		if offset >= 0 && offset < len(ents) {
 			lo := ents[offset].Index
 			hi := lo + uint64(length)
@@ -517,14 +517,14 @@ func TestPanicOnNonContiguousRange(t *testing.T) {
 			t.Errorf("Expected panic with non-contiguous range")
 		}
 	}()
-	c.Add(1, []raftpb.Entry{newEntry(1, 1), newEntry(3, 1)}, true)
+	c.Add(1, []rafttype.Entry{newEntry(1, 1), newEntry(3, 1)}, true)
 }
 
 func TestEntryCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID, rangeID2 := roachpb.RangeID(1), roachpb.RangeID(2)
 	c := NewCache(140 + uint64(partitionSize))
-	c.Add(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)}, true)
+	c.Add(rangeID, []rafttype.Entry{newEntry(1, 40), newEntry(2, 40)}, true)
 	ents, _, hi, _ := c.Scan(nil, rangeID, 1, 3, noLimit)
 	if len(ents) != 2 || hi != 3 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
@@ -534,7 +534,7 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 	// Add another entry to the same range. This will exceed the size limit and
 	// lead to eviction.
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 80)}, true)
+	c.Add(rangeID, []rafttype.Entry{newEntry(3, 80)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID, 1, 4, noLimit)
 	if len(ents) != 0 || hi != 1 {
 		t.Errorf("expected no entries; got %+v, %d", ents, hi)
@@ -549,16 +549,16 @@ func TestEntryCacheEviction(t *testing.T) {
 	if len(ents) != 1 || hi != 4 {
 		t.Errorf("expected the new entry; got %+v, %d", ents, hi)
 	}
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 9)}, true)
+	c.Add(rangeID, []rafttype.Entry{newEntry(3, 9)}, true)
 	verifyMetrics(t, c, 1, c.Metrics().Bytes.Value())
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
+	c.Add(rangeID2, []rafttype.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID2, 20, 22, noLimit)
 	if len(ents) != 2 || hi != 22 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
 	}
 	verifyMetrics(t, c, 3, c.Metrics().Bytes.Value())
 	// Evict from rangeID by adding more to rangeID 2.
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}, true)
+	c.Add(rangeID2, []rafttype.Entry{newEntry(20, 35), newEntry(21, 35)}, true)
 	if _, ok := c.Get(rangeID, 3); ok {
 		t.Errorf("didn't expect to get evicted entry")
 	}
@@ -570,7 +570,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	c := NewCache(10000)
 	const r1 roachpb.RangeID = 1
-	ents := []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}
+	ents := []rafttype.Entry{newEntry(20, 35), newEntry(21, 35)}
 	// Test using both Clear and Drop to remove the added entries.
 	for _, clearMethod := range []struct {
 		name  string
@@ -649,7 +649,7 @@ func TestConcurrentAddGetAndEviction(t *testing.T) {
 	// so that each add operation will lead to the eviction of the other
 	// partition.
 	c := NewCache(1000)
-	ents := []raftpb.Entry{newEntry(1, 500)}
+	ents := []rafttype.Entry{newEntry(1, 500)}
 	doAddAndGetToRange := func(rangeID roachpb.RangeID) {
 		doAction(func() { c.Add(rangeID, ents, true) })
 		doAction(func() { c.Get(rangeID, kvpb.RaftIndex(ents[0].Index)) })
@@ -661,7 +661,7 @@ func TestConcurrentAddGetAndEviction(t *testing.T) {
 
 func BenchmarkEntryCache(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
-	ents := make([]raftpb.Entry, 1000)
+	ents := make([]rafttype.Entry, 1000)
 	for i := range ents {
 		ents[i] = newEntry(kvpb.RaftIndex(i+1), 9)
 	}
@@ -683,7 +683,7 @@ func BenchmarkEntryCache(b *testing.B) {
 
 func BenchmarkEntryCacheClearTo(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
-	ents := make([]raftpb.Entry, 1000)
+	ents := make([]rafttype.Entry, 1000)
 	for i := range ents {
 		ents[i] = newEntry(kvpb.RaftIndex(i+1), 9)
 	}

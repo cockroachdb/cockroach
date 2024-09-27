@@ -19,7 +19,7 @@ package confchange
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -27,7 +27,7 @@ import (
 // first the config that will become the outgoing one, and then the incoming one, and
 // b) another slice that, when applied to the config resulted from 1), represents the
 // ConfState.
-func toConfChangeSingle(cs pb.ConfState) (out []pb.ConfChangeSingle, in []pb.ConfChangeSingle) {
+func toConfChangeSingle(cs rt.ConfState) (out []rt.ConfChangeSingle, in []rt.ConfChangeSingle) {
 	// Example to follow along this code:
 	// voters=(1 2 3) learners=(5) outgoing=(1 2 4 6) learners_next=(4)
 	//
@@ -59,8 +59,8 @@ func toConfChangeSingle(cs pb.ConfState) (out []pb.ConfChangeSingle, in []pb.Con
 	for _, id := range cs.VotersOutgoing {
 		// If there are outgoing voters, first add them one by one so that the
 		// (non-joint) config has them all.
-		out = append(out, pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddNode,
+		out = append(out, rt.ConfChangeSingle{
+			Type:   rt.ConfChangeAddNode,
 			NodeID: id,
 		})
 
@@ -71,29 +71,29 @@ func toConfChangeSingle(cs pb.ConfState) (out []pb.ConfChangeSingle, in []pb.Con
 
 	// First, we'll remove all of the outgoing voters.
 	for _, id := range cs.VotersOutgoing {
-		in = append(in, pb.ConfChangeSingle{
-			Type:   pb.ConfChangeRemoveNode,
+		in = append(in, rt.ConfChangeSingle{
+			Type:   rt.ConfChangeRemoveNode,
 			NodeID: id,
 		})
 	}
 	// Then we'll add the incoming voters and learners.
 	for _, id := range cs.Voters {
-		in = append(in, pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddNode,
+		in = append(in, rt.ConfChangeSingle{
+			Type:   rt.ConfChangeAddNode,
 			NodeID: id,
 		})
 	}
 	for _, id := range cs.Learners {
-		in = append(in, pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddLearnerNode,
+		in = append(in, rt.ConfChangeSingle{
+			Type:   rt.ConfChangeAddLearnerNode,
 			NodeID: id,
 		})
 	}
 	// Same for LearnersNext; these are nodes we want to be learners but which
 	// are currently voters in the outgoing config.
 	for _, id := range cs.LearnersNext {
-		in = append(in, pb.ConfChangeSingle{
-			Type:   pb.ConfChangeAddLearnerNode,
+		in = append(in, rt.ConfChangeSingle{
+			Type:   rt.ConfChangeAddLearnerNode,
 			NodeID: id,
 		})
 	}
@@ -122,7 +122,7 @@ func chain(
 // the Changer only needs a ProgressMap (not a whole Tracker) at which point
 // this can just take LastIndex and MaxInflight directly instead and cook up
 // the results from that alone.
-func Restore(chg Changer, cs pb.ConfState) (quorum.Config, tracker.ProgressMap, error) {
+func Restore(chg Changer, cs rt.ConfState) (quorum.Config, tracker.ProgressMap, error) {
 	outgoing, incoming := toConfChangeSingle(cs)
 
 	var ops []func(Changer) (quorum.Config, tracker.ProgressMap, error)

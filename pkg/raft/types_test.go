@@ -20,7 +20,7 @@ package raft
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,12 +31,12 @@ func TestEntryID(t *testing.T) {
 	require.NotEqual(t, entryID{term: 5, index: 9}, entryID{term: 5, index: 10})
 
 	for _, tt := range []struct {
-		entry pb.Entry
+		entry rt.Entry
 		want  entryID
 	}{
-		{entry: pb.Entry{}, want: entryID{term: 0, index: 0}},
-		{entry: pb.Entry{Term: 1, Index: 2, Data: []byte("data")}, want: entryID{term: 1, index: 2}},
-		{entry: pb.Entry{Term: 10, Index: 123}, want: entryID{term: 10, index: 123}},
+		{entry: rt.Entry{}, want: entryID{term: 0, index: 0}},
+		{entry: rt.Entry{Term: 1, Index: 2, Data: []byte("data")}, want: entryID{term: 1, index: 2}},
+		{entry: rt.Entry{Term: 10, Index: 123}, want: entryID{term: 10, index: 123}},
 	} {
 		require.Equal(t, tt.want, pbEntryID(&tt.entry))
 	}
@@ -46,13 +46,13 @@ func TestLogSlice(t *testing.T) {
 	id := func(index, term uint64) entryID {
 		return entryID{term: term, index: index}
 	}
-	e := func(index, term uint64) pb.Entry {
-		return pb.Entry{Term: term, Index: index}
+	e := func(index, term uint64) rt.Entry {
+		return rt.Entry{Term: term, Index: index}
 	}
 	for _, tt := range []struct {
 		term    uint64
 		prev    entryID
-		entries []pb.Entry
+		entries []rt.Entry
 
 		notOk bool
 		last  entryID
@@ -65,23 +65,23 @@ func TestLogSlice(t *testing.T) {
 		{term: 10, prev: id(123, 10), last: id(123, 10)},
 		{term: 11, prev: id(123, 10), last: id(123, 10)},
 		// A single entry.
-		{term: 0, entries: []pb.Entry{e(1, 1)}, notOk: true},
-		{term: 1, entries: []pb.Entry{e(1, 1)}, last: id(1, 1)},
-		{term: 2, entries: []pb.Entry{e(1, 1)}, last: id(1, 1)},
+		{term: 0, entries: []rt.Entry{e(1, 1)}, notOk: true},
+		{term: 1, entries: []rt.Entry{e(1, 1)}, last: id(1, 1)},
+		{term: 2, entries: []rt.Entry{e(1, 1)}, last: id(1, 1)},
 		// Multiple entries.
-		{term: 2, entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
-		{term: 1, prev: id(1, 1), entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
-		{term: 2, prev: id(1, 1), entries: []pb.Entry{e(2, 1), e(3, 1), e(4, 2)}, last: id(4, 2)},
+		{term: 2, entries: []rt.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
+		{term: 1, prev: id(1, 1), entries: []rt.Entry{e(2, 1), e(3, 1), e(4, 2)}, notOk: true},
+		{term: 2, prev: id(1, 1), entries: []rt.Entry{e(2, 1), e(3, 1), e(4, 2)}, last: id(4, 2)},
 		// First entry inconsistent with prev.
-		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(111, 5)}, notOk: true},
-		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(124, 4)}, notOk: true},
-		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(234, 6)}, notOk: true},
-		{term: 10, prev: id(123, 5), entries: []pb.Entry{e(124, 6)}, last: id(124, 6)},
+		{term: 10, prev: id(123, 5), entries: []rt.Entry{e(111, 5)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []rt.Entry{e(124, 4)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []rt.Entry{e(234, 6)}, notOk: true},
+		{term: 10, prev: id(123, 5), entries: []rt.Entry{e(124, 6)}, last: id(124, 6)},
 		// Inconsistent entries.
-		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(12, 2)}, notOk: true},
-		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(15, 2)}, notOk: true},
-		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(14, 1)}, notOk: true},
-		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(14, 3)}, last: id(14, 3)},
+		{term: 10, prev: id(12, 2), entries: []rt.Entry{e(13, 2), e(12, 2)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []rt.Entry{e(13, 2), e(15, 2)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []rt.Entry{e(13, 2), e(14, 1)}, notOk: true},
+		{term: 10, prev: id(12, 2), entries: []rt.Entry{e(13, 2), e(14, 3)}, last: id(14, 3)},
 	} {
 		t.Run("", func(t *testing.T) {
 			s := logSlice{term: tt.term, prev: tt.prev, entries: tt.entries}
@@ -107,7 +107,7 @@ func TestLogSliceForward(t *testing.T) {
 		return entryID{term: term, index: index}
 	}
 	ls := func(prev entryID, terms ...uint64) logSlice {
-		empty := make([]pb.Entry, 0) // hack to canonicalize empty slices
+		empty := make([]rt.Entry, 0) // hack to canonicalize empty slices
 		return logSlice{
 			term:    8,
 			prev:    prev,
@@ -137,14 +137,14 @@ func TestSnapshot(t *testing.T) {
 	id := func(index, term uint64) entryID {
 		return entryID{term: term, index: index}
 	}
-	snap := func(index, term uint64) pb.Snapshot {
-		return pb.Snapshot{Metadata: pb.SnapshotMetadata{
+	snap := func(index, term uint64) rt.Snapshot {
+		return rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Term: term, Index: index,
 		}}
 	}
 	for _, tt := range []struct {
 		term  uint64
-		snap  pb.Snapshot
+		snap  rt.Snapshot
 		notOk bool
 		last  entryID
 	}{

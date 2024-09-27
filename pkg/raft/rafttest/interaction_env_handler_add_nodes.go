@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
@@ -33,7 +33,7 @@ import (
 
 func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) error {
 	n := firstAsInt(t, d)
-	var snap pb.Snapshot
+	var snap rt.Snapshot
 	cfg := raftConfigStub()
 	for _, arg := range d.CmdArgs[1:] {
 		for i := range arg.Vals {
@@ -41,12 +41,12 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			case "voters":
 				var rawID uint64
 				arg.Scan(t, i, &rawID)
-				id := pb.PeerID(rawID)
+				id := rt.PeerID(rawID)
 				snap.Metadata.ConfState.Voters = append(snap.Metadata.ConfState.Voters, id)
 			case "learners":
 				var rawID uint64
 				arg.Scan(t, i, &rawID)
-				id := pb.PeerID(rawID)
+				id := rt.PeerID(rawID)
 				snap.Metadata.ConfState.Learners = append(snap.Metadata.ConfState.Learners, id)
 			case "inflight":
 				arg.Scan(t, i, &cfg.MaxInflightMsgs)
@@ -84,10 +84,10 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 
 type snapOverrideStorage struct {
 	Storage
-	snapshotOverride func() (pb.Snapshot, error)
+	snapshotOverride func() (rt.Snapshot, error)
 }
 
-func (s snapOverrideStorage) Snapshot() (pb.Snapshot, error) {
+func (s snapOverrideStorage) Snapshot() (rt.Snapshot, error) {
 	if s.snapshotOverride != nil {
 		return s.snapshotOverride()
 	}
@@ -98,10 +98,10 @@ var _ raft.Storage = snapOverrideStorage{}
 
 // AddNodes adds n new nodes initialized from the given snapshot (which may be
 // empty), and using the cfg as template. They will be assigned consecutive IDs.
-func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
-	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
+func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap rt.Snapshot) error {
+	bootstrap := !reflect.DeepEqual(snap, rt.Snapshot{})
 	for i := 0; i < n; i++ {
-		id := pb.PeerID(1 + len(env.Nodes))
+		id := rt.PeerID(1 + len(env.Nodes))
 		s := snapOverrideStorage{
 			Storage: raft.NewMemoryStorage(),
 			// When you ask for a snapshot, you get the most recent snapshot.
@@ -110,7 +110,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			// give you some fixed snapshot and also the snapshot changes
 			// whenever you compact the logs and vice versa, so it's all a bit
 			// awkward to use.
-			snapshotOverride: func() (pb.Snapshot, error) {
+			snapshotOverride: func() (rt.Snapshot, error) {
 				snaps := env.Nodes[int(id-1)].History
 				return snaps[len(snaps)-1], nil
 			},
@@ -168,7 +168,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			// us to apply snapshots, append entries, and update the HardState.
 			Storage: s,
 			Config:  &cfg,
-			History: []pb.Snapshot{snap},
+			History: []rt.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
 	}

@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -117,8 +117,8 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 // splitMsgs extracts messages for the given recipient of the given type (-1 for
 // all types) from msgs, and returns them along with the remainder of msgs.
 func splitMsgs(
-	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType, drop bool,
-) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
+	msgs []rafttype.Message, to rafttype.PeerID, typ rafttype.MessageType, drop bool,
+) (toMsgs []rafttype.Message, rmdr []rafttype.Message) {
 	// NB: this method does not reorder messages.
 	for _, msg := range msgs {
 		if msg.To == to && !(drop && isLocalMsg(msg)) && (typ < 0 || msg.Type == typ) {
@@ -131,6 +131,6 @@ func splitMsgs(
 }
 
 // Don't drop local messages, which require reliable delivery.
-func isLocalMsg(msg raftpb.Message) bool {
+func isLocalMsg(msg rafttype.Message) bool {
 	return msg.From == msg.To || raft.IsLocalMsgTarget(msg.From) || raft.IsLocalMsgTarget(msg.To)
 }

@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // InteractionOpts groups the options for an InteractionEnv.
@@ -42,9 +42,9 @@ type Node struct {
 	Storage
 
 	Config     *raft.Config
-	AppendWork []pb.Message // []MsgStorageAppend
-	ApplyWork  []pb.Message // []MsgStorageApply
-	History    []pb.Snapshot
+	AppendWork []rt.Message // []MsgStorageAppend
+	ApplyWork  []rt.Message // []MsgStorageApply
+	History    []rt.Snapshot
 }
 
 // InteractionEnv facilitates testing of complex interactions between the
@@ -52,7 +52,7 @@ type Node struct {
 type InteractionEnv struct {
 	Options  *InteractionOpts
 	Nodes    []Node
-	Messages []pb.Message // in-flight messages
+	Messages []rt.Message // in-flight messages
 	Fabric   *livenessFabric
 
 	Output *RedirectLogger
@@ -89,10 +89,10 @@ func (env *InteractionEnv) withIndent(f func()) {
 // the Ready handling loop.
 type Storage interface {
 	raft.Storage
-	SetHardState(state pb.HardState) error
-	ApplySnapshot(pb.Snapshot) error
+	SetHardState(state rt.HardState) error
+	ApplySnapshot(rt.Snapshot) error
 	Compact(newFirstIndex uint64) error
-	Append([]pb.Entry) error
+	Append([]rt.Entry) error
 }
 
 // raftConfigStub sets up a raft.Config stub with reasonable testing defaults.

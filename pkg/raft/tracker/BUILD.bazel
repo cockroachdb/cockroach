@@ -14,8 +14,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/raft/quorum",
-        "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
+        "//pkg/raft/rafttype",
         "//pkg/util/hlc",
     ],
 )
@@ -30,8 +30,8 @@ go_test(
     embed = [":tracker"],
     deps = [
         "//pkg/raft/quorum",
-        "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
+        "//pkg/raft/rafttype",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

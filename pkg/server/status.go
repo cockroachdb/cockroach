@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -2421,12 +2422,12 @@ func (s *systemStatusServer) rangesHelper(
 
 		state := serverpb.RaftState{
 			ReplicaID:        uint64(raftStatus.ID),
-			HardState:        raftStatus.HardState,
+			HardState:        raftStatus.HardState.Convert(),
 			Applied:          raftStatus.Applied,
-			Lead:             raftStatus.Lead,
+			Lead:             raftpb.PeerID(raftStatus.Lead),
 			State:            raftStatus.RaftState.String(),
 			Progress:         make(map[uint64]serverpb.RaftState_Progress),
-			LeadTransferee:   raftStatus.LeadTransferee,
+			LeadTransferee:   raftpb.PeerID(raftStatus.LeadTransferee),
 			LeadSupportUntil: raftStatus.LeadSupportUntil,
 		}
 

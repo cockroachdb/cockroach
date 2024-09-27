@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -850,7 +850,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverrt.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -912,7 +912,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	// Validate that the error is logged, so that we can use the log entry to
 	// validate the trace output.
 	foundEntry := false
-	var entry logpb.Entry
+	var entry logrt.Entry
 	for _, entry = range entries {
 		if errRegexp.MatchString(entry.Message) {
 			foundEntry = true
@@ -975,7 +975,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverrt.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -2022,7 +2022,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	})
 	testutils.SucceedsSoon(t, func() error {
 		status := leaseHolderRepl.RaftStatus()
-		progress := status.Progress[raftpb.PeerID(remoteRepl.ReplicaID())]
+		progress := status.Progress[rafttype.PeerID(remoteRepl.ReplicaID())]
 		if progress.Match > 0 {
 			return nil
 		}
@@ -2035,7 +2035,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	for {
 		// Ensure that the replica on the remote node is lagging.
 		status := leaseHolderRepl.RaftStatus()
-		progress := status.Progress[raftpb.PeerID(remoteRepl.ReplicaID())]
+		progress := status.Progress[rafttype.PeerID(remoteRepl.ReplicaID())]
 		if progress.State == tracker.StateReplicate &&
 			(status.Commit-progress.Match) > 0 {
 			break

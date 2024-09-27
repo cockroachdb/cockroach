@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -60,13 +60,13 @@ type msgAppDropper interface {
 // free". However, there are some situations in which this is not the case (all
 // taken into account by this method by allowing the MsgApp through).
 func maybeDropMsgApp(
-	ctx context.Context, r msgAppDropper, msg *raftpb.Message, startKey roachpb.RKey,
+	ctx context.Context, r msgAppDropper, msg *rafttype.Message, startKey roachpb.RKey,
 ) (drop bool) {
 	// Run the cheapest check first. If the leader doesn't think this replica is
 	// probing, it won't set msg.Context (the common case).
 	// Note that startKey could be of length zero (not nil) if the sender is a
 	// replica of the first range.
-	if msg.Type != raftpb.MsgApp || startKey == nil {
+	if msg.Type != rafttype.MsgApp || startKey == nil {
 		return false
 	}
 

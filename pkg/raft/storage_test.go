@@ -21,7 +21,7 @@ import (
 	"math"
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +63,7 @@ func TestStorageEntries(t *testing.T) {
 		lo, hi, maxsize uint64
 
 		werr     error
-		wentries []pb.Entry
+		wentries []rt.Entry
 	}{
 		{2, 6, math.MaxUint64, ErrCompacted, nil},
 		{3, 4, math.MaxUint64, ErrCompacted, nil},
@@ -136,17 +136,17 @@ func TestStorageCompact(t *testing.T) {
 
 func TestStorageCreateSnapshot(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
-	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
+	cs := &rt.ConfState{Voters: []rt.PeerID{1, 2, 3}}
 	data := []byte("data")
 
 	tests := []struct {
 		i uint64
 
 		werr  error
-		wsnap pb.Snapshot
+		wsnap rt.Snapshot
 	}{
-		{4, nil, pb.Snapshot{Data: data, Metadata: pb.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}}},
-		{5, nil, pb.Snapshot{Data: data, Metadata: pb.SnapshotMetadata{Index: 5, Term: 5, ConfState: *cs}}},
+		{4, nil, rt.Snapshot{Data: data, Metadata: rt.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}}},
+		{5, nil, rt.Snapshot{Data: data, Metadata: rt.SnapshotMetadata{Index: 5, Term: 5, ConfState: *cs}}},
 	}
 
 	for _, tt := range tests {
@@ -162,10 +162,10 @@ func TestStorageCreateSnapshot(t *testing.T) {
 func TestStorageAppend(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
 	tests := []struct {
-		entries []pb.Entry
+		entries []rt.Entry
 
 		werr     error
-		wentries []pb.Entry
+		wentries []rt.Entry
 	}{
 		{
 			index(1).terms(1, 2),
@@ -217,11 +217,11 @@ func TestStorageAppend(t *testing.T) {
 }
 
 func TestStorageApplySnapshot(t *testing.T) {
-	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
+	cs := &rt.ConfState{Voters: []rt.PeerID{1, 2, 3}}
 	data := []byte("data")
 
-	tests := []pb.Snapshot{{Data: data, Metadata: pb.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}},
-		{Data: data, Metadata: pb.SnapshotMetadata{Index: 3, Term: 3, ConfState: *cs}},
+	tests := []rt.Snapshot{{Data: data, Metadata: rt.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}},
+		{Data: data, Metadata: rt.SnapshotMetadata{Index: 3, Term: 3, ConfState: *cs}},
 	}
 
 	s := NewMemoryStorage()

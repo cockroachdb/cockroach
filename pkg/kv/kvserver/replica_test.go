@@ -53,7 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -125,16 +125,16 @@ func leaseExpiry(repl *Replica) time.Time {
 
 // Create a Raft status that shows everyone fully up to date.
 func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
-	prs := make(map[raftpb.PeerID]tracker.Progress)
+	prs := make(map[rafttype.PeerID]tracker.Progress)
 	for _, repl := range repls {
-		prs[raftpb.PeerID(repl.ReplicaID)] = tracker.Progress{
+		prs[rafttype.PeerID(repl.ReplicaID)] = tracker.Progress{
 			State: tracker.StateReplicate,
 			Match: 100,
 		}
 	}
 	return &raft.Status{
 		BasicStatus: raft.BasicStatus{
-			HardState: raftpb.HardState{Commit: 100, Lead: 1},
+			HardState: rafttype.HardState{Commit: 100, Lead: 1},
 			SoftState: raft.SoftState{RaftState: raft.StateLeader},
 		},
 		Progress: prs,
@@ -8928,14 +8928,14 @@ func TestReplicaMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	progress := func(vals ...uint64) map[raftpb.PeerID]tracker.Progress {
-		m := make(map[raftpb.PeerID]tracker.Progress)
+	progress := func(vals ...uint64) map[rafttype.PeerID]tracker.Progress {
+		m := make(map[rafttype.PeerID]tracker.Progress)
 		for i, v := range vals {
-			m[raftpb.PeerID(i+1)] = tracker.Progress{Match: v}
+			m[rafttype.PeerID(i+1)] = tracker.Progress{Match: v}
 		}
 		return m
 	}
-	status := func(lead raftpb.PeerID, progress map[raftpb.PeerID]tracker.Progress) *raft.SparseStatus {
+	status := func(lead rafttype.PeerID, progress map[rafttype.PeerID]tracker.Progress) *raft.SparseStatus {
 		status := &raft.SparseStatus{
 			Progress: progress,
 		}
@@ -9899,7 +9899,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				status: &raft.SparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 1,
-						HardState: raftpb.HardState{
+						HardState: rafttype.HardState{
 							Commit: logIndex,
 						},
 						SoftState: raft.SoftState{
@@ -9908,7 +9908,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						Applied:        logIndex,
 						LeadTransferee: 0,
 					},
-					Progress: map[raftpb.PeerID]tracker.Progress{
+					Progress: map[rafttype.PeerID]tracker.Progress{
 						1: {Match: logIndex, State: tracker.StateReplicate},
 						2: {Match: logIndex, State: tracker.StateReplicate},
 						3: {Match: logIndex, State: tracker.StateReplicate},
@@ -10019,7 +10019,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		q.lastIndex = invalidIndex
 		return q
 	})
-	for _, i := range []raftpb.PeerID{1, 2, 3} {
+	for _, i := range []rafttype.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
@@ -10074,7 +10074,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	// Verify quiesce even when replica progress doesn't match, if
 	// the replica is on a non-live node.
-	for _, i := range []raftpb.PeerID{1, 2, 3} {
+	for _, i := range []rafttype.PeerID{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
 			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
@@ -10087,7 +10087,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// given a nil liveness map.
-	for _, i := range []raftpb.PeerID{1, 2, 3} {
+	for _, i := range []rafttype.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			q.livenessMap = nil
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -10096,7 +10096,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// liveness map does not contain the lagging replica.
-	for _, i := range []raftpb.PeerID{1, 2, 3} {
+	for _, i := range []rafttype.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			delete(q.livenessMap, roachpb.NodeID(i))
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -10149,7 +10149,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 				status: &raft.SparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 2,
-						HardState: raftpb.HardState{
+						HardState: rafttype.HardState{
 							Term:   5,
 							Commit: 10,
 							Lead:   1,
@@ -10163,8 +10163,8 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 				},
 			}
 			req := kvserverpb.RaftMessageRequest{
-				Message: raftpb.Message{
-					Type:   raftpb.MsgHeartbeat,
+				Message: rafttype.Message{
+					Type:   rafttype.MsgHeartbeat,
 					From:   1,
 					Term:   5,
 					Commit: 10,
@@ -11515,7 +11515,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
 			},
-			HardState: raftpb.HardState{
+			HardState: rafttype.HardState{
 				Lead: 2,
 			},
 		},
@@ -11635,7 +11635,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
 			},
-			HardState: raftpb.HardState{
+			HardState: rafttype.HardState{
 				Lead: 2,
 			},
 		},
@@ -11752,7 +11752,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
 			},
-			HardState: raftpb.HardState{
+			HardState: rafttype.HardState{
 				Lead: 2,
 			},
 		},
@@ -11856,12 +11856,12 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 				SoftState: raft.SoftState{
 					RaftState: raft.StateLeader,
 				},
-				HardState: raftpb.HardState{
+				HardState: rafttype.HardState{
 					Lead:   localID,
 					Commit: 10,
 				},
 			},
-			Progress: map[raftpb.PeerID]tracker.Progress{
+			Progress: map[rafttype.PeerID]tracker.Progress{
 				remoteID: {Match: 10},
 			},
 		},
@@ -11905,17 +11905,17 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			p.leaseAcquisitionPending = true
 		}},
 		"no progress": {false, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.raftStatus.Progress = map[rafttype.PeerID]tracker.Progress{}
 		}},
 		"insufficient progress": {false, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.raftStatus.Progress = map[rafttype.PeerID]tracker.Progress{remoteID: {Match: 9}}
 		}},
 		"no progress, draining": {true, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.raftStatus.Progress = map[rafttype.PeerID]tracker.Progress{}
 			p.draining = true
 		}},
 		"insufficient progress, draining": {true, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.raftStatus.Progress = map[rafttype.PeerID]tracker.Progress{remoteID: {Match: 9}}
 			p.draining = true
 		}},
 	}

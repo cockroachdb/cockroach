@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -70,20 +70,20 @@ func (env *InteractionEnv) ProcessApplyThread(idx int) error {
 	return nil
 }
 
-func processApply(n *Node, ents []raftpb.Entry) error {
+func processApply(n *Node, ents []rafttype.Entry) error {
 	for _, ent := range ents {
 		var update []byte
-		var cs *raftpb.ConfState
+		var cs *rafttype.ConfState
 		switch ent.Type {
-		case raftpb.EntryConfChange:
-			var cc raftpb.ConfChange
+		case rafttype.EntryConfChange:
+			var cc rafttype.ConfChange
 			if err := cc.Unmarshal(ent.Data); err != nil {
 				return err
 			}
 			update = cc.Context
 			cs = n.RawNode.ApplyConfChange(cc)
-		case raftpb.EntryConfChangeV2:
-			var cc raftpb.ConfChangeV2
+		case rafttype.EntryConfChangeV2:
+			var cc rafttype.ConfChangeV2
 			if err := cc.Unmarshal(ent.Data); err != nil {
 				return err
 			}
@@ -96,7 +96,7 @@ func processApply(n *Node, ents []raftpb.Entry) error {
 		// Record the new state by starting with the current state and applying
 		// the command.
 		lastSnap := n.History[len(n.History)-1]
-		var snap raftpb.Snapshot
+		var snap rafttype.Snapshot
 		snap.Data = append(snap.Data, lastSnap.Data...)
 		// NB: this hard-codes an "appender" state machine.
 		snap.Data = append(snap.Data, update...)

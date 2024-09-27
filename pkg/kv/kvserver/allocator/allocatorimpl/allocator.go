@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -3061,7 +3061,7 @@ func simulateFilterUnremovableReplicas(
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	status := *raftStatus
-	status.Progress[raftpb.PeerID(brandNewReplicaID)] = tracker.Progress{
+	status.Progress[rafttype.PeerID(brandNewReplicaID)] = tracker.Progress{
 		State: tracker.StateReplicate,
 		Match: status.Commit,
 	}

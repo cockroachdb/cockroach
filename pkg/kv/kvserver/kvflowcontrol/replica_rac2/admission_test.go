@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,18 +86,18 @@ func TestLowPriOverrideState(t *testing.T) {
 		})
 }
 
-func readPriority(t *testing.T, d *datadriven.TestData) raftpb.Priority {
+func readPriority(t *testing.T, d *datadriven.TestData) rafttype.Priority {
 	var priStr string
 	d.ScanArgs(t, "pri", &priStr)
 	switch priStr {
 	case "LowPri":
-		return raftpb.LowPri
+		return rafttype.LowPri
 	case "NormalPri":
-		return raftpb.NormalPri
+		return rafttype.NormalPri
 	case "AboveNormalPri":
-		return raftpb.AboveNormalPri
+		return rafttype.AboveNormalPri
 	case "HighPri":
-		return raftpb.HighPri
+		return rafttype.HighPri
 	default:
 		t.Fatalf("unknown pri %s", priStr)
 	}

@@ -14,14 +14,14 @@ import (
 	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
 // ringBuf is a ring buffer of raft entries.
 type ringBuf struct {
-	buf  []raftpb.Entry
+	buf  []rafttype.Entry
 	head int
 	len  int
 }
@@ -34,7 +34,7 @@ const (
 // add adds ents to the ringBuf keeping track of how much was actually added
 // given that ents may overlap with existing entries or may be rejected from
 // the buffer. ents must not be empty.
-func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
+func (b *ringBuf) add(ents []rafttype.Entry) (addedBytes, addedEntries int32) {
 	if it := last(b); it.valid(b) && kvpb.RaftIndex(ents[0].Index) > it.index(b)+1 {
 		// If ents is non-contiguous and later than the currently cached range then
 		// remove the current entries and add ents in their place.
@@ -129,7 +129,7 @@ func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32
 	return
 }
 
-func (b *ringBuf) get(index kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
+func (b *ringBuf) get(index kvpb.RaftIndex) (e rafttype.Entry, ok bool) {
 	it, ok := iterateFrom(b, index)
 	if !ok {
 		return e, ok
@@ -138,8 +138,8 @@ func (b *ringBuf) get(index kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
 }
 
 func (b *ringBuf) scan(
-	ents []raftpb.Entry, lo kvpb.RaftIndex, hi kvpb.RaftIndex, maxBytes uint64,
-) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
+	ents []rafttype.Entry, lo kvpb.RaftIndex, hi kvpb.RaftIndex, maxBytes uint64,
+) (_ []rafttype.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
 	var it iterator
 	nextIdx = lo
 	it, ok := iterateFrom(b, lo)
@@ -161,7 +161,7 @@ func (b *ringBuf) scan(
 // reallocs b.buf into a new buffer of newSize leaving before zero value entries
 // at the front of b.
 func realloc(b *ringBuf, before, newLen int) {
-	newBuf := make([]raftpb.Entry, reallocLen(newLen))
+	newBuf := make([]rafttype.Entry, reallocLen(newLen))
 	if b.head+b.len > len(b.buf) {
 		n := copy(newBuf[before:], b.buf[b.head:])
 		copy(newBuf[before+n:], b.buf[:(b.head+b.len)%len(b.buf)])
@@ -263,13 +263,13 @@ func (it iterator) index(b *ringBuf) kvpb.RaftIndex {
 }
 
 // entry returns the entry at iterator's curent position.
-func (it iterator) entry(b *ringBuf) *raftpb.Entry {
+func (it iterator) entry(b *ringBuf) *rafttype.Entry {
 	return &b.buf[it]
 }
 
 // clear zeroes the current value in b.
 func (it iterator) clear(b *ringBuf) {
-	b.buf[it] = raftpb.Entry{}
+	b.buf[it] = rafttype.Entry{}
 }
 
 // next returns an iterator which points to the next element in b.
@@ -284,7 +284,7 @@ func (it iterator) next(b *ringBuf) (_ iterator, ok bool) {
 // push sets the iterator's current value in b to e and calls next
 // It is the caller's responsibility to ensure that b has space for the new
 // entry.
-func (it iterator) push(b *ringBuf, e raftpb.Entry) iterator {
+func (it iterator) push(b *ringBuf, e rafttype.Entry) iterator {
 	b.buf[it] = e
 	it, _ = it.next(b)
 	return it

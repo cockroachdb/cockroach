@@ -21,7 +21,7 @@ import (
 	"math"
 	"strconv"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // Index is a Raft log position.
@@ -37,13 +37,13 @@ func (i Index) String() string {
 // AckedIndexer allows looking up a commit index for a given ID of a voter
 // from a corresponding MajorityConfig.
 type AckedIndexer interface {
-	AckedIndex(voterID pb.PeerID) (idx Index, found bool)
+	AckedIndex(voterID rt.PeerID) (idx Index, found bool)
 }
 
-type mapAckIndexer map[pb.PeerID]Index
+type mapAckIndexer map[rt.PeerID]Index
 
 // AckedIndex implements AckedIndexer interface.
-func (m mapAckIndexer) AckedIndex(id pb.PeerID) (Index, bool) {
+func (m mapAckIndexer) AckedIndex(id rt.PeerID) (Index, bool) {
 	idx, ok := m[id]
 	return idx, ok
 }

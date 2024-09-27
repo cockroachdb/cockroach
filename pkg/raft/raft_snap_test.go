@@ -20,16 +20,16 @@ package raft
 import (
 	"testing"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 var (
 	testingSnap = snapshot{
 		term: 11,
-		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		snap: rt.Snapshot{Metadata: rt.SnapshotMetadata{
 			Index:     11,
 			Term:      11,
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+			ConfState: rt.ConfState{Voters: []rt.PeerID{1, 2}},
 		}},
 	}
 )
@@ -47,7 +47,7 @@ func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
 	// node 2 needs a snapshot
 	sm.trk.Progress(2).Next = sm.raftLog.firstIndex()
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
+	sm.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
 	if sm.trk.Progress(2).PendingSnapshot != 11 {
 		t.Fatalf("PendingSnapshot = %d, want 11", sm.trk.Progress(2).PendingSnapshot)
 	}
@@ -64,7 +64,7 @@ func TestPendingSnapshotPauseReplication(t *testing.T) {
 
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+	sm.Step(rt.Message{From: 1, To: 1, Type: rt.MsgProp, Entries: []rt.Entry{{Data: []byte("somedata")}}})
 	msgs := sm.readMessages()
 	if len(msgs) != 0 {
 		t.Fatalf("len(msgs) = %d, want 0", len(msgs))
@@ -83,7 +83,7 @@ func TestSnapshotFailure(t *testing.T) {
 	sm.trk.Progress(2).Next = 1
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: true})
+	sm.Step(rt.Message{From: 2, To: 1, Type: rt.MsgSnapStatus, Reject: true})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}
@@ -107,7 +107,7 @@ func TestSnapshotSucceed(t *testing.T) {
 	sm.trk.Progress(2).Next = 1
 	sm.trk.Progress(2).BecomeSnapshot(11)
 
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgSnapStatus, Reject: false})
+	sm.Step(rt.Message{From: 2, To: 1, Type: rt.MsgSnapStatus, Reject: false})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}
@@ -133,7 +133,7 @@ func TestSnapshotAbort(t *testing.T) {
 
 	// A successful msgAppResp that has a higher/equal index than the
 	// pending snapshot should abort the pending snapshot.
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: 11})
+	sm.Step(rt.Message{From: 2, To: 1, Type: rt.MsgAppResp, Index: 11})
 	if sm.trk.Progress(2).PendingSnapshot != 0 {
 		t.Fatalf("PendingSnapshot = %d, want 0", sm.trk.Progress(2).PendingSnapshot)
 	}

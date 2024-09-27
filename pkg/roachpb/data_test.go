@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2166,15 +2166,15 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 	testCases := []struct {
 		crt mockCRT
-		exp raftpb.ConfChangeI
+		exp rafttype.ConfChangeI
 		err string
 	}{
 		// A replica of type VOTER_OUTGOING being added makes no sense.
 		{crt: mk(in{add: vo1, repls: vo1}), err: "can't add replica in state VOTER_OUTGOING"},
 		// But an incoming one can be added, and the result must be a joint change.
-		{crt: mk(in{add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionJointExplicit,
-			Changes:    []raftpb.ConfChangeSingle{{Type: raftpb.ConfChangeAddNode, NodeID: 1}},
+		{crt: mk(in{add: vi1, repls: vi1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionJointExplicit,
+			Changes:    []rafttype.ConfChangeSingle{{Type: rafttype.ConfChangeAddNode, NodeID: 1}},
 		}},
 		// A replica of type VOTER_FULL being removed is unsafe.
 		{crt: mk(in{del: vf1}), err: "removal of VOTER_FULL unsafe, demote to LEARNER first"},
@@ -2184,13 +2184,13 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		{crt: mk(in{del: vi1}), err: "removal of VOTER_INCOMING unsafe, demote to LEARNER first"},
 
 		// Adding a voter via the V1 path.
-		{crt: mk(in{add: vf1, repls: vf1}), exp: raftpb.ConfChange{
-			Type:   raftpb.ConfChangeAddNode,
+		{crt: mk(in{add: vf1, repls: vf1}), exp: rafttype.ConfChange{
+			Type:   rafttype.ConfChangeAddNode,
 			NodeID: 1,
 		}},
 		// Adding a learner via the V1 path.
-		{crt: mk(in{add: l1, repls: l1}), exp: raftpb.ConfChange{
-			Type:   raftpb.ConfChangeAddLearnerNode,
+		{crt: mk(in{add: l1, repls: l1}), exp: rafttype.ConfChange{
+			Type:   rafttype.ConfChangeAddLearnerNode,
 			NodeID: 1,
 		}},
 
@@ -2198,23 +2198,23 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		{crt: mk(in{del: l1, repls: l1}), err: "(n3,s2):1LEARNER must no longer be present in descriptor"},
 		{crt: mk(in{del: nv1, repls: nv1}), err: "(n3,s2):1NON_VOTER must no longer be present in descriptor"},
 		// Well-formed examples.
-		{crt: mk(in{del: l1}), exp: raftpb.ConfChange{
-			Type:   raftpb.ConfChangeRemoveNode,
+		{crt: mk(in{del: l1}), exp: rafttype.ConfChange{
+			Type:   rafttype.ConfChangeRemoveNode,
 			NodeID: 1,
 		}},
 		// Adding a voter via the V2 path but without joint consensus.
-		{crt: mk(in{v2: true, add: vf1, repls: vf1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionAuto,
-			Changes: []raftpb.ConfChangeSingle{{
-				Type:   raftpb.ConfChangeAddNode,
+		{crt: mk(in{v2: true, add: vf1, repls: vf1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionAuto,
+			Changes: []rafttype.ConfChangeSingle{{
+				Type:   rafttype.ConfChangeAddNode,
 				NodeID: 1,
 			}},
 		}},
 		// Ditto, but with joint consensus requested.
-		{crt: mk(in{v2: true, add: vi1, repls: vi1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionJointExplicit,
-			Changes: []raftpb.ConfChangeSingle{{
-				Type:   raftpb.ConfChangeAddNode,
+		{crt: mk(in{v2: true, add: vi1, repls: vi1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionJointExplicit,
+			Changes: []rafttype.ConfChangeSingle{{
+				Type:   rafttype.ConfChangeAddNode,
 				NodeID: 1,
 			}},
 		}},
@@ -2222,31 +2222,31 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		// Adding a learner via the V2 path and without joint consensus. (There is currently
 		// no way to request joint consensus when adding a single learner, but there is no
 		// reason one would ever want that).
-		{crt: mk(in{v2: true, add: l1, repls: l1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionAuto,
-			Changes: []raftpb.ConfChangeSingle{{
-				Type:   raftpb.ConfChangeAddLearnerNode,
+		{crt: mk(in{v2: true, add: l1, repls: l1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionAuto,
+			Changes: []rafttype.ConfChangeSingle{{
+				Type:   rafttype.ConfChangeAddLearnerNode,
 				NodeID: 1,
 			}},
 		}},
 
 		// Removing a learner via the V2 path without joint consensus. Note that
 		// this means that the replica is not in the desc any more.
-		{crt: mk(in{v2: true, del: l1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionAuto,
-			Changes: []raftpb.ConfChangeSingle{{
-				Type:   raftpb.ConfChangeRemoveNode,
+		{crt: mk(in{v2: true, del: l1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionAuto,
+			Changes: []rafttype.ConfChangeSingle{{
+				Type:   rafttype.ConfChangeRemoveNode,
 				NodeID: 1,
 			}},
 		}},
 
 		// Demoting a voter or removing a learner via the V2 path with joint
 		// consensus.
-		{crt: mk(in{v2: true, del: vdl1, repls: vdl1}), exp: raftpb.ConfChangeV2{
-			Transition: raftpb.ConfChangeTransitionJointExplicit,
-			Changes: []raftpb.ConfChangeSingle{
-				{NodeID: 1, Type: raftpb.ConfChangeRemoveNode},
-				{NodeID: 1, Type: raftpb.ConfChangeAddLearnerNode},
+		{crt: mk(in{v2: true, del: vdl1, repls: vdl1}), exp: rafttype.ConfChangeV2{
+			Transition: rafttype.ConfChangeTransitionJointExplicit,
+			Changes: []rafttype.ConfChangeSingle{
+				{NodeID: 1, Type: rafttype.ConfChangeRemoveNode},
+				{NodeID: 1, Type: rafttype.ConfChangeAddLearnerNode},
 			},
 		}},
 
@@ -2268,22 +2268,22 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 				LEARNER, 4, // added
 				VOTER_FULL, 10,
 			)}),
-			exp: raftpb.ConfChangeV2{
-				Transition: raftpb.ConfChangeTransitionJointExplicit,
-				Changes: []raftpb.ConfChangeSingle{
-					{NodeID: 2, Type: raftpb.ConfChangeRemoveNode},
-					{NodeID: 9, Type: raftpb.ConfChangeRemoveNode},
-					{NodeID: 9, Type: raftpb.ConfChangeAddLearnerNode},
-					{NodeID: 6, Type: raftpb.ConfChangeAddNode},
-					{NodeID: 4, Type: raftpb.ConfChangeAddLearnerNode},
-					{NodeID: 3, Type: raftpb.ConfChangeAddNode},
+			exp: rafttype.ConfChangeV2{
+				Transition: rafttype.ConfChangeTransitionJointExplicit,
+				Changes: []rafttype.ConfChangeSingle{
+					{NodeID: 2, Type: rafttype.ConfChangeRemoveNode},
+					{NodeID: 9, Type: rafttype.ConfChangeRemoveNode},
+					{NodeID: 9, Type: rafttype.ConfChangeAddLearnerNode},
+					{NodeID: 6, Type: rafttype.ConfChangeAddNode},
+					{NodeID: 4, Type: rafttype.ConfChangeAddLearnerNode},
+					{NodeID: 3, Type: rafttype.ConfChangeAddNode},
 				}},
 		},
 
 		// Leave a joint config.
 		{
 			crt: mk(in{repls: sl(VOTER_FULL, 1)}),
-			exp: raftpb.ConfChangeV2{},
+			exp: rafttype.ConfChangeV2{},
 		},
 		// If we're asked to leave a joint state but the descriptor is still joint,
 		// that's a problem.

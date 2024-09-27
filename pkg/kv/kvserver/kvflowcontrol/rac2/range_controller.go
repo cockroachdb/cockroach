@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -148,7 +148,7 @@ type RaftInterface interface {
 	// as if it was sent (i.e., update Next). Since we are not holding
 	// Replica.mu, the callee will need to acquire Replica.mu.
 	MakeMsgAppRaftMuLocked(
-		replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
+		replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (rafttype.Message, error)
 }
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In
@@ -190,9 +190,9 @@ type RaftEvent struct {
 	// populated if Entries is empty and Snap is nil.
 	Term uint64
 	// Snap contains the snapshot to be written to storage.
-	Snap *raftpb.Snapshot
+	Snap *rafttype.Snapshot
 	// Entries contains the log entries to be written to storage.
-	Entries []raftpb.Entry
+	Entries []rafttype.Entry
 	// MsgApps to followers. Only populated on the leader, when operating in
 	// MsgAppPush mode. This is informational, for bookkeeping in the callee.
 	//
@@ -217,7 +217,7 @@ type RaftEvent struct {
 	//
 	// A key can map to an empty slice, in order to reuse already allocated
 	// slice memory.
-	MsgApps map[roachpb.ReplicaID][]raftpb.Message
+	MsgApps map[roachpb.ReplicaID][]rafttype.Message
 	// ReplicasStateInfo contains the state of all replicas. This is used to
 	// determine if the state of a replica has changed, and if so, to update the
 	// flow control state. It also informs the RangeController of a replica's
@@ -233,12 +233,12 @@ type RaftEvent struct {
 func RaftEventFromMsgStorageAppendAndMsgApps(
 	mode RaftMsgAppMode,
 	replicaID roachpb.ReplicaID,
-	appendMsg raftpb.Message,
-	outboundMsgs []raftpb.Message,
-	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
+	appendMsg rafttype.Message,
+	outboundMsgs []rafttype.Message,
+	msgAppScratch map[roachpb.ReplicaID][]rafttype.Message,
 ) RaftEvent {
 	event := RaftEvent{MsgAppMode: mode}
-	if appendMsg.Type == raftpb.MsgStorageAppend {
+	if appendMsg.Type == rafttype.MsgStorageAppend {
 		event = RaftEvent{
 			MsgAppMode: event.MsgAppMode,
 			Term:       appendMsg.LogTerm,
@@ -260,7 +260,7 @@ func RaftEventFromMsgStorageAppendAndMsgApps(
 	}
 	added := false
 	for _, msg := range outboundMsgs {
-		if msg.Type != raftpb.MsgApp || roachpb.ReplicaID(msg.To) == replicaID {
+		if msg.Type != rafttype.MsgApp || roachpb.ReplicaID(msg.To) == replicaID {
 			continue
 		}
 		added = true
@@ -592,7 +592,7 @@ func constructRaftEventForReplica(
 	raftEventAppendState raftEventAppendState,
 	latestReplicaStateInfo ReplicaStateInfo,
 	existingSendStreamState existingSendStreamState,
-	msgApps []raftpb.Message,
+	msgApps []rafttype.Message,
 	scratchSendingEntries []entryFCState,
 ) (_ raftEventForReplica, scratch []entryFCState) {
 	firstNewEntryIndex, lastNewEntryIndex := uint64(math.MaxUint64), uint64(math.MaxUint64)
@@ -739,11 +739,11 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 		if info.State == tracker.StateReplicate {
 			// The leader won't have a MsgApp for itself, so we need to construct a
 			// MsgApp for the leader, containing all the entries.
-			var msgApps []raftpb.Message
+			var msgApps []rafttype.Message
 			if r != rc.opts.LocalReplicaID {
 				msgApps = e.MsgApps[r]
 			} else {
-				msgAppVec := [1]raftpb.Message{
+				msgAppVec := [1]rafttype.Message{
 					{
 						Entries: e.Entries,
 					},
@@ -1180,12 +1180,12 @@ type entryFCState struct {
 	term, index     uint64
 	usesFlowControl bool
 	tokens          kvflowcontrol.Tokens
-	pri             raftpb.Priority
+	pri             rafttype.Priority
 }
 
 // getEntryFCStateOrFatal returns the given entry's flow control state. If the
 // entry encoding cannot be determined, a fatal is logged.
-func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCState {
+func getEntryFCStateOrFatal(ctx context.Context, entry rafttype.Entry) entryFCState {
 	enc, pri, err := raftlog.EncodingOf(entry)
 	if err != nil {
 		log.Fatalf(ctx, "error getting encoding of entry: %v", err)
@@ -1196,7 +1196,7 @@ func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCStat
 		// the priority via the priority bit and would need to decode the admission
 		// metadata. Instead, assume the priority is low priority, which is the
 		// only sane flow control priority enforcement level in v1 (elastic only).
-		pri = raftpb.LowPri
+		pri = rafttype.LowPri
 	}
 
 	return entryFCState{
@@ -1319,7 +1319,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 			if !entry.usesFlowControl {
 				continue
 			}
-			var pri raftpb.Priority
+			var pri rafttype.Priority
 			inSendQueue := false
 			if entry.index >= rss.mu.sendQueue.nextRaftIndex {
 				// Was never in the send-queue.
@@ -1353,7 +1353,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 			if !entry.usesFlowControl {
 				continue
 			}
-			var pri raftpb.Priority
+			var pri rafttype.Priority
 			inSendQueue := false
 			if entry.index >= rss.mu.sendQueue.indexToSend {
 				// Being added to the send-queue.
@@ -1423,11 +1423,11 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 // returnSendTokens takes the tokens untracked by the tracker and returns them
 // to the send token counters.
 func (rss *replicaSendStream) returnSendTokens(
-	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens, disconnect bool,
+	ctx context.Context, returned [rafttype.NumPriorities]kvflowcontrol.Tokens, disconnect bool,
 ) {
 	for pri, tokens := range returned {
 		if tokens > 0 {
-			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
+			pri := WorkClassFromRaftPriority(rafttype.Priority(pri))
 			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, disconnect)
 		}
 	}
@@ -1435,10 +1435,10 @@ func (rss *replicaSendStream) returnSendTokens(
 
 // returnEvalTokens returns tokens to the eval token counters.
 func (rss *replicaSendStream) returnEvalTokens(
-	ctx context.Context, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens,
+	ctx context.Context, returnedEval [rafttype.NumPriorities]kvflowcontrol.Tokens,
 ) {
 	for pri, tokens := range returnedEval {
-		rpri := raftpb.Priority(pri)
+		rpri := rafttype.Priority(pri)
 		wc := WorkClassFromRaftPriority(rpri)
 		if tokens > 0 {
 			rss.parent.evalTokenCounter.Return(ctx, wc, tokens, false /* disconnect */)
@@ -1488,7 +1488,7 @@ type connectedState uint32
 // The first false return value from SendRaftMessage will trigger a
 // notification to Raft that the replica is unreachable (see
 // Replica.sendRaftMessage calling Replica.addUnreachableRemoteReplica), and
-// that raftpb.MsgUnreachable will cause the transition out of StateReplicate
+// that rafttype.MsgUnreachable will cause the transition out of StateReplicate
 // to StateProbe. The false return value happens either when the (generous)
 // RaftTransport buffer is full, or when the circuit breaker opens. The
 // circuit breaker opens 3-6s after no more TCP packets are flowing.

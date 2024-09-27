@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -47,7 +47,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
+func mustEntryEq(t testing.TB, l, r rafttype.Entry) {
 	el, err := raftlog.NewEntry(l)
 	require.NoError(t, err)
 	er, err := raftlog.NewEntry(r)
@@ -57,7 +57,7 @@ func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
 
 func mkEnt(
 	enc raftlog.EntryEncoding, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
-) raftpb.Entry {
+) rafttype.Entry {
 	cmdIDKey := strings.Repeat("x", raftlog.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
@@ -65,7 +65,7 @@ func mkEnt(
 	if err != nil {
 		panic(err)
 	}
-	var ent raftpb.Entry
+	var ent rafttype.Entry
 	ent.Index, ent.Term = index, term
 	ent.Data = raftlog.EncodeCommandBytes(enc, kvserverbase.CmdIDKey(cmdIDKey), b, 0 /* pri */)
 	return ent
@@ -384,7 +384,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	type testCase struct {
 		// Entry passed into maybeInlineSideloadedRaftCommand and the entry
 		// after having (perhaps) been modified.
-		thin, fat raftpb.Entry
+		thin, fat rafttype.Entry
 		// Populate the raft entry cache and sideload storage before running the test.
 		setup func(*raftentry.Cache, SideloadStorage)
 		// If nonempty, the error expected from maybeInlineSideloadedRaftCommand.
@@ -430,7 +430,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: func(ec *raftentry.Cache, ss SideloadStorage) {
 				putOnDisk(ec, ss)
-				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)}, true)
+				ec.Add(rangeID, []rafttype.Entry{mkEnt(v2, 5, 6, &sstFat)}, true)
 			}, expTrace: "using cache hit",
 		},
 		"v2-fat-without-file": {
@@ -453,7 +453,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			test.setup(ec, ss)
 		}
 
-		thinCopy := *(protoutil.Clone(&test.thin).(*raftpb.Entry))
+		thinCopy := *(protoutil.Clone(&test.thin).(*rafttype.Entry))
 		newEnt, err := MaybeInlineSideloadedRaftCommand(ctx, rangeID, thinCopy, ss, ec)
 		if err != nil {
 			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
@@ -508,7 +508,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 
 	type tc struct {
 		name              string
-		preEnts, postEnts []raftpb.Entry
+		preEnts, postEnts []rafttype.Entry
 		ss                []string
 		// Expectations.
 		size              int64
@@ -526,21 +526,21 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 		},
 		{
 			name:              "v1",
-			preEnts:           []raftpb.Entry{entV1Reg, entV1SST},
-			postEnts:          []raftpb.Entry{entV1Reg, entV1SST},
+			preEnts:           []rafttype.Entry{entV1Reg, entV1SST},
+			postEnts:          []rafttype.Entry{entV1Reg, entV1SST},
 			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),
 		},
 		{
 			name:     "v2",
-			preEnts:  []raftpb.Entry{entV2SST, entV2Reg},
-			postEnts: []raftpb.Entry{entV2SSTStripped, entV2Reg},
+			preEnts:  []rafttype.Entry{entV2SST, entV2Reg},
+			postEnts: []rafttype.Entry{entV2SSTStripped, entV2Reg},
 			ss:       []string{"i13.t99"},
 			size:     int64(len(addSST.Data)),
 		},
 		{
 			name:              "mixed",
-			preEnts:           []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
-			postEnts:          []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
+			preEnts:           []rafttype.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
+			postEnts:          []rafttype.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
 			ss:                []string{"i13.t99"},
 			size:              int64(len(addSST.Data)),
 			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),

@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -30,7 +30,7 @@ func formatTrackerState(t *Tracker) string {
 	var result strings.Builder
 	for pri, tracked := range t.tracked {
 		if len(tracked) > 0 {
-			result.WriteString(fmt.Sprintf("%v:\n", raftpb.Priority(pri)))
+			result.WriteString(fmt.Sprintf("%v:\n", rafttype.Priority(pri)))
 			for _, tr := range tracked {
 				result.WriteString(fmt.Sprintf("  term=%d index=%-2d tokens=%-3d\n",
 					tr.term, tr.index, tr.tokens))
@@ -40,12 +40,12 @@ func formatTrackerState(t *Tracker) string {
 	return result.String()
 }
 
-func formatUntracked(prefix string, untracked [raftpb.NumPriorities]kvflowcontrol.Tokens) string {
+func formatUntracked(prefix string, untracked [rafttype.NumPriorities]kvflowcontrol.Tokens) string {
 	var buf strings.Builder
 	for pri, tokens := range untracked {
 		if tokens > 0 {
 			buf.WriteString(fmt.Sprintf("%s returned: tokens=%-4d pri=%v\n",
-				prefix, tokens, raftpb.Priority(pri)))
+				prefix, tokens, rafttype.Priority(pri)))
 		}
 	}
 	return buf.String()
@@ -109,7 +109,7 @@ func TestTokenTracker(t *testing.T) {
 			d.ScanArgs(t, "term", &term)
 			var evalTokensGEIndex uint64
 			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
-			var admitted [raftpb.NumPriorities]uint64
+			var admitted [rafttype.NumPriorities]uint64
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {

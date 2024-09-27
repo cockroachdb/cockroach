@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -55,7 +55,7 @@ func (r *Replica) getDecoder() *replicaDecoder {
 }
 
 // DecodeAndBind implements the apply.Decoder interface.
-func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry) (bool, error) {
+func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []rafttype.Entry) (bool, error) {
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
@@ -65,7 +65,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 }
 
 // decode decodes the provided entries into the decoder.
-func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error {
+func (d *replicaDecoder) decode(ctx context.Context, ents []rafttype.Entry) error {
 	for i := range ents {
 		ent := &ents[i]
 		if err := d.cmdBuf.allocate().Decode(ent); err != nil {

@@ -23,12 +23,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/datadriven"
 )
 
 func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData) error {
-	var typ raftpb.MessageType = -1
+	var typ rafttype.MessageType = -1
 	var rs []Recipient
 	for _, arg := range d.CmdArgs {
 		if len(arg.Vals) == 0 {
@@ -36,14 +36,14 @@ func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData
 			if err != nil {
 				t.Fatal(err)
 			}
-			rs = append(rs, Recipient{ID: raftpb.PeerID(id)})
+			rs = append(rs, Recipient{ID: rafttype.PeerID(id)})
 		}
 		for i := range arg.Vals {
 			switch arg.Key {
 			case "drop":
 				var rawID uint64
 				arg.Scan(t, i, &rawID)
-				id := raftpb.PeerID(rawID)
+				id := rafttype.PeerID(rawID)
 				var found bool
 				for _, r := range rs {
 					if r.ID == id {
@@ -57,11 +57,11 @@ func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData
 			case "type":
 				var s string
 				arg.Scan(t, i, &s)
-				v, ok := raftpb.MessageType_value[s]
+				v, ok := rafttype.MessageType_value[s]
 				if !ok {
 					t.Fatalf("unknown message type %s", s)
 				}
-				typ = raftpb.MessageType(v)
+				typ = rafttype.MessageType(v)
 			}
 		}
 	}
@@ -73,7 +73,7 @@ func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData
 }
 
 type Recipient struct {
-	ID   raftpb.PeerID
+	ID   rafttype.PeerID
 	Drop bool
 }
 
@@ -81,10 +81,10 @@ type Recipient struct {
 // delivers or drops messages to the specified Recipients. Only messages of type
 // typ are delivered (-1 for all types). Returns the number of messages handled
 // (i.e. delivered or dropped). A handled message is removed from env.Messages.
-func (env *InteractionEnv) DeliverMsgs(typ raftpb.MessageType, rs ...Recipient) int {
+func (env *InteractionEnv) DeliverMsgs(typ rafttype.MessageType, rs ...Recipient) int {
 	var n int
 	for _, r := range rs {
-		var msgs []raftpb.Message
+		var msgs []rafttype.Message
 		msgs, env.Messages = splitMsgs(env.Messages, r.ID, typ, r.Drop)
 		n += len(msgs)
 		for _, msg := range msgs {

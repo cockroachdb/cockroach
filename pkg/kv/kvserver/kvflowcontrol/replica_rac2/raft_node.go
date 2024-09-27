@@ -13,7 +13,7 @@ package replica_rac2
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -54,7 +54,7 @@ func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 func (rn raftNodeForRACv2) ReplicasStateLocked(
 	infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo,
 ) {
-	rn.WithProgress(func(peerID raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
+	rn.WithProgress(func(peerID rafttype.PeerID, _ raft.ProgressType, progress tracker.Progress) {
 		infoMap[roachpb.ReplicaID(peerID)] = rac2.ReplicaStateInfo{
 			Match: progress.Match,
 			Next:  progress.Next,
@@ -67,12 +67,12 @@ func (rn raftNodeForRACv2) ReplicasStateLocked(
 func (rn raftNodeForRACv2) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
 	rn.r.MuLock()
 	defer rn.r.MuUnlock()
-	return rn.RawNode.SendPing(raftpb.PeerID(to))
+	return rn.RawNode.SendPing(rafttype.PeerID(to))
 }
 
 // MakeMsgAppRaftMuLocked implements rac2.RaftInterface.
 func (rn raftNodeForRACv2) MakeMsgAppRaftMuLocked(
 	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
+) (rafttype.Message, error) {
 	panic("unimplemented")
 }

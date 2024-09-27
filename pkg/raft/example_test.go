@@ -17,12 +17,12 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 
-func applyToStore(_ []pb.Entry)      {}
-func sendMessages(_ []pb.Message)    {}
-func saveStateToDisk(_ pb.HardState) {}
-func saveToDisk(_ []pb.Entry)        {}
+func applyToStore(_ []rt.Entry)      {}
+func sendMessages(_ []rt.Message)    {}
+func saveStateToDisk(_ rt.HardState) {}
+func saveToDisk(_ []rt.Entry)        {}
 
 func ExampleNode() {
 	c := &Config{}
@@ -32,7 +32,7 @@ func ExampleNode() {
 	// stuff to n happens in other goroutines
 
 	// the last known state
-	var prev pb.HardState
+	var prev rt.HardState
 	for {
 		// Ready blocks until there is new state ready.
 		rd := <-n.Ready()

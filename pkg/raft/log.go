@@ -20,7 +20,7 @@ package raft
 import (
 	"fmt"
 
-	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	rt "github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 )
 
 // LogSnapshot encapsulates a point-in-time state of the raft log accessible
@@ -252,7 +252,7 @@ func (l *raftLog) findConflictByTerm(index uint64, term uint64) (uint64, uint64)
 
 // nextUnstableEnts returns all entries that are available to be written to the
 // local stable log and are not already in-progress.
-func (l *raftLog) nextUnstableEnts() []pb.Entry {
+func (l *raftLog) nextUnstableEnts() []rt.Entry {
 	return l.unstable.nextEntries()
 }
 
@@ -267,7 +267,7 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 // appended them to the local raft log yet. If allowUnstable is true, committed
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
-func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
+func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []rt.Entry) {
 	if l.applyingEntsPaused {
 		// Entry application outstanding size limit reached.
 		return nil
@@ -324,7 +324,7 @@ func (l *raftLog) maxAppliableIndex(allowUnstable bool) uint64 {
 
 // nextUnstableSnapshot returns the snapshot, if present, that is available to
 // be applied to the local storage and is not already in-progress.
-func (l *raftLog) nextUnstableSnapshot() *pb.Snapshot {
+func (l *raftLog) nextUnstableSnapshot() *rt.Snapshot {
 	return l.unstable.nextSnapshot()
 }
 
@@ -340,7 +340,7 @@ func (l *raftLog) hasNextOrInProgressSnapshot() bool {
 	return l.unstable.snapshot != nil
 }
 
-func (l *raftLog) snapshot() (pb.Snapshot, error) {
+func (l *raftLog) snapshot() (rt.Snapshot, error) {
 	if l.unstable.snapshot != nil {
 		return *l.unstable.snapshot, nil
 	}
@@ -461,7 +461,7 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 // the total size not exceeding maxSize. The total size can exceed maxSize if
 // the first entry (at index after+1) is larger than maxSize. Returns nil if
 // there are no entries at indices > after.
-func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]rt.Entry, error) {
 	if after >= l.lastIndex() {
 		return nil, nil
 	}
@@ -469,7 +469,7 @@ func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, 
 }
 
 // allEntries returns all entries in the log. For testing only.
-func (l *raftLog) allEntries() []pb.Entry {
+func (l *raftLog) allEntries() []rt.Entry {
 	ents, err := l.entries(l.firstIndex()-1, noLimit)
 	if err == nil {
 		return ents
@@ -521,7 +521,7 @@ func (l *raftLog) restore(s snapshot) bool {
 //
 // If the callback returns an error, scan terminates and returns this error
 // immediately. This can be used to stop the scan early ("break" the loop).
-func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.Entry) error) error {
+func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]rt.Entry) error) error {
 	for lo < hi {
 		ents, err := l.slice(lo, hi, pageSize)
 		if err != nil {
@@ -543,7 +543,7 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 //
 // The returned slice can be appended to, but the entries in it must not be
 // mutated.
-func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]rt.Entry, error) {
 	return l.snap(l.storage).slice(lo, hi, maxSize)
 }
 
@@ -572,7 +572,7 @@ func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (logSlice, error) {
 	}, nil
 }
 
-func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]rt.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
 	} else if lo >= hi {
