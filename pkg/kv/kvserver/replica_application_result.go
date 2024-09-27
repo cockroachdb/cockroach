@@ -419,9 +419,9 @@ func (r *Replica) tryReproposeWithNewLeaseIndexRaftMuLocked(
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
 		return kvpb.NewNotLeaseHolderError(
-			*r.mu.orRaftMu.state.Lease,
+			*r.shMu.state.Lease,
 			r.store.StoreID(),
-			r.mu.orRaftMu.state.Desc,
+			r.shMu.state.Desc,
 			"reproposal failed due to closed timestamp",
 		)
 	}
@@ -477,8 +477,8 @@ func (r *Replica) handleLeaseResult(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.leasePostApplyLocked(ctx,
-		r.mu.orRaftMu.state.Lease, /* prevLease */
-		lease,                     /* newLease */
+		r.shMu.state.Lease, /* prevLease */
+		lease,              /* newLease */
 		priorReadSum,
 		assertNoLeaseJump)
 }
@@ -490,8 +490,8 @@ func (r *Replica) handleTruncatedStateResult(
 ) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
 	expectedFirstIndexWasAccurate =
-		r.mu.orRaftMu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
-	r.mu.orRaftMu.state.TruncatedState = t
+		r.shMu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
+	r.shMu.state.TruncatedState = t
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up
@@ -528,13 +528,13 @@ func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Times
 		return
 	}
 	r.mu.Lock()
-	r.mu.orRaftMu.state.GCThreshold = thresh
+	r.shMu.state.GCThreshold = thresh
 	r.mu.Unlock()
 }
 
 func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) {
 	r.mu.Lock()
-	r.mu.orRaftMu.state.GCHint = hint
+	r.shMu.state.GCHint = hint
 	r.mu.Unlock()
 }
 
@@ -543,7 +543,7 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 		log.Fatal(ctx, "not expecting empty replica version downstream of raft")
 	}
 	r.mu.Lock()
-	r.mu.orRaftMu.state.Version = version
+	r.shMu.state.Version = version
 	r.mu.Unlock()
 }
 

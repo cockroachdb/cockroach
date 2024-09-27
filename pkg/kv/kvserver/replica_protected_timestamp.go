@@ -63,7 +63,7 @@ func (r *Replica) readProtectedTimestampsRLocked(
 	ctx context.Context,
 ) (ts cachedProtectedTimestampState, _ error) {
 	desc := r.descRLocked()
-	gcThreshold := *r.mu.orRaftMu.state.GCThreshold
+	gcThreshold := *r.shMu.state.GCThreshold
 
 	sp := roachpb.Span{
 		Key:    roachpb.Key(desc.StartKey),
@@ -121,8 +121,8 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	defer r.mu.RUnlock()
 	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
 
-	oldThreshold = *r.mu.orRaftMu.state.GCThreshold
-	lease := *r.mu.orRaftMu.state.Lease
+	oldThreshold = *r.shMu.state.GCThreshold
+	lease := *r.shMu.state.Lease
 
 	// read.earliestRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.

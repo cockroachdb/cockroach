@@ -563,8 +563,8 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			tc.repl.mu.orRaftMu.state.RaftClosedTimestamp = test.raftClosed
-			tc.repl.mu.orRaftMu.state.LeaseAppliedIndex = test.applied
+			tc.repl.shMu.state.RaftClosedTimestamp = test.raftClosed
+			tc.repl.shMu.state.LeaseAppliedIndex = test.applied
 			tc.repl.raftMu.Unlock()
 			// NB: don't release the mutex to make this test a bit more resilient to
 			// problems that could arise should something propose a command to this
@@ -679,7 +679,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			// Inject a closed timestamp.
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
-			tc.repl.mu.orRaftMu.state.RaftClosedTimestamp = test.closedTS
+			tc.repl.shMu.state.RaftClosedTimestamp = test.closedTS
 			tc.repl.raftMu.Unlock()
 			tc.repl.mu.Unlock()
 
@@ -745,7 +745,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	tc.manualClock.AdvanceTo(ts20.GoTime())
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.mu.orRaftMu.state.RaftClosedTimestamp = ts20
+	tc.repl.shMu.state.RaftClosedTimestamp = ts20
 	tc.repl.raftMu.Unlock()
 	tc.repl.mu.Unlock()
 
@@ -986,7 +986,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				// Inject a closed timestamp.
 				tc.repl.raftMu.Lock()
 				tc.repl.mu.Lock()
-				tc.repl.mu.orRaftMu.state.RaftClosedTimestamp = closedTS
+				tc.repl.shMu.state.RaftClosedTimestamp = closedTS
 				tc.repl.raftMu.Unlock()
 				tc.repl.mu.Unlock()
 
@@ -1082,7 +1082,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 		// Inject a closed timestamp.
 		tc.repl.raftMu.Lock()
 		tc.repl.mu.Lock()
-		tc.repl.mu.orRaftMu.state.RaftClosedTimestamp = makeTS(30)
+		tc.repl.shMu.state.RaftClosedTimestamp = makeTS(30)
 		tc.repl.raftMu.Unlock()
 		tc.repl.mu.Unlock()
 
