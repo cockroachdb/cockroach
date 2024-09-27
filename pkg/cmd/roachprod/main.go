@@ -1709,6 +1709,18 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 			_ = cmd.Flags().Set("arch", string(arch))
 		}
 	}
+
+	// Validate cloud providers, if set.
+	providersSet := make(map[string]struct{})
+	for _, p := range createVMOpts.VMProviders {
+		if _, ok := vm.Providers[p]; !ok {
+			printErrAndExit(fmt.Errorf("unknown cloud provider %q", p))
+		}
+		if _, ok := providersSet[p]; ok {
+			printErrAndExit(fmt.Errorf("duplicate cloud provider specified %q", p))
+		}
+		providersSet[p] = struct{}{}
+	}
 }
 
 var updateCmd = &cobra.Command{
