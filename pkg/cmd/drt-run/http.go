@@ -100,7 +100,7 @@ func (h *httpHandler) serve(rw http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(rw, "<h3>Configuration</h3><hr>\n")
 	fmt.Fprintf(rw, "<pre>")
 	encoder := yaml.NewEncoder(rw)
-	encoder.Encode(h.w.config)
+	_ = encoder.Encode(h.w.config)
 	fmt.Fprintf(rw, "</pre>")
 
 	fmt.Fprintf(rw, "</body>\n</html>")

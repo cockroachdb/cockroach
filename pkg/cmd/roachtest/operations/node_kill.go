@@ -103,7 +103,7 @@ func registerNodeKill(r registry.Registry) {
 		Owner:              registry.OwnerServer,
 		Timeout:            15 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:                nodeKillRunner(9 /* signal */, true /* drain */),
 	})
@@ -112,7 +112,7 @@ func registerNodeKill(r registry.Registry) {
 		Owner:              registry.OwnerServer,
 		Timeout:            10 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:                nodeKillRunner(9 /* signal */, false /* drain */),
 	})
@@ -121,7 +121,7 @@ func registerNodeKill(r registry.Registry) {
 		Owner:              registry.OwnerServer,
 		Timeout:            15 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:                nodeKillRunner(15 /* signal */, true /* drain */),
 	})
