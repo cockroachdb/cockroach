@@ -108,54 +108,57 @@ func (r *opsRunner) pickOperation(
 		setIdx := rng.Intn(len(r.specs))
 		opSpecsSet := r.specs[setIdx]
 		opSpec := &opSpecsSet[rng.Intn(len(opSpecsSet))]
-		r.mu.Lock()
-		if r.mu.lockOutOperations {
-			r.mu.completed.Wait()
-			r.mu.Unlock()
-			continue
-		}
+		shouldContinue := func() bool {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if r.mu.lockOutOperations {
+				r.mu.completed.Wait()
+				return true
+			}
 
-		lastRun := r.mu.lastRun[opSpec.Name]
-		eligibleForNextRun := lastRun.Add(r.config.Operations.Sets[setIdx].Cadence)
+			lastRun := r.mu.lastRun[opSpec.Name]
+			eligibleForNextRun := lastRun.Add(r.config.Operations.Sets[setIdx].Cadence)
 
-		if timeutil.Now().Compare(eligibleForNextRun) < 0 {
-			// Find another operation to run.
-			r.mu.completed.Wait()
-			r.mu.Unlock()
-			continue
-		}
-		// Ratchet lastRun forward.
-		r.mu.lastRun[opSpec.Name] = timeutil.Now()
-		r.mu.runningOperations[workerIdx] = opSpec.Name
+			if timeutil.Now().Compare(eligibleForNextRun) < 0 {
+				// Find another operation to run.
+				r.mu.completed.Wait()
+				return true
+			}
+			// Ratchet lastRun forward.
+			r.mu.lastRun[opSpec.Name] = timeutil.Now()
+			r.mu.runningOperations[workerIdx] = opSpec.Name
 
-		// See what level of isolation this operation requires
-		// from other operations.
-		switch opSpec.CanRunConcurrently {
-		case registry.OperationCanRunConcurrently:
-			// Nothing to do.
-		case registry.OperationCannotRunConcurrently:
-			r.mu.lockOutOperations = true
-			fallthrough
-		case registry.OperationCannotRunConcurrentlyWithItself:
-			for otherOpsRunning := true; otherOpsRunning; {
-				otherOpsRunning = false
-				for i := range r.mu.runningOperations {
-					if i == workerIdx {
-						continue
+			// See what level of isolation this operation requires
+			// from other operations.
+			switch opSpec.CanRunConcurrently {
+			case registry.OperationCanRunConcurrently:
+				// Nothing to do.
+			case registry.OperationCannotRunConcurrently:
+				r.mu.lockOutOperations = true
+				fallthrough
+			case registry.OperationCannotRunConcurrentlyWithItself:
+				for otherOpsRunning := true; otherOpsRunning; {
+					otherOpsRunning = false
+					for i := range r.mu.runningOperations {
+						if i == workerIdx {
+							continue
+						}
+						if r.mu.runningOperations[i] != "" &&
+							(opSpec.CanRunConcurrently != registry.OperationCannotRunConcurrentlyWithItself || r.mu.runningOperations[i] == opSpec.Name) {
+							otherOpsRunning = true
+							break
+						}
 					}
-					if r.mu.runningOperations[i] != "" &&
-						(opSpec.CanRunConcurrently != registry.OperationCannotRunConcurrentlyWithItself || r.mu.runningOperations[i] == opSpec.Name) {
-						otherOpsRunning = true
-						break
+					if otherOpsRunning {
+						r.mu.completed.Wait()
 					}
-				}
-				if otherOpsRunning {
-					r.mu.completed.Wait()
 				}
 			}
+			return false
+		}()
+		if shouldContinue {
+			continue
 		}
-
-		r.mu.Unlock()
 		return opSpec
 	}
 }
@@ -215,7 +218,7 @@ func (r *opsRunner) runOperation(
 		})
 		return
 	}
-	cmd.Start()
+	_ = cmd.Start()
 	wg.Add(2)
 	// Spin up goroutines to read stdout and stderr, and pipe them
 	// into the event logger.
@@ -255,12 +258,12 @@ func (r *opsRunner) runOperation(
 	})
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mu.runningOperations[workerIdx] = ""
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.mu.lockOutOperations = false
 	}
 	r.mu.completed.Broadcast()
-	r.mu.Unlock()
 }
 
 // runWorker manages the infinite loop for one operation runner worker.
