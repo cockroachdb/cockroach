@@ -1198,16 +1198,19 @@ func (b *changefeedResumer) handleChangefeedError(
 	// Execution relocation errors just get returned immediately, as they indicate
 	// another node has taken over execution and this execution should end now.
 	if jobs.IsLeaseRelocationError(changefeedErr) {
+		log.Warningf(ctx, "job lease relocated (%v)", changefeedErr)
 		return changefeedErr
 	}
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	onError, errErr := opts.GetOnError()
 	if errErr != nil {
+		log.Warningf(ctx, "job failed (%v) but was unable to get on error option (%v)", changefeedErr, errErr)
 		return errors.CombineErrors(changefeedErr, errErr)
 	}
 	switch onError {
 	// default behavior
 	case changefeedbase.OptOnErrorFail:
+		log.Warningf(ctx, "job failed (%v)", changefeedErr)
 		return changefeedErr
 	// pause instead of failing
 	case changefeedbase.OptOnErrorPause:
@@ -1225,6 +1228,7 @@ func (b *changefeedResumer) handleChangefeedError(
 			return nil
 		}, errorMessage)
 	default:
+		log.Warningf(ctx, "job failed (%v) but has unrecognized option value %s=%s", changefeedErr, changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 		return errors.Wrapf(changefeedErr, "unrecognized option value: %s=%s for handling error",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 	}
