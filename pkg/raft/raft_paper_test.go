@@ -35,6 +35,7 @@ import (
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,23 +106,44 @@ func TestStartAsFollower(t *testing.T) {
 func TestLeaderBcastBeat(t *testing.T) {
 	// heartbeat interval
 	hi := 1
-	r := newTestRaft(1, 10, hi, newTestMemoryStorage(withPeers(1, 2, 3)))
-	r.becomeCandidate()
-	r.becomeLeader()
-	for i := 0; i < 10; i++ {
-		mustAppendEntry(r, pb.Entry{Index: uint64(i) + 1})
-	}
 
-	for i := 0; i < hi; i++ {
-		r.tick()
-	}
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testOptions := emptyTestConfigModifierOpt()
+			if !storeLivenessEnabled {
+				testOptions = withFortificationDisabled()
+			}
 
-	msgs := r.readMessages()
-	sort.Sort(messageSlice(msgs))
-	assert.Equal(t, []pb.Message{
-		{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
-		{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
-	}, msgs)
+			r := newTestRaft(1, 10, hi,
+				newTestMemoryStorage(withPeers(1, 2, 3)), testOptions)
+
+			r.becomeCandidate()
+			r.becomeLeader()
+
+			for i := 0; i < 10; i++ {
+				mustAppendEntry(r, pb.Entry{Index: uint64(i) + 1})
+			}
+
+			for i := 0; i < hi; i++ {
+				r.tick()
+			}
+
+			msgs := r.readMessages()
+			sort.Sort(messageSlice(msgs))
+			if storeLivenessEnabled {
+				assert.Equal(t, []pb.Message{
+					{From: 1, To: 2, Term: 1, Type: pb.MsgFortifyLeader},
+					{From: 1, To: 3, Term: 1, Type: pb.MsgFortifyLeader},
+					{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
+					{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
+				}, msgs)
+			} else {
+				assert.Equal(t, []pb.Message{
+					{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
+					{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
+				}, msgs)
+			}
+		})
 }
 
 func TestFollowerStartElection(t *testing.T) {
