@@ -870,9 +870,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	r.mu.Lock()
 	state := logstore.RaftState{ // used for append below
-		LastIndex: r.mu.orRaftMu.lastIndexNotDurable,
-		LastTerm:  r.mu.orRaftMu.lastTermNotDurable,
-		ByteSize:  r.mu.orRaftMu.raftLogSize,
+		LastIndex: r.shMu.lastIndexNotDurable,
+		LastTerm:  r.shMu.lastTermNotDurable,
+		ByteSize:  r.shMu.raftLogSize,
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
@@ -1075,9 +1075,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// applySnapshot, but we also want to make sure we reflect these changes
 			// in the local variables we're tracking here.
 			state = logstore.RaftState{
-				LastIndex: r.mu.orRaftMu.lastIndexNotDurable,
-				LastTerm:  r.mu.orRaftMu.lastTermNotDurable,
-				ByteSize:  r.mu.orRaftMu.raftLogSize,
+				LastIndex: r.shMu.lastIndexNotDurable,
+				LastTerm:  r.shMu.lastTermNotDurable,
+				ByteSize:  r.shMu.raftLogSize,
 			}
 
 			// We refresh pending commands after applying a snapshot because this
@@ -1146,9 +1146,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// leader ID.
 	r.mu.Lock()
 	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
-	r.mu.orRaftMu.lastIndexNotDurable = state.LastIndex
-	r.mu.orRaftMu.lastTermNotDurable = state.LastTerm
-	r.mu.orRaftMu.raftLogSize = state.ByteSize
+	r.shMu.lastIndexNotDurable = state.LastIndex
+	r.shMu.lastTermNotDurable = state.LastTerm
+	r.shMu.raftLogSize = state.ByteSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
@@ -1546,7 +1546,7 @@ func (r *Replica) refreshProposalsLocked(
 			//
 			// NB: lease proposals have MaxLeaseIndex 0, so they are cleaned
 			// up here too.
-			if p.command.MaxLeaseIndex <= r.mu.orRaftMu.state.LeaseAppliedIndex {
+			if p.command.MaxLeaseIndex <= r.shMu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(ctx, makeProposalResultErr(
@@ -1606,8 +1606,8 @@ func (r *Replica) refreshProposalsLocked(
 
 	log.VInfof(ctx, 2,
 		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
-		len(reproposals), r.mu.orRaftMu.state.RaftAppliedIndex,
-		r.mu.orRaftMu.state.LeaseAppliedIndex, reason)
+		len(reproposals), r.shMu.state.RaftAppliedIndex,
+		r.shMu.state.LeaseAppliedIndex, reason)
 
 	// Reproposals are those commands which we weren't able to send back to the
 	// client (since we're not sure that another copy of them could apply at
@@ -2051,7 +2051,7 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 ) (kvpb.RaftIndex, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	appliedIndex := r.mu.orRaftMu.state.RaftAppliedIndex
+	appliedIndex := r.shMu.state.RaftAppliedIndex
 	// Cleared when OutgoingSnapshot closes.
 	if r.mu.snapshotLogTruncationConstraints == nil {
 		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
@@ -2287,7 +2287,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// method were to be called on an uninitialized replica (which
 	// has no state and thus an empty raft config), this might cause
 	// problems.
-	if _, currentMember := r.mu.orRaftMu.state.Desc.GetReplicaDescriptorByID(r.replicaID); !currentMember {
+	if _, currentMember := r.shMu.state.Desc.GetReplicaDescriptorByID(r.replicaID); !currentMember {
 		return
 	}
 

@@ -329,7 +329,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	t.Helper()
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	raftLogSize := r.mu.orRaftMu.raftLogSize
+	raftLogSize := r.shMu.raftLogSize
 	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
@@ -639,7 +639,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 		index2 = 60
 	)
 
-	r.mu.orRaftMu.state.RaftAppliedIndex = index1
+	r.shMu.state.RaftAppliedIndex = index1
 	// Add first constraint.
 	_, cleanup1 := r.addSnapshotLogTruncationConstraint(ctx, id1, false /* initial */, storeID)
 	exp1 := map[uuid.UUID]snapTruncationInfo{id1: {index: index1}}
@@ -647,7 +647,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// Make sure it registered.
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
 
-	r.mu.orRaftMu.state.RaftAppliedIndex = index2
+	r.shMu.state.RaftAppliedIndex = index2
 	// Add another constraint with the same id. Extremely unlikely in practice
 	// but we want to make sure it doesn't blow anything up. Collisions are
 	// handled by ignoring the colliding update.
@@ -668,7 +668,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// colliding update at index2 is not represented.
 	assertMin(index1, time.Time{})
 
-	r.mu.orRaftMu.state.RaftAppliedIndex = index2
+	r.shMu.state.RaftAppliedIndex = index2
 	// Add another, higher, index. We're not going to notice it's around
 	// until the lower one disappears.
 	_, cleanup3 := r.addSnapshotLogTruncationConstraint(ctx, id2, false /* initial */, storeID)
@@ -859,7 +859,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	trusted := func() bool {
 		repl.mu.RLock()
 		defer repl.mu.RUnlock()
-		return repl.mu.orRaftMu.raftLogSizeTrusted
+		return repl.shMu.raftLogSizeTrusted
 	}
 
 	put := func() {
@@ -885,9 +885,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 
 	repl.raftMu.Lock()
 	repl.mu.Lock()
-	repl.mu.orRaftMu.raftLogSizeTrusted = false
-	repl.mu.orRaftMu.raftLogSize += 12          // garbage
-	repl.mu.orRaftMu.raftLogLastCheckSize += 12 // garbage
+	repl.shMu.raftLogSizeTrusted = false
+	repl.shMu.raftLogSize += 12          // garbage
+	repl.shMu.raftLogLastCheckSize += 12 // garbage
 	repl.mu.Unlock()
 	repl.raftMu.Unlock()
 
