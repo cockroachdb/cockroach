@@ -484,7 +484,7 @@ func (r *replicaForRACv2) MuRUnlock() {
 
 // LeaseholderMuRLocked implements replica_rac2.Replica.
 func (r *replicaForRACv2) LeaseholderMuRLocked() roachpb.ReplicaID {
-	return r.mu.orRaftMu.state.Lease.Replica.ReplicaID
+	return r.shMu.state.Lease.Replica.ReplicaID
 }
 
 // IsScratchRange implements replica_rac2.Replica.

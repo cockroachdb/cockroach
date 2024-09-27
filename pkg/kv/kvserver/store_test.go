@@ -706,9 +706,9 @@ func TestReplicasByKey(t *testing.T) {
 
 	rep.raftMu.Lock()
 	rep.mu.Lock()
-	desc := *rep.mu.orRaftMu.state.Desc // shallow copy to replace desc wholesale
+	desc := *rep.shMu.state.Desc // shallow copy to replace desc wholesale
 	desc.EndKey = roachpb.RKey("e")
-	rep.mu.orRaftMu.state.Desc = &desc
+	rep.shMu.state.Desc = &desc
 	rep.raftMu.Unlock()
 	rep.mu.Unlock()
 
@@ -2794,7 +2794,7 @@ func TestStoreGCThreshold(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl.mu.Lock()
-		gcThreshold := *repl.mu.orRaftMu.state.GCThreshold
+		gcThreshold := *repl.shMu.state.GCThreshold
 		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
 		repl.mu.Unlock()
 		if err != nil {

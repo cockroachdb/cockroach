@@ -300,8 +300,8 @@ func makeMVCCGCQueueScore(
 	canAdvanceGCThreshold bool,
 ) mvccGCQueueScore {
 	repl.mu.RLock()
-	ms := *repl.mu.orRaftMu.state.Stats
-	hint := *repl.mu.orRaftMu.state.GCHint
+	ms := *repl.shMu.state.Stats
+	hint := *repl.shMu.state.GCHint
 	repl.mu.RUnlock()
 
 	if repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {

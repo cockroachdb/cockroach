@@ -473,7 +473,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				// TODO(sumeer): this code will be deleted when there is no
 				// !looselyCoupledTruncation code path.
 				b.r.mu.Lock()
-				b.r.mu.orRaftMu.raftLogSizeTrusted = false
+				b.r.shMu.raftLogSizeTrusted = false
 				b.r.mu.Unlock()
 			}
 		}
@@ -621,12 +621,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
 	r := b.r
 	r.mu.Lock()
-	r.mu.orRaftMu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
-	r.mu.orRaftMu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
-	r.mu.orRaftMu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
+	r.shMu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
+	r.shMu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
+	r.shMu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
 
 	// Sanity check that the RaftClosedTimestamp doesn't go backwards.
-	existingClosed := r.mu.orRaftMu.state.RaftClosedTimestamp
+	existingClosed := r.shMu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
 	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) {
 		err := errors.AssertionFailedf(
@@ -636,9 +636,9 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 	r.mu.closedTimestampSetter = b.closedTimestampSetter
 
-	closedTimestampUpdated := r.mu.orRaftMu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
-	prevStats := *r.mu.orRaftMu.state.Stats
-	*r.mu.orRaftMu.state.Stats = *b.state.Stats
+	closedTimestampUpdated := r.shMu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
+	prevStats := *r.shMu.state.Stats
+	*r.shMu.state.Stats = *b.state.Stats
 
 	// If the range is now less than its RangeMaxBytes, clear the history of its
 	// largest previous max bytes.

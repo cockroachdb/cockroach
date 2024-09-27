@@ -511,7 +511,7 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.orRaftMu.state.Desc = desc
+	r.shMu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
 	if !r.ContainsKey(roachpb.Key("aa")) {
@@ -865,7 +865,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	tc.repl.mu.RLock()
 	fr := kvserverbase.CheckForcedErr(
 		ctx, raftlog.MakeCmdIDKey(), &raftCmd, false, /* isLocal */
-		&tc.repl.mu.orRaftMu.state,
+		&tc.repl.shMu.state,
 	)
 	pErr := fr.ForcedError
 	tc.repl.mu.RUnlock()
@@ -6672,7 +6672,7 @@ func TestAppliedIndex(t *testing.T) {
 		}
 
 		tc.repl.mu.RLock()
-		newAppliedIndex := tc.repl.mu.orRaftMu.state.RaftAppliedIndex
+		newAppliedIndex := tc.repl.shMu.state.RaftAppliedIndex
 		tc.repl.mu.RUnlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
@@ -7830,7 +7830,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	// Set the max lease index to that of the recently applied write.
 	// Two requests can't have the same lease applied index.
 	tc.repl.mu.RLock()
-	wrongLeaseIndex = tc.repl.mu.orRaftMu.state.LeaseAppliedIndex
+	wrongLeaseIndex = tc.repl.shMu.state.LeaseAppliedIndex
 	if wrongLeaseIndex < 1 {
 		t.Fatal("committed a few batches, but still at lease index zero")
 	}
@@ -8049,7 +8049,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		t.Fatal("still pending commands")
 	}
 	lastAssignedIdx := tc.repl.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
-	curIdx := tc.repl.mu.orRaftMu.state.LeaseAppliedIndex
+	curIdx := tc.repl.shMu.state.LeaseAppliedIndex
 	if c := lastAssignedIdx - curIdx; c > 0 {
 		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
@@ -10305,7 +10305,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 
 	repl.raftMu.Lock()
 	repl.mu.Lock()
-	ms := repl.mu.orRaftMu.state.Stats // intentionally mutated below
+	ms := repl.shMu.state.Stats // intentionally mutated below
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
