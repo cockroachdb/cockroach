@@ -414,7 +414,7 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 type testGranterWithIOTokens struct {
 	buf                     strings.Builder
 	allTokensUsed           bool
-	diskBandwidthTokensUsed [admissionpb.NumWorkClasses]diskTokens
+	diskBandwidthTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -445,7 +445,7 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 }
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
-	usedTokens [admissionpb.NumWorkClasses]diskTokens,
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) {
 	return g.diskBandwidthTokensUsed
 }
@@ -498,9 +498,9 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 }
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
-	usedTokens [admissionpb.NumWorkClasses]diskTokens,
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) {
-	return [admissionpb.NumWorkClasses]diskTokens{}
+	return [admissionpb.NumStoreWorkTypes]diskTokens{}
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(
