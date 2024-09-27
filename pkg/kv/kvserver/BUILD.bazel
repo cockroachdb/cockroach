@@ -361,6 +361,7 @@ go_test(
         "store_rangefeed_test.go",
         "store_rebalancer_test.go",
         "store_replica_btree_test.go",
+        "store_snapshot_admission_test.go",
         "store_test.go",
         "stores_test.go",
         "testutils_test.go",
