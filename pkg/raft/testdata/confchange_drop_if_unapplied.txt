@@ -3,11 +3,20 @@
 # https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
 
 # The check should be performed even if conf change validation is disabled.
-add-nodes 1 voters=(1) index=2 disable-conf-change-validation=true
+add-nodes 4 voters=(1) index=2 disable-conf-change-validation=true
 ----
 INFO 1 switched to configuration voters=(1)
 INFO 1 became follower at term 0
 INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+INFO 2 switched to configuration voters=(1)
+INFO 2 became follower at term 0
+INFO newRaft 2 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+INFO 3 switched to configuration voters=(1)
+INFO 3 became follower at term 0
+INFO newRaft 3 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+INFO 4 switched to configuration voters=(1)
+INFO 4 became follower at term 0
+INFO newRaft 4 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 
 campaign 1
 ----
