@@ -87,36 +87,29 @@ type raftLog struct {
 // newLog returns log using the given storage and default options. It
 // recovers the log to the state that it just commits and applies the
 // latest snapshot.
-func newLog(storage Storage, logger Logger) *raftLog {
-	return newLogWithSize(storage, logger, noLimit)
+func newLog(storage Storage) *raftLog {
+	return newLogWithSize(storage, noLimit)
 }
 
 // newLogWithSize returns a log using the given storage and max
 // message size.
-func newLogWithSize(storage Storage, logger Logger, maxMsgSize uint64) *raftLog {
-	if storage == nil {
-		log.Panic("storage must not be nil")
-	}
-	log := &raftLog{
-		storage:    storage,
-		logger:     logger,
-		maxMsgSize: maxMsgSize,
-	}
-	firstIndex, err := storage.FirstIndex()
+func newLogWithSize(storage Storage, maxApplyingEntsSize entryEncodingSize) *raftLog {
+	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
+	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
-		panic(err) // TODO(bdarnell)
+		panic(err) // TODO(pav-kv): the storage should always cache the last term.
 	}
-	lastIndex, err := storage.LastIndex()
-	if err != nil {
-		panic(err) // TODO(bdarnell)
-	}
-	log.unstable.offset = lastIndex + 1
-	log.unstable.logger = logger
-	// Initialize our committed and applied pointers to the time of the last compaction.
-	log.committed = firstIndex - 1
-	log.applied = firstIndex - 1
+	last := entryID{term: lastTerm, index: lastIndex}
+	return &raftLog{
+		storage:             storage,
+		unstable:            newUnstable(last),
+		maxApplyingEntsSize: maxApplyingEntsSize,
 
-	return log
+		// Initialize our committed and applied pointers to the time of the last compaction.
+		committed: firstIndex - 1,
+		applying:  firstIndex - 1,
+		applied:   firstIndex - 1,
+	}
 }
 
 func (l *raftLog) String() string {

@@ -30,7 +30,6 @@ func newUnstableForTesting(ls logSlice, snap *pb.Snapshot) unstable {
 		snapshot:        snap,
 		logSlice:        ls,
 		entryInProgress: ls.prev.index,
-		logger:          discardLogger,
 	}
 }
 

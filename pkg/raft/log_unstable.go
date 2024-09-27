@@ -21,6 +21,7 @@ import (
 	"context"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
@@ -99,11 +100,9 @@ type unstable struct {
 	// both a snapshot and entries. The snapshot must be sent to storage first, or
 	// together with the entries.
 	entryInProgress uint64
-
-	logger Logger
 }
 
-func newUnstable(last entryID, logger Logger) unstable {
+func newUnstable(last entryID) unstable {
 	// To initialize the last accepted term (logSlice.term) correctly, we make
 	// sure its invariant is true: the log is a prefix of the term's leader's log.
 	// This can be achieved by conservatively initializing to the term of the last
@@ -122,7 +121,6 @@ func newUnstable(last entryID, logger Logger) unstable {
 	return unstable{
 		logSlice:        logSlice{term: last.term, prev: last},
 		entryInProgress: last.index,
-		logger:          logger,
 	}
 }
 
@@ -173,22 +171,22 @@ func (u *unstable) stableTo(ctx context.Context, mark LogMark) {
 		// The last accepted term has changed. Ignore. This is possible if part or
 		// all of the unstable log was replaced between that time that a set of
 		// entries started to be written to stable storage and when they finished.
-		u.logger.Infof("mark (term,index)=(%d,%d) mismatched the last accepted "+
+		log.VInfof(ctx, 2, "mark (term,index)=(%d,%d) mismatched the last accepted "+
 			"term %d in unstable log; ignoring ", mark.Term, mark.Index, u.term)
 		return
 	}
 	if u.snapshot != nil && mark.Index == u.snapshot.Metadata.Index {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
-		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.Index)
+		log.VInfof(ctx, 2, "entry at index %d matched unstable snapshot; ignoring", mark.Index)
 		return
 	}
 	if mark.Index <= u.prev.index || mark.Index > u.lastIndex() {
 		// Unstable entry missing. Ignore.
-		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.Index)
+		log.VInfof(ctx, 2, "entry at index %d missing from unstable log; ignoring", mark.Index)
 		return
 	}
 	if u.snapshot != nil {
-		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
+		log.Fatalf(ctx, "mark %+v acked earlier than the snapshot(in-progress=%t): %s",
 			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
 	u.logSlice = u.forward(mark.Index)
@@ -301,7 +299,7 @@ func (u *unstable) truncateAndAppend(ctx context.Context, a logSlice) bool {
 	// prev == snapshot.{term,index}. The code regresses prev, so we don't want
 	// the snapshot ID to get out of sync with it.
 	if u.snapshot != nil && a.prev.index < u.snapshot.Metadata.Index {
-		u.logger.Panicf("appending at %+v before snapshot %s", a.prev, DescribeSnapshot(*u.snapshot))
+		log.Fatalf(ctx, "appending at %+v before snapshot %s", a.prev, DescribeSnapshot(*u.snapshot))
 		return false
 	}
 
@@ -311,7 +309,7 @@ func (u *unstable) truncateAndAppend(ctx context.Context, a logSlice) bool {
 		u.logSlice = a // replace the entire logSlice with the latest append
 		// TODO(pav-kv): clean up the logging message. It will change all datadriven
 		// test outputs, so do it in a contained PR.
-		u.logger.Infof("replace the unstable entries from index %d", a.prev.index+1)
+		log.VInfof(ctx, 2, "replace the unstable entries from index %d", a.prev.index+1)
 	} else {
 		u.term = a.term // update the last accepted term
 		// Use the full slice expression to cause copy-on-write on this or a
@@ -319,7 +317,7 @@ func (u *unstable) truncateAndAppend(ctx context.Context, a logSlice) bool {
 		// part of the old slice can still be referenced elsewhere.
 		keep := u.entries[:a.prev.index-u.prev.index]
 		u.entries = append(keep[:len(keep):len(keep)], a.entries...)
-		u.logger.Infof("truncate the unstable entries before index %d", a.prev.index+1)
+		log.VInfof(ctx, 2, "truncate the unstable entries before index %d", a.prev.index+1)
 	}
 	u.entryInProgress = min(u.entryInProgress, a.prev.index)
 	return true

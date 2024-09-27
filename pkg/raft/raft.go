@@ -225,10 +225,6 @@ type Config struct {
 	// rejoins the cluster.
 	PreVote bool
 
-	// Logger is the logger used for raft log. For multinode which can host
-	// multiple raft group, each raft group can have its own logger
-	Logger Logger
-
 	// DisableProposalForwarding set to true means that followers will drop
 	// proposals, rather than forwarding them to the leader. One use case for
 	// this feature would be in a situation where the Raft leader is used to
@@ -306,10 +302,6 @@ func (c *Config) validate() error {
 		c.MaxInflightBytes = noLimit
 	} else if c.MaxInflightBytes < c.MaxSizePerMsg {
 		return errors.New("max inflight bytes must be >= max message size")
-	}
-
-	if c.Logger == nil {
-		c.Logger = getLogger()
 	}
 
 	return nil
@@ -426,7 +418,6 @@ type raft struct {
 	tick func(ctx context.Context)
 	step stepFunc
 
-	logger        Logger
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
 }
@@ -435,7 +426,7 @@ func newRaft(ctx context.Context, c *Config) *raft {
 	if err := c.validate(); err != nil {
 		panic(err.Error())
 	}
-	raftlog := newLogWithSize(c.Storage, c.Logger, entryEncodingSize(c.MaxCommittedSizePerReady))
+	raftlog := newLogWithSize(c.Storage, entryEncodingSize(c.MaxCommittedSizePerReady))
 	hs, cs, err := c.Storage.InitialState()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -450,7 +441,6 @@ func newRaft(ctx context.Context, c *Config) *raft {
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
-		logger:                      c.Logger,
 		maxInflight:                 c.MaxInflightMsgs,
 		maxInflightBytes:            c.MaxInflightBytes,
 		checkQuorum:                 c.CheckQuorum,
@@ -475,7 +465,7 @@ func newRaft(ctx context.Context, c *Config) *raft {
 	if err != nil {
 		panic(err)
 	}
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
+	assertConfStatesEquivalent(ctx, cs, r.switchToConfig(ctx, cfg, progressMap))
 
 	if !IsEmptyHardState(hs) {
 		r.loadState(ctx, hs)
@@ -491,7 +481,7 @@ func newRaft(ctx context.Context, c *Config) *raft {
 	}
 
 	// TODO(pav-kv): it should be ok to simply print %+v for lastID.
-	r.logger.Infof("newRaft %x [peers: [%s], term: %d, commit: %d, applied: %d, lastindex: %d, lastterm: %d]",
+	log.VInfof(ctx, 2, "newRaft %x [peers: [%s], term: %d, commit: %d, applied: %d, lastindex: %d, lastterm: %d]",
 		r.id, strings.Join(nodesStrs, ","), r.Term, r.raftLog.committed, r.raftLog.applied, lastID.index, lastID.term)
 	return r
 }
@@ -531,11 +521,11 @@ func (r *raft) send(ctx context.Context, m pb.Message) {
 			// - MsgPreVoteResp: m.Term is the term received in the original
 			//   MsgPreVote if the pre-vote was granted, non-zero for the
 			//   same reasons MsgPreVote is
-			r.logger.Panicf("term should be set when sending %s", m.Type)
+			log.Fatalf(ctx, "term should be set when sending %s", m.Type)
 		}
 	} else {
 		if m.Term != 0 {
-			r.logger.Panicf("term should not be set when sending %s (was %d)", m.Type, m.Term)
+			log.Fatalf(ctx, "term should not be set when sending %s (was %d)", m.Type, m.Term)
 		}
 		// Do not attach term to MsgProp. Proposals are a way to forward to the
 		// leader, and should be treated as local message.
@@ -595,7 +585,7 @@ func (r *raft) send(ctx context.Context, m pb.Message) {
 		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
 	} else {
 		if m.To == r.id {
-			r.logger.Panicf("message should not be self-addressed when sending %s", m.Type)
+			log.Fatalf(ctx, "message should not be self-addressed when sending %s", m.Type)
 		}
 		r.msgs = append(r.msgs, m)
 	}
@@ -688,7 +678,7 @@ func (r *raft) sendPing(ctx context.Context, to pb.PeerID) bool {
 // node. Returns true iff the snapshot message has been emitted successfully.
 func (r *raft) maybeSendSnapshot(ctx context.Context, to pb.PeerID, pr *tracker.Progress) bool {
 	if !pr.RecentActive {
-		r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
+		log.Eventf(ctx, "ignore sending snapshot to %x since it is not recently active", to)
 		return false
 	}
 
@@ -700,10 +690,10 @@ func (r *raft) maybeSendSnapshot(ctx context.Context, to pb.PeerID, pr *tracker.
 		panic("need non-empty snapshot")
 	}
 	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
-	r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
+	log.Eventf(ctx, "%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
 		r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
 	pr.BecomeSnapshot(sindex)
-	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
+	log.Eventf(ctx, "%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
 	r.send(ctx, pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
 	return true
@@ -758,7 +748,7 @@ func (r *raft) sendFortify(ctx context.Context, to pb.PeerID) {
 			// follower).
 			r.send(ctx, pb.Message{To: r.id, Type: pb.MsgFortifyLeaderResp, LeadEpoch: epoch})
 		} else {
-			r.logger.Infof(
+			log.Infof(ctx,
 				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
 			)
 		}
@@ -824,9 +814,9 @@ func (r *raft) appliedTo(ctx context.Context, index uint64, size entryEncodingSi
 		// the joint configuration, or the leadership transfer will fail,
 		// and we will propose the config change on the next advance.
 		if err := r.Step(ctx, m); err != nil {
-			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.config, err)
+			log.Eventf(ctx, "not initiating automatic transition out of joint configuration %s: %v", r.config, err)
 		} else {
-			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.config)
+			log.Eventf(ctx, "initiating automatic transition out of joint configuration %s", r.config)
 		}
 	}
 }
@@ -913,7 +903,7 @@ func (r *raft) appendEntry(ctx context.Context, es ...pb.Entry) (accepted bool) 
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(es) {
-		r.logger.Warningf(
+		log.Warningf(ctx,
 			"%x appending new entries to log would exceed uncommitted entry size limit; dropping proposal",
 			r.id,
 		)
@@ -922,9 +912,9 @@ func (r *raft) appendEntry(ctx context.Context, es ...pb.Entry) (accepted bool) 
 	}
 	app := logSlice{term: r.Term, prev: last, entries: es}
 	if err := app.valid(); err != nil {
-		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
+		log.Fatalf(ctx, "%x leader could not append to its log: %v", r.id, err)
 	} else if !r.raftLog.append(app) {
-		r.logger.Panicf("%x leader could not append to its log", r.id)
+		log.Fatalf(ctx, "%x leader could not append to its log", r.id)
 	}
 
 	// On appending entries, the leader is effectively "sending" a MsgApp to its
@@ -972,7 +962,7 @@ func (r *raft) tickElection(ctx context.Context) {
 			// built into raft to prevent hung elections.
 			// We achieve both of these goals by "forwarding" electionElapsed to begin
 			// at r.electionTimeout. Also see pastElectionTimeout.
-			r.logger.Debugf(
+			log.Eventf(ctx,
 				"%d setting election elapsed to start from %d ticks after store liveness support expired",
 				r.id, r.electionTimeout,
 			)
@@ -984,7 +974,7 @@ func (r *raft) tickElection(ctx context.Context) {
 	if r.promotable() && r.pastElectionTimeout() {
 		r.electionElapsed = 0
 		if err := r.Step(ctx, pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
-			r.logger.Debugf("error occurred during election: %v", err)
+			log.Eventf(ctx, "error occurred during election: %v", err)
 		}
 	}
 }
@@ -1000,7 +990,7 @@ func (r *raft) tickHeartbeat(ctx context.Context) {
 		r.electionElapsed = 0
 		if r.checkQuorum {
 			if err := r.Step(ctx, pb.Message{From: r.id, Type: pb.MsgCheckQuorum}); err != nil {
-				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+				log.Eventf(ctx, "error occurred during checking sending heartbeat: %v", err)
 			} else if r.state != StateLeader {
 				return // stepped down
 			}
@@ -1015,7 +1005,7 @@ func (r *raft) tickHeartbeat(ctx context.Context) {
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
 		if err := r.Step(ctx, pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
-			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+			log.Eventf(ctx, "error occurred during checking sending heartbeat: %v", err)
 		}
 	}
 }
@@ -1031,7 +1021,7 @@ func (r *raft) becomeFollower(ctx context.Context, term uint64, lead pb.PeerID) 
 	r.tick = r.tickElection
 	r.lead = lead
 	r.state = StateFollower
-	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
+	log.VInfof(ctx, 2, "%x became follower at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomeCandidate(ctx context.Context) {
@@ -1044,13 +1034,13 @@ func (r *raft) becomeCandidate(ctx context.Context) {
 	r.tick = r.tickElection
 	r.Vote = r.id
 	r.state = StateCandidate
-	r.logger.Infof("%x became candidate at term %d", r.id, r.Term)
+	log.VInfof(ctx, 2, "%x became candidate at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomePreCandidate(ctx context.Context) {
 	// TODO(xiangli) remove the panic when the raft implementation is stable
 	if r.state == StateLeader {
-		panic("invalid transition [leader -> pre-candidate]")
+		log.Fatalf(ctx, "invalid transition [leader -> pre-candidate]")
 	}
 	assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
 		"should not be supporting a fortified leader when becoming pre-candidate; leader exempted",
@@ -1068,7 +1058,7 @@ func (r *raft) becomePreCandidate(ctx context.Context) {
 	r.lead = None
 	r.leadEpoch = 0
 	r.state = StatePreCandidate
-	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
+	log.VInfof(ctx, 2, "%x became pre-candidate at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomeLeader(ctx context.Context) {
@@ -1101,22 +1091,22 @@ func (r *raft) becomeLeader(ctx context.Context) {
 	emptyEnt := pb.Entry{Data: nil}
 	if !r.appendEntry(ctx, emptyEnt) {
 		// This won't happen because we just called reset() above.
-		r.logger.Panic("empty entry was dropped")
+		log.Fatalf(ctx, "empty entry was dropped")
 	}
 	// The payloadSize of an empty entry is 0 (see TestPayloadSizeOfEmptyEntry),
 	// so the preceding log append does not count against the uncommitted log
 	// quota of the new leader. In other words, after the call to appendEntry,
 	// r.uncommittedSize is still 0.
-	r.logger.Infof("%x became leader at term %d", r.id, r.Term)
+	log.VInfof(ctx, 2, "%x became leader at term %d", r.id, r.Term)
 }
 
 func (r *raft) hup(ctx context.Context, t CampaignType) {
 	if r.state == StateLeader {
-		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
+		log.Eventf(ctx, "%x ignoring MsgHup because already leader", r.id)
 		return
 	}
 	if !r.promotable() {
-		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		log.Warningf(ctx, "%x is unpromotable and can not campaign", r.id)
 		return
 	}
 	// NB: The leader is allowed to bump its term by calling an election. Note that
@@ -1126,15 +1116,16 @@ func (r *raft) hup(ctx context.Context, t CampaignType) {
 	// assertion to ensure the LeaderSupportExpiration is in the past before
 	// campaigning.
 	if r.supportingFortifiedLeader() && r.lead != r.id {
-		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
+		log.Eventf(ctx, "%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
 	if r.hasUnappliedConfChanges(ctx) {
-		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
+		log.Warningf(ctx, "%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
 	}
 
-	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
+	log.VInfof(ctx, 2, "%x is starting a new election at term %d", r.id, r.Term)
+	r.campaign(ctx, t)
 }
 
 // supportingFortifiedLeader returns whether the peer is providing fortification
@@ -1177,7 +1168,7 @@ func (r *raft) hasUnappliedConfChanges(ctx context.Context) bool {
 		}
 		return nil
 	}); err != nil && err != errBreak {
-		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
+		log.Fatalf(ctx, "error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
 	}
 	return found
 }
@@ -1188,7 +1179,7 @@ func (r *raft) campaign(ctx context.Context, t CampaignType) {
 	if !r.promotable() {
 		// This path should not be hit (callers are supposed to check), but
 		// better safe than sorry.
-		r.logger.Warningf("%x is unpromotable; campaign() should have been called", r.id)
+		log.Warningf(ctx, "%x is unpromotable; campaign() should have been called", r.id)
 	}
 	var term uint64
 	var voteMsg pb.MessageType
@@ -1223,7 +1214,7 @@ func (r *raft) campaign(ctx context.Context, t CampaignType) {
 		}
 		// TODO(pav-kv): it should be ok to simply print %+v for the lastEntryID.
 		last := r.raftLog.lastEntryID()
-		r.logger.Infof("%x [logterm: %d, index: %d] sent %s request to %x at term %d",
+		log.VInfof(ctx, 2, "%x [logterm: %d, index: %d] sent %s request to %x at term %d",
 			r.id, last.term, last.index, voteMsg, id, r.Term)
 
 		var transferType []byte
@@ -1238,9 +1229,9 @@ func (r *raft) poll(
 	ctx context.Context, id pb.PeerID, t pb.MessageType, v bool,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
-		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
+		log.VInfof(ctx, 2, "%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
-		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
+		log.VInfof(ctx, 2, "%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
 	r.electionTracker.RecordVote(id, v)
 	return r.electionTracker.TallyVotes()
@@ -1284,7 +1275,7 @@ func (r *raft) Step(ctx context.Context, m pb.Message) error {
 					last := r.raftLog.lastEntryID()
 					// TODO(pav-kv): it should be ok to simply print the %+v of the
 					// lastEntryID.
-					r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s%s%s",
+					log.VInfof(ctx, 2, "%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s%s%s",
 						r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, inHeartbeatLeaseMsg, sep, inFortifyLeaseMsg)
 				}
 				return nil // don't update term/grant vote; early return
@@ -1305,7 +1296,7 @@ func (r *raft) Step(ctx context.Context, m pb.Message) error {
 			// rejected our vote so we should become a follower at the new
 			// term.
 		default:
-			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
+			log.VInfof(ctx, 2, "%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
 			if IsMsgFromLeader(m.Type) {
 				// We've just received a message from the new leader which was elected
@@ -1348,12 +1339,12 @@ func (r *raft) Step(ctx context.Context, m pb.Message) error {
 			// we drop messages with a lower term.
 			last := r.raftLog.lastEntryID()
 			// TODO(pav-kv): it should be ok to simply print %+v of the lastEntryID.
-			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
+			log.VInfof(ctx, 2, "%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(ctx, pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
 		} else {
 			// ignore other cases
-			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
+			log.VInfof(ctx, 2, "%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
 		}
 		return nil
@@ -1413,7 +1404,7 @@ func (r *raft) Step(ctx context.Context, m pb.Message) error {
 			// it won't win the election, at least in the absence of the bug discussed
 			// in:
 			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-488798263.
-			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] cast %s for %x [logterm: %d, index: %d] at term %d",
+			log.VInfof(ctx, 2, "%x [logterm: %d, index: %d, vote: %x] cast %s for %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
 			// When responding to Msg{Pre,}Vote messages we include the term
 			// from the message, not the local term. To see why, consider the
@@ -1431,7 +1422,7 @@ func (r *raft) Step(ctx context.Context, m pb.Message) error {
 				r.Vote = m.From
 			}
 		} else {
-			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
+			log.VInfof(ctx, 2, "%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
 			r.send(ctx, pb.Message{To: m.From, Term: r.Term, Type: voteRespMsgType(m.Type), Reject: true})
 		}
@@ -1457,15 +1448,15 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 		quorumActiveByHeartbeats := r.trk.QuorumActive()
 		quorumActiveByFortification := r.fortificationTracker.QuorumActive()
 		if !quorumActiveByHeartbeats {
-			r.logger.Debugf(
+			log.Eventf(ctx,
 				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
 			)
 		}
 		if !quorumActiveByFortification {
-			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
+			log.Eventf(ctx, "%x does not have store liveness support from a quorum of peers", r.id)
 		}
 		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
-			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
+			log.Warningf(ctx, "%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
 			// the LeadSupportUntil is in the past. This means that the leader can safely call a
 			// new election or vote for a different peer without regressing LeadSupportUntil.
@@ -1484,7 +1475,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 		return nil
 	case pb.MsgProp:
 		if len(m.Entries) == 0 {
-			r.logger.Panicf("%x stepped empty MsgProp", r.id)
+			log.Fatalf(ctx, "%x stepped empty MsgProp", r.id)
 		}
 		if r.trk.Progress(r.id) == nil {
 			// If we are not currently a member of the range (i.e. this node
@@ -1493,7 +1484,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 			return ErrProposalDropped
 		}
 		if r.leadTransferee != None {
-			r.logger.Debugf("%x [term %d] transfer leadership to %x is in progress; dropping proposal", r.id, r.Term, r.leadTransferee)
+			log.Eventf(ctx, "%x [term %d] transfer leadership to %x is in progress; dropping proposal", r.id, r.Term, r.leadTransferee)
 			return ErrProposalDropped
 		}
 
@@ -1538,7 +1529,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 				//
 				// NB: !alreadyPending requirement is always respected, for safety.
 				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
+					log.VInfof(ctx, 2, "%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
@@ -1561,7 +1552,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 	// All other message types require a progress for m.From (pr).
 	pr := r.trk.Progress(m.From)
 	if pr == nil {
-		r.logger.Debugf("%x no progress available for %x", r.id, m.From)
+		log.Eventf(ctx, "%x no progress available for %x", r.id, m.From)
 		return nil
 	}
 	switch m.Type {
@@ -1592,7 +1583,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 			// which can easily result in hours of time spent probing and can
 			// even cause outright outages. The probes are thus optimized as
 			// described below.
-			r.logger.Debugf("%x received MsgAppResp(rejected, hint: (index %d, term %d)) from %x for index %d",
+			log.Eventf(ctx, "%x received MsgAppResp(rejected, hint: (index %d, term %d)) from %x for index %d",
 				r.id, m.RejectHint, m.LogTerm, m.From, m.Index)
 			nextProbeIdx := m.RejectHint
 			if m.LogTerm > 0 {
@@ -1693,7 +1684,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 				nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
 			}
 			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
-				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
+				log.Eventf(ctx, "%x decreased progress of %x to [%s]", r.id, m.From, pr)
 				if pr.State == tracker.StateReplicate {
 					pr.BecomeProbe()
 				}
@@ -1719,7 +1710,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 					// the follower from the log, we will accept it. This gives
 					// systems more flexibility in how they implement snapshots;
 					// see the comments on PendingSnapshot.
-					r.logger.Debugf("%x recovered from needing snapshot, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
+					log.Eventf(ctx, "%x recovered from needing snapshot, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 					// Transition back to replicating state via probing state
 					// (which takes the snapshot into account). If we didn't
 					// move to replicating state, that would only happen with
@@ -1744,7 +1735,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 				}
 				// Transfer leadership is in progress.
 				if m.From == r.leadTransferee && pr.Match == r.raftLog.lastIndex() {
-					r.logger.Infof("%x sent MsgTimeoutNow to %x after received MsgAppResp", r.id, m.From)
+					log.VInfof(ctx, 2, "%x sent MsgTimeoutNow to %x after received MsgAppResp", r.id, m.From)
 					r.transferLeader(ctx, m.From)
 				}
 			}
@@ -1760,13 +1751,13 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 		}
 		if !m.Reject {
 			pr.BecomeProbe()
-			r.logger.Debugf("%x snapshot succeeded, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
+			log.Eventf(ctx, "%x snapshot succeeded, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 		} else {
 			// NB: the order here matters or we'll be probing erroneously from
 			// the snapshot index, but the snapshot never applied.
 			pr.PendingSnapshot = 0
 			pr.BecomeProbe()
-			r.logger.Debugf("%x snapshot failed, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
+			log.Eventf(ctx, "%x snapshot failed, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 		}
 		// If snapshot finish, wait for the MsgAppResp from the remote node before sending
 		// out the next MsgApp.
@@ -1778,29 +1769,29 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 		if pr.State == tracker.StateReplicate {
 			pr.BecomeProbe()
 		}
-		r.logger.Debugf("%x failed to send message to %x because it is unreachable [%s]", r.id, m.From, pr)
+		log.Eventf(ctx, "%x failed to send message to %x because it is unreachable [%s]", r.id, m.From, pr)
 	case pb.MsgTransferLeader:
 		if pr.IsLearner {
-			r.logger.Debugf("%x is learner. Ignored transferring leadership", r.id)
+			log.Eventf(ctx, "%x is learner. Ignored transferring leadership", r.id)
 			return nil
 		}
 		leadTransferee := m.From
 		lastLeadTransferee := r.leadTransferee
 		if lastLeadTransferee != None {
 			if lastLeadTransferee == leadTransferee {
-				r.logger.Infof("%x [term %d] transfer leadership to %x is in progress, ignores request to same node %x",
+				log.VInfof(ctx, 2, "%x [term %d] transfer leadership to %x is in progress, ignores request to same node %x",
 					r.id, r.Term, leadTransferee, leadTransferee)
 				return nil
 			}
 			r.abortLeaderTransfer()
-			r.logger.Infof("%x [term %d] abort previous transferring leadership to %x", r.id, r.Term, lastLeadTransferee)
+			log.VInfof(ctx, 2, "%x [term %d] abort previous transferring leadership to %x", r.id, r.Term, lastLeadTransferee)
 		}
 		if leadTransferee == r.id {
-			r.logger.Debugf("%x is already leader. Ignored transferring leadership to self", r.id)
+			log.Eventf(ctx, "%x is already leader. Ignored transferring leadership to self", r.id)
 			return nil
 		}
 		// Transfer leadership to third party.
-		r.logger.Infof("%x [term %d] starts to transfer leadership to %x", r.id, r.Term, leadTransferee)
+		log.VInfof(ctx, 2, "%x [term %d] starts to transfer leadership to %x", r.id, r.Term, leadTransferee)
 		// Transfer leadership should be finished in one electionTimeout, so reset
 		// r.electionElapsed. If the transfer target is not caught up on its log by
 		// then, the transfer is aborted and the leader can resume normal operation.
@@ -1808,7 +1799,7 @@ func stepLeader(ctx context.Context, r *raft, m pb.Message) error {
 		r.electionElapsed = 0
 		r.leadTransferee = leadTransferee
 		if pr.Match == r.raftLog.lastIndex() {
-			r.logger.Infof("%x sends MsgTimeoutNow to %x immediately as %x already has up-to-date log", r.id, leadTransferee, leadTransferee)
+			log.VInfof(ctx, 2, "%x sends MsgTimeoutNow to %x immediately as %x already has up-to-date log", r.id, leadTransferee, leadTransferee)
 			r.transferLeader(ctx, leadTransferee)
 		} else {
 			// If the transfer target is not initially caught up on its log, we don't
@@ -1839,7 +1830,7 @@ func stepCandidate(ctx context.Context, r *raft, m pb.Message) error {
 	}
 	switch m.Type {
 	case pb.MsgProp:
-		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
+		log.VInfof(ctx, 2, "%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
 	case pb.MsgApp:
 		r.becomeFollower(ctx, m.Term, m.From) // always m.Term == r.Term
@@ -1855,7 +1846,7 @@ func stepCandidate(ctx context.Context, r *raft, m pb.Message) error {
 		r.handleFortify(ctx, m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(ctx, m.From, m.Type, !m.Reject)
-		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
+		log.VInfof(ctx, 2, "%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 		switch res {
 		case quorum.VoteWon:
 			if r.state == StatePreCandidate {
@@ -1871,7 +1862,7 @@ func stepCandidate(ctx context.Context, r *raft, m pb.Message) error {
 			r.becomeFollower(ctx, r.Term, r.lead)
 		}
 	case pb.MsgTimeoutNow:
-		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
+		log.Eventf(ctx, "%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
 	}
 	return nil
 }
@@ -1880,13 +1871,13 @@ func stepFollower(ctx context.Context, r *raft, m pb.Message) error {
 	switch m.Type {
 	case pb.MsgProp:
 		if r.lead == None {
-			r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
+			log.VInfof(ctx, 2, "%x no leader at term %d; dropping proposal", r.id, r.Term)
 			return ErrProposalDropped
 		} else if r.disableProposalForwarding {
-			r.logger.Infof("%x not forwarding to leader %x at term %d; dropping proposal", r.id, r.lead, r.Term)
+			log.VInfof(ctx, 2, "%x not forwarding to leader %x at term %d; dropping proposal", r.id, r.lead, r.Term)
 			return ErrProposalDropped
 		} else if r.lead == r.id {
-			r.logger.Infof("%x not forwarding to itself at term %d; dropping proposal", r.id, r.Term)
+			log.VInfof(ctx, 2, "%x not forwarding to itself at term %d; dropping proposal", r.id, r.Term)
 			return ErrProposalDropped
 		}
 		m.To = r.lead
@@ -1914,10 +1905,10 @@ func stepFollower(ctx context.Context, r *raft, m pb.Message) error {
 		r.handleFortify(ctx, m)
 	case pb.MsgTransferLeader:
 		if r.lead == None {
-			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
+			log.VInfof(ctx, 2, "%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
 			return nil
 		} else if r.lead == r.id {
-			r.logger.Infof("%x is itself the leader at term %d; dropping leader transfer msg", r.id, r.Term)
+			log.VInfof(ctx, 2, "%x is itself the leader at term %d; dropping leader transfer msg", r.id, r.Term)
 			return nil
 		}
 		m.To = r.lead
@@ -1927,14 +1918,14 @@ func stepFollower(ctx context.Context, r *raft, m pb.Message) error {
 		// Replica.maybeForgetLeaderOnVoteRequestLocked is removed. This will
 		// accompany the removal of epoch-based leases.
 		if r.lead == None {
-			r.logger.Infof("%x no leader at term %d; dropping forget leader msg", r.id, r.Term)
+			log.VInfof(ctx, 2, "%x no leader at term %d; dropping forget leader msg", r.id, r.Term)
 			return nil
 		}
 		if r.supportingFortifiedLeader() && r.lead != m.From {
-			r.logger.Infof("%x [term %d] ignored MsgForgetLeader from %x due to leader fortification", r.id, r.Term, m.From)
+			log.VInfof(ctx, 2, "%x [term %d] ignored MsgForgetLeader from %x due to leader fortification", r.id, r.Term, m.From)
 			return nil
 		}
-		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
+		log.VInfof(ctx, 2, "%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
 		r.lead = None
 		r.leadEpoch = 0
 	case pb.MsgTimeoutNow:
@@ -1945,10 +1936,10 @@ func stepFollower(ctx context.Context, r *raft, m pb.Message) error {
 		// We need to think about this more.
 		//
 		//if r.supportingFortifiedLeader() && r.lead != m.From {
-		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
+		//	log.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
 		//	return nil
 		//}
-		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
+		log.VInfof(ctx, 2, "%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
@@ -1982,7 +1973,7 @@ func (r *raft) handleAppendEntries(ctx context.Context, m pb.Message) {
 	if err := a.valid(); err != nil {
 		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
 		// but logs an error in prod. We want to eliminate all such errors in tests.
-		r.logger.Errorf("%x received an invalid MsgApp: %v", r.id, err)
+		log.Fatalf(ctx, "%x received an invalid MsgApp: %v", r.id, err)
 		return
 	}
 
@@ -2002,9 +1993,8 @@ func (r *raft) handleAppendEntries(ctx context.Context, m pb.Message) {
 			Commit: r.raftLog.committed})
 		return
 	}
-
 	term, err := r.raftLog.term(m.Index)
-	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
+	log.Eventf(ctx, "%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
 		r.id, r.raftLog.zeroTermOnOutOfBounds(ctx, term, err), m.Index, m.LogTerm, m.Index, m.From)
 
 	// Our log does not match the leader's at index m.Index. Return a hint to the
@@ -2048,7 +2038,7 @@ func (r *raft) checkMatch(ctx context.Context, match uint64) {
 	// accepted term. If `match` is non-zero, this follower's log last accepted
 	// term must equal the leader term, and have entries up to `match` durable.
 	if last := r.raftLog.lastIndex(); last < match {
-		r.logger.Panicf("match(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", match, last)
+		log.Eventf(ctx, "match(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", match, last)
 	}
 }
 
@@ -2094,18 +2084,18 @@ func (r *raft) handleSnapshot(ctx context.Context, m pb.Message) {
 	if err := s.valid(); err != nil {
 		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
 		// but logs an error in prod. We want to eliminate all such errors in tests.
-		r.logger.Errorf("%x received an invalid MsgSnap: %v", r.id, err)
+		log.Errorf(ctx, "%x received an invalid MsgSnap: %v", r.id, err)
 		return
 	}
 
 	id := s.lastEntryID()
 	if r.restore(ctx, s) {
-		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
+		log.VInfof(ctx, 2, "%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
 		r.send(ctx, pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
 			Commit: r.raftLog.committed})
 	} else {
-		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
+		log.VInfof(ctx, 2, "%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
 		r.send(ctx, pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
 			Commit: r.raftLog.committed})
@@ -2173,7 +2163,7 @@ func (r *raft) restore(ctx context.Context, s snapshot) bool {
 		//
 		// At the time of writing, the instance is guaranteed to be in follower
 		// state when this method is called.
-		r.logger.Panicf("%x attempted to restore snapshot in state %s", r.id, r.state)
+		log.Fatalf(ctx, "%x attempted to restore snapshot in state %s", r.id, r.state)
 		return false
 	}
 
@@ -2201,7 +2191,8 @@ func (r *raft) restore(ctx context.Context, s snapshot) bool {
 		}
 	}
 	if !found {
-		r.logger.Warningf(
+		log.Warningf(
+			ctx,
 			"%x attempted to restore snapshot but it is not in the ConfState %v; should never happen",
 			r.id, cs,
 		)
@@ -2213,14 +2204,14 @@ func (r *raft) restore(ctx context.Context, s snapshot) bool {
 	if r.raftLog.matchTerm(id) {
 		// TODO(pav-kv): can print %+v of the id, but it will change the format.
 		last := r.raftLog.lastEntryID()
-		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
+		log.VInfof(ctx, 2, "%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
 		r.raftLog.commitTo(ctx, s.mark())
 		return false
 	}
 
 	if !r.raftLog.restore(ctx, s) {
-		r.logger.Errorf("%x unable to restore snapshot [index: %d, term: %d]", r.id, id.index, id.term)
+		log.Errorf(ctx, "%x unable to restore snapshot [index: %d, term: %d]", r.id, id.index, id.term)
 		return false
 	}
 
@@ -2242,7 +2233,7 @@ func (r *raft) restore(ctx context.Context, s snapshot) bool {
 	assertConfStatesEquivalent(ctx, cs, r.switchToConfig(ctx, cfg, progressMap))
 
 	last := r.raftLog.lastEntryID()
-	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
+	log.VInfof(ctx, 2, "%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
 		r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
 	return true
 }
@@ -2291,7 +2282,7 @@ func (r *raft) switchToConfig(
 	r.config = cfg
 	r.trk = tracker.MakeProgressTracker(&r.config, progressMap)
 
-	r.logger.Infof("%x switched to configuration %s", r.id, r.config)
+	log.VInfof(ctx, 2, "%x switched to configuration %s", r.id, r.config)
 	cs := r.config.ConfState()
 	pr := r.trk.Progress(r.id)
 
@@ -2339,7 +2330,7 @@ func (r *raft) switchToConfig(
 
 func (r *raft) loadState(ctx context.Context, state pb.HardState) {
 	if state.Commit < r.raftLog.committed || state.Commit > r.raftLog.lastIndex() {
-		r.logger.Panicf("%x state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex())
+		log.Fatalf(ctx, "%x state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex())
 	}
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term

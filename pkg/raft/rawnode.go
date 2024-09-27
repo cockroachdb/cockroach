@@ -23,6 +23,7 @@ import (
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ErrStepLocalMsg is returned when try to step a local raft message
@@ -398,7 +399,7 @@ func (rn *RawNode) acceptReady(ctx context.Context, rd Ready) {
 	}
 	if !rn.asyncStorageWrites {
 		if len(rn.stepsOnAdvance) != 0 {
-			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
+			log.Fatalf(ctx, "two accepted Ready structs without call to Advance")
 		}
 		for _, m := range rn.raft.msgsAfterAppend {
 			if m.To == rn.raft.id {
@@ -463,7 +464,7 @@ func (rn *RawNode) Advance(ctx context.Context, _ Ready) {
 	// acceptReady. In earlier versions of this library, they were computed from
 	// the provided Ready struct. Retain the unused parameter for compatibility.
 	if rn.asyncStorageWrites {
-		rn.raft.logger.Panicf("Advance must not be called when using AsyncStorageWrites")
+		log.Fatalf(ctx, "Advance must not be called when using AsyncStorageWrites")
 	}
 	for i, m := range rn.stepsOnAdvance {
 		_ = rn.raft.Step(ctx, m)

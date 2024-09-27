@@ -235,15 +235,15 @@ type Peer struct {
 
 func setupNode(ctx context.Context, c *Config, peers []Peer) *node {
 	if len(peers) == 0 {
-		panic("no peers given; use RestartNode instead")
+		log.Fatalf(ctx, "no peers given; use RestartNode instead")
 	}
 	rn, err := NewRawNode(ctx, c)
 	if err != nil {
-		panic(err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	err = rn.Bootstrap(ctx, peers)
 	if err != nil {
-		c.Logger.Warningf("error occurred during starting a new node: %v", err)
+		log.Warningf(ctx, "error occurred during starting a new node: %v", err)
 	}
 
 	n := newNode(rn)
@@ -356,13 +356,13 @@ func (n *node) run(ctx context.Context) {
 		if lead != r.lead {
 			if r.hasLeader() {
 				if lead == None {
-					r.logger.Infof("raft.node: %x elected leader %x at term %d", r.id, r.lead, r.Term)
+					log.VInfof(ctx, 2, "raft.node: %x elected leader %x at term %d", r.id, r.lead, r.Term)
 				} else {
-					r.logger.Infof("raft.node: %x changed leader from %x to %x at term %d", r.id, lead, r.lead, r.Term)
+					log.VInfof(ctx, 2, "raft.node: %x changed leader from %x to %x at term %d", r.id, lead, r.lead, r.Term)
 				}
 				propc = n.propc
 			} else {
-				r.logger.Infof("raft.node: %x lost leader %x at term %d", r.id, lead, r.Term)
+				log.VInfof(ctx, 2, "raft.node: %x lost leader %x at term %d", r.id, lead, r.Term)
 				propc = nil
 			}
 			lead = r.lead
@@ -449,7 +449,7 @@ func (n *node) Tick(ctx context.Context) {
 	case n.tickc <- struct{}{}:
 	case <-n.done:
 	default:
-		n.rn.raft.logger.Warningf("%x A tick missed to fire. Node blocks too long!", n.rn.raft.id)
+		log.Warningf(ctx, "%x A tick missed to fire. Node blocks too long!", n.rn.raft.id)
 	}
 }
 
