@@ -156,6 +156,7 @@ type FunctionReference interface {
 var _ FunctionReference = &UnresolvedName{}
 var _ FunctionReference = &FunctionDefinition{}
 var _ FunctionReference = &ResolvedFunctionDefinition{}
+var _ FunctionReference = &FunctionOID{}
 
 func (*UnresolvedName) functionReference()             {}
 func (*FunctionDefinition) functionReference()         {}
