@@ -175,7 +175,7 @@ func TestUsingSimulation(t *testing.T) {
 					rangeID := rangeIDSeq
 					handleToRangeID[handle] = rangeID
 					sim.state.getOrInitRange(t, makeSingleVoterTestingRange(
-						rangeID, testingLocalTenantID, testingLocalNodeID, testingLocalStoreID))
+						rangeID, testingLocalTenantID, testingLocalNodeID, testingLocalStoreID), MsgAppPush)
 				}
 
 			case "timeline":
