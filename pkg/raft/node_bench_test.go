@@ -27,7 +27,7 @@ func BenchmarkOneNode(b *testing.B) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
 	n := newNode(rn)
-	go n.run()
+	go n.run(ctx)
 
 	defer n.Stop()
 
@@ -40,10 +40,10 @@ func BenchmarkOneNode(b *testing.B) {
 
 	for {
 		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		s.Append(ctx, rd.Entries)
 		// a reasonable disk sync latency
 		time.Sleep(1 * time.Millisecond)
-		n.Advance()
+		n.Advance(ctx)
 		if rd.HardState.Commit == uint64(b.N+1) {
 			return
 		}

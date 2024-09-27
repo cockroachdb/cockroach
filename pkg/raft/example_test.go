@@ -17,7 +17,11 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"context"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 func applyToStore(_ []pb.Entry)      {}
 func sendMessages(_ []pb.Message)    {}
@@ -25,8 +29,9 @@ func saveStateToDisk(_ pb.HardState) {}
 func saveToDisk(_ []pb.Entry)        {}
 
 func ExampleNode() {
+	ctx := context.Background()
 	c := &Config{}
-	n := StartNode(c, nil)
+	n := StartNode(ctx, c, nil)
 	defer n.Stop()
 
 	// stuff to n happens in other goroutines

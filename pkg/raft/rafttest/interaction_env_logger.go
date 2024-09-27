@@ -20,8 +20,6 @@ package rafttest
 import (
 	"fmt"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 type logLevels [6]string
@@ -32,8 +30,6 @@ type RedirectLogger struct {
 	*strings.Builder
 	Lvl int // 0 = DEBUG, 1 = INFO, 2 = WARNING, 3 = ERROR, 4 = FATAL, 5 = NONE
 }
-
-var _ raft.Logger = (*RedirectLogger)(nil)
 
 func (l *RedirectLogger) printf(lvl int, format string, args ...interface{}) {
 	if l.Lvl <= lvl {

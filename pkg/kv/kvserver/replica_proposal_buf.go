@@ -147,7 +147,7 @@ type proposer interface {
 	shouldCampaignOnRedirect(raftGroup proposerRaft, leaseType roachpb.LeaseType) bool
 
 	// The following require the proposer to hold an exclusive lock.
-	withGroupLocked(func(proposerRaft) error) error
+	withGroupLocked(context.Context, func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
 	campaignLocked(ctx context.Context)
 	rejectProposalWithErrLocked(ctx context.Context, prop *ProposalData, err error)
@@ -169,10 +169,10 @@ type proposer interface {
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
 // testing.
 type proposerRaft interface {
-	Step(raftpb.Message) error
+	Step(context.Context, raftpb.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
-	Campaign() error
+	Campaign(ctx context.Context) error
 }
 
 // Init initializes the proposal buffer and binds it to the provided proposer.
@@ -369,7 +369,7 @@ func (b *propBuf) flushRLocked(ctx context.Context) error {
 }
 
 func (b *propBuf) flushLocked(ctx context.Context) error {
-	return b.p.withGroupLocked(func(raftGroup proposerRaft) error {
+	return b.p.withGroupLocked(ctx, func(raftGroup proposerRaft) error {
 		_, err := b.FlushLockedWithRaftGroup(ctx, raftGroup)
 		return err
 	})
@@ -863,7 +863,7 @@ func proposeBatch(
 		return nil
 	}
 	replID := p.getReplicaID()
-	err := raftGroup.Step(raftpb.Message{
+	err := raftGroup.Step(ctx, raftpb.Message{
 		Type:    raftpb.MsgProp,
 		From:    raftpb.PeerID(replID),
 		Entries: ents,
@@ -1180,11 +1180,13 @@ func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
 }
 
-func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
-	return (*Replica)(rp).withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+func (rp *replicaProposer) withGroupLocked(
+	ctx context.Context, fn func(raftGroup proposerRaft) error,
+) error {
+	return (*Replica)(rp).withRaftGroupLocked(ctx, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.
-		(*Replica)(rp).maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
+		(*Replica)(rp).maybeUnquiesceLocked(ctx, false /* wakeLeader */, true /* mayCampaign */)
 		return false /* maybeUnquiesceLocked */, fn(raftGroup)
 	})
 }

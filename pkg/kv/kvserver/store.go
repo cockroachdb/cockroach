@@ -384,7 +384,6 @@ func newRaftConfig(
 	id raftpb.PeerID,
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
-	logger raft.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
 ) *raft.Config {
 	return &raft.Config{
@@ -400,7 +399,6 @@ func newRaftConfig(
 		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
-		Logger:                      logger,
 		StoreLiveness:               storeLiveness,
 		PreVote:                     true,
 		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,

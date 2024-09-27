@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -99,6 +100,7 @@ var _ raft.Storage = snapOverrideStorage{}
 // AddNodes adds n new nodes initialized from the given snapshot (which may be
 // empty), and using the cfg as template. They will be assigned consecutive IDs.
 func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
+	ctx := context.Background()
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
 		id := pb.PeerID(1 + len(env.Nodes))
@@ -153,12 +155,8 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 				return errors.New("OnConfig must not change the ID")
 			}
 		}
-		if cfg.Logger != nil {
-			return errors.New("OnConfig must not set Logger")
-		}
-		cfg.Logger = env.Output
 
-		rn, err := raft.NewRawNode(&cfg)
+		rn, err := raft.NewRawNode(ctx, &cfg)
 		if err != nil {
 			return err
 		}

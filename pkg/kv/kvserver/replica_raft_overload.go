@@ -369,7 +369,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		// MsgApp (which it can only do once we stop dropping messages). Something
 		// similar would result naturally if we didn't report as unreachable, but
 		// with more wasted work.
-		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(replicaID))
+		r.mu.internalRaftGroup.ReportUnreachable(ctx, raftpb.PeerID(replicaID))
 	}
 	r.mu.replicaFlowControlIntegration.onFollowersPaused(ctx)
 }
