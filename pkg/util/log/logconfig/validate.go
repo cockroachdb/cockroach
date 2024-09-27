@@ -177,17 +177,12 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		c.Sinks.Stderr.Criticality = &bt
 	}
 	c.Sinks.Stderr.Auditable = nil
-	// The format parameter for stderr is set to `crdb-v2-tty` and cannot be changed.
-	// See docs: https://www.cockroachlabs.com/docs/stable/configure-logs#output-to-stderr
-	if *c.Sinks.Stderr.Format != DefaultStderrFormat {
-		f := DefaultStderrFormat
-		c.Sinks.Stderr.Format = &f
-	}
+
 	// FormatOptions are format-specific. We should only copy them over to StdErr from
-	// FileDefaults if FileDefaults is also making use of a crdb-v2 format. Otherwise,
+	// FileDefaults if FileDefaults specifies the same format as the stderr sink. Otherwise,
 	// we are likely to error when trying to apply an unsupported format option.
 	if c.FileDefaults.CommonSinkConfig.Format != nil &&
-		!strings.Contains(*c.FileDefaults.CommonSinkConfig.Format, "v2") &&
+		!canShareFormatOptions(*c.FileDefaults.CommonSinkConfig.Format, *c.Sinks.Stderr.Format) &&
 		!stdErrFormatOptionsOriginallySet {
 		c.Sinks.Stderr.CommonSinkConfig.FormatOptions = map[string]string{}
 	}
@@ -537,4 +532,15 @@ func propagateDefaults(target, source interface{}) {
 			tf.Set(s.Field(i))
 		}
 	}
+}
+
+// canShareFormatOptions returns true if f1 and f2 can share format options.
+// See log.FormatParsers for full list of supported formats.
+// Examples:
+//
+//	canShareFormatOptions("json", "json") => true
+//	canShareFormatOptions("crdb-v2", "crdb-v2-tty") => true
+//	canShareFormatOptions("crdb-v2", "json") => false
+func canShareFormatOptions(f1, f2 string) bool {
+	return strings.HasPrefix(f1, f2) || strings.HasPrefix(f2, f1)
 }
