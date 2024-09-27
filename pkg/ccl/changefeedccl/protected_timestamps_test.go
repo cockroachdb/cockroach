@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -447,9 +448,9 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
-// TestPTSRecordProtectsTargetsAndDescriptorTable tests that descriptors are not
-// GC'd when they are protected by a PTS record.
-func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
+// TestPTSRecordProtectsTargetsAndSystemTables tests that descriptors and other
+// required tables are not GC'd when they are protected by a PTS record.
+func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -459,6 +460,8 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT, b STRING)")
+	sqlDB.Exec(t, `CREATE USER test`)
+	sqlDB.Exec(t, `GRANT admin TO test`)
 	ts := s.Clock().Now()
 	ctx := context.Background()
 
@@ -516,6 +519,10 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 	// Alter foo few times, then force GC at ts-1.
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN c STRING")
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN d STRING")
+
+	// Remove this entry from role_members.
+	sqlDB.Exec(t, "REVOKE admin FROM test")
+
 	time.Sleep(2 * time.Second)
 	// If you want to GC all system tables:
 	//
@@ -528,11 +535,16 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 	gcTestTableRange("system", "descriptor")
 	gcTestTableRange("system", "zones")
 	gcTestTableRange("system", "comments")
+	gcTestTableRange("system", "role_members")
 
-	// We can still fetch table descriptors because of protected timestamp record.
+	// We can still fetch table descriptors and role members because of protected timestamp record.
 	asOf := ts
 	_, err := fetchTableDescriptors(ctx, &execCfg, targets, asOf)
 	require.NoError(t, err)
+	// The role_members entry we removed is still visible at the asOf time because of the PTS record.
+	rms, err := fetchRoleMembers(ctx, &execCfg, asOf)
+	require.NoError(t, err)
+	require.Contains(t, rms, []string{"admin", "test"})
 }
 
 // TestChangefeedUpdateProtectedTimestamp tests that changefeeds using the
@@ -670,4 +682,35 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+func fetchRoleMembers(
+	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
+) ([][]string, error) {
+	var roleMembers [][]string
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		it, err := txn.QueryIteratorEx(ctx, "test-get-role-members", txn.KV(), sessiondata.NoSessionDataOverride, "SELECT role, member FROM system.role_members")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = it.Close() }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+			role, member := string(tree.MustBeDString(it.Cur()[0])), string(tree.MustBeDString(it.Cur()[1]))
+			roleMembers = append(roleMembers, []string{role, member})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return roleMembers, nil
 }
