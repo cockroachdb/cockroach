@@ -91,7 +91,7 @@ func runDRT(configFile string) (retErr error) {
 		o:      or,
 		eventL: eventL,
 	}
-	hh.startHTTPServer(8080, "localhost")
+	_ = hh.startHTTPServer(8080, "localhost")
 	or.Run(ctx)
 
 	return nil
