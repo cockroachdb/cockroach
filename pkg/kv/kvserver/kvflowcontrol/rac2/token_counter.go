@@ -358,6 +358,7 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 }
 
 type tokenWaitingHandleInfo struct {
+	// Can be nil, in which case the wait on this can never succeed.
 	handle TokenWaitingHandle
 	// requiredWait will be set for the leaseholder and leader for regular work.
 	// For elastic work this will be set for the aforementioned, and all replicas
@@ -429,8 +430,13 @@ func WaitForEval(
 		if h.requiredWait {
 			requiredWaitCount++
 		}
+		var chanValue reflect.Value
+		if h.handle != nil {
+			chanValue = reflect.ValueOf(h.handle.WaitChannel())
+		}
+		// Else, zero Value, so will never be selected.
 		scratch = append(scratch,
-			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: chanValue})
 	}
 	if requiredQuorum == 0 && requiredWaitCount == 0 {
 		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
