@@ -17,11 +17,17 @@ t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 # There should be no tracked entries for the range.
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,1) send_queue=[1,1)
+(n1,s1):1: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,1)
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,1)
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,1) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
 
 # Simulate a call to `HandleRaftEventRaftMuLocked` on s1 (leader/local
@@ -45,19 +51,25 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 # replica stream (1,2,3).
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
@@ -81,11 +93,17 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4)
+(n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,4)
+(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
@@ -104,34 +122,45 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 
 # Tick the clock by less than the probe to close delay, the stream should still
-# be open in state probeRecentlyReplicate but all deducted tokens should be
+# be open in state probeRecentlyNoSendQ but all deducted tokens should be
 # returned.
-tick duration=500ms
+tick duration=200ms
 ----
-now=500ms
+now=200ms
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n3,s3):3: state=probeRecentlyReplicate closed=false inflight=[1,4) send_queue=[4,4)
+(n3,s3):3: state=probeRecentlyNoSendQ closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
 
 # Tick the clock by the remaining probe to close delay, the stream should now
 # be closed and all tokens returned.
-tick duration=500ms
+tick duration=200ms
 ----
-now=1s
+now=400ms
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 ++++
 (n3,s3):3: closed
+++++
 
 # Next, start a WaitForEval operation. We will update the state of s3 to be
 # Replicate, which should trigger the WaitForEval to refresh. First, deduct all

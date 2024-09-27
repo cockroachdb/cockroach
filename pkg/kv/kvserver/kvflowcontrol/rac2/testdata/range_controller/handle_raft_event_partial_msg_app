@@ -38,18 +38,24 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 # while r2 and r3 have partial entry tracking.
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4)
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4)
+(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+1.0 MiB force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4)
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+2.0 MiB force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
@@ -80,7 +86,9 @@ t1/s3: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[4,6) send_queue=[6,6)
+(n1,s1):1: state=replicate closed=false inflight=[4,6) send_queue=[6,6) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+5.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
@@ -88,11 +96,15 @@ NormalPri:
   term=1 index=4  tokens=1048576
   term=1 index=5  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,5) send_queue=[5,6)
+(n2,s2):2: state=replicate closed=false inflight=[2,5) send_queue=[5,6) precise_q_size=+1.0 MiB force-flush=false
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=4  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,6)
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+2.0 MiB force-flush=false
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
 ++++
 
 # Partially admit the entries, with r3 lagging by one entry. Expect to see the
@@ -113,13 +125,19 @@ t1/s3: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,6) send_queue=[6,6)
+(n1,s1):1: state=replicate closed=false inflight=[5,6) send_queue=[6,6) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=5  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[5,5) send_queue=[5,6)
+(n2,s2):2: state=replicate closed=false inflight=[5,5) send_queue=[5,6) precise_q_size=+1.0 MiB force-flush=false
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[4,4) send_queue=[4,6)
+(n3,s3):3: state=replicate closed=false inflight=[4,4) send_queue=[4,6) precise_q_size=+2.0 MiB force-flush=false
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
 ++++
 
 # Send a raft_event that contains the unsent entries for each replica, in
@@ -142,17 +160,23 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[6,7) send_queue=[7,7)
+(n1,s1):1: state=replicate closed=false inflight=[6,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=5  tokens=1048576
   term=1 index=6  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[5,7) send_queue=[7,7)
+(n2,s2):2: state=replicate closed=false inflight=[5,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+2.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=5  tokens=1048576
   term=1 index=6  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[4,7) send_queue=[7,7)
+(n3,s3):3: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=4  tokens=1048576
   term=1 index=5  tokens=1048576
@@ -172,6 +196,21 @@ t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[7,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n2,s2):2: state=replicate closed=false inflight=[7,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
+(n3,s3):3: state=replicate closed=false inflight=[7,7) send_queue=[7,7) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+++++
 
 close_rcs
 ----
