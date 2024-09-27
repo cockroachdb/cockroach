@@ -239,7 +239,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
 	// compilation will fail if it's not. Unfortunately, this doesn't protect
 	// against reusing a currently unused RocksDB key kind.
-	const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
+	const _ = uint(pebble.InternalKeyKindExcise - pebble.InternalKeyKindMax)
 
 	if writeBatch == nil {
 		return "<nil>\n", nil
@@ -349,6 +349,19 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			}
 			v, _ := binary.Uvarint(r.Value())
 			sb.WriteString(fmt.Sprintf("Delete (Sized at %d): %s\n", v, SprintEngineKey(engineKey)))
+
+		case pebble.InternalKeyKindExcise:
+			engineStartKey, err := r.EngineKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			engineEndKey, err := r.EngineEndKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			sb.WriteString(fmt.Sprintf(
+				"Excise: [%s, %s)\n", SprintEngineKey(engineStartKey), SprintEngineKey(engineEndKey),
+			))
 		default:
 			sb.WriteString(fmt.Sprintf("unsupported key kind: %d\n", r.KeyKind()))
 		}

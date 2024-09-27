@@ -20,11 +20,11 @@ import (
 )
 
 // Ensure that we always update the batch reader to consider any necessary
-// updates when a new key kind is introduced. To do this, we assert
-// InternalKeyKindMax=23, ensuring that compilation will fail if it's not.
-// Unfortunately, this doesn't protect against reusing a currently unused
-// RocksDB key kind.
-const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
+// updates when a new key kind is introduced. To do this, we assert that the
+// latest key we considered equals InternalKeyKindMax, ensuring that compilation
+// will fail if it's not. Unfortunately, this doesn't protect against reusing a
+// currently unused RocksDB key kind.
+const _ = uint(pebble.InternalKeyKindExcise - pebble.InternalKeyKindMax)
 
 // decodeBatchHeader decodes the header of Pebble batch representation,
 // returning the parsed header and a batchrepr.Reader into the contents of the

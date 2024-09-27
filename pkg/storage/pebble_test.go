@@ -98,24 +98,23 @@ func TestEngineComparer(t *testing.T) {
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
 
 	// We group versions by equality and in the expected ordering.
-	orderedVersions := [][]any{
-		{ts1},       // Empty version sorts first.
-		{ts2, ts2a}, // Higher timestamps sort before lower timestamps.
-		{ts3, ts3a, ts3b},
-		{ts4},
-		{ts5},
+	orderedVersions := []any{
+		ts1,  // Empty version sorts first.
+		ts2a, // Synthetic bit is not ignored when comparing suffixes.
+		ts2,
+		ts3b, // Higher timestamps sort before lower timestamps.
+		ts3a,
+		ts3,
+		ts4,
+		ts5,
 	}
 
 	// Compare suffixes.
-	for i := range orderedVersions {
-		for j := range orderedVersions {
-			for _, v1 := range orderedVersions[i] {
-				for _, v2 := range orderedVersions[j] {
-					result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
-					if expected := cmp.Compare(i, j); result != expected {
-						t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
-					}
-				}
+	for i, v1 := range orderedVersions {
+		for j, v2 := range orderedVersions {
+			result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
+			if expected := cmp.Compare(i, j); result != expected {
+				t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
 			}
 		}
 	}
