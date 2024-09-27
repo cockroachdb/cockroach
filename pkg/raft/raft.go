@@ -2344,6 +2344,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	}
 
 	r.maybeCommit()
+	// If the configuration change means that there are new followers, fortify
+	// them immediately, without waiting for the next heartbeatTimeout to fire.
+	// bcastFortify is a no-op for peers that are already fortified.
+	r.bcastFortify()
 	// If the configuration change means that more entries are committed now,
 	// broadcast/append to everyone in the updated config.
 	//
