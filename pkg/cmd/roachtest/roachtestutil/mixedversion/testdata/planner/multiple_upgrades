@@ -21,7 +21,7 @@ Deployment mode:    system-only
 Plan:
 ├── install fixtures for version "v22.1.8" (1)
 ├── start cluster at version "v22.1.8" (2)
-├── wait for system tenant on nodes :1-4 to reach cluster version '22.1' (3)
+├── wait for all nodes (:1-4) to acknowledge cluster version '22.1' on system tenant (3)
 ├── upgrade cluster from "v22.1.8" to "v22.2.3"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4)
 │   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
@@ -31,7 +31,7 @@ Plan:
 │   │   ├── restart node 2 with binary version v22.2.3 (8)
 │   │   └── restart node 3 with binary version v22.2.3 (9)
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (10)
-│   └── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (11)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (11)
 ├── run "initialize bank workload" (12)
 ├── run "bank workload" (13)
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
@@ -56,7 +56,7 @@ Plan:
 │   │   └── restart node 1 with binary version v23.1.4 (29)
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (30)
 │   ├── run "mixed-version 1" (31)
-│   └── wait for system tenant on nodes :1-4 to reach cluster version '23.1' (32)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (32)
 └── upgrade cluster from "v23.1.4" to "<current>"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (33)
    ├── upgrade nodes :1-4 from "v23.1.4" to "<current>"
@@ -79,4 +79,4 @@ Plan:
    │   └── run "mixed-version 1" (48)
    ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (49)
    ├── run "mixed-version 1" (50)
-   └── wait for system tenant on nodes :1-4 to reach cluster version <current> (51)
+   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (51)
