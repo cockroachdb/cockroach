@@ -180,6 +180,7 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				// retries. I've filed an issue with them
 				// [here](https://github.com/twmb/franz-go/issues/830).
 				//
+				// TODO: We could also/instead capture broker connect errors and network read/write errors
 				k.recordSinkError(ctx, err)
 				return err
 			}

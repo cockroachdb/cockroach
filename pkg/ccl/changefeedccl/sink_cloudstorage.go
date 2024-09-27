@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -79,6 +80,7 @@ type cloudStorageSinkFile struct {
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
 	allocCallback func(delta int64)
+	recordError   func(ctx context.Context, err error)
 }
 
 func (f *cloudStorageSinkFile) mergeAlloc(other *kvevent.Alloc) {
@@ -530,6 +532,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
+		recordError:         func(ctx context.Context, err error) { s.metrics.recordSinkError(ctx, sinkTypeCloudstorage, err) },
 	}
 
 	if s.compression.enabled() {
@@ -626,7 +629,11 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if log.V(1) {
 		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
-	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
+	if err := cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload)); err != nil {
+		s.metrics.recordSinkError(ctx, sinkTypeCloudstorage, err)
+		return err
+	}
+	return nil
 }
 
 // flushTopicVersions flushes all open files for the provided topic up to and
@@ -865,6 +872,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 
 			if err != nil {
 				log.Errorf(ctx, "error flushing file to storage: %s", err)
+				s.metrics.recordSinkError(ctx, sinkTypeCloudstorage, err)
 				s.asyncFlushErr = err
 				return err
 			}
