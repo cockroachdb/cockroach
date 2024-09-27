@@ -1685,6 +1685,153 @@ statement ok
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
+# Test row-level BEFORE triggers that filter the row.
+# ==============================================================================
+
+subtest before_row_filter
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE val xy := COALESCE(NEW, OLD);
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    IF (val).x % 2 = 0 THEN
+      RETURN val;
+    ELSE
+      RETURN NULL;
+    END IF;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+2  2
+4  4
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Fill in the missing values.
+statement ok
+INSERT INTO xy VALUES (1, 1), (3, 3);
+
+statement ok
+CREATE TRIGGER foo BEFORE UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (1,1), new: (1,11)
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (3,3), new: (3,13)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  12
+3  3
+4  14
+
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (1,1), new: <NULL>
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (3,3), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+3  3
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Include hidden columns that won't be visible to triggers.
+statement ok
+CREATE TABLE nullable (a INT, foo INT NOT VISIBLE, b INT, bar INT NOT VISIBLE DEFAULT 1);
+
+# A tuple with only NULL elements does not cause the filter to remove rows.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN ROW(NULL, NULL);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON nullable FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO nullable VALUES (1, 1), (2, 2), (3, 3);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+
+# NOTE: the trigger does not modify the default value of "bar".
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+UPDATE nullable SET b = 10;
+----
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+DELETE FROM nullable WHERE a IS NULL LIMIT 2;
+----
+NOTICE: DELETE: old: (,), new: <NULL>
+NOTICE: DELETE: old: (,), new: <NULL>
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+
+statement ok
+DROP TABLE nullable;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
 # Test order of execution.
 # ==============================================================================
 
