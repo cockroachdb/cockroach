@@ -75,7 +75,7 @@ type RangeController interface {
 	// recent MsgApp to this peer.
 	//
 	// Requires replica.raftMu to be held.
-	MaybeSendPingsRaftMuLocked()
+	MaybeSendPingsRaftMuLocked(ctx context.Context)
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -109,7 +109,7 @@ type RaftInterface interface {
 	// processing.
 	//
 	// If the peer is not in StateReplicate, this call does nothing.
-	SendPingRaftMuLocked(roachpb.ReplicaID) bool
+	SendPingRaftMuLocked(context.Context, roachpb.ReplicaID) bool
 	// MakeMsgAppRaftMuLocked is used to construct a MsgApp for entries in
 	// [start, end) and must only be called in MsgAppPull mode for followers.
 	//
@@ -764,13 +764,13 @@ func (rc *rangeController) AdmitRaftMuLocked(
 }
 
 // MaybeSendPingsRaftMuLocked implements RangeController.
-func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
+func (rc *rangeController) MaybeSendPingsRaftMuLocked(ctx context.Context) {
 	for id, state := range rc.replicaMap {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
 		if s := state.sendStream; s != nil && s.shouldPing() {
-			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
+			rc.opts.RaftInterface.SendPingRaftMuLocked(ctx, id)
 		}
 	}
 }

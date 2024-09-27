@@ -30,6 +30,7 @@ outgoing messages and state.
 package raft
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
@@ -55,18 +56,19 @@ func TestLeaderUpdateTermFromMessage(t *testing.T) {
 // it immediately reverts to follower state.
 // Reference: section 5.1
 func testUpdateTermFromMessage(t *testing.T, state StateType) {
+	ctx := context.Background()
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
 	case StateFollower:
-		r.becomeFollower(1, 2)
+		r.becomeFollower(ctx, 1, 2)
 	case StateCandidate:
-		r.becomeCandidate()
+		r.becomeCandidate(ctx)
 	case StateLeader:
-		r.becomeCandidate()
-		r.becomeLeader()
+		r.becomeCandidate(ctx)
+		r.becomeLeader(ctx)
 	}
 
-	r.Step(pb.Message{Type: pb.MsgApp, Term: 2})
+	r.Step(ctx, pb.Message{Type: pb.MsgApp, Term: 2})
 
 	assert.Equal(t, uint64(2), r.Term)
 	assert.Equal(t, StateFollower, r.state)
@@ -77,16 +79,17 @@ func testUpdateTermFromMessage(t *testing.T, state StateType) {
 // Our implementation ignores the request instead.
 // Reference: section 5.1
 func TestRejectStaleTermMessage(t *testing.T) {
+	ctx := context.Background()
 	called := false
-	fakeStep := func(r *raft, m pb.Message) error {
+	fakeStep := func(_ context.Context, r *raft, m pb.Message) error {
 		called = true
 		return nil
 	}
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	r.step = fakeStep
-	r.loadState(pb.HardState{Term: 2})
+	r.loadState(ctx, pb.HardState{Term: 2})
 
-	r.Step(pb.Message{Type: pb.MsgApp, Term: r.Term - 1})
+	r.Step(ctx, pb.Message{Type: pb.MsgApp, Term: r.Term - 1})
 
 	assert.False(t, called)
 }
@@ -103,20 +106,21 @@ func TestStartAsFollower(t *testing.T) {
 // as heartbeat to all followers.
 // Reference: section 5.2
 func TestLeaderBcastBeat(t *testing.T) {
+	ctx := context.Background()
 	// heartbeat interval
 	hi := 1
 	r := newTestRaft(1, 10, hi, newTestMemoryStorage(withPeers(1, 2, 3)))
-	r.becomeCandidate()
-	r.becomeLeader()
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
 	for i := 0; i < 10; i++ {
-		mustAppendEntry(r, pb.Entry{Index: uint64(i) + 1})
+		mustAppendEntry(ctx, r, pb.Entry{Index: uint64(i) + 1})
 	}
 
 	for i := 0; i < hi; i++ {
-		r.tick()
+		r.tick(ctx)
 	}
 
-	msgs := r.readMessages()
+	msgs := r.readMessages(ctx)
 	sort.Sort(messageSlice(msgs))
 	assert.Equal(t, []pb.Message{
 		{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
@@ -142,26 +146,27 @@ func TestCandidateStartNewElection(t *testing.T) {
 // round of RequestVote RPCs.
 // Reference: section 5.2
 func testNonleaderStartElection(t *testing.T, state StateType) {
+	ctx := context.Background()
 	// election timeout
 	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
 	case StateFollower:
-		r.becomeFollower(1, 2)
+		r.becomeFollower(ctx, 1, 2)
 	case StateCandidate:
-		r.becomeCandidate()
+		r.becomeCandidate(ctx)
 	}
 
 	for i := 1; i < 2*et; i++ {
-		r.tick()
+		r.tick(ctx)
 	}
-	r.advanceMessagesAfterAppend()
+	r.advanceMessagesAfterAppend(ctx)
 
 	assert.Equal(t, uint64(2), r.Term)
 	assert.Equal(t, StateCandidate, r.state)
 	assert.True(t, r.electionTracker.TestingGetVotes()[r.id])
 
-	msgs := r.readMessages()
+	msgs := r.readMessages(ctx)
 	sort.Sort(messageSlice(msgs))
 	assert.Equal(t, []pb.Message{
 		{From: 1, To: 2, Term: 2, Type: pb.MsgVote},
@@ -176,6 +181,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 // c) it is unclear about the result
 // Reference: section 5.2
 func TestLeaderElectionInOneRoundRPC(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		size  int
 		votes map[pb.PeerID]bool
@@ -203,10 +209,10 @@ func TestLeaderElectionInOneRoundRPC(t *testing.T) {
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(idsBySize(tt.size)...)))
 
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-		r.advanceMessagesAfterAppend()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		r.advanceMessagesAfterAppend(ctx)
 		for id, vote := range tt.votes {
-			r.Step(pb.Message{From: id, To: 1, Term: r.Term, Type: pb.MsgVoteResp, Reject: !vote})
+			r.Step(ctx, pb.Message{From: id, To: 1, Term: r.Term, Type: pb.MsgVoteResp, Reject: !vote})
 		}
 
 		assert.Equal(t, tt.state, r.state, "#%d", i)
@@ -218,6 +224,7 @@ func TestLeaderElectionInOneRoundRPC(t *testing.T) {
 // candidate in a given term, on a first-come-first-served basis.
 // Reference: section 5.2
 func TestFollowerVote(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		vote    pb.PeerID
 		nvote   pb.PeerID
@@ -232,9 +239,9 @@ func TestFollowerVote(t *testing.T) {
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		r.loadState(pb.HardState{Term: 1, Vote: tt.vote})
+		r.loadState(ctx, pb.HardState{Term: 1, Vote: tt.vote})
 
-		r.Step(pb.Message{From: tt.nvote, To: 1, Term: 1, Type: pb.MsgVote})
+		r.Step(ctx, pb.Message{From: tt.nvote, To: 1, Term: 1, Type: pb.MsgVote})
 
 		assert.Equal(t, []pb.Message{
 			{From: 1, To: tt.nvote, Term: 1, Type: pb.MsgVoteResp, Reject: tt.wreject},
@@ -248,16 +255,17 @@ func TestFollowerVote(t *testing.T) {
 // it recognizes the leader as legitimate and returns to follower state.
 // Reference: section 5.2
 func TestCandidateFallback(t *testing.T) {
+	ctx := context.Background()
 	tests := []pb.Message{
 		{From: 2, To: 1, Term: 1, Type: pb.MsgApp},
 		{From: 2, To: 1, Term: 2, Type: pb.MsgApp},
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 		require.Equal(t, StateCandidate, r.state, "#%d", i)
 
-		r.Step(tt)
+		r.Step(ctx, tt)
 
 		assert.Equal(t, StateFollower, r.state, "#%d", i)
 		assert.Equal(t, tt.Term, r.Term, "#%d", i)
@@ -265,13 +273,9 @@ func TestCandidateFallback(t *testing.T) {
 }
 
 func TestFollowerElectionTimeoutRandomized(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
 	testNonleaderElectionTimeoutRandomized(t, StateFollower)
 }
 func TestCandidateElectionTimeoutRandomized(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
 	testNonleaderElectionTimeoutRandomized(t, StateCandidate)
 }
 
@@ -279,20 +283,21 @@ func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 // follower or candidate is randomized.
 // Reference: section 5.2
 func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
+	ctx := context.Background()
 	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	timeouts := make(map[int]bool)
 	for round := 0; round < 50*et; round++ {
 		switch state {
 		case StateFollower:
-			r.becomeFollower(r.Term+1, 2)
+			r.becomeFollower(ctx, r.Term+1, 2)
 		case StateCandidate:
-			r.becomeCandidate()
+			r.becomeCandidate(ctx)
 		}
 
 		time := 0
-		for len(r.readMessages()) == 0 {
-			r.tick()
+		for len(r.readMessages(ctx)) == 0 {
+			r.tick(ctx)
 			time++
 		}
 		timeouts[time] = true
@@ -304,13 +309,9 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 }
 
 func TestFollowersElectionTimeoutNonconflict(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
 	testNonleadersElectionTimeoutNonconflict(t, StateFollower)
 }
 func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
 	testNonleadersElectionTimeoutNonconflict(t, StateCandidate)
 }
 
@@ -319,6 +320,7 @@ func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
 // likelihood of split vote in the new election.
 // Reference: section 5.2
 func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
+	ctx := context.Background()
 	et := 10
 	size := 5
 	rs := make([]*raft, size)
@@ -331,17 +333,17 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 		for _, r := range rs {
 			switch state {
 			case StateFollower:
-				r.becomeFollower(r.Term+1, None)
+				r.becomeFollower(ctx, r.Term+1, None)
 			case StateCandidate:
-				r.becomeCandidate()
+				r.becomeCandidate(ctx)
 			}
 		}
 
 		timeoutNum := 0
 		for timeoutNum == 0 {
 			for _, r := range rs {
-				r.tick()
-				if len(r.readMessages()) > 0 {
+				r.tick(ctx)
+				if len(r.readMessages(ctx)) > 0 {
 					timeoutNum++
 				}
 			}
@@ -364,19 +366,20 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 // Also, it writes the new entry into stable storage.
 // Reference: section 5.3
 func TestLeaderStartReplication(t *testing.T) {
+	ctx := context.Background()
 	s := newTestMemoryStorage(withPeers(1, 2, 3))
 	r := newTestRaft(1, 10, 1, s)
-	r.becomeCandidate()
-	r.becomeLeader()
-	commitNoopEntry(r, s)
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
+	commitNoopEntry(ctx, r, s)
 	li := r.raftLog.lastIndex()
 
 	ents := []pb.Entry{{Data: []byte("some data")}}
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: ents})
+	r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: ents})
 
 	assert.Equal(t, li+1, r.raftLog.lastIndex())
 	assert.Equal(t, li, r.raftLog.committed)
-	msgs := r.readMessages()
+	msgs := r.readMessages(ctx)
 	sort.Sort(messageSlice(msgs))
 	wents := []pb.Entry{{Index: li + 1, Term: 1, Data: []byte("some data")}}
 	assert.Equal(t, []pb.Message{
@@ -396,23 +399,24 @@ func TestLeaderStartReplication(t *testing.T) {
 // servers eventually find out.
 // Reference: section 5.3
 func TestLeaderCommitEntry(t *testing.T) {
+	ctx := context.Background()
 	s := newTestMemoryStorage(withPeers(1, 2, 3))
 	r := newTestRaft(1, 10, 1, s)
-	r.becomeCandidate()
-	r.becomeLeader()
-	commitNoopEntry(r, s)
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
+	commitNoopEntry(ctx, r, s)
 	li := r.raftLog.lastIndex()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+	r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
 
-	for _, m := range r.readMessages() {
-		r.Step(acceptAndReply(m))
+	for _, m := range r.readMessages(ctx) {
+		r.Step(ctx, acceptAndReply(m))
 	}
 
 	assert.Equal(t, li+1, r.raftLog.committed)
 	assert.Equal(t, []pb.Entry{
 		{Index: li + 1, Term: 1, Data: []byte("some data")},
-	}, r.raftLog.nextCommittedEnts(true))
-	msgs := r.readMessages()
+	}, r.raftLog.nextCommittedEnts(ctx, true))
+	msgs := r.readMessages(ctx)
 	sort.Sort(messageSlice(msgs))
 	for i, m := range msgs {
 		assert.Equal(t, pb.PeerID(i+2), m.To)
@@ -425,6 +429,7 @@ func TestLeaderCommitEntry(t *testing.T) {
 // leader that created the entry has replicated it on a majority of the servers.
 // Reference: section 5.3
 func TestLeaderAcknowledgeCommit(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		size               int
 		nonLeaderAcceptors map[pb.PeerID]bool
@@ -443,15 +448,15 @@ func TestLeaderAcknowledgeCommit(t *testing.T) {
 	for i, tt := range tests {
 		s := newTestMemoryStorage(withPeers(idsBySize(tt.size)...))
 		r := newTestRaft(1, 10, 1, s)
-		r.becomeCandidate()
-		r.becomeLeader()
-		commitNoopEntry(r, s)
+		r.becomeCandidate(ctx)
+		r.becomeLeader(ctx)
+		commitNoopEntry(ctx, r, s)
 		li := r.raftLog.lastIndex()
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-		r.advanceMessagesAfterAppend()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+		r.advanceMessagesAfterAppend(ctx)
 		for _, m := range r.msgs {
 			if tt.nonLeaderAcceptors[m.To] {
-				r.Step(acceptAndReply(m))
+				r.Step(ctx, acceptAndReply(m))
 			}
 		}
 
@@ -465,6 +470,7 @@ func TestLeaderAcknowledgeCommit(t *testing.T) {
 // Also, it applies the entry to its local state machine (in log order).
 // Reference: section 5.3
 func TestLeaderCommitPrecedingEntries(t *testing.T) {
+	ctx := context.Background()
 	tests := [][]pb.Entry{
 		{},
 		{{Term: 2, Index: 1}},
@@ -473,22 +479,22 @@ func TestLeaderCommitPrecedingEntries(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
-		storage.Append(tt)
+		storage.Append(ctx, tt)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Term: 2})
-		r.becomeCandidate()
-		r.becomeLeader()
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+		r.loadState(ctx, pb.HardState{Term: 2})
+		r.becomeCandidate(ctx)
+		r.becomeLeader(ctx)
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
 
-		for _, m := range r.readMessages() {
-			r.Step(acceptAndReply(m))
+		for _, m := range r.readMessages(ctx) {
+			r.Step(ctx, acceptAndReply(m))
 		}
 
 		li := uint64(len(tt))
 		assert.Equal(t, append(tt,
 			pb.Entry{Term: 3, Index: li + 1},
 			pb.Entry{Term: 3, Index: li + 2, Data: []byte("some data")},
-		), r.raftLog.nextCommittedEnts(true), "#%d", i)
+		), r.raftLog.nextCommittedEnts(ctx, true), "#%d", i)
 	}
 }
 
@@ -496,6 +502,7 @@ func TestLeaderCommitPrecedingEntries(t *testing.T) {
 // is committed, it applies the entry to its local state machine (in log order).
 // Reference: section 5.3
 func TestFollowerCommitEntry(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		ents   []pb.Entry
 		commit uint64
@@ -530,12 +537,12 @@ func TestFollowerCommitEntry(t *testing.T) {
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		r.becomeFollower(1, 2)
+		r.becomeFollower(ctx, 1, 2)
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 1, Entries: tt.ents, Commit: tt.commit})
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 1, Entries: tt.ents, Commit: tt.commit})
 
 		assert.Equal(t, tt.commit, r.raftLog.committed, "#%d", i)
-		assert.Equal(t, tt.ents[:int(tt.commit)], r.raftLog.nextCommittedEnts(true), "#%d", i)
+		assert.Equal(t, tt.ents[:int(tt.commit)], r.raftLog.nextCommittedEnts(ctx, true), "#%d", i)
 	}
 }
 
@@ -545,6 +552,7 @@ func TestFollowerCommitEntry(t *testing.T) {
 // append entries.
 // Reference: section 5.3
 func TestFollowerCheckMsgApp(t *testing.T) {
+	ctx := context.Background()
 	ents := []pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}
 	tests := []struct {
 		term        uint64
@@ -567,15 +575,15 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
-		storage.Append(ents)
+		storage.Append(ctx, ents)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Commit: 1})
-		r.becomeFollower(2, 2)
+		r.loadState(ctx, pb.HardState{Commit: 1})
+		r.becomeFollower(ctx, 2, 2)
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index})
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index})
 		assert.Equal(t, []pb.Message{
 			{From: 1, To: 2, Type: pb.MsgAppResp, Term: 2, Index: tt.windex, Commit: 1, Reject: tt.wreject, RejectHint: tt.wrejectHint, LogTerm: tt.wlogterm},
-		}, r.readMessages(), "#%d", i)
+		}, r.readMessages(ctx), "#%d", i)
 	}
 }
 
@@ -585,6 +593,7 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 // Also, it writes the new entry into stable storage.
 // Reference: section 5.3
 func TestFollowerAppendEntries(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		index, term uint64
 		ents        []pb.Entry
@@ -618,13 +627,13 @@ func TestFollowerAppendEntries(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
-		storage.Append([]pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}})
+		storage.Append(ctx, []pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}})
 		r := newTestRaft(1, 10, 1, storage)
-		r.becomeFollower(2, 2)
+		r.becomeFollower(ctx, 2, 2)
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 4, LogTerm: tt.term, Index: tt.index, Entries: tt.ents})
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 4, LogTerm: tt.term, Index: tt.index, Entries: tt.ents})
 
-		assert.Equal(t, tt.wents, r.raftLog.allEntries(), "#%d", i)
+		assert.Equal(t, tt.wents, r.raftLog.allEntries(ctx), "#%d", i)
 		assert.Equal(t, tt.wunstable, r.raftLog.nextUnstableEnts(), "#%d", i)
 	}
 }
@@ -633,6 +642,7 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
+	ctx := context.Background()
 	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
 	term := uint64(8)
 	for i, tt := range [][]pb.Entry{
@@ -644,23 +654,23 @@ func TestLeaderSyncFollowerLog(t *testing.T) {
 		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		leadStorage.Append(ents)
+		leadStorage.Append(ctx, ents)
 		lead := newTestRaft(1, 10, 1, leadStorage)
-		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
+		lead.loadState(ctx, pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		followerStorage.Append(tt)
+		followerStorage.Append(ctx, tt)
 		follower := newTestRaft(2, 10, 1, followerStorage)
-		follower.loadState(pb.HardState{Term: term - 1})
+		follower.loadState(ctx, pb.HardState{Term: term - 1})
 		// It is necessary to have a three-node cluster.
 		// The second may have more up-to-date log than the first one, so the
 		// first node needs the vote from the third node to become the leader.
 		n := newNetwork(lead, follower, nopStepper)
-		n.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		n.send(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 		// The election occurs in the term after the one we loaded with
 		// lead.loadState above.
-		n.send(pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp, Term: term + 1})
+		n.send(ctx, pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp, Term: term + 1})
 
-		n.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+		n.send(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 		assert.Empty(t, diffu(ltoa(lead.raftLog), ltoa(follower.raftLog)), "#%d", i)
 	}
@@ -670,6 +680,7 @@ func TestLeaderSyncFollowerLog(t *testing.T) {
 // and are sent to all of the other nodes.
 // Reference: section 5.4.1
 func TestVoteRequest(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		ents  []pb.Entry
 		wterm uint64
@@ -679,16 +690,16 @@ func TestVoteRequest(t *testing.T) {
 	}
 	for j, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		r.Step(pb.Message{
+		r.Step(ctx, pb.Message{
 			From: 2, To: 1, Type: pb.MsgApp, Term: tt.wterm - 1, LogTerm: 0, Index: 0, Entries: tt.ents,
 		})
-		r.readMessages()
+		r.readMessages(ctx)
 
 		for i := 1; i < r.electionTimeout*2; i++ {
-			r.tickElection()
+			r.tickElection(ctx)
 		}
 
-		msgs := r.readMessages()
+		msgs := r.readMessages(ctx)
 		sort.Sort(messageSlice(msgs))
 		require.Len(t, msgs, 2, "#%d", j)
 		for i, m := range msgs {
@@ -706,6 +717,7 @@ func TestVoteRequest(t *testing.T) {
 // than that of the candidate.
 // Reference: section 5.4.1
 func TestVoter(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		ents    []pb.Entry
 		logterm uint64
@@ -729,12 +741,12 @@ func TestVoter(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
-		storage.Append(tt.ents)
+		storage.Append(ctx, tt.ents)
 		r := newTestRaft(1, 10, 1, storage)
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgVote, Term: 3, LogTerm: tt.logterm, Index: tt.index})
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgVote, Term: 3, LogTerm: tt.logterm, Index: tt.index})
 
-		msgs := r.readMessages()
+		msgs := r.readMessages(ctx)
 		require.Len(t, msgs, 1, "#%d", i)
 		m := msgs[0]
 		assert.Equal(t, pb.MsgVoteResp, m.Type, "#%d", i)
@@ -746,6 +758,7 @@ func TestVoter(t *testing.T) {
 // current term are committed by counting replicas.
 // Reference: section 5.4.2
 func TestLeaderOnlyCommitsLogFromCurrentTerm(t *testing.T) {
+	ctx := context.Background()
 	ents := []pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}
 	tests := []struct {
 		index   uint64
@@ -759,18 +772,18 @@ func TestLeaderOnlyCommitsLogFromCurrentTerm(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
-		storage.Append(ents)
+		storage.Append(ctx, ents)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Term: 2})
+		r.loadState(ctx, pb.HardState{Term: 2})
 		// become leader at term 3
-		r.becomeCandidate()
-		r.becomeLeader()
-		r.readMessages()
+		r.becomeCandidate(ctx)
+		r.becomeLeader(ctx)
+		r.readMessages(ctx)
 		// propose a entry to current term
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Term: r.Term, Index: tt.index})
-		r.advanceMessagesAfterAppend()
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Term: r.Term, Index: tt.index})
+		r.advanceMessagesAfterAppend(ctx)
 		assert.Equal(t, tt.wcommit, r.raftLog.committed, "#%d", i)
 	}
 }
@@ -781,24 +794,24 @@ func (s messageSlice) Len() int           { return len(s) }
 func (s messageSlice) Less(i, j int) bool { return fmt.Sprint(s[i]) < fmt.Sprint(s[j]) }
 func (s messageSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-func commitNoopEntry(r *raft, s *MemoryStorage) {
+func commitNoopEntry(ctx context.Context, r *raft, s *MemoryStorage) {
 	if r.state != StateLeader {
 		panic("it should only be used when it is the leader")
 	}
-	r.bcastAppend()
+	r.bcastAppend(ctx)
 	// simulate the response of MsgApp
-	msgs := r.readMessages()
+	msgs := r.readMessages(ctx)
 	for _, m := range msgs {
 		if m.Type != pb.MsgApp || len(m.Entries) != 1 || m.Entries[0].Data != nil {
 			panic("not a message to append noop entry")
 		}
-		r.Step(acceptAndReply(m))
+		r.Step(ctx, acceptAndReply(m))
 	}
 	// ignore further messages to refresh followers' commit index
-	r.readMessages()
-	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
-	r.raftLog.stableTo(r.raftLog.unstable.mark())
+	r.readMessages(ctx)
+	s.Append(ctx, r.raftLog.nextUnstableEnts())
+	r.raftLog.appliedTo(ctx, r.raftLog.committed, 0 /* size */)
+	r.raftLog.stableTo(ctx, r.raftLog.unstable.mark())
 }
 
 func acceptAndReply(m pb.Message) pb.Message {

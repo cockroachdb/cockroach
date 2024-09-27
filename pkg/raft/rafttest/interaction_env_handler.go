@@ -82,14 +82,6 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// process-apply-thread 3
 		err = env.handleProcessApplyThread(t, d)
-	case "log-level":
-		// Set the log level. NONE disables all output, including from the test
-		// harness (except errors).
-		//
-		// Example:
-		//
-		// log-level WARN
-		err = env.handleLogLevel(d)
 	case "raft-log":
 		// Print the Raft log.
 		//

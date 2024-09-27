@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"context"
 	"errors"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -30,7 +31,7 @@ import (
 // It is recommended that instead of calling this method, applications bootstrap
 // their state manually by setting up a Storage that has a first index > 1 and
 // which stores the desired ConfState as its InitialState.
-func (rn *RawNode) Bootstrap(peers []Peer) error {
+func (rn *RawNode) Bootstrap(ctx context.Context, peers []Peer) error {
 	if len(peers) == 0 {
 		return errors.New("must provide at least one peer to Bootstrap")
 	}
@@ -46,7 +47,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 
 	// TODO(tbg): remove StartNode and give the application the right tools to
 	// bootstrap the initial membership in a cleaner way.
-	rn.raft.becomeFollower(1, None)
+	rn.raft.becomeFollower(ctx, 1, None)
 	app := logSlice{term: 1, entries: make([]pb.Entry, 0, len(peers))}
 	for i, peer := range peers {
 		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
@@ -78,7 +79,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// the invariant that committed < unstable?
 	rn.raft.raftLog.committed = app.lastIndex()
 	for _, peer := range peers {
-		rn.raft.applyConfChange(pb.ConfChange{NodeID: peer.ID, Type: pb.ConfChangeAddNode}.AsV2())
+		rn.raft.applyConfChange(ctx, pb.ConfChange{NodeID: peer.ID, Type: pb.ConfChangeAddNode}.AsV2())
 	}
 	return nil
 }

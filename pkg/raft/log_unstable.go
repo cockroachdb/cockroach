@@ -17,7 +17,11 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"context"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
 // "log" can be represented by a snapshot, and/or a contiguous slice of entries.
@@ -164,7 +168,7 @@ func (u *unstable) acceptInProgress() {
 //
 // The method makes sure the entries can not be overwritten by an in-progress
 // log append. See the related comment in newStorageAppendRespMsg.
-func (u *unstable) stableTo(mark LogMark) {
+func (u *unstable) stableTo(ctx context.Context, mark LogMark) {
 	if mark.Term != u.term {
 		// The last accepted term has changed. Ignore. This is possible if part or
 		// all of the unstable log was replaced between that time that a set of
@@ -262,7 +266,7 @@ func (u *unstable) append(a logSlice) bool {
 	return true
 }
 
-func (u *unstable) truncateAndAppend(a logSlice) bool {
+func (u *unstable) truncateAndAppend(ctx context.Context, a logSlice) bool {
 	if a.term < u.term {
 		return false // append from an outdated log
 	}

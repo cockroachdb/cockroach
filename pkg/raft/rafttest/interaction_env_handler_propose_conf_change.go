@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -81,5 +82,5 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 
 // ProposeConfChange proposes a configuration change on the node with the given index.
 func (env *InteractionEnv) ProposeConfChange(idx int, c raftpb.ConfChangeI) error {
-	return env.Nodes[idx].ProposeConfChange(c)
+	return env.Nodes[idx].ProposeConfChange(context.Background(), c)
 }

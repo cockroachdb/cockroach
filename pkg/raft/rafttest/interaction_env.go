@@ -19,6 +19,7 @@ package rafttest
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -91,8 +92,8 @@ type Storage interface {
 	raft.Storage
 	SetHardState(state pb.HardState) error
 	ApplySnapshot(pb.Snapshot) error
-	Compact(newFirstIndex uint64) error
-	Append([]pb.Entry) error
+	Compact(_ context.Context, newFirstIndex uint64) error
+	Append(context.Context, []pb.Entry) error
 }
 
 // raftConfigStub sets up a raft.Config stub with reasonable testing defaults.

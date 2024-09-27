@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -97,5 +98,5 @@ func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap raftp
 		}
 		return s.ApplySnapshot(snap)
 	}
-	return s.Append(ents)
+	return s.Append(context.Background(), ents)
 }

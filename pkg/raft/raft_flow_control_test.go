@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -28,17 +29,18 @@ import (
 // 2. when the window is full, no more msgApp can be sent.
 
 func TestMsgAppFlowControlFull(t *testing.T) {
+	ctx := context.Background()
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.becomeCandidate()
-	r.becomeLeader()
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
 
 	pr2 := r.trk.Progress(2)
 	// force the progress to be in replicate state
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		ms := r.readMessages()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		ms := r.readMessages(ctx)
 		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
 			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", i, len(ms))
 		}
@@ -51,8 +53,8 @@ func TestMsgAppFlowControlFull(t *testing.T) {
 
 	// ensure 2
 	for i := 0; i < 10; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		ms := r.readMessages()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		ms := r.readMessages(ctx)
 		if len(ms) != 0 {
 			t.Fatalf("#%d: len(ms) = %d, want 0", i, len(ms))
 		}
@@ -64,29 +66,30 @@ func TestMsgAppFlowControlFull(t *testing.T) {
 // 1. valid msgAppResp.index moves the windows to pass all smaller or equal index.
 // 2. out-of-dated msgAppResp has no effect on the sliding window.
 func TestMsgAppFlowControlMoveForward(t *testing.T) {
+	ctx := context.Background()
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.becomeCandidate()
-	r.becomeLeader()
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
 
 	pr2 := r.trk.Progress(2)
 	// force the progress to be in replicate state
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		r.readMessages()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.readMessages(ctx)
 	}
 
 	// 1 is noop, 2 is the first proposal we just sent.
 	// so we start with 2.
 	for tt := 2; tt < r.maxInflight; tt++ {
 		// move forward the window
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(tt)})
-		r.readMessages()
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(tt)})
+		r.readMessages(ctx)
 
 		// fill in the inflights window again
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		ms := r.readMessages()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		ms := r.readMessages(ctx)
 		if len(ms) != 1 || ms[0].Type != pb.MsgApp {
 			t.Fatalf("#%d: len(ms) = %d, want 1 MsgApp", tt, len(ms))
 		}
@@ -98,7 +101,7 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 
 		// ensure 2
 		for i := 0; i < tt; i++ {
-			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(i)})
+			r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: uint64(i)})
 			if !pr2.IsPaused() {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
@@ -109,17 +112,18 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 // TestMsgAppFlowControlRecvHeartbeat ensures a heartbeat response
 // frees one slot if the window is full.
 func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
+	ctx := context.Background()
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.becomeCandidate()
-	r.becomeLeader()
+	r.becomeCandidate(ctx)
+	r.becomeLeader(ctx)
 
 	pr2 := r.trk.Progress(2)
 	// force the progress to be in replicate state
 	pr2.BecomeReplicate()
 	// fill in the inflights window
 	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		r.readMessages()
+		r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+		r.readMessages(ctx)
 	}
 
 	for tt := 1; tt < 5; tt++ {
@@ -129,8 +133,8 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
 			// Unpauses the progress, sends an empty MsgApp, and pauses it again.
-			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-			ms := r.readMessages()
+			r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+			ms := r.readMessages(ctx)
 			if len(ms) != 1 || ms[0].Type != pb.MsgApp || len(ms[0].Entries) != 0 {
 				t.Fatalf("#%d.%d: len(ms) == %d, want 1 empty MsgApp", tt, i, len(ms))
 			}
@@ -141,15 +145,15 @@ func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
 			if !pr2.IsPaused() {
 				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
 			}
-			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-			ms := r.readMessages()
+			r.Step(ctx, pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
+			ms := r.readMessages(ctx)
 			if len(ms) != 0 {
 				t.Fatalf("#%d.%d: len(ms) = %d, want 0", tt, i, len(ms))
 			}
 		}
 
 		// clear all pending messages.
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-		r.readMessages()
+		r.Step(ctx, pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+		r.readMessages(ctx)
 	}
 }

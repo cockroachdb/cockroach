@@ -156,7 +156,9 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 //
 // Requires that r.mu is held for writing.
 // TODO(pav-kv): make it possible to call with only raftMu held.
-func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *replicaRaftStorage) Entries(
+	ctx context.Context, lo, hi uint64, maxBytes uint64,
+) ([]raftpb.Entry, error) {
 	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
 		r.reportRaftStorageError(err)

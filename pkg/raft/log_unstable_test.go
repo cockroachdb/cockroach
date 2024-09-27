@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -397,7 +398,7 @@ func TestUnstableStableTo(t *testing.T) {
 				u.stableSnapTo(u.snapshot.Metadata.Index)
 			}
 			u.checkInvariants(t)
-			u.stableTo(LogMark{Term: tt.term, Index: tt.index})
+			u.stableTo(context.Background(), LogMark{Term: tt.term, Index: tt.index})
 			u.checkInvariants(t)
 			require.Equal(t, tt.wprev, u.prev.index)
 			require.Equal(t, tt.wentryInProgress, u.entryInProgress)
@@ -481,7 +482,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 			u.snapshotInProgress = u.snapshot != nil && u.entryInProgress > u.prev.index
 			u.checkInvariants(t)
 
-			u.truncateAndAppend(tt.app)
+			u.truncateAndAppend(context.Background(), tt.app)
 			u.checkInvariants(t)
 			require.Equal(t, tt.want, u.logSlice)
 			require.Equal(t, tt.wentryInProgress, u.entryInProgress)

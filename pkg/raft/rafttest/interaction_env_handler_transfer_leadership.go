@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -42,6 +43,6 @@ func (env *InteractionEnv) handleTransferLeadership(t *testing.T, d datadriven.T
 // Initiate leadership transfer.
 func (env *InteractionEnv) transferLeadership(from, to raftpb.PeerID) error {
 	fromIdx := from - 1
-	env.Nodes[fromIdx].TransferLeader(to)
+	env.Nodes[fromIdx].TransferLeader(context.Background(), to)
 	return nil
 }

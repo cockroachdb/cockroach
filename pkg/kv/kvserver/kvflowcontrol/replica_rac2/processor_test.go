@@ -138,7 +138,7 @@ func (rn *testRaftNode) ReplicasStateLocked(_ map[roachpb.ReplicaID]rac2.Replica
 	fmt.Fprint(rn.b, " RaftNode.ReplicasStateLocked\n")
 }
 
-func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+func (rn *testRaftNode) SendPingRaftMuLocked(ctx context.Context, to roachpb.ReplicaID) bool {
 	fmt.Fprintf(rn.b, " RaftNode.SendPingRaftMuLocked(%d)\n", to)
 	return true
 }
@@ -252,7 +252,7 @@ func (c *testRangeController) AdmitRaftMuLocked(
 	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
 }
 
-func (c *testRangeController) MaybeSendPingsRaftMuLocked() {
+func (c *testRangeController) MaybeSendPingsRaftMuLocked(context.Context) {
 	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsRaftMuLocked()\n")
 }
 

@@ -42,6 +42,7 @@ type raftRequestInfo struct {
 	req        *kvserverpb.RaftMessageRequest
 	size       int64 // size of req in bytes
 	respStream RaftMessageResponseStream
+	ctx        context.Context
 }
 
 type raftReceiveQueue struct {
@@ -409,7 +410,7 @@ func (s *Store) processRaftRequestWithReplica(
 
 	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
 	if !drop {
-		if err := r.stepRaftGroupRaftMuLocked(req); err != nil {
+		if err := r.stepRaftGroupRaftMuLocked(ctx, req); err != nil {
 			return kvpb.NewError(err)
 		}
 	}
@@ -476,7 +477,7 @@ func (s *Store) processRaftSnapshotRequest(
 		// NB: we cannot get errRemoved here because we're promised by
 		// withReplicaForRequest that this replica is not currently being removed
 		// and we've been holding the raftMu the entire time.
-		if err := r.stepRaftGroupRaftMuLocked(&snapHeader.RaftMessageRequest); err != nil {
+		if err := r.stepRaftGroupRaftMuLocked(ctx, &snapHeader.RaftMessageRequest); err != nil {
 			return kvpb.NewError(err)
 		}
 

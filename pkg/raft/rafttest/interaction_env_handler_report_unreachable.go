@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -29,6 +30,6 @@ func (env *InteractionEnv) handleReportUnreachable(t *testing.T, d datadriven.Te
 	if len(sl) != 2 {
 		return errors.New("must specify exactly two node indexes: node on which to report, and reported node")
 	}
-	env.Nodes[sl[0]].ReportUnreachable(env.Nodes[sl[1]].Config.ID)
+	env.Nodes[sl[0]].ReportUnreachable(context.Background(), env.Nodes[sl[1]].Config.ID)
 	return nil
 }

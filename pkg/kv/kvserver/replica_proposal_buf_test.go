@@ -99,7 +99,7 @@ type testProposerRaft struct {
 
 var _ proposerRaft = &testProposerRaft{}
 
-func (t *testProposerRaft) Step(msg raftpb.Message) error {
+func (t *testProposerRaft) Step(ctx context.Context, msg raftpb.Message) error {
 	if msg.Type != raftpb.MsgProp {
 		return nil
 	}
@@ -134,7 +134,7 @@ func (t testProposerRaft) BasicStatus() raft.BasicStatus {
 	return t.status.BasicStatus
 }
 
-func (t *testProposerRaft) Campaign() error {
+func (t *testProposerRaft) Campaign(_ context.Context) error {
 	t.campaigned = true
 	return nil
 }
@@ -188,7 +188,7 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 	)
 }
 
-func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
+func (t *testProposer) withGroupLocked(ctx context.Context, fn func(proposerRaft) error) error {
 	// Note that t.raftGroup can be nil, which FlushLockedWithRaftGroup supports.
 	return fn(t.raftGroup)
 }
@@ -217,7 +217,7 @@ func (t *testProposer) shouldCampaignOnRedirect(
 }
 
 func (t *testProposer) campaignLocked(ctx context.Context) {
-	if err := t.raftGroup.Campaign(); err != nil {
+	if err := t.raftGroup.Campaign(ctx); err != nil {
 		panic(err)
 	}
 }

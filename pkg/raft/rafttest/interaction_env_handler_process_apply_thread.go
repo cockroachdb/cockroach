@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -81,13 +82,13 @@ func processApply(n *Node, ents []raftpb.Entry) error {
 				return err
 			}
 			update = cc.Context
-			cs = n.RawNode.ApplyConfChange(cc)
+			cs = n.RawNode.ApplyConfChange(context.Background(), cc)
 		case raftpb.EntryConfChangeV2:
 			var cc raftpb.ConfChangeV2
 			if err := cc.Unmarshal(ent.Data); err != nil {
 				return err
 			}
-			cs = n.RawNode.ApplyConfChange(cc)
+			cs = n.RawNode.ApplyConfChange(context.Background(), cc)
 			update = cc.Context
 		default:
 			update = ent.Data

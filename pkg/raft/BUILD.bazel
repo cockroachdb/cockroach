@@ -26,6 +26,7 @@ go_library(
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
         "//pkg/util/hlc",
+        "//pkg/util/log",
     ],
 )
 
@@ -58,6 +59,7 @@ go_test(
         "//pkg/raft/rafttest",
         "//pkg/raft/tracker",
         "//pkg/settings/cluster",
+        "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
