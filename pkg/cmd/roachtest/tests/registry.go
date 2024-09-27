@@ -157,6 +157,7 @@ func RegisterTests(r registry.Registry) {
 	registerTPCHVec(r)
 	registerTypeORM(r)
 	registerUnoptimizedQueryOracle(r)
+	registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 	registerMultiRegionMixedVersion(r)
