@@ -523,7 +523,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			firstProp, nextProp = i+1, i+1
 			admitHandles = admitHandles[len(admitHandles):]
 
-			confChangeCtx := kvserverrt.ConfChangeContext{
+			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   p.encodedCommand,
 			}
@@ -539,7 +539,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 
-			typ, data, err := raftpb.MarshalConfChange(cc)
+			typ, data, err := rafttype.MarshalConfChange(cc)
 			if err != nil {
 				firstErr = err
 				continue

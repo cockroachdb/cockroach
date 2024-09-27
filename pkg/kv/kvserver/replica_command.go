@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -3018,10 +3019,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 						// With a delegated snapshot, the recipient received the snapshot
 						// from another replica and will thus respond to it instead. But the
 						// message is valid for the actual originator of the send as well.
-						msg.To = rn.BasicStatus().ID
+						msg.To = raftpb.PeerID(rn.BasicStatus().ID)
 						// We do want to unquiesce here - we wouldn't ever want state transitions
 						// on a quiesced replica.
-						return true, rn.Step(*resp.MsgAppResp)
+						return true, rn.Step(rafttype.ConvertMessage(*resp.MsgAppResp))
 					})
 				}
 				return nil
@@ -3311,12 +3312,12 @@ func (r *Replica) followerSendSnapshot(
 			RangeID:     req.RangeID,
 			FromReplica: req.CoordinatorReplica,
 			ToReplica:   req.RecipientReplica,
-			Message: rafttype.Message{
-				Type:     rafttype.MsgSnap,
-				From:     rafttype.PeerID(req.CoordinatorReplica.ReplicaID),
-				To:       rafttype.PeerID(req.RecipientReplica.ReplicaID),
+			Message: raftpb.Message{
+				Type:     raftpb.MsgSnap,
+				From:     raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
+				To:       raftpb.PeerID(req.RecipientReplica.ReplicaID),
 				Term:     uint64(req.Term),
-				Snapshot: &snap.RaftSnap,
+				Snapshot: snap.RaftSnap.Convert(),
 			},
 		},
 		RangeSize:           rangeSize,
@@ -3365,7 +3366,7 @@ func (r *Replica) followerSendSnapshot(
 		}
 	}
 
-	var msgAppResp *rafttype.Message
+	var msgAppResp rafttype.Message
 	if err := timeutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			resp, err := r.store.cfg.Transport.SendSnapshot(
@@ -3381,13 +3382,13 @@ func (r *Replica) followerSendSnapshot(
 			if err != nil {
 				return err
 			}
-			msgAppResp = resp.MsgAppResp
+			msgAppResp = rafttype.ConvertMessage(*resp.MsgAppResp)
 			return nil
 		},
 	); err != nil {
 		return nil, err
 	}
-	return msgAppResp, nil
+	return &msgAppResp, nil
 }
 
 // replicasCollocated is used in AdminMerge to ensure that the ranges are

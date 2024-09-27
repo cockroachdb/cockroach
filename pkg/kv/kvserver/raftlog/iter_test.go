@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,7 +77,7 @@ func ents(inds ...uint64) []rafttype.Entry {
 			if err != nil {
 				panic(err)
 			}
-			var cc rafttype.ConfChange
+			var cc raftpb.ConfChange
 			cc.Context = ccContext
 			data, err = protoutil.Marshal(&cc)
 			if err != nil {

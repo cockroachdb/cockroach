@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -504,14 +505,22 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 
 		logEvery = log.Every(10 * time.Second)
 		i = 0
-		var hs rafttype.HardState
+		var pbHs raftpb.HardState
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftHardStateKey(rangeID)
-		}, &hs, func(rangeID roachpb.RangeID) error {
+		}, &pbHs, func(rangeID roachpb.RangeID) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
 				log.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
 			}
 			i++
+			hs := rafttype.HardState{
+				Term:      pbHs.Term,
+				Vote:      rafttype.PeerID(pbHs.Vote),
+				Commit:    pbHs.Commit,
+				Lead:      rafttype.PeerID(pbHs.Lead),
+				LeadEpoch: rafttype.Epoch(pbHs.LeadEpoch),
+			}
+
 			s.setHardState(rangeID, hs)
 			return nil
 		}); err != nil {

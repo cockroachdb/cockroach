@@ -167,6 +167,7 @@ go_library(
         "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

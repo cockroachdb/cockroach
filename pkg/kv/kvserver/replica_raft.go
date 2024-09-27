@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -634,11 +635,11 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
 		switch req.Message.Type {
-		case rafttype.MsgPreVote, rafttype.MsgVote:
+		case raftpb.MsgPreVote, raftpb.MsgVote:
 			// If we receive a (pre)vote request, and we find our leader to be dead or
 			// removed, forget it so we can grant the (pre)votes.
 			r.maybeForgetLeaderOnVoteRequestLocked()
-		case rafttype.MsgSnap:
+		case raftpb.MsgSnap:
 			// Occasionally a snapshot message may arrive under an outdated term,
 			// which would lead to Raft discarding the snapshot. This should be
 			// really rare in practice, but it does happen in tests and in particular
@@ -652,7 +653,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
 				req.Message.Term = term
 			}
-		case rafttype.MsgApp:
+		case raftpb.MsgApp:
 			if n := len(req.Message.Entries); n > 0 {
 				sideChannelInfo = replica_rac2.SideChannelInfoUsingRaftMessageRequest{
 					UsingV2Protocol: req.UsingRac2Protocol,
@@ -662,7 +663,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 					LowPriOverride:  req.LowPriorityOverride,
 				}
 			}
-		case rafttype.MsgAppResp:
+		case raftpb.MsgAppResp:
 			// If there is an admitted vector annotation, pass it to RACv2 to release
 			// the flow control tokens.
 			if term := req.AdmittedState.Term; term != 0 {
@@ -671,7 +672,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 				r.flowControlV2.AdmitRaftMuLocked(context.TODO(), req.FromReplica.ReplicaID, av)
 			}
 		}
-		err := raftGroup.Step(req.Message)
+		err := raftGroup.Step(rafttype.ConvertMessage(req.Message))
 		if errors.Is(err, raft.ErrProposalDropped) {
 			// A proposal was forwarded to this replica but we couldn't propose it.
 			// Swallow the error since we don't have an effective way of signaling
@@ -1885,7 +1886,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 		})
 	}
 
-	for i, m := range localMsgs {
+	for _, m := range localMsgs {
 		if err := raftGroup.Step(m); err != nil {
 			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
 				raft.DescribeMessage(m, raftEntryFormatter), err)
@@ -1894,7 +1895,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 		// the localMsgs mutex because no-one ever writes to localMsgs.recycled and
 		// we are holding raftMu, which must be held to switch localMsgs.active and
 		// localMsgs.recycled.
-		localMsgs[i].Reset() // for GC
+		// FIXME		localMsgs[i].Reset() // for GC
 	}
 }
 
@@ -1954,7 +1955,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg rafttype.Message) {
 		RangeID:           r.RangeID,
 		ToReplica:         toReplica,
 		FromReplica:       fromReplica,
-		Message:           msg,
+		Message:           msg.Convert(),
 		RangeStartKey:     startKey, // usually nil
 		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
 	}

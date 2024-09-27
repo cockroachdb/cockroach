@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -129,27 +130,41 @@ func (sl StateLoader) SetRaftTruncatedState(
 func (sl StateLoader) LoadHardState(
 	ctx context.Context, reader storage.Reader,
 ) (rafttype.HardState, error) {
-	var hs rafttype.HardState
+	var hs raftpb.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
 		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
 
 	if !found || err != nil {
 		return rafttype.HardState{}, err
 	}
-	return hs, nil
+	return rafttype.HardState{
+		Term:      hs.Term,
+		Vote:      rafttype.PeerID(hs.Vote),
+		Commit:    hs.Commit,
+		Lead:      rafttype.PeerID(hs.Lead),
+		LeadEpoch: rafttype.Epoch(hs.LeadEpoch),
+	}, nil
 }
 
 // SetHardState overwrites the HardState.
 func (sl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs rafttype.HardState,
 ) error {
+	pbHs := raftpb.HardState{
+		Term:      hs.Term,
+		Vote:      raftpb.PeerID(hs.Vote),
+		Commit:    hs.Commit,
+		Lead:      raftpb.PeerID(hs.Lead),
+		LeadEpoch: raftpb.Epoch(hs.LeadEpoch),
+	}
+
 	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
 		sl.RaftHardStateKey(),
 		hlc.Timestamp{}, /* timestamp */
-		&hs,
+		&pbHs,
 		storage.MVCCWriteOptions{}, /* opts */
 	)
 }

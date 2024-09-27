@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -459,7 +460,12 @@ func logAppend(
 
 	opts := storage.MVCCWriteOptions{Stats: diff, Category: fs.ReplicationReadCategory}
 	for i := range entries {
-		ent := &entries[i]
+		ent := &raftpb.Entry{
+			Term:  entries[i].Term,
+			Index: entries[i].Index,
+			Type:  raftpb.EntryType(entries[i].Type),
+			Data:  entries[i].Data,
+		}
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
 
 		if err := value.SetProto(ent); err != nil {

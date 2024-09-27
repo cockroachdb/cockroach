@@ -20,17 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.
-const maxRaftMsgType = rafttype.MsgFortifyLeaderResp
+const maxRaftMsgType = raftpb.MsgFortifyLeaderResp
 
 func init() {
-	for v := range rafttype.MessageType_name {
-		typ := rafttype.MessageType(v)
+	for v := range raftpb.MessageType_name {
+		typ := raftpb.MessageType(v)
 		if typ > maxRaftMsgType {
 			panic(fmt.Sprintf("raft.MessageType (%s) with value larger than maxRaftMsgType", typ))
 		}

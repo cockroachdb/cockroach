@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/rafttype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -191,10 +192,11 @@ func (s *Store) HandleDelegatedSnapshot(
 		}
 	}
 
+	pbMsg := msgAppResp.Convert()
 	return &kvserverpb.DelegateSnapshotResponse{
 		Status:         kvserverpb.DelegateSnapshotResponse_APPLIED,
 		CollectedSpans: sp.GetConfiguredRecording(),
-		MsgAppResp:     msgAppResp,
+		MsgAppResp:     &pbMsg,
 	}
 }
 
@@ -258,7 +260,7 @@ func (s *Store) uncoalesceBeats(
 				StoreID:   toReplica.StoreID,
 				ReplicaID: beat.ToReplicaID,
 			},
-			Message:                   msg,
+			Message:                   msg.Convert(),
 			Quiesce:                   beat.Quiesce,
 			LaggingFollowersOnQuiesce: beat.LaggingFollowersOnQuiesce,
 		}
@@ -376,22 +378,23 @@ func (s *Store) processRaftRequestWithReplica(
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer r.MeasureRaftCPUNanos(grunning.Time())
+	msg := rafttype.ConvertMessage(req.Message)
 
 	if verboseRaftLoggingEnabled() {
-		log.Infof(ctx, "incoming raft message:\n%s", raft.DescribeMessage(req.Message, raftEntryFormatter))
+		log.Infof(ctx, "incoming raft message:\n%s", raft.DescribeMessage(msg, raftEntryFormatter))
 	}
 
-	if req.Message.Type == rafttype.MsgSnap {
+	if msg.Type == rafttype.MsgSnap {
 		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
 
 	if req.Quiesce {
-		if req.Message.Type != rafttype.MsgHeartbeat {
+		if msg.Type != rafttype.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
 		if r.maybeQuiesceOnNotify(
 			ctx,
-			req.Message,
+			msg,
 			laggingReplicaSet(req.LaggingFollowersOnQuiesce),
 		) {
 			return nil
@@ -407,7 +410,7 @@ func (s *Store) processRaftRequestWithReplica(
 		)
 	}
 
-	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
+	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &msg, req.RangeStartKey)
 	if !drop {
 		if err := r.stepRaftGroupRaftMuLocked(req); err != nil {
 			return kvpb.NewError(err)
@@ -432,7 +435,7 @@ func (s *Store) processRaftSnapshotRequest(
 		ctx context.Context, r *Replica,
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
-		if snapHeader.RaftMessageRequest.Message.Type != rafttype.MsgSnap {
+		if rafttype.MessageType(snapHeader.RaftMessageRequest.Message.Type) != rafttype.MsgSnap {
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
@@ -919,8 +922,8 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 			NodeID:  s.Ident.NodeID,
 			StoreID: s.Ident.StoreID,
 		},
-		Message: rafttype.Message{
-			Type: msgType,
+		Message: raftpb.Message{
+			Type: raftpb.MessageType(msgType),
 		},
 		Heartbeats:     beats,
 		HeartbeatResps: resps,
