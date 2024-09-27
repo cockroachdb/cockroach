@@ -1354,7 +1354,11 @@ func (e *BatchTimestampBeforeGCError) Error() string {
 }
 
 func (e *BatchTimestampBeforeGCError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("batch timestamp %v must be after replica GC threshold %v", e.Timestamp, e.Threshold)
+	p.Printf(
+		"batch timestamp %v must be after replica GC threshold %v (r%d: %s)",
+		e.Timestamp, e.Threshold, e.RangeID,
+		roachpb.RSpan{Key: []byte(e.StartKey), EndKey: []byte(e.EndKey)},
+	)
 	return nil
 }
 
