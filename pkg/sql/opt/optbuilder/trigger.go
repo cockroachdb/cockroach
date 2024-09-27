@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -243,6 +244,10 @@ func (mb *mutationBuilder) buildTriggerFunction(
 		},
 	)
 
+	// If there is a WHEN condition, wrap the trigger function invocation in a
+	// CASE WHEN statement that checks the WHEN condition.
+	triggerFn = mb.buildTriggerWhen(trigger, triggerScope, eventType, oldColID, newColID, triggerFn)
+
 	// For UPSERT and INSERT ON CONFLICT, UPDATE triggers should only fire for the
 	// conflicting rows, which are identified by the canary column.
 	if mb.canaryColID != 0 && eventType == tree.TriggerEventUpdate {
@@ -267,6 +272,50 @@ func (mb *mutationBuilder) buildTriggerFunction(
 		passThroughCols,
 	)
 	return triggerFnCol.id
+}
+
+// buildTriggerWhen wraps the trigger function invocation in a CASE WHEN
+// statement that checks the WHEN condition, if one exists.
+func (mb *mutationBuilder) buildTriggerWhen(
+	trigger cat.Trigger,
+	triggerScope *scope,
+	eventType tree.TriggerEventType,
+	oldColID, newColID opt.ColumnID,
+	triggerFn opt.ScalarExpr,
+) opt.ScalarExpr {
+	f := mb.b.factory
+	if trigger.WhenExpr() == "" {
+		return triggerFn
+	}
+	// Wrap the trigger function invocation in a CASE WHEN statement that
+	// checks the WHEN condition.
+	parsedWhen, err := parser.ParseExpr(trigger.WhenExpr())
+	if err != nil {
+		panic(err)
+	}
+	// The WHEN condition may reference OlD and NEW columns only.
+	whenScope := triggerScope.push()
+	if oldColID != 0 {
+		whenScope.appendColumn(triggerScope.getColumn(oldColID))
+		whenScope.getColumn(oldColID).name = scopeColName(triggerColOld)
+	}
+	if newColID != 0 {
+		whenScope.appendColumn(triggerScope.getColumn(newColID))
+		whenScope.getColumn(newColID).name = scopeColName(triggerColNew)
+	}
+	typedWhen := whenScope.resolveAndRequireType(parsedWhen, types.Bool)
+	whenExpr := mb.b.buildScalar(
+		typedWhen, whenScope, nil /* outScope */, nil /* outCol */, nil, /* colRefs */
+	)
+	elseColID := newColID
+	if eventType == tree.TriggerEventDelete {
+		elseColID = oldColID
+	}
+	return f.ConstructCase(
+		memo.TrueSingleton,
+		memo.ScalarListExpr{f.ConstructWhen(whenExpr, triggerFn)},
+		f.ConstructVariable(elseColID),
+	)
 }
 
 // buildTriggerFunctionArgs builds the set of arguments that should be passed to
