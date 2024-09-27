@@ -570,7 +570,7 @@ func (s *deprecatedWebhookSink) sendMessageWithRetries(ctx context.Context, reqB
 func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) (retErr error) {
 	defer func() {
 		if retErr != nil {
-			s.metrics.recordSinkError("webhook", retErr)
+			s.metrics.recordSinkError(ctx, sinkTypeWebhook, retErr)
 		}
 	}()
 
@@ -654,7 +654,6 @@ func (s *deprecatedWebhookSink) EmitRow(
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-s.errChan:
-		s.metrics.recordSinkError("webhook", err)
 		return err
 	case s.batchChan <- webhookMessage{
 		payload: deprecatedMessagePayload{

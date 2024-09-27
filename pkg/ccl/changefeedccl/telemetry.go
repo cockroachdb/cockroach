@@ -229,6 +229,10 @@ func (r *telemetryMetricsRecorder) netMetrics() *cidr.NetMetrics {
 	return r.inner.netMetrics()
 }
 
+func (r *telemetryMetricsRecorder) recordSinkError(ctx context.Context, st sinkType, err error) {
+	r.inner.recordSinkError(ctx, st, err)
+}
+
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
 // during the lifespan of each enterprise changefeed.
 var continuousTelemetryInterval = settings.RegisterDurationSetting(

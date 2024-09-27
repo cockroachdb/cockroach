@@ -563,7 +563,7 @@ func (s *kafkaSink) workerLoop() {
 		case m := <-s.producer.Successes():
 			ackMsg = m
 		case err := <-s.producer.Errors():
-			s.metrics.recordSinkError("kafka", err)
+			s.metrics.recordSinkError(s.ctx, sinkTypeKafka, err)
 			ackMsg, ackError = err.Msg, err.Err
 			if ackError != nil {
 				// Msg should never be nil but we're being defensive around a vendor library.

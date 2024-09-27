@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -382,11 +383,15 @@ func (m *sliMetrics) netMetrics() *cidr.NetMetrics {
 	return m.NetMetrics
 }
 
+// recordSinkError records an error for the given sink type. It should be called
+// as close to the source of the error as possible so that it captures transient
+// errors including internal retries.
 func (m *sliMetrics) recordSinkError(ctx context.Context, st sinkType, err error) {
-	// TODO: either we put calls in the change aggregator encode and emit, or we put it inside the sinks as close to the errors as possible
-	// i think the latter is better because it captures more transient errors.
-
-	// TODO: log more detailed info to event log or another channel or smth
+	// Always ignore context canceled errors. They usually indicate shutdown due
+	// to other errors that (hopefully) we already recorded.
+	if errors.Is(err, context.Canceled) {
+		return
+	}
 
 	// TODO: handle this differently
 	if _, ok := m.SinkErrors[st]; !ok {
@@ -394,9 +399,7 @@ func (m *sliMetrics) recordSinkError(ctx context.Context, st sinkType, err error
 	}
 
 	m.SinkErrors[st].Inc(1)
-	// log.Eventf .. or something
-
-	panic("todo")
+	// TODO(TREQ-49): log this error to the changefeed event log, once such a thing exists.
 }
 
 // JobScopedUsageMetrics are aggregated metrics keeping track of
@@ -719,7 +722,7 @@ func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
 }
 
 func (w *wrappingCostController) recordSinkError(ctx context.Context, st sinkType, err error) {
-	w.inner.recordSinkError(sinkType, err)
+	w.inner.recordSinkError(ctx, st, err)
 }
 
 var (

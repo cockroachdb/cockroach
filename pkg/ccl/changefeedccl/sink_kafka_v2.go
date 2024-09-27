@@ -50,9 +50,10 @@ type kafkaSinkClientV2 struct {
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
 
-	knobs          kafkaSinkV2Knobs
-	canTryResizing bool
-	recordResize   func(numRecords int64)
+	knobs           kafkaSinkV2Knobs
+	canTryResizing  bool
+	recordResize    func(numRecords int64)
+	recordSinkError func(context.Context, error)
 
 	topicsForConnectionCheck []string
 
@@ -103,11 +104,11 @@ func newKafkaSinkClientV2(
 	}
 
 	recordResize := func(numRecords int64) {}
+	recordSinkError := func(ctx context.Context, err error) {}
 	if m := mb(requiresResourceAccounting); m != nil { // `m` can be nil in tests.
 		baseOpts = append(baseOpts, kgo.WithHooks(&kgoMetricsAdapter{throttling: m.getKafkaThrottlingMetrics(settings)}))
-		recordResize = func(numRecords int64) {
-			m.recordInternalRetry(numRecords, true)
-		}
+		recordResize = func(numRecords int64) { m.recordInternalRetry(numRecords, true) }
+		recordSinkError = func(ctx context.Context, err error) { m.recordSinkError(ctx, sinkTypeKafka, err) }
 	}
 
 	clientOpts = append(baseOpts, clientOpts...)
@@ -133,6 +134,7 @@ func newKafkaSinkClientV2(
 		batchCfg:                 batchCfg,
 		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
 		recordResize:             recordResize,
+		recordSinkError:          recordSinkError,
 		topicsForConnectionCheck: topicsForConnectionCheck,
 	}
 	c.metadataMu.allTopicPartitions = make(map[string][]int32)
@@ -146,7 +148,8 @@ func (k *kafkaSinkClientV2) Close() error {
 	return nil
 }
 
-// Flush implements SinkClient. Does not retry -- retries will be handled either by kafka or ParallelIO.
+// Flush implements SinkClient. Does not retry -- retries will be handled either
+// by kafka or ParallelIO -- except for resizing when enabled.
 func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
 	msgs := payload.([]*kgo.Record)
 
@@ -173,6 +176,11 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				}
 				return nil
 			} else {
+				// Unfortunately it's not possible to capture kgo's internal
+				// retries. I've filed an issue with them
+				// [here](https://github.com/twmb/franz-go/issues/830).
+				//
+				k.recordSinkError(ctx, err)
 				return err
 			}
 		}
