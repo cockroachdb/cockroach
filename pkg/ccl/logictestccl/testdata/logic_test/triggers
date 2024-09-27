@@ -1832,6 +1832,82 @@ statement ok
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
+# Test row-level BEFORE triggers with a WHERE clause.
+# ==============================================================================
+
+subtest before_row_where
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW WHEN ((NEW).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# inserted.
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  2
+3  3
+4  4
+
+statement ok
+CREATE TRIGGER foo2 BEFORE UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# updated.
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  11
+2  12
+3  13
+4  14
+
+# The trigger should not fire for the odd values, but they should still be
+# deleted.
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
 # Test order of execution.
 # ==============================================================================
 
