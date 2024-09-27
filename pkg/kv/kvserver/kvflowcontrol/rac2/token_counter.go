@@ -228,19 +228,19 @@ func newTokenCounter(
 }
 
 // String returns a string representation of the token counter.
-func (b *tokenCounter) String() string {
-	return redact.StringWithoutMarkers(b)
+func (t *tokenCounter) String() string {
+	return redact.StringWithoutMarkers(t)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+func (t *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	w.Printf("reg=%v/%v ela=%v/%v",
-		b.mu.counters[admissionpb.RegularWorkClass].tokens,
-		b.mu.counters[admissionpb.RegularWorkClass].limit,
-		b.mu.counters[admissionpb.ElasticWorkClass].tokens,
-		b.mu.counters[admissionpb.ElasticWorkClass].limit)
+		t.mu.counters[admissionpb.RegularWorkClass].tokens,
+		t.mu.counters[admissionpb.RegularWorkClass].limit,
+		t.mu.counters[admissionpb.ElasticWorkClass].tokens,
+		t.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
 func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
@@ -258,8 +258,14 @@ func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	return t.tokensLocked(wc)
 }
 
-func (b *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	return b.mu.counters[wc].tokens
+func (t *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	return t.mu.counters[wc].tokens
+}
+
+func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.counters[wc].limit
 }
 
 // TokensAvailable returns true if tokens are available. If false, it returns
