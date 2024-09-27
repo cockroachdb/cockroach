@@ -760,7 +760,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// referenced again, to prevent column-pruning rules from dropping the
 			// side effects of executing the SELECT ... INTO statement.
 			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
-				b.addBarrier(stmtScope)
+				b.ob.addBarrier(stmtScope)
 			}
 
 			if strict {
@@ -912,7 +912,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Add a barrier in case the projected variables are never referenced
 			// again, to prevent column-pruning rules from removing the FETCH.
-			b.addBarrier(intoScope)
+			b.ob.addBarrier(intoScope)
 
 			// Call a continuation for the remaining PLpgSQL statements from the newly
 			// built statement that has updated variables.
@@ -1606,7 +1606,7 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	// Add an optimization barrier to ensure that the row-count checks are not
 	// eliminated by column-pruning. Then, remove the temporary columns from the
 	// output.
-	b.addBarrier(s)
+	b.ob.addBarrier(s)
 	s.expr = b.ob.factory.ConstructProject(s.expr, memo.ProjectionsExpr{}, originalCols)
 }
 
@@ -1819,7 +1819,7 @@ func (b *plpgsqlBuilder) callContinuationWithTxnOp(
 	if txnOp == tree.StoredProcTxnNoOp {
 		panic(errors.AssertionFailedf("no-op transaction control statement"))
 	}
-	b.addBarrier(s)
+	b.ob.addBarrier(s)
 	returnScope := s.push()
 	args := b.makeContinuationArgs(con, s)
 	txnPrivate := &memo.TxnControlPrivate{TxnOp: txnOp, TxnModes: txnModes, Def: con.def}
@@ -1882,14 +1882,8 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 	var p props.Shared
 	memo.BuildSharedProps(expr, &p, b.ob.evalCtx)
 	if p.VolatilitySet.HasVolatile() {
-		b.addBarrier(s)
+		b.ob.addBarrier(s)
 	}
-}
-
-// addBarrier adds an optimization barrier to the given scope, in order to
-// prevent side effects from being duplicated, eliminated, or reordered.
-func (b *plpgsqlBuilder) addBarrier(s *scope) {
-	s.expr = b.ob.factory.ConstructBarrier(s.expr)
 }
 
 // buildSQLExpr type-checks and builds the given SQL expression into a
