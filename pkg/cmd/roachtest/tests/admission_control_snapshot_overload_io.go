@@ -67,6 +67,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		// sstables should ingest into L6.
 		limitCompactionConcurrency: true,
 		limitDiskBandwidth:         false,
+		readPercent:                75,
+		workloadBlockBytes:         12288,
 	}))
 
 	// This tests the behaviour of snpashot ingestion in bandwidth constrained
@@ -76,6 +78,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		volumeSize:                 1000,
 		limitCompactionConcurrency: false,
 		limitDiskBandwidth:         true,
+		readPercent:                20,
+		workloadBlockBytes:         1024,
 	}))
 
 }
@@ -84,6 +88,8 @@ type admissionControlSnapshotOverloadIOOpts struct {
 	volumeSize                 int
 	limitCompactionConcurrency bool
 	limitDiskBandwidth         bool
+	readPercent                int
+	workloadBlockBytes         int
 }
 
 func runAdmissionControlSnapshotOverloadIO(
@@ -138,18 +144,6 @@ func runAdmissionControlSnapshotOverloadIO(
 		}
 	}
 
-	if cfg.limitDiskBandwidth {
-		const bandwidthLimit = 128
-		dataDir := "/mnt/data1"
-		if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", bandwidthLimit<<20 /* 128MiB */, false, dataDir); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(
-			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
-			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
-		}
-	}
-
 	// Setup the prometheus instance and client.
 	t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
 	var statCollector clusterstats.StatCollector
@@ -176,15 +170,38 @@ func runAdmissionControlSnapshotOverloadIO(
 		"./cockroach workload init kv --drop --insert-count=40000000 "+
 			"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1-3}")
 
+	// Now set disk bandwidth limits
+	if cfg.limitDiskBandwidth {
+		const bandwidthLimit = 128
+		dataDir := "/mnt/data1"
+		if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", bandwidthLimit<<20 /* 128MiB */, false, dataDir); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
+		}
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING kvadmission.store.snapshot_ingest_bandwidth_control.enabled = 'true'"); err != nil {
+			t.Fatalf("failed to set kvadmission.store.snapshot_ingest_bandwidth_control.enabled: %v", err)
+		}
+	}
+
 	t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 			fmt.Sprintf("./cockroach workload run kv --tolerate-errors "+
-				"--splits=1000 --histograms=%s/stats.json --read-percent=75 "+
-				"--max-rate=600 --max-block-bytes=12288 --min-block-bytes=12288 "+
+				"--splits=1000 --histograms=%s/stats.json --read-percent=%d "+
+				"--max-rate=600 --max-block-bytes=%d --min-block-bytes=%d "+
 				"--concurrency=4000 --duration=%s {pgurl:1-2}",
-				t.PerfArtifactsDir(), (6*time.Hour).String()))
+				t.PerfArtifactsDir(),
+				cfg.readPercent,
+				cfg.workloadBlockBytes,
+				cfg.workloadBlockBytes,
+				(6*time.Hour).String(),
+			),
+		)
 		return nil
 	})
 
