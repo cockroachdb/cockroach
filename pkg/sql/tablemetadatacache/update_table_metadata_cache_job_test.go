@@ -45,9 +45,34 @@ func TestUpdateTableMetadataCacheJobRunsOnRPCTrigger(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.Background())
 
+	defer tc.Stopper().Stop(context.Background())
+	metrics := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	testJobComplete := func(runNum int64) {
+		testutils.SucceedsSoon(t, func() error {
+			if metrics.NumRuns.Count() != runNum {
+				return errors.New("job hasn't run yet")
+			}
+			row := conn.Query(t,
+				`SELECT running_status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
+				jobs.UpdateTableMetadataCacheJobID)
+			if !row.Next() {
+				return errors.New("last_run_time not updated")
+			}
+			var runningStatus string
+			var fractionCompleted float32
+			require.NoError(t, row.Scan(&runningStatus, &fractionCompleted))
+			if !strings.Contains(runningStatus, "Job completed at") {
+				return errors.New("running_status not updated")
+			}
+			if fractionCompleted != 1.0 {
+				return errors.New("fraction_completed not updated")
+			}
+			return nil
+		})
+	}
 
 	// Get the node id that claimed the update job. We'll issue the
 	// RPC to a node that doesn't own the job to test that the RPC can
@@ -60,41 +85,39 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		if !row.Next() {
 			return errors.New("no node has claimed the job")
 		}
-		require.NoError(t, row.Scan(&nodeID))
-
-		rpcGatewayNode := (nodeID + 1) % 3
-		_, err := tc.Server(rpcGatewayNode).GetStatusClient(t).UpdateTableMetadataCache(ctx,
-			&serverpb.UpdateTableMetadataCacheRequest{Local: false})
-		if err != nil {
+		if err := row.Scan(&nodeID); err != nil {
 			return err
 		}
-		// The job shouldn't be busy.
 		return nil
 	})
 
-	metrics := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().
-		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
-	testutils.SucceedsSoon(t, func() error {
-		if metrics.NumRuns.Count() != 1 {
-			return errors.New("job hasn't run yet")
-		}
-		row := conn.Query(t,
-			`SELECT running_status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
-			jobs.UpdateTableMetadataCacheJobID)
-		if !row.Next() {
-			return errors.New("last_run_time not updated")
-		}
-		var runningStatus string
-		var fractionCompleted float32
-		require.NoError(t, row.Scan(&runningStatus, &fractionCompleted))
-		if !strings.Contains(runningStatus, "Job completed at") {
-			return errors.New("running_status not updated")
-		}
-		if fractionCompleted != 1.0 {
-			return errors.New("fraction_completed not updated")
-		}
-		return nil
-	})
+	rpcGatewayNode := (nodeID + 1) % 3
+	_, err := tc.Server(rpcGatewayNode).GetStatusClient(t).UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	require.NoError(t, err)
+	testJobComplete(1)
+	count := metrics.UpdatedTables.Count()
+	meanDuration := metrics.Duration.CumulativeSnapshot().Mean()
+	require.Greater(t, count, int64(0))
+	require.Greater(t, meanDuration, float64(0))
+
+	_, err = tc.Server(rpcGatewayNode).GetStatusClient(t).UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	require.NoError(t, err)
+	testJobComplete(2)
+	require.Greater(t, metrics.UpdatedTables.Count(), count)
+	require.NotEqual(t, metrics.Duration.CumulativeSnapshot().Mean(), meanDuration)
+	meanDuration = metrics.Duration.CumulativeSnapshot().Mean()
+	count = metrics.UpdatedTables.Count()
+
+	defer testutils.TestingHook(&upsertQuery, "UPSERT INTO error")()
+	_, err = tc.Server(rpcGatewayNode).GetStatusClient(t).UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	require.NoError(t, err)
+	testJobComplete(3)
+	require.Equal(t, count, metrics.UpdatedTables.Count())
+	require.NotEqual(t, metrics.Duration.CumulativeSnapshot().Mean(), meanDuration)
+
 }
 
 func TestUpdateTableMetadataCacheProgressUpdate(t *testing.T) {
@@ -172,7 +195,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	mockMutex := syncutil.RWMutex{}
 	jobRunCh := make(chan struct{})
 	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
-		func(ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer) error {
+		func(ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer) (int, error) {
 			mockMutex.Lock()
 			defer mockMutex.Unlock()
 			mockCalls = append(mockCalls, timeutil.Now())
@@ -180,7 +203,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 			case jobRunCh <- struct{}{}:
 			default:
 			}
-			return nil
+			return 1, nil
 		})
 	defer restoreUpdate()
 

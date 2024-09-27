@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,21 +36,25 @@ const (
 
 // updateJobExecFn specifies the function that is run on each iteration of the
 // table metadata update job. It can be overriden in tests.
-var updateJobExecFn func(context.Context, isql.Executor, *tableMetadataUpdateJobResumer) error = updateTableMetadataCache
+var updateJobExecFn func(context.Context, isql.Executor, *tableMetadataUpdateJobResumer) (int, error) = updateTableMetadataCache
 
 type tableMetadataUpdateJobResumer struct {
-	job *jobs.Job
+	job     *jobs.Job
+	metrics *TableMetadataUpdateJobMetrics
 }
 
 var _ jobs.Resumer = (*tableMetadataUpdateJobResumer)(nil)
 
 // Resume is part of the jobs.Resumer interface.
 func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI interface{}) error {
+	// This job is a forever running background job, and it is always safe to
+	// terminate the SQL pod whenever the job is running, so mark it as idle.
 	j.job.MarkIdle(true)
 
 	execCtx := execCtxI.(sql.JobExecContext)
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
+	j.metrics = &metrics
 	var onJobStartKnob, onJobCompleteKnob, onJobReady func()
 	if execCtx.ExecCfg().TableMetadataKnobs != nil {
 		onJobStartKnob = execCtx.ExecCfg().TableMetadataKnobs.OnJobStart
@@ -111,15 +116,22 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			onJobStartKnob()
 		}
 		// Run table metadata update job.
-		metrics.NumRuns.Inc(1)
+		j.metrics.NumRuns.Inc(1)
+		sw := timeutil.NewStopWatch()
+		sw.Start()
 		j.markAsRunning(ctx)
-		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor(), j); err != nil {
+		rowsUpdated, err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor(), j)
+		if err != nil {
 			log.Errorf(ctx, "error running table metadata update job: %s", err)
+			j.metrics.Errors.Inc(1)
 		}
 		j.markAsCompleted(ctx)
 		if onJobCompleteKnob != nil {
 			onJobCompleteKnob()
 		}
+		sw.Stop()
+		j.metrics.Duration.RecordValue(sw.Elapsed().Nanoseconds())
+		j.metrics.UpdatedTables.Inc(int64(rowsUpdated))
 	}
 }
 
@@ -173,17 +185,18 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 // metadata from the system.namespace, system.descriptor tables and table span stats RPC.
 func updateTableMetadataCache(
 	ctx context.Context, ie isql.Executor, resumer *tableMetadataUpdateJobResumer,
-) error {
+) (int, error) {
 	updater := newTableMetadataUpdater(ie)
 	if _, err := updater.pruneCache(ctx); err != nil {
 		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
 	}
 
 	resumer.updateProgress(ctx, .01)
-	// We'll use the updated ret val in a follow-up to update metrics and
-	// fractional job progress.
-	_, err := updater.updateCache(ctx, resumer.onBatchUpdate())
-	return err
+	return updater.updateCache(ctx, resumer.onBatchUpdate(), func(ctx context.Context, e error) {
+		if resumer.metrics != nil {
+			resumer.metrics.Errors.Inc(1)
+		}
+	})
 }
 
 // onBatchUpdate returns an onBatchUpdateCallback func that updates the progress of the job.
@@ -226,7 +239,10 @@ func (j *tableMetadataUpdateJobResumer) CollectProfile(
 }
 
 type TableMetadataUpdateJobMetrics struct {
-	NumRuns *metric.Counter
+	NumRuns       *metric.Counter
+	UpdatedTables *metric.Counter
+	Errors        *metric.Counter
+	Duration      metric.IHistogram
 }
 
 func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
@@ -239,6 +255,30 @@ func newTableMetadataUpdateJobMetrics() metric.Struct {
 			Measurement: "Executions",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		UpdatedTables: metric.NewCounter(metric.Metadata{
+			Name:        "obs.tablemetadata.update_job.table_updates",
+			Help:        "The total number of rows that have been updated in system.table_metadata",
+			Measurement: "Rows Updated",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		Errors: metric.NewCounter(metric.Metadata{
+			Name:        "obs.tablemetadata.update_job.errors",
+			Help:        "The total number of errors that have been emitted from the update table metadata job.",
+			Measurement: "Errors",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+		Duration: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:        "obs.tablemetadata.update_job.duration",
+				Help:        "Time spent running the update table metadata job.",
+				Measurement: "Duration",
+				Unit:        metric.Unit_NANOSECONDS},
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 }

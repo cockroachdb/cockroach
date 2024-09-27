@@ -43,7 +43,7 @@ func newTableMetadataUpdater(ie isql.Executor) *tableMetadataUpdater {
 // updateCache performs a full update of the system.table_metadata, returning
 // the number of rows updated and the last error encountered.
 func (u *tableMetadataUpdater) updateCache(
-	ctx context.Context, onUpdate onBatchUpdateCallback,
+	ctx context.Context, onUpdate onBatchUpdateCallback, onErr func(ctx context.Context, e error),
 ) (updated int, err error) {
 	it := newTableMetadataBatchIterator(u.ie)
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
@@ -57,6 +57,9 @@ func (u *tableMetadataUpdater) updateCache(
 			// https://github.com/cockroachdb/cockroach/issues/130040. For now,
 			// we can't continue because the page key is in an invalid state.
 			log.Errorf(ctx, "failed to fetch next batch: %s", err.Error())
+			if onErr != nil {
+				onErr(ctx, err)
+			}
 			return updated, err
 		}
 
@@ -69,6 +72,9 @@ func (u *tableMetadataUpdater) updateCache(
 		if err != nil {
 			// If an upsert fails, let's just continue to the next batch for now.
 			log.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
+			if onErr != nil {
+				onErr(ctx, err)
+			}
 			continue
 		}
 
@@ -180,7 +186,11 @@ func newTableMetadataBatchUpsertQuery(batchLen int) *tableMetadataBatchUpsertQue
 // another batch.
 func (q *tableMetadataBatchUpsertQuery) resetForBatch() {
 	q.stmt.Reset()
-	q.stmt.WriteString(`
+	q.stmt.WriteString(upsertQuery)
+	q.args = q.args[:0]
+}
+
+var upsertQuery = `
 UPSERT INTO system.table_metadata (
 	db_id,
 	table_id,
@@ -198,9 +208,7 @@ UPSERT INTO system.table_metadata (
 	perc_live_data,
   last_updated
 ) VALUES
-`)
-	q.args = q.args[:0]
-}
+`
 
 // addRow adds a tableMetadataIterRow to the batch upsert query.
 func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error {

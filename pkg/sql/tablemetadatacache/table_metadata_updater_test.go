@@ -55,7 +55,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				return res
 			case "update-cache":
 				updater := newTableMetadataUpdater(s.InternalExecutor().(isql.Executor))
-				updated, err := updater.updateCache(ctx, nil)
+				updated, err := updater.updateCache(ctx, nil, nil)
 				if err != nil {
 					return err.Error()
 				}
