@@ -18,7 +18,7 @@ upload-logs
 ----
 ABC/123/dt=20240716/hour=17:
 Upload ID: 123
-debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs --log-format=crdb-v1
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs
 {"data":{"type":"archives","attributes":{"name":"123","query":"-*","destination":{"type":"gcs","path":"ABC/123","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
 {"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:123"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/env_sampler.go","line":125,"counter":33,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"WARNING"}}
 {"timestamp":1721152304,"date":"2024-07-16T17:51:44Z","message":"initialized store s1","tags":["cluster:ABC","env:debug","node_id:1","service:CRDB-SH","source:cockroachdb","upload_id:123"],"_id":"a1b2c3","attributes":{"goroutine":100,"file":"server/node.go","line":533,"counter":24,"tenant_id":"1","date":"2024-07-16T17:51:44Z","timestamp":1721152304,"channel":"DEV","severity":"INFO"}}
@@ -48,7 +48,7 @@ debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --clus
 
 
 # multi-node
-upload-logs
+upload-logs log-format=crdb-v1
 {
   "nodes": {
     "1": {

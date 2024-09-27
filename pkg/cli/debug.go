@@ -1589,8 +1589,12 @@ func init() {
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
 	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
-	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "",
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1",
 		"log format of the input files")
+	// the log-format flag is depricated. It will
+	// eventually be removed completely. keeping it hidden for now incase we ever
+	// need to specify the log format
+	f.Lookup("log-format").Hidden = true
 	f.StringVar(&debugZipUploadOpts.gcpProjectID, "gcp-project-id",
 		defaultGCPProjectID, "GCP project ID to use to send debug.zip logs to GCS")
 
