@@ -8,6 +8,7 @@ go_library(
         "api_v2.go",
         "api_v2_constants.go",
         "api_v2_databases_metadata.go",
+        "api_v2_grants.go",
         "api_v2_ranges.go",
         "api_v2_sql.go",
         "api_v2_sql_schema.go",
@@ -425,6 +426,7 @@ go_test(
     size = "enormous",
     srcs = [
         "api_v2_databases_metadata_test.go",
+        "api_v2_grants_test.go",
         "api_v2_ranges_test.go",
         "api_v2_sql_schema_test.go",
         "api_v2_sql_test.go",
