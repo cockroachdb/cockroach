@@ -22,7 +22,7 @@ Mutators:           concurrent_user_hooks_mutator
 Plan:
 ├── install fixtures for version "v24.2.2" (1) [stage=system-setup]
 ├── start cluster at version "v24.2.2" (2) [stage=system-setup]
-├── wait for system tenant on nodes :1-4 to reach cluster version '24.2' (3) [stage=system-setup]
+├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (3) [stage=system-setup]
 └── upgrade cluster from "v24.2.2" to "<current>"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=init]
    ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
@@ -50,4 +50,4 @@ Plan:
    │   │   └── testSingleStep, after 0s delay (21) [stage=last-upgrade]
    │   └── restart node 2 with binary version <current> (22) [stage=last-upgrade]
    ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations,finalizing]
-   └── wait for system tenant on nodes :1-4 to reach cluster version <current> (24) [stage=running-upgrade-migrations,finalizing]
+   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (24) [stage=running-upgrade-migrations,finalizing]

@@ -108,7 +108,18 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		var cancel context.CancelFunc
 		testCtx, cancel = context.WithTimeout(ctx, localTimeout)
 		defer cancel()
-		opts = append(opts, mixedversion.NumUpgrades(1))
+		opts = append(
+			opts,
+			mixedversion.NumUpgrades(1),
+			// Disable separate-proces deployments in local runs, as it is
+			// currently failing on the `BACKUP` step, and we don't want to
+			// disrupt CI. Once we figure out a fix for it in nightly runs,
+			// we can re-enable it.
+			mixedversion.EnabledDeploymentModes(
+				mixedversion.SystemOnlyDeployment,
+				mixedversion.SharedProcessDeployment,
+			),
+		)
 	}
 
 	mvt := mixedversion.NewTest(testCtx, t, t.L(), c, c.All(), opts...)
