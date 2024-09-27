@@ -67,6 +67,10 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(eventType tree.TriggerEve
 			triggers[i], triggerScope, eventType, tableTyp, oldColID, newColID,
 		)
 
+		// BEFORE triggers can return a NULL value to indicate that the row should
+		// be skipped.
+		mb.applyFilterFromTrigger(triggerScope, triggerFnColID)
+
 		// For INSERT and UPDATE triggers, the NEW column takes on the result of the
 		// trigger function. This allows subsequent trigger functions to see the
 		// modified row.
@@ -305,6 +309,16 @@ func (mb *mutationBuilder) buildTriggerFunctionArgs(
 		f.ConstructConstVal(tgNumArgs, types.Int),        // TG_NARGS
 		f.ConstructConstVal(tgArgV, types.StringArray),   // TG_ARGV
 	}
+}
+
+// applyFilterFromTrigger adds a filter to the expression in triggerScope that
+// removes rows for which the trigger returns NULL.
+func (mb *mutationBuilder) applyFilterFromTrigger(
+	triggerScope *scope, triggerFnColID opt.ColumnID,
+) {
+	f := mb.b.factory
+	filter := f.ConstructIsNot(f.ConstructVariable(triggerFnColID), memo.NullSingleton)
+	triggerScope.expr = f.ConstructSelect(triggerScope.expr, memo.FiltersExpr{f.ConstructFiltersItem(filter)})
 }
 
 // applyChangesFromTriggers updates triggerScope and mutationBuilder to reflect
