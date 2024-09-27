@@ -227,7 +227,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
-	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.ContextMessage{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
@@ -312,15 +312,17 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 // replica, replacing the existing Raft group if any.
 func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	ctx := r.AnnotateCtx(context.Background())
-	rg, err := raft.NewRawNode(newRaftConfig(
-		ctx,
-		(*replicaRaftStorage)(r),
-		raftpb.PeerID(r.replicaID),
-		r.mu.state.RaftAppliedIndex,
-		r.store.cfg,
-		&raftLogger{ctx: ctx},
-		(*replicaRLockedStoreLiveness)(r),
-	))
+	rg, err := raft.NewRawNode(ctx,
+		newRaftConfig(
+			ctx,
+			(*replicaRaftStorage)(r),
+			raftpb.PeerID(r.replicaID),
+			r.mu.state.RaftAppliedIndex,
+			r.store.cfg,
+			(*replicaRLockedStoreLiveness)(r),
+			r.AmbientContext.Tracer,
+			r.lookupContextLocked,
+		))
 	if err != nil {
 		return err
 	}

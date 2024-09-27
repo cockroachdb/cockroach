@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -147,7 +148,7 @@ type proposer interface {
 	shouldCampaignOnRedirect(raftGroup proposerRaft, leaseType roachpb.LeaseType) bool
 
 	// The following require the proposer to hold an exclusive lock.
-	withGroupLocked(func(proposerRaft) error) error
+	withGroupLocked(context.Context, func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
 	campaignLocked(ctx context.Context)
 	rejectProposalWithErrLocked(ctx context.Context, prop *ProposalData, err error)
@@ -169,10 +170,10 @@ type proposer interface {
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
 // testing.
 type proposerRaft interface {
-	Step(raftpb.Message) error
+	Step(context.Context, raftpb.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
-	Campaign() error
+	Campaign(ctx context.Context) error
 }
 
 // Init initializes the proposal buffer and binds it to the provided proposer.
@@ -343,6 +344,9 @@ func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) 
 // insertIntoArray inserts the proposal into the proposal buffer's array at the
 // specified index. It also schedules a Raft update check if necessary.
 func (b *propBuf) insertIntoArray(p *ProposalData, idx int) {
+	if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(p.ctx) == nil {
+		log.Fatalf(p.ctx, "expected span in context: %v", p.ctx)
+	}
 	b.arr.asSlice()[idx] = p
 	if idx == 0 {
 		// If this is the first proposal in the buffer, schedule a Raft update
@@ -369,7 +373,7 @@ func (b *propBuf) flushRLocked(ctx context.Context) error {
 }
 
 func (b *propBuf) flushLocked(ctx context.Context) error {
-	return b.p.withGroupLocked(func(raftGroup proposerRaft) error {
+	return b.p.withGroupLocked(ctx, func(raftGroup proposerRaft) error {
 		_, err := b.FlushLockedWithRaftGroup(ctx, raftGroup)
 		return err
 	})
@@ -439,6 +443,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// buffer and registering each of the proposals with the proposer, but we
 	// stop trying to propose commands to raftGroup.
 	var firstErr error
+	var tracedCtx context.Context
 	for i, p := range buf {
 		if p == nil {
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
@@ -513,7 +518,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+			propErr := proposeBatch(tracedCtx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -572,9 +577,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
+			ents = append(ents, raftpb.Entry{Data: p.encodedCommand})
+			// If we have a tracing span in the context, we want to keep it around.
+			if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(p.ctx) == nil {
+				log.Fatalf(p.ctx, "expected span in context: %v", p.ctx)
+			}
+			tracedCtx = p.ctx
+
 			nextProp++
 			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
 
@@ -595,7 +604,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+	propErr := proposeBatch(tracedCtx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 	return used, propErr
 }
 
@@ -863,7 +872,7 @@ func proposeBatch(
 		return nil
 	}
 	replID := p.getReplicaID()
-	err := raftGroup.Step(raftpb.Message{
+	err := raftGroup.Step(ctx, raftpb.Message{
 		Type:    raftpb.MsgProp,
 		From:    raftpb.PeerID(replID),
 		Entries: ents,
@@ -1180,11 +1189,13 @@ func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
 }
 
-func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
-	return (*Replica)(rp).withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
+func (rp *replicaProposer) withGroupLocked(
+	ctx context.Context, fn func(raftGroup proposerRaft) error,
+) error {
+	return (*Replica)(rp).withRaftGroupLocked(ctx, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.
-		(*Replica)(rp).maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
+		(*Replica)(rp).maybeUnquiesceLocked(ctx, false /* wakeLeader */, true /* mayCampaign */)
 		return false /* maybeUnquiesceLocked */, fn(raftGroup)
 	})
 }

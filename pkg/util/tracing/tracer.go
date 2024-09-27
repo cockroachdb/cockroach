@@ -625,8 +625,8 @@ func NewTracer() *Tracer {
 		stack:               string(debug.Stack()),
 		activeSpansRegistry: makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
-		panicOnUseAfterFinish: panicOnUseAfterFinish,
-		debugUseAfterFinish:   debugUseAfterFinish,
+		panicOnUseAfterFinish: false,
+		debugUseAfterFinish:   false,
 		spanReusePercent:      defaultSpanReusePercent,
 	}
 	t.SetActiveSpansRegistryEnabled(true)

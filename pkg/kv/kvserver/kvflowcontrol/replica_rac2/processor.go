@@ -384,7 +384,7 @@ type Processor interface {
 	// If the replica is not the leader, this call does nothing.
 	//
 	// raftMu is held.
-	MaybeSendPingsRaftMuLocked()
+	MaybeSendPingsRaftMuLocked(ctx context.Context)
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -1132,10 +1132,10 @@ func (p *processorImpl) AdmitRaftMuLocked(
 }
 
 // MaybeSendPingsRaftMuLocked implements Processor.
-func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
+func (p *processorImpl) MaybeSendPingsRaftMuLocked(ctx context.Context) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if rc := p.leader.rc; rc != nil {
-		rc.MaybeSendPingsRaftMuLocked()
+		rc.MaybeSendPingsRaftMuLocked(ctx)
 	}
 }
 

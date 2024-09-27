@@ -384,8 +384,9 @@ func newRaftConfig(
 	id raftpb.PeerID,
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
-	logger raft.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
+	tracer *tracing.Tracer,
+	lookupContext func(raftpb.Entry) (context.Context, bool),
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -400,11 +401,12 @@ func newRaftConfig(
 		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
-		Logger:                      logger,
 		StoreLiveness:               storeLiveness,
 		PreVote:                     true,
 		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
 		CRDBVersion:                 storeCfg.Settings.Version,
+		Tracer:                      tracer,
+		LookupContext:               lookupContext,
 	}
 }
 

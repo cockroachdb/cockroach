@@ -18,10 +18,13 @@
 package raft
 
 import (
+	"context"
 	"errors"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ErrStepLocalMsg is returned when try to step a local raft message
@@ -41,7 +44,8 @@ type RawNode struct {
 	// Mutable fields.
 	prevSoftSt     *SoftState
 	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	stepsOnAdvance []pb.ContextMessage
+	tracer         *tracing.Tracer
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -51,10 +55,11 @@ type RawNode struct {
 // recommended that instead of calling Bootstrap, applications bootstrap their
 // state manually by setting up a Storage that has a first index > 1 and which
 // stores the desired ConfState as its InitialState.
-func NewRawNode(config *Config) (*RawNode, error) {
-	r := newRaft(config)
+func NewRawNode(ctx context.Context, config *Config) (*RawNode, error) {
+	r := newRaft(ctx, config)
 	rn := &RawNode{
-		raft: r,
+		raft:   r,
+		tracer: config.Tracer,
 	}
 	rn.asyncStorageWrites = config.AsyncStorageWrites
 	ss := r.softState()
@@ -64,20 +69,21 @@ func NewRawNode(config *Config) (*RawNode, error) {
 }
 
 // Tick advances the internal logical clock by a single tick.
-func (rn *RawNode) Tick() {
-	rn.raft.tick()
+func (rn *RawNode) Tick(ctx context.Context) {
+	rn.raft.tick(ctx)
 }
 
 // Campaign causes this RawNode to transition to candidate state.
-func (rn *RawNode) Campaign() error {
-	return rn.raft.Step(pb.Message{
+func (rn *RawNode) Campaign(ctx context.Context) error {
+	return rn.raft.Step(ctx, pb.Message{
 		Type: pb.MsgHup,
 	})
 }
 
 // Propose proposes data be appended to the raft log.
-func (rn *RawNode) Propose(data []byte) error {
-	return rn.raft.Step(pb.Message{
+func (rn *RawNode) Propose(ctx context.Context, data []byte) error {
+	log.Event(ctx, "RawNode.Propose")
+	return rn.raft.Step(ctx, pb.Message{
 		Type: pb.MsgProp,
 		From: rn.raft.id,
 		Entries: []pb.Entry{
@@ -87,24 +93,27 @@ func (rn *RawNode) Propose(data []byte) error {
 
 // ProposeConfChange proposes a config change. See (Node).ProposeConfChange for
 // details.
-func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
+func (rn *RawNode) ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error {
 	m, err := confChangeToMsg(cc)
 	if err != nil {
 		return err
 	}
-	return rn.raft.Step(m)
+	return rn.raft.Step(ctx, m)
 }
 
 // ApplyConfChange applies a config change to the local node. The app must call
 // this when it applies a configuration change, except when it decides to reject
 // the configuration change, in which case no call must take place.
-func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
-	cs := rn.raft.applyConfChange(cc.AsV2())
+func (rn *RawNode) ApplyConfChange(ctx context.Context, cc pb.ConfChangeI) *pb.ConfState {
+	cs := rn.raft.applyConfChange(ctx, cc.AsV2())
 	return &cs
 }
 
 // Step advances the state machine using the given message.
-func (rn *RawNode) Step(m pb.Message) error {
+func (rn *RawNode) Step(ctx context.Context, m pb.Message) error {
+	if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+		log.Fatalf(ctx, "expected span in context: %v", ctx)
+	}
 	// Ignore unexpected local messages receiving over network.
 	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
 		return ErrStepLocalMsg
@@ -112,7 +121,8 @@ func (rn *RawNode) Step(m pb.Message) error {
 	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.trk.Progress(m.From) == nil {
 		return ErrStepPeerNotFound
 	}
-	return rn.raft.Step(m)
+	log.Eventf(ctx, "RawNode.Step: %s - index %d, (%d -> %d)", m.Type.String(), m.Index, m.From, m.To)
+	return rn.raft.Step(ctx, m)
 }
 
 // LogSnapshot returns a point-in-time read-only state of the raft log.
@@ -137,20 +147,51 @@ func (rn *RawNode) LogSnapshot() LogSnapshot {
 // includes appending and applying entries or a snapshot, updating the HardState,
 // and sending messages. The returned Ready() *must* be handled and subsequently
 // passed back via Advance().
-func (rn *RawNode) Ready() Ready {
-	rd := rn.readyWithoutAccept()
-	rn.acceptReady(rd)
+func (rn *RawNode) Ready(ctx context.Context) Ready {
+	rd := rn.readyWithoutAccept(ctx)
+	rn.acceptReady(ctx, rd)
 	return rd
+}
+
+// NB: This uses an approach of attaching SOME context to the Ready that has a
+// SpanFromContext set. This could be done lazily instead but since we look this
+// up multiple times it is better to do it once at creation.
+func (rn *RawNode) tracedContext(ctx context.Context, rd Ready) context.Context {
+	if tracing.SpanFromContext(ctx) != nil {
+		return ctx
+	}
+	for _, msg := range rd.Messages {
+		if pb.MUST_TRACE_ALL && tracing.SpanFromContext(msg.Context) == nil {
+			log.Fatalf(ctx, "expected span in context: %v", msg.Context)
+		} else {
+			return msg.Context
+		}
+	}
+
+	if ctx, found := rn.raft.contextForEntries(rd.CommittedEntries); found {
+		return ctx
+	}
+	if ctx, found := rn.raft.contextForEntries(rd.Entries); found {
+		return ctx
+	}
+	// FIXME: Remove. We have no entries or messages, so we can't attach a
+	// context. Instead create a traced context manually for now. This should be
+	// removed as we don't really need to trace this message at all.
+	if pb.MUST_TRACE_ALL {
+		ctx, _ = tracing.ContextWithRecordingSpan(ctx, rn.tracer, "empty ready")
+		log.Event(ctx, "empty ready - created span")
+	}
+	return ctx
 }
 
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
-func (rn *RawNode) readyWithoutAccept() Ready {
+func (rn *RawNode) readyWithoutAccept(ctx context.Context) Ready {
 	r := rn.raft
 
 	rd := Ready{
 		Entries:          r.raftLog.nextUnstableEnts(),
-		CommittedEntries: r.raftLog.nextCommittedEnts(rn.applyUnstableEntries()),
+		CommittedEntries: r.raftLog.nextCommittedEnts(ctx, rn.applyUnstableEntries()),
 		Messages:         r.msgs,
 	}
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
@@ -166,11 +207,15 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 	}
 	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
 
+	rd.Context = rn.tracedContext(ctx, rd)
+	if pb.MUST_TRACE_ALL && len(rd.Entries) != 0 && len(rd.CommittedEntries) != 0 && tracing.SpanFromContext(rd.Context) == nil {
+		log.Fatalf(ctx, "expected span in context: %v, %v, %v", rd.Entries, rd.CommittedEntries, rd.Context)
+	}
 	if rn.asyncStorageWrites {
 		// If async storage writes are enabled, enqueue messages to
 		// local storage threads, where applicable.
 		if needStorageAppendMsg(r, rd) {
-			m := newStorageAppendMsg(r, rd)
+			m := newStorageAppendMsg(ctx, r, rd)
 			rd.Messages = append(rd.Messages, m)
 		}
 		if needStorageApplyMsg(rd) {
@@ -228,7 +273,7 @@ func needStorageAppendRespMsg(rd Ready) bool {
 // state, and apply a snapshot. The message also carries a set of responses
 // that should be delivered after the rest of the message is processed. Used
 // with AsyncStorageWrites.
-func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
+func newStorageAppendMsg(ctx context.Context, r *raft, rd Ready) pb.ContextMessage {
 	m := pb.Message{
 		Type:    pb.MsgStorageAppend,
 		To:      LocalAppendThread,
@@ -269,21 +314,35 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
-	m.Responses = r.msgsAfterAppend
+	var mCtx context.Context
+	m.Responses, mCtx = stripContext(r.msgsAfterAppend)
+	if mCtx != nil {
+		ctx = mCtx
+	}
 	// Warning: there is code outside raft package depending on the order of
 	// Responses, particularly MsgStorageAppendResp being last in this list.
 	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
-		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
+		m.Responses = append(m.Responses, newStorageAppendRespMsg(ctx, r, rd).Message)
 	}
-	return m
+	return pb.NewContextMessage(ctx, m)
+}
+
+func stripContext(m []pb.ContextMessage) ([]pb.Message, context.Context) {
+	responses := make([]pb.Message, len(m))
+	var ctx context.Context
+	for i, resp := range m {
+		responses[i] = resp.Message
+		ctx = resp.Context
+	}
+	return responses, ctx
 }
 
 // newStorageAppendRespMsg creates the message that should be returned to node
 // after the unstable log entries, hard state, and snapshot in the current Ready
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
-func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
+func newStorageAppendRespMsg(ctx context.Context, r *raft, rd Ready) pb.ContextMessage {
 	m := pb.Message{
 		Type: pb.MsgStorageAppendResp,
 		To:   r.id,
@@ -342,13 +401,21 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
+		// TODO: Lookup all contexts until we find one that has tracing info.
+		if eCtx, found := r.contextForEntries(rd.Entries); found {
+			ctx = eCtx
+		}
+
+		if pb.MUST_TRACE_ALL && tracing.SpanFromContext(ctx) == nil {
+			log.Fatalf(ctx, "expected span in context: %v, %v", ctx, rd.Entries)
+		}
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
 		m.LogTerm = r.raftLog.accTerm()
 	}
-	return m
+	return pb.NewContextMessage(rd.Context, m)
 }
 
 func needStorageApplyMsg(rd Ready) bool     { return len(rd.CommittedEntries) > 0 }
@@ -358,18 +425,21 @@ func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
 // message is processed. Used with AsyncStorageWrites.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
+func newStorageApplyMsg(r *raft, rd Ready) pb.ContextMessage {
 	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
-		To:      LocalApplyThread,
-		From:    r.id,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
-		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, ents),
+	return pb.NewContextMessage(
+		rd.Context,
+		pb.Message{
+			Type:    pb.MsgStorageApply,
+			To:      LocalApplyThread,
+			From:    r.id,
+			Term:    0, // committed entries don't apply under a specific term
+			Entries: ents,
+			Responses: []pb.Message{
+				newStorageApplyRespMsg(r, ents),
+			},
 		},
-	}
+	)
 }
 
 // newStorageApplyRespMsg creates the message that should be returned to node
@@ -388,7 +458,7 @@ func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
 // acceptReady is called when the consumer of the RawNode has decided to go
 // ahead and handle a Ready. Nothing must alter the state of the RawNode between
 // this call and the prior call to Ready().
-func (rn *RawNode) acceptReady(rd Ready) {
+func (rn *RawNode) acceptReady(ctx context.Context, rd Ready) {
 	if rd.SoftState != nil {
 		rn.prevSoftSt = rd.SoftState
 	}
@@ -397,7 +467,7 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	}
 	if !rn.asyncStorageWrites {
 		if len(rn.stepsOnAdvance) != 0 {
-			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
+			log.Fatalf(ctx, "two accepted Ready structs without call to Advance")
 		}
 		for _, m := range rn.raft.msgsAfterAppend {
 			if m.To == rn.raft.id {
@@ -405,11 +475,12 @@ func (rn *RawNode) acceptReady(rd Ready) {
 			}
 		}
 		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(rn.raft, rd)
+			m := newStorageAppendRespMsg(ctx, rn.raft, rd)
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
+			// FIXME: Is this the right context?
+			m := pb.NewContextMessage(ctx, newStorageApplyRespMsg(rn.raft, rd.CommittedEntries))
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 	}
@@ -419,7 +490,7 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	if len(rd.CommittedEntries) > 0 {
 		ents := rd.CommittedEntries
 		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
+		rn.raft.raftLog.acceptApplying(ctx, index, entsSize(ents), rn.applyUnstableEntries())
 	}
 }
 
@@ -457,16 +528,16 @@ func (rn *RawNode) HasReady() bool {
 //
 // NOTE: Advance must not be called when using AsyncStorageWrites. Response messages from
 // the local append and apply threads take its place.
-func (rn *RawNode) Advance(_ Ready) {
+func (rn *RawNode) Advance(ctx context.Context, _ Ready) {
 	// The actions performed by this function are encoded into stepsOnAdvance in
 	// acceptReady. In earlier versions of this library, they were computed from
 	// the provided Ready struct. Retain the unused parameter for compatibility.
 	if rn.asyncStorageWrites {
-		rn.raft.logger.Panicf("Advance must not be called when using AsyncStorageWrites")
+		log.Fatalf(ctx, "Advance must not be called when using AsyncStorageWrites")
 	}
 	for i, m := range rn.stepsOnAdvance {
-		_ = rn.raft.Step(m)
-		rn.stepsOnAdvance[i] = pb.Message{}
+		_ = rn.raft.Step(m.Context, m.Message)
+		rn.stepsOnAdvance[i] = pb.ContextMessage{}
 	}
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
@@ -503,8 +574,8 @@ func (rn *RawNode) NextUnstableIndex() uint64 {
 // and there was no recent MsgApp to this peer.
 //
 // Returns true if the ping was added to the message queue.
-func (rn *RawNode) SendPing(to pb.PeerID) bool {
-	return rn.raft.sendPing(to)
+func (rn *RawNode) SendPing(ctx context.Context, to pb.PeerID) bool {
+	return rn.raft.sendPing(ctx, to)
 }
 
 // Status returns the current status of the given group. This allocates, see
@@ -549,30 +620,30 @@ func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr 
 }
 
 // ReportUnreachable reports the given node is not reachable for the last send.
-func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
+func (rn *RawNode) ReportUnreachable(ctx context.Context, id pb.PeerID) {
+	_ = rn.raft.Step(ctx, pb.Message{Type: pb.MsgUnreachable, From: id})
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
-func (rn *RawNode) ReportSnapshot(id pb.PeerID, status SnapshotStatus) {
+func (rn *RawNode) ReportSnapshot(ctx context.Context, id pb.PeerID, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
+	_ = rn.raft.Step(ctx, pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
-func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
+func (rn *RawNode) TransferLeader(ctx context.Context, transferee pb.PeerID) {
+	_ = rn.raft.Step(ctx, pb.Message{Type: pb.MsgTransferLeader, From: transferee})
 }
 
 // ForgetLeader forgets a follower's current leader, changing it to None.
 // See (Node).ForgetLeader for details.
-func (rn *RawNode) ForgetLeader() error {
-	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
+func (rn *RawNode) ForgetLeader(ctx context.Context) error {
+	return rn.raft.Step(ctx, pb.Message{Type: pb.MsgForgetLeader})
 }
 
 func (rn *RawNode) TestingStepDown() error {
-	return rn.raft.testingStepDown()
+	return rn.raft.testingStepDown(context.Background())
 }
 
 func (rn *RawNode) TestingFortificationStateString() string {

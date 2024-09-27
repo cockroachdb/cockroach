@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -331,7 +332,7 @@ type Replica struct {
 		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
 		// Scratch for populating RaftEvent for flowControlV2.
-		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
+		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.ContextMessage
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
@@ -345,7 +346,7 @@ type Replica struct {
 	// TODO(pav-kv): replace these with log marks for the latest completed write.
 	localMsgs struct {
 		syncutil.Mutex
-		active, recycled []raftpb.Message
+		active, recycled []raftpb.ContextMessage
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are
@@ -984,6 +985,25 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 // ID returns the FullReplicaID for the Replica.
 func (r *Replica) ID() storage.FullReplicaID {
 	return storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
+}
+
+// TODO - create a function in raftlog for decoding for the id.
+func (r *Replica) lookupContextLocked(entry raftpb.Entry) (context.Context, bool) {
+	// FIXME: For testing only.
+	if r == nil {
+		return nil, false
+	}
+	if entry.Data != nil {
+		if key := raftlog.GetCmdBytes(entry); key != "" {
+			if p, ok := r.mu.proposals[key]; ok {
+				return p.ctx, true
+			}
+			log.Warningf(context.Background(), "entry not found in proposals map %v, %s, %v", entry, key, r.mu.proposals)
+		}
+	}
+
+	// Likely the command has completed and been removed from the proposals map.
+	return nil, false
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
@@ -2235,7 +2255,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
-	r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
+	r.maybeUnquiesceLocked(ctx, false /* wakeLeader */, true /* mayCampaign */)
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {

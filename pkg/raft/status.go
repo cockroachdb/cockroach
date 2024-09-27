@@ -18,12 +18,14 @@
 package raft
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Status contains information about this Raft peer and its view of the system.
@@ -182,7 +184,7 @@ func (s Status) MarshalJSON() ([]byte, error) {
 func (s Status) String() string {
 	b, err := s.MarshalJSON()
 	if err != nil {
-		getLogger().Panicf("unexpected error: %v", err)
+		log.Fatalf(context.Background(), "unexpected error: %v", err)
 	}
 	return string(b)
 }

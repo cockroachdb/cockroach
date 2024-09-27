@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -49,6 +50,7 @@ func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) 
 // Stabilize repeatedly runs Ready handling on and message delivery to the set
 // of nodes specified via the idxs slice until reaching a fixed point.
 func (env *InteractionEnv) Stabilize(idxs ...int) error {
+	ctx := context.Background()
 	var nodes []*Node
 	if len(idxs) != 0 {
 		for _, idx := range idxs {
@@ -67,7 +69,7 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 				idx := int(rn.Status().ID - 1)
 				fmt.Fprintf(env.Output, "> %d handling Ready\n", idx+1)
 				var err error
-				env.withIndent(func() { err = env.ProcessReady(idx) })
+				env.withIndent(func() { err = env.ProcessReady(ctx, idx) })
 				if err != nil {
 					return err
 				}

@@ -18,6 +18,7 @@
 package raft
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -58,6 +59,7 @@ func TestStorageTerm(t *testing.T) {
 }
 
 func TestStorageEntries(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5, 6)
 	tests := []struct {
 		lo, hi, maxsize uint64
@@ -84,7 +86,7 @@ func TestStorageEntries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			s := &MemoryStorage{ents: ents}
-			entries, err := s.Entries(tt.lo, tt.hi, tt.maxsize)
+			entries, err := s.Entries(ctx, tt.lo, tt.hi, tt.maxsize)
 			require.Equal(t, tt.werr, err)
 			require.Equal(t, tt.wentries, entries)
 		})
@@ -92,22 +94,25 @@ func TestStorageEntries(t *testing.T) {
 }
 
 func TestStorageLastIndex(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5)
 	s := &MemoryStorage{ents: ents}
 	require.Equal(t, uint64(5), s.LastIndex())
-	require.NoError(t, s.Append(index(6).terms(5)))
+	require.NoError(t, s.Append(ctx, index(6).terms(5)))
 	require.Equal(t, uint64(6), s.LastIndex())
 }
 
 func TestStorageFirstIndex(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5)
 	s := &MemoryStorage{ents: ents}
 	require.Equal(t, uint64(4), s.FirstIndex())
-	require.NoError(t, s.Compact(4))
+	require.NoError(t, s.Compact(ctx, 4))
 	require.Equal(t, uint64(5), s.FirstIndex())
 }
 
 func TestStorageCompact(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5)
 	tests := []struct {
 		i uint64
@@ -126,7 +131,7 @@ func TestStorageCompact(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			s := &MemoryStorage{ents: ents}
-			require.Equal(t, tt.werr, s.Compact(tt.i))
+			require.Equal(t, tt.werr, s.Compact(ctx, tt.i))
 			require.Equal(t, tt.windex, s.ents[0].Index)
 			require.Equal(t, tt.wterm, s.ents[0].Term)
 			require.Equal(t, tt.wlen, len(s.ents))
@@ -135,6 +140,7 @@ func TestStorageCompact(t *testing.T) {
 }
 
 func TestStorageCreateSnapshot(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5)
 	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
@@ -152,7 +158,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			s := &MemoryStorage{ents: ents}
-			snap, err := s.CreateSnapshot(tt.i, cs, data)
+			snap, err := s.CreateSnapshot(ctx, tt.i, cs, data)
 			require.Equal(t, tt.werr, err)
 			require.Equal(t, tt.wsnap, snap)
 		})
@@ -160,6 +166,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 }
 
 func TestStorageAppend(t *testing.T) {
+	ctx := context.Background()
 	ents := index(3).terms(3, 4, 5)
 	tests := []struct {
 		entries []pb.Entry
@@ -210,7 +217,7 @@ func TestStorageAppend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			s := &MemoryStorage{ents: ents}
-			require.Equal(t, tt.werr, s.Append(tt.entries))
+			require.Equal(t, tt.werr, s.Append(ctx, tt.entries))
 			require.Equal(t, tt.wentries, s.ents)
 		})
 	}

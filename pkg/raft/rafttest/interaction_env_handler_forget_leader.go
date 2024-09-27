@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
@@ -31,7 +32,7 @@ func (env *InteractionEnv) handleForgetLeader(t *testing.T, d datadriven.TestDat
 
 // ForgetLeader makes the follower at the given index forget its leader.
 func (env *InteractionEnv) ForgetLeader(idx int) {
-	env.Nodes[idx].ForgetLeader()
+	env.Nodes[idx].ForgetLeader(context.Background())
 }
 
 func (env *InteractionEnv) handleStepDown(t *testing.T, d datadriven.TestData) error {

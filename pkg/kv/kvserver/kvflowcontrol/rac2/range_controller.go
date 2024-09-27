@@ -82,7 +82,7 @@ type RangeController interface {
 	// recent MsgApp to this peer.
 	//
 	// Requires replica.raftMu to be held.
-	MaybeSendPingsRaftMuLocked()
+	MaybeSendPingsRaftMuLocked(ctx context.Context)
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -116,7 +116,7 @@ type RaftInterface interface {
 	// processing.
 	//
 	// If the peer is not in StateReplicate, this call does nothing.
-	SendPingRaftMuLocked(roachpb.ReplicaID) bool
+	SendPingRaftMuLocked(context.Context, roachpb.ReplicaID) bool
 	// MakeMsgAppRaftMuLocked is used to construct a MsgApp for entries in
 	// [start, end) and must only be called in MsgAppPull mode for followers.
 	//
@@ -217,7 +217,7 @@ type RaftEvent struct {
 	//
 	// A key can map to an empty slice, in order to reuse already allocated
 	// slice memory.
-	MsgApps map[roachpb.ReplicaID][]raftpb.Message
+	MsgApps map[roachpb.ReplicaID][]raftpb.ContextMessage
 	// ReplicasStateInfo contains the state of all replicas. This is used to
 	// determine if the state of a replica has changed, and if so, to update the
 	// flow control state. It also informs the RangeController of a replica's
@@ -233,9 +233,9 @@ type RaftEvent struct {
 func RaftEventFromMsgStorageAppendAndMsgApps(
 	mode RaftMsgAppMode,
 	replicaID roachpb.ReplicaID,
-	appendMsg raftpb.Message,
-	outboundMsgs []raftpb.Message,
-	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
+	appendMsg raftpb.ContextMessage,
+	outboundMsgs []raftpb.ContextMessage,
+	msgAppScratch map[roachpb.ReplicaID][]raftpb.ContextMessage,
 ) RaftEvent {
 	event := RaftEvent{MsgAppMode: mode}
 	if appendMsg.Type == raftpb.MsgStorageAppend {
@@ -789,13 +789,13 @@ func (rc *rangeController) AdmitRaftMuLocked(
 }
 
 // MaybeSendPingsRaftMuLocked implements RangeController.
-func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
+func (rc *rangeController) MaybeSendPingsRaftMuLocked(ctx context.Context) {
 	for id, state := range rc.replicaMap {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
 		if s := state.sendStream; s != nil && s.shouldPing() {
-			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
+			rc.opts.RaftInterface.SendPingRaftMuLocked(ctx, id)
 		}
 	}
 }

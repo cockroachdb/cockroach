@@ -248,7 +248,7 @@ LIMIT
 		_, err = ls.StoreEntries(ctx, logstore.RaftState{
 			LastIndex: lastIndex,
 			LastTerm:  kvpb.RaftTerm(lastTerm),
-		}, logstore.MakeMsgStorageAppend(msgApp), (*wgSyncCallback)(wg), stats)
+		}, logstore.MakeMsgStorageAppend(raftpb.NewContextMessage(ctx, msgApp)), (*wgSyncCallback)(wg), stats)
 		require.NoError(t, err)
 		wg.Wait()
 

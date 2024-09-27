@@ -319,7 +319,7 @@ func (r *testingRCRange) replicasStateInfo() map[roachpb.ReplicaID]ReplicaStateI
 	return replicasStateInfo
 }
 
-func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
+func (r *testingRCRange) SendPingRaftMuLocked(context.Context, roachpb.ReplicaID) bool {
 	return false
 }
 

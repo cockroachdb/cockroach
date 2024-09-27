@@ -37,87 +37,6 @@ func init() {
 	}
 }
 
-// init installs an adapter to use clog for log messages from raft which
-// don't belong to any range.
-func init() {
-	raft.SetLogger(&raftLogger{ctx: context.Background()})
-}
-
-// *clogLogger implements the raft.Logger interface. Note that all methods
-// must be defined on the pointer type rather than the value type because
-// (at least in the go 1.4 compiler), methods on a value type called through
-// an interface pointer go through an additional layer of indirection that
-// appears on the stack, and would make all our stack frame offsets incorrect.
-//
-// Raft is fairly verbose at the "info" level, so we map "info" messages to
-// clog.V(1) and "debug" messages to clog.V(2).
-//
-// This file is named raft.go instead of something like logger.go because this
-// file's name is used to determine the vmodule parameter: --vmodule=raft=1
-type raftLogger struct {
-	ctx context.Context
-}
-
-func (r *raftLogger) Debug(v ...interface{}) {
-	if log.V(3) {
-		log.InfofDepth(r.ctx, 1, "", v...)
-	}
-}
-
-func (r *raftLogger) Debugf(format string, v ...interface{}) {
-	if log.V(3) {
-		log.InfofDepth(r.ctx, 1, format, v...)
-	}
-}
-
-func (r *raftLogger) Info(v ...interface{}) {
-	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, "", v...)
-	}
-}
-
-func (r *raftLogger) Infof(format string, v ...interface{}) {
-	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, format, v...)
-	}
-}
-
-func (r *raftLogger) Warning(v ...interface{}) {
-	log.WarningfDepth(r.ctx, 1, "", v...)
-}
-
-func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	log.WarningfDepth(r.ctx, 1, format, v...)
-}
-
-func (r *raftLogger) Error(v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, "", v...)
-}
-
-func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, format, v...)
-}
-
-func (r *raftLogger) Fatal(v ...interface{}) {
-	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, "", v...)
-}
-
-func (r *raftLogger) Fatalf(format string, v ...interface{}) {
-	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, format, v...)
-}
-
-func (r *raftLogger) Panic(v ...interface{}) {
-	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, "", v...)
-}
-
-func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, format, v...)
-}
-
 func wrapNumbersAsSafe(v ...interface{}) {
 	for i := range v {
 		switch v[i].(type) {
@@ -181,7 +100,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 	}
 	for i, m := range ready.Messages {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
-			i, raft.DescribeMessage(m, raftEntryFormatter))
+			i, raft.DescribeMessage(m.Message, raftEntryFormatter))
 	}
 	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 }
@@ -223,10 +142,7 @@ func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
 	}
 }
 
-// traceMessageSends records the provided event for all proposals contained in
-// in entries contained in msgs. The vmodule level for raft must be at
-// least 1.
-func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
+func (r *Replica) traceMessageSends(msgs []raftpb.ContextMessage, event string) {
 	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		var ids []kvserverbase.CmdIDKey
 		for _, m := range msgs {

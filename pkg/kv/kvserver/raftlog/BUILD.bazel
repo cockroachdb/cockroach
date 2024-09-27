@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

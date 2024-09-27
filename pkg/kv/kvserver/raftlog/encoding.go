@@ -11,6 +11,7 @@
 package raftlog
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,15 +111,18 @@ func (enc EntryEncoding) UsesAdmissionControl() bool {
 		enc == EntryEncodingSideloadedWithACAndPriority
 }
 
-// encodingMask is used to encode the encoding type in the lower 6 bits of the
+// encodingMask is used to encode the encoding type in the lower 5 bits of the
 // first byte in the entry encoding.
-const encodingMask byte = 0x3F
+const encodingMask byte = 0x1F
 
 // priMask is used to encode the raftpb.Priority of the command in the highest
 // 2 bits of the first byte in the entry encoding.
 const priMask byte = 0xC0
 
 const priShift = 6
+
+// isTracedMask is used to encode whether the command is traced in the 6th bit.
+const isTracedMask byte = 0x20
 
 // getPriority returns the raftpb.Priority, given the first byte of the entry
 // encoding.
@@ -135,28 +140,37 @@ func getPriority(b byte) raftpb.Priority {
 	return raftpb.Priority((b & priMask) >> priShift)
 }
 
+func isTraced(b byte) bool {
+	return b&isTracedMask != 0
+}
+
 // prefixByte returns the prefix byte used during encoding, applicable only to
 // EntryEncoding{Standard,Sideloaded}With{,out}AC{AndPriority}. pri is used
 // only for the WithACAndPriority encodings.
-func (enc EntryEncoding) prefixByte(pri raftpb.Priority) byte {
+func (enc EntryEncoding) prefixByte(ctx context.Context, pri raftpb.Priority) byte {
 	if buildutil.CrdbTestBuild {
 		if pri >= 4 {
 			panic(errors.AssertionFailedf("pri is out of expected bounds %d", pri))
 		}
 	}
+	traceSet := byte(0)
+	// TODO(baptist): Profile to make sure this is not too expensive.
+	if tracing.SpanFromContext(ctx) != nil {
+		traceSet = isTracedMask
+	}
 	switch enc {
 	case EntryEncodingStandardWithAC:
-		return entryEncodingStandardWithACPrefixByte
+		return entryEncodingStandardWithACPrefixByte | traceSet
 	case EntryEncodingSideloadedWithAC:
-		return entryEncodingSideloadedWithACPrefixByte
+		return entryEncodingSideloadedWithACPrefixByte | traceSet
 	case EntryEncodingStandardWithoutAC:
-		return entryEncodingStandardWithoutACPrefixByte
+		return entryEncodingStandardWithoutACPrefixByte | traceSet
 	case EntryEncodingSideloadedWithoutAC:
-		return entryEncodingSideloadedWithoutACPrefixByte
+		return entryEncodingSideloadedWithoutACPrefixByte | traceSet
 	case EntryEncodingStandardWithACAndPriority:
-		return entryEncodingStandardWithACAndPriorityPrefixByte | (byte(pri) << priShift)
+		return entryEncodingStandardWithACAndPriorityPrefixByte | (byte(pri) << priShift) | traceSet
 	case EntryEncodingSideloadedWithACAndPriority:
-		return entryEncodingSideloadedWithACAndPriorityPrefixByte | (byte(pri) << priShift)
+		return entryEncodingSideloadedWithACAndPriorityPrefixByte | (byte(pri) << priShift) | traceSet
 	default:
 		panic(fmt.Sprintf("invalid encoding: %v has no prefix byte", enc))
 	}
@@ -207,10 +221,10 @@ const (
 // If EntryEncoding is one of the WithACAndPriority encodings, the pri
 // parameter is used.
 func EncodeCommandBytes(
-	enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte, pri raftpb.Priority,
+	ctx context.Context, enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte, pri raftpb.Priority,
 ) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
-	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID, pri)
+	EncodeRaftCommandPrefix(ctx, b[:RaftCommandPrefixLen], enc, commandID, pri)
 	copy(b[RaftCommandPrefixLen:], command)
 	return b
 }
@@ -221,7 +235,7 @@ func EncodeCommandBytes(
 // EntryEncoding is one of the WithACAndPriority encodings, the pri parameter
 // is used.
 func EncodeRaftCommandPrefix(
-	b []byte, enc EntryEncoding, commandID kvserverbase.CmdIDKey, pri raftpb.Priority,
+	ctx context.Context, b []byte, enc EntryEncoding, commandID kvserverbase.CmdIDKey, pri raftpb.Priority,
 ) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
@@ -229,7 +243,7 @@ func EncodeRaftCommandPrefix(
 	if len(b) != RaftCommandPrefixLen {
 		panic(fmt.Sprintf("invalid command prefix length; %d != %d", len(b), RaftCommandPrefixLen))
 	}
-	b[0] = enc.prefixByte(pri)
+	b[0] = enc.prefixByte(ctx, pri)
 	copy(b[1:], commandID)
 }
 

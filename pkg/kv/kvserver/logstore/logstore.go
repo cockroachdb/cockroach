@@ -35,8 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,10 +65,10 @@ var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 )
 
 // MsgStorageAppend is a raftpb.Message with type MsgStorageAppend.
-type MsgStorageAppend raftpb.Message
+type MsgStorageAppend raftpb.ContextMessage
 
 // MakeMsgStorageAppend constructs a MsgStorageAppend from a raftpb.Message.
-func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
+func MakeMsgStorageAppend(m raftpb.ContextMessage) MsgStorageAppend {
 	if m.Type != raftpb.MsgStorageAppend {
 		panic(fmt.Sprintf("unexpected message type %s", m.Type))
 	}
@@ -90,14 +92,16 @@ func (m *MsgStorageAppend) MustSync() bool {
 }
 
 // OnDone returns the storage write post-processing information.
-func (m *MsgStorageAppend) OnDone() MsgStorageAppendDone { return m.Responses }
+func (m *MsgStorageAppend) OnDone(ctx context.Context) MsgStorageAppendDone {
+	return raftpb.NewContextMessages(ctx, m.Responses)
+}
 
 // MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
 // done, such as sending messages back to raft node and its peers.
-type MsgStorageAppendDone []raftpb.Message
+type MsgStorageAppendDone []raftpb.ContextMessage
 
 // Responses returns the messages to send after the write/sync is completed.
-func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
+func (m MsgStorageAppendDone) Responses() []raftpb.ContextMessage { return m }
 
 // Mark returns the LogMark of the raft log in storage after the write/sync is
 // completed. Returns zero value if the write does not update the log mark.
@@ -204,6 +208,9 @@ func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
 func (s *LogStore) StoreEntries(
 	ctx context.Context, state RaftState, m MsgStorageAppend, cb SyncCallback, stats *AppendStats,
 ) (RaftState, error) {
+	if raftpb.MUST_TRACE_ALL && tracing.SpanFromContext(m.Context) == nil {
+		log.Fatalf(m.Context, "expected span in context: %v", m.Context)
+	}
 	batch := newStoreEntriesBatch(s.Engine)
 	return s.storeEntriesAndCommitBatch(ctx, state, m, cb, stats, batch)
 }
@@ -318,9 +325,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// callback when the write completes.
 		waiterCallback := nonBlockingSyncWaiterCallbackPool.Get().(*nonBlockingSyncWaiterCallback)
 		*waiterCallback = nonBlockingSyncWaiterCallback{
-			ctx:            ctx,
+			ctx:            m.Context,
 			cb:             cb,
-			onDone:         m.OnDone(),
+			onDone:         m.OnDone(m.Context),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -338,7 +345,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.OnDone(), storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.OnDone(m.Context), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync
