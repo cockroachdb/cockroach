@@ -637,6 +637,19 @@ func (r *raft) makeMsgApp(to pb.PeerID, pr *tracker.Progress, ls logSlice) pb.Me
 	}
 }
 
+// maybeMakeMsgApp returns a MsgApp message to be sent to the given peer, or a
+// zero-value message if it can not be sent.
+func (r *raft) maybeMakeMsgApp(to pb.PeerID, ls logSlice) pb.Message {
+	if r.state != StateLeader || r.Term != ls.term {
+		return pb.Message{}
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.Next != ls.prev.index+1 {
+		return pb.Message{}
+	}
+	return r.makeMsgApp(to, pr, ls)
+}
+
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
 // yet known to be replicated in the given peer's log, as well as the current
 // commit index. Usually it sends a MsgApp message, but in some cases (e.g. the
