@@ -23,7 +23,7 @@ func Test_processYaml(t *testing.T) {
 	ctx := context.Background()
 	// setting to nil as a precaution that the command execution does not invoke an
 	// actual command
-	commandExecutor = nil
+	yamlCommandExecutor = nil
 	t.Run("expect unmarshall to fail", func(t *testing.T) {
 		err := processYaml(ctx, []byte("invalid"), false, nil)
 		require.NotNil(t, err)
@@ -45,7 +45,7 @@ environment:
 	t.Run("expect partial failure and rollback", func(t *testing.T) {
 		name1Commands := make([]string, 0)
 		name2Commands := make([]string, 0)
-		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+		yamlCommandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 			if strings.HasPrefix(logPrefix, "name_value1") {
 				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
 			} else if strings.HasPrefix(logPrefix, "name_value2") {
@@ -80,7 +80,7 @@ environment:
 	t.Run("expect no failure", func(t *testing.T) {
 		name1Commands := make([]string, 0)
 		name2Commands := make([]string, 0)
-		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+		yamlCommandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 			if strings.HasPrefix(logPrefix, "name_value1") {
 				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
 			} else if strings.HasPrefix(logPrefix, "name_value2") {

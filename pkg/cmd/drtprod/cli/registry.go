@@ -22,5 +22,6 @@ import (
 func register(ctx context.Context) []*cobra.Command {
 	return []*cobra.Command{
 		commands.GetYamlProcessor(ctx),
+		commands.GetPProfCommand(ctx),
 	}
 }

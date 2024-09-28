@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "commands",
     srcs = [
+        "getpprof.go",
         "rootcmd.go",
         "yamlprocessor.go",
     ],
@@ -18,7 +19,10 @@ go_library(
 
 go_test(
     name = "commands_test",
-    srcs = ["yamlprocessor_test.go"],
+    srcs = [
+        "getpprof_test.go",
+        "yamlprocessor_test.go",
+    ],
     embed = [":commands"],
     deps = ["@com_github_stretchr_testify//require"],
 )

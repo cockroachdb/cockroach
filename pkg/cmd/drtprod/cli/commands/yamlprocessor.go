@@ -21,8 +21,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// commandExecutor is responsible for executing the shell commands
-var commandExecutor = helpers.ExecuteCmd
+// yamlCommandExecutor is responsible for executing the shell commands
+var yamlCommandExecutor = helpers.ExecuteCmdWithPrefix
 
 // GetYamlProcessor creates a new Cobra command for processing a YAML file.
 // The command expects a YAML file as an argument and runs the commands defined in it.
@@ -209,7 +209,7 @@ func executeCommands(ctx context.Context, logPrefix string, cmds []*command) err
 
 	for _, cmd := range cmds {
 		fmt.Printf("[%s] Starting <%v>\n", logPrefix, cmd)
-		err := commandExecutor(ctx, logPrefix, cmd.name, cmd.args...)
+		err := yamlCommandExecutor(ctx, logPrefix, cmd.name, cmd.args...)
 		if err != nil {
 			if !cmd.continueOnFailure {
 				// Return the error if not configured to continue on failure
