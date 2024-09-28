@@ -70,7 +70,9 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 	}
 
 	// Validate the CREATE TRIGGER statement.
-	b.validateCreateTrigger(ct, ds, allEventTypes)
+	if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
+		panic(err)
+	}
 
 	// Lookup the implicit table type. This must happen after the above checks,
 	// since virtual/system tables do not have an implicit type.
@@ -101,149 +103,6 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		},
 	)
 	return outScope
-}
-
-// validateCreateTrigger checks that the CREATE TRIGGER statement is valid.
-func (b *Builder) validateCreateTrigger(
-	ct *tree.CreateTrigger, ds cat.DataSource, allEventTypes tree.TriggerEventTypeSet,
-) {
-	var hasTargetCols bool
-	for i := range ct.Events {
-		if len(ct.Events[i].Columns) > 0 {
-			hasTargetCols = true
-			break
-		}
-	}
-
-	// Check that the target table/view is valid.
-	switch t := ds.(type) {
-	case cat.Table:
-		if t.IsSystemTable() || t.IsVirtualTable() {
-			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-				"permission denied: \"%s\" is a system catalog", t.Name()))
-		}
-		if t.IsMaterializedView() {
-			panic(errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
-				"relation \"%s\" cannot have triggers", t.Name()),
-				"This operation is not supported for materialized views."))
-		}
-		if ct.ActionTime == tree.TriggerActionTimeInsteadOf {
-			panic(errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
-				"\"%s\" is a table", t.Name()),
-				"Tables cannot have INSTEAD OF triggers."))
-		}
-		if !ct.Replace {
-			for i := 0; i < t.TriggerCount(); i++ {
-				if t.Trigger(i).Name() == ct.Name {
-					panic(pgerror.Newf(pgcode.DuplicateObject,
-						"trigger \"%s\" for relation \"%s\" already exists", ct.Name, t.Name()))
-				}
-			}
-		}
-	case cat.View:
-		if t.IsSystemView() {
-			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-				"permission denied: \"%s\" is a system catalog", t.Name()))
-		}
-		// Views can only use row-level INSTEAD OF, or statement-level BEFORE or
-		// AFTER timing. The former is checked below.
-		if ct.ActionTime != tree.TriggerActionTimeInsteadOf && ct.ForEach == tree.TriggerForEachRow {
-			panic(errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
-				"\"%s\" is a view", t.Name()),
-				"Views cannot have row-level BEFORE or AFTER triggers."))
-		}
-		if allEventTypes.Contains(tree.TriggerEventTruncate) {
-			panic(errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
-				"\"%s\" is a view", t.Name()),
-				"Views cannot have TRUNCATE triggers."))
-		}
-		if !ct.Replace {
-			for i := 0; i < t.TriggerCount(); i++ {
-				if t.Trigger(i).Name() == ct.Name {
-					panic(pgerror.Newf(pgcode.DuplicateObject,
-						"trigger \"%s\" for relation \"%s\" already exists", ct.Name, t.Name()))
-				}
-			}
-		}
-	default:
-		panic(pgerror.Newf(pgcode.WrongObjectType, "relation \"%s\" cannot have triggers", t.Name()))
-	}
-
-	// TRUNCATE is not compatible with FOR EACH ROW.
-	if ct.ForEach == tree.TriggerForEachRow && allEventTypes.Contains(tree.TriggerEventTruncate) {
-		panic(pgerror.New(pgcode.FeatureNotSupported,
-			"TRUNCATE FOR EACH ROW triggers are not supported"))
-	}
-
-	// Validate usage of INSTEAD OF timing.
-	if ct.ActionTime == tree.TriggerActionTimeInsteadOf {
-		if ct.ForEach != tree.TriggerForEachRow {
-			panic(pgerror.New(pgcode.FeatureNotSupported,
-				"INSTEAD OF triggers must be FOR EACH ROW"))
-		}
-		if ct.When != nil {
-			panic(pgerror.New(pgcode.FeatureNotSupported,
-				"INSTEAD OF triggers cannot have WHEN conditions"))
-		}
-		if hasTargetCols {
-			panic(pgerror.New(pgcode.FeatureNotSupported,
-				"INSTEAD OF triggers cannot have column lists"))
-		}
-	}
-
-	// Validate usage of transition tables.
-	if len(ct.Transitions) > 0 {
-		if ct.ActionTime != tree.TriggerActionTimeAfter {
-			panic(pgerror.New(pgcode.InvalidObjectDefinition,
-				"transition table name can only be specified for an AFTER trigger"))
-		}
-		if allEventTypes.Contains(tree.TriggerEventTruncate) {
-			panic(pgerror.New(pgcode.InvalidObjectDefinition,
-				"TRUNCATE triggers cannot specify transition tables"))
-		}
-		if len(ct.Events) > 1 {
-			panic(pgerror.New(pgcode.FeatureNotSupported,
-				"transition tables cannot be specified for triggers with more than one event"))
-		}
-		if hasTargetCols {
-			panic(pgerror.New(pgcode.FeatureNotSupported,
-				"transition tables cannot be specified for triggers with column lists"))
-		}
-	}
-	if len(ct.Transitions) == 2 && ct.Transitions[0].Name == ct.Transitions[1].Name {
-		panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-			"OLD TABLE name and NEW TABLE name cannot be the same"))
-	}
-	var sawOld, sawNew bool
-	for i := range ct.Transitions {
-		if ct.Transitions[i].IsNew {
-			if !allEventTypes.Contains(tree.TriggerEventInsert) &&
-				!allEventTypes.Contains(tree.TriggerEventUpdate) {
-				panic(pgerror.New(pgcode.InvalidObjectDefinition,
-					"NEW TABLE can only be specified for an INSERT or UPDATE trigger"))
-			}
-			if sawNew {
-				panic(pgerror.Newf(pgcode.Syntax, "cannot specify NEW more than once"))
-			}
-			sawNew = true
-		} else {
-			if !allEventTypes.Contains(tree.TriggerEventDelete) &&
-				!allEventTypes.Contains(tree.TriggerEventUpdate) {
-				panic(pgerror.New(pgcode.InvalidObjectDefinition,
-					"OLD TABLE can only be specified for a DELETE or UPDATE trigger"))
-			}
-			if sawOld {
-				panic(pgerror.Newf(pgcode.Syntax, "cannot specify OLD more than once"))
-			}
-			sawOld = true
-		}
-		if ct.Transitions[i].IsRow {
-			// NOTE: Postgres also returns an "unimplemented" error here.
-			panic(errors.WithHint(pgerror.New(pgcode.FeatureNotSupported,
-				"ROW variable naming in the REFERENCING clause is not supported"),
-				"Use OLD TABLE or NEW TABLE for naming transition tables."))
-		}
-	}
 }
 
 // buildWhenForTrigger builds and validates the WHEN clause of a trigger.
