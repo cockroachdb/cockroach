@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/raft/raftpb",
         "//pkg/util/hlc",
+        "@org_golang_x_exp//maps",
     ],
 )
 

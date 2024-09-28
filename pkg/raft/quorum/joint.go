@@ -36,7 +36,7 @@ func (c JointConfig) String() string {
 // IDs returns a newly initialized map representing the set of voters present
 // in the joint configuration.
 func (c JointConfig) IDs() map[pb.PeerID]struct{} {
-	m := map[pb.PeerID]struct{}{}
+	m := make(map[pb.PeerID]struct{}, len(c[0])+len(c[1]))
 	for _, cc := range c {
 		for id := range cc {
 			m[id] = struct{}{}
@@ -55,12 +55,7 @@ func (c JointConfig) Describe(l AckedIndexer) string {
 // quorum. An index is jointly committed if it is committed in both constituent
 // majorities.
 func (c JointConfig) CommittedIndex(l AckedIndexer) Index {
-	idx0 := c[0].CommittedIndex(l)
-	idx1 := c[1].CommittedIndex(l)
-	if idx0 < idx1 {
-		return idx0
-	}
-	return idx1
+	return min(c[0].CommittedIndex(l), c[1].CommittedIndex(l))
 }
 
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
