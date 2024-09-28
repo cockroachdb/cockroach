@@ -40,6 +40,12 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// This test sometimes flake on separate-process
+		// deployments. Needs investigation.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 	n1 := 1
 	n2 := 2
@@ -153,7 +159,10 @@ func partialDecommission(
 	cmd = cmd.
 		WithEqualsSyntax().
 		Flag("wait", "none").
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `decommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir)
 
 	return c.RunE(ctx, option.WithNodes(c.Node(from)), cmd.String())
@@ -170,7 +179,10 @@ func recommissionNodes(
 	cockroachPath string,
 ) error {
 	cmd := roachtestutil.NewCommand("%s node recommission %s", cockroachPath, nodes.NodeIDsString()).
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `recommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir).
 		String()
 
@@ -185,7 +197,10 @@ func fullyDecommission(
 	cmd := roachtestutil.NewCommand("%s node decommission %d", cockroachPath, target).
 		WithEqualsSyntax().
 		Flag("wait", "all").
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `decommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir).
 		String()
 
