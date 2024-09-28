@@ -552,9 +552,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 //
 // Returns at least one entry if the interval contains any. The maxSize can only
 // be exceeded if the first entry (lo+1) is larger.
-//
-// TODO(pav-kv): export the logSlice type so that the caller can use it.
-func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (logSlice, error) {
+func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (LogSlice, error) {
 	prevTerm, err := l.term(lo)
 	if err != nil {
 		// The log is probably compacted at index > lo (err == ErrCompacted), or it

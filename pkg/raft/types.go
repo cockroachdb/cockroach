@@ -61,6 +61,8 @@ func (l LogMark) After(other LogMark) bool {
 	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
 }
 
+type LogSlice = logSlice // TODO(pav-kv): export logSlice properly
+
 // logSlice describes a correct slice of a raft log.
 //
 // Every log slice is considered in a context of a specific leader term. This
