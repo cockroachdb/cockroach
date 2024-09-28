@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -26,8 +26,8 @@ func (tc *Catalog) CreateType(c *tree.CreateType) {
 	if c.Variety != tree.Enum {
 		panic("only enum types can be created")
 	}
-	typOid := oid.Oid(oidext.CockroachPredefinedOIDMax + 1 + len(tc.enumTypes)*2)
-	arrayOid := typOid + 1
+	typOid := catid.TypeIDToOID(catid.DescID(tc.nextStableID()))
+	arrayOid := catid.TypeIDToOID(catid.DescID(tc.nextStableID()))
 	typ := types.MakeEnum(typOid, arrayOid)
 
 	// We don't handle fully qualified names.
