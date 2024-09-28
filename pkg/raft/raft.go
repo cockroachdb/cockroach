@@ -509,13 +509,14 @@ func (r *raft) hardState() pb.HardState {
 	}
 }
 
-// send schedules persisting state to a stable storage and AFTER that
-// sending the message (as part of next Ready message processing).
-func (r *raft) send(m pb.Message) {
+// prepareMessage sets the given message's sender, and term if the message type
+// requires one. It also sanity checks that the term is populated correctly.
+func (r *raft) prepareMessage(m *pb.Message) {
 	if m.From == None {
 		m.From = r.id
 	}
-	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp {
+	switch m.Type {
+	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp:
 		if m.Term == 0 {
 			// All {pre-,}campaign messages need to have the term set when
 			// sending.
@@ -531,7 +532,7 @@ func (r *raft) send(m pb.Message) {
 			//   same reasons MsgPreVote is
 			r.logger.Panicf("term should be set when sending %s", m.Type)
 		}
-	} else {
+	default:
 		if m.Term != 0 {
 			r.logger.Panicf("term should not be set when sending %s (was %d)", m.Type, m.Term)
 		}
@@ -541,8 +542,21 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
-	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp ||
-		m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeaderResp {
+}
+
+// send prepares the given message for being sent, and puts it into the outgoing
+// message queue. The outgoing messages will be handed over to the application
+// via the next Ready handling cycle.
+//
+// Certain message types are scheduled for being sent *after* the unstable state
+// is durably persisted in storage. If AsyncStorageWrites config flag is true,
+// the responsibility of upholding this condition is on the application; if
+// false, the messages will skip one Ready handling cycle, and will be sent in
+// the cycle after it (after the application has persisted the state).
+func (r *raft) send(m pb.Message) {
+	r.prepareMessage(&m)
+	switch m.Type {
+	case pb.MsgAppResp, pb.MsgVoteResp, pb.MsgPreVoteResp, pb.MsgFortifyLeaderResp:
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
 		// writes and election votes) have been durably synced to the local
@@ -591,7 +605,7 @@ func (r *raft) send(m pb.Message) {
 		// we err on the side of safety and omit a `&& !m.Reject` condition
 		// above.
 		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
-	} else {
+	default:
 		if m.To == r.id {
 			r.logger.Panicf("message should not be self-addressed when sending %s", m.Type)
 		}
