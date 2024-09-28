@@ -638,6 +638,22 @@ func (r *raft) prepareMsgApp(to pb.PeerID, pr *tracker.Progress, ls logSlice) pb
 	}
 }
 
+// maybePrepareMsgApp returns a MsgApp message to be sent to the given peer,
+// containing the given log slice.
+//
+// Returns false if the current state of the node does not permit this MsgApp
+// send, e.g. the log slice is misaligned with the replication flow status.
+func (r *raft) maybePrepareMsgApp(to pb.PeerID, ls logSlice) (pb.Message, bool) {
+	if r.state != StateLeader || r.Term != ls.term {
+		return pb.Message{}, false
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.Next != ls.prev.index+1 {
+		return pb.Message{}, false
+	}
+	return r.prepareMsgApp(to, pr, ls), true
+}
+
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
 // yet known to be replicated in the given peer's log, as well as the current
 // commit index. Usually it sends a MsgApp message, but in some cases (e.g. the

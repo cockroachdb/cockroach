@@ -133,6 +133,22 @@ func (rn *RawNode) LogSnapshot() LogSnapshot {
 	return rn.raft.raftLog.snap(rn.raft.raftLog.storage.LogSnapshot())
 }
 
+// SendMsgApp conditionally sends a MsgApp message containing the given log
+// slice to the given peer. The message is returned to the caller, who is
+// responsible for actually sending it. The RawNode only updates the internal
+// state to reflect the fact that it was sent.
+//
+// The message can be sent only if all the conditions are true:
+//   - this node is the leader of term to which the slice corresponds
+//   - the given peer exists
+//   - the replication flow to the given peer is in StateReplicate
+//   - the first slice index matches the Next index to send to this peer
+//
+// Returns false if the message can not be sent.
+func (rn *RawNode) SendMsgApp(to pb.PeerID, slice logSlice) (pb.Message, bool) {
+	return rn.raft.maybePrepareMsgApp(to, slice)
+}
+
 // Ready returns the outstanding work that the application needs to handle. This
 // includes appending and applying entries or a snapshot, updating the HardState,
 // and sending messages. The returned Ready() *must* be handled and subsequently
