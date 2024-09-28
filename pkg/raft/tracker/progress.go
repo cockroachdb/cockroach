@@ -19,10 +19,11 @@ package tracker
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"golang.org/x/exp/maps"
 )
 
 // Progress represents a follower’s progress in the view of the leader. Leader
@@ -414,13 +415,8 @@ func MakeEmptyProgressMap() ProgressMap {
 
 // String prints the ProgressMap in sorted key order, one Progress per line.
 func (m ProgressMap) String() string {
-	ids := make([]pb.PeerID, 0, len(m))
-	for k := range m {
-		ids = append(ids, k)
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
-	})
+	ids := maps.Keys(m)
+	slices.Sort(ids)
 	var buf strings.Builder
 	for _, id := range ids {
 		fmt.Fprintf(&buf, "%d: %s\n", id, m[id])
