@@ -542,6 +542,10 @@ func (r *raft) send(m pb.Message) {
 			//   same reasons MsgPreVote is
 			r.logger.Panicf("term should be set when sending %s", m.Type)
 		}
+	case pb.MsgApp:
+		if m.Term != r.Term {
+			r.logger.Panicf("invalid term %d in MsgApp, must be %d", m.Term, r.Term)
+		}
 	default:
 		if m.Term != 0 {
 			r.logger.Panicf("term should not be set when sending %s (was %d)", m.Type, m.Term)
@@ -611,6 +615,28 @@ func (r *raft) send(m pb.Message) {
 	}
 }
 
+// makeMsgApp constructs a MsgApp message for being sent to the given peer, and
+// hands it over to the caller. Updates the replication flow control state to
+// account for the fact that the message is about to be sent.
+func (r *raft) makeMsgApp(to pb.PeerID, pr *tracker.Progress, ls logSlice) pb.Message {
+	commit := r.raftLog.committed
+	// Update the progress accordingly to the message being sent.
+	pr.SentEntries(len(ls.entries), uint64(payloadsSize(ls.entries)))
+	pr.MaybeUpdateSentCommit(commit)
+	// Hand over the message to the caller.
+	return pb.Message{
+		From:    r.id,
+		To:      to,
+		Type:    pb.MsgApp,
+		Term:    ls.term,
+		Index:   ls.prev.index,
+		LogTerm: ls.prev.term,
+		Entries: ls.entries,
+		Commit:  commit,
+		Match:   pr.Match,
+	}
+}
+
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
 // yet known to be replicated in the given peer's log, as well as the current
 // commit index. Usually it sends a MsgApp message, but in some cases (e.g. the
@@ -639,7 +665,6 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		// follower log anymore. Send a snapshot instead.
 		return r.maybeSendSnapshot(to, pr)
 	}
-
 	var entries []pb.Entry
 	if pr.CanSendEntries(last) {
 		if entries, err = r.raftLog.entries(prevIndex, r.maxMsgSize); err != nil {
@@ -648,18 +673,11 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		}
 	}
 
-	// Send the MsgApp, and update the progress accordingly.
-	r.send(pb.Message{
-		To:      to,
-		Type:    pb.MsgApp,
-		Index:   prevIndex,
-		LogTerm: prevTerm,
-		Entries: entries,
-		Commit:  commit,
-		Match:   pr.Match,
-	})
-	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
-	pr.MaybeUpdateSentCommit(commit)
+	r.send(r.makeMsgApp(to, pr, logSlice{
+		term:    r.Term,
+		prev:    entryID{index: prevIndex, term: prevTerm},
+		entries: entries,
+	}))
 	return true
 }
 
@@ -671,7 +689,6 @@ func (r *raft) sendPing(to pb.PeerID) bool {
 	if pr == nil || pr.State != tracker.StateReplicate || pr.MsgAppProbesPaused {
 		return false
 	}
-	commit := r.raftLog.committed
 	prevIndex := pr.Next - 1
 	prevTerm, err := r.raftLog.term(prevIndex)
 	// An error happens then the log is truncated beyond Next. We can't send a
@@ -679,16 +696,11 @@ func (r *raft) sendPing(to pb.PeerID) bool {
 	if err != nil {
 		return false
 	}
-	r.send(pb.Message{
-		To:      to,
-		Type:    pb.MsgApp,
-		Index:   prevIndex,
-		LogTerm: prevTerm,
-		Commit:  commit,
-		Match:   pr.Match,
-	})
-	pr.SentEntries(0, 0) // NB: this sets MsgAppProbesPaused to true again.
-	pr.MaybeUpdateSentCommit(commit)
+	// NB: this sets MsgAppProbesPaused to true again.
+	r.send(r.makeMsgApp(to, pr, logSlice{
+		term: r.Term,
+		prev: entryID{index: prevIndex, term: prevTerm},
+	}))
 	return true
 }
 
