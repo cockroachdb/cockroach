@@ -1215,4 +1215,26 @@ t_int  CREATE TABLE public.t_int (
 statement ok
 DROP TABLE t_int;
 
+subtest partial_index_fails_with_error
+
+onlyif config local-legacy-schema-changer
+statement ok
+create table roach_village ( roach_id int primary key, first_name text, last_name text, legs int );
+
+onlyif config local-legacy-schema-changer
+statement ok
+create index idx on roach_village(last_name) where first_name = 'papa roach';
+
+onlyif config local-legacy-schema-changer
+statement error pq: cannot alter type of column "first_name" because it is referenced by partial index "idx"
+alter table roach_village alter column first_name set data type timestamp using first_name::timestamp;
+
+onlyif config local-legacy-schema-changer
+statement error pq: cannot alter type of column "last_name" because it is referenced by partial index "idx"
+alter table roach_village alter column last_name set data type timestamp using last_name::timestamp;
+
+onlyif config local-legacy-schema-changer
+statement ok
+alter table roach_village alter column legs set data type timestamp using legs::timestamp;
+
 subtest end
