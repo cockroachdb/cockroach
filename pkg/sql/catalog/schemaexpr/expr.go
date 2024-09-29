@@ -468,9 +468,9 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-// ValidateTTLExpressionDoesNotDependOnColumn verifies that the
+// ValidateTTLExpression verifies that the
 // ttl_expiration_expression, if any, does not reference the given column.
-func ValidateTTLExpressionDoesNotDependOnColumn(
+func ValidateTTLExpression(
 	tableDesc catalog.TableDescriptor,
 	rowLevelTTL *catpb.RowLevelTTL,
 	col catalog.Column,
@@ -505,6 +505,18 @@ func ValidateComputedColumnExpressionDoesNotDependOnColumn(
 				return sqlerrors.NewDependentBlocksOpError(op, objType,
 					string(dependentCol.ColName()), "computed column", string(col.ColName()))
 			}
+		}
+	}
+	return nil
+}
+
+// ValidatePartialIndex verifies that we have no partial indexes that references the column.
+func ValidatePartialIndex(
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
+) error {
+	for _, index := range tableDesc.AllIndexes() {
+		if index.IsPartial() {
+			return sqlerrors.ColumnReferencedByPartialIndex(op, objType, string(dependentCol.ColName()), index.GetName())
 		}
 	}
 	return nil
