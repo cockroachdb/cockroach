@@ -78,7 +78,7 @@ type expectPromRangeQuery struct {
 
 var (
 	statsTestingStartTime = time.Date(2020, 12, 25, 0, 0, 0, 0, time.UTC)
-	statsTestingDuration  = prometheus.DefaultScrapeInterval
+	statsTestingDuration  = 10 * time.Second
 
 	fooStat = ClusterStat{Query: "foo_count", LabelName: "instance"}
 	barStat = ClusterStat{Query: "bar_count", LabelName: "instance"}

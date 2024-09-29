@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sparkline",
+    srcs = [
+        "iterm.go",
+        "sparkline.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/sparkline",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

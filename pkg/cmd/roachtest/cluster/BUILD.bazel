@@ -17,7 +17,7 @@ go_library(
         "//pkg/roachprod",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
-        "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/prometheus/prominstaller",
         "//pkg/roachprod/vm",
         "@com_github_cockroachdb_errors//:errors",
     ],

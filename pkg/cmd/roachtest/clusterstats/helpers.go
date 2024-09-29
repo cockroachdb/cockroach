@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	prominstaller "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus/prominstaller"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -25,7 +26,7 @@ import (
 // configuration. It assumes that a prometheus instance has been created for
 // the configuration already.
 func SetupCollectorPromClient(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, cfg *prometheus.Config,
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, cfg *prominstaller.Config,
 ) (prometheus.Client, error) {
 	prometheusNodeIP, err := c.ExternalIP(ctx, l, c.Node(int(cfg.PrometheusNode[0])))
 	if err != nil {
@@ -49,12 +50,12 @@ func (i Interval) valid() bool {
 // TrimTaggedSeries returns a map of labeled time series values that have equal
 // start times, end times, and length.
 func TrimTaggedSeries(
-	ctx context.Context, l *logger.Logger, taggedSeries map[string]map[string]StatSeries,
-) (map[string]map[string]StatSeries, int, Interval) {
+	ctx context.Context, l *logger.Logger, taggedSeries map[string]map[string]prometheus.StatSeries,
+) (map[string]map[string]prometheus.StatSeries, int, Interval) {
 	lowTS := int64(math.MaxInt64)
 	highTS := int64(math.MinInt64)
 	longest := 0
-	result := make(map[string]map[string]StatSeries)
+	result := make(map[string]map[string]prometheus.StatSeries)
 	skip := make(map[string]bool)
 
 	// Find the highest start timestamp and the lowest end timestamp. These
@@ -91,7 +92,7 @@ func TrimTaggedSeries(
 		if _, shouldSkip := skip[labelName]; shouldSkip {
 			continue
 		}
-		result[labelName] = make(map[string]StatSeries)
+		result[labelName] = make(map[string]prometheus.StatSeries)
 		for labelValue, series := range labelValues {
 			trimmedSeries, err := trimSeries(trimInterval, series)
 			if err != nil {
@@ -114,7 +115,7 @@ func TrimTaggedSeries(
 // trimSeries trims a series such that the smallest timestamp is at least as
 // great as interval.From and the largest timestamp is at least as small as
 // interval.To. e.g. trimSeries([1,2,3,4], (2,4)) returns [2,3,4].
-func trimSeries(interval Interval, series StatSeries) (StatSeries, error) {
+func trimSeries(interval Interval, series prometheus.StatSeries) (prometheus.StatSeries, error) {
 	if len(series) < 1 {
 		return series, nil
 	}

@@ -27,6 +27,7 @@ go_library(
         "//pkg/roachprod/prometheus",
         # Required for generated mocks
         "//pkg/roachprod/vm",  #keep
+        "//pkg/roachprod/prometheus/prominstaller",
         "//pkg/util/search",
         "//pkg/util/timeutil",
         # Required for generated mocks
@@ -34,7 +35,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
-        "@com_github_prometheus_common//model",
         "@org_golang_x_exp//maps",
     ],
 )
