@@ -1216,3 +1216,20 @@ statement ok
 DROP TABLE t_int;
 
 subtest end
+
+subtest partial_index_fails_with_error
+
+statement ok
+set enable_experimental_alter_column_type_general='true';
+set use_declarative_schema_changer = off;
+
+statement ok
+create table a ( a int primary key, b text, c text );
+
+statement ok
+create index idx on a(c) where b = 'cat';
+
+statement error pq: cannot alter type of column "b" because it is referenced by partial index "idx"
+alter table a alter column b set data type timestamp  using a::timestamp;
+
+subtest end
