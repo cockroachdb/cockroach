@@ -119,7 +119,7 @@ Examples:
 				if s.Skip != "" {
 					skip = " (skipped: " + s.Skip + ")"
 				}
-				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
+				fmt.Printf("%s [%s]%s %v\n", s.Name, s.Owner, skip, s.Randomized)
 			}
 			return nil
 		},

@@ -1,30 +1,17 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "prometheus",
-    srcs = ["prometheus.go"],
+    srcs = ["query.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod/install",
-        "//pkg/roachprod/logger",
-        "//pkg/roachprod/vm",
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/roachprodutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
-        "@in_gopkg_yaml_v2//:yaml_v2",
-    ],
-)
-
-go_test(
-    name = "prometheus_test",
-    srcs = ["prometheus_test.go"],
-    data = glob(["testdata/**"]),
-    embed = [":prometheus"],
-    deps = [
-        "//pkg/roachprod/install",
-        "//pkg/testutils/datapathutils",
-        "//pkg/testutils/echotest",
-        "@com_github_stretchr_testify//require",
+        "@org_golang_google_api//idtoken",
     ],
 )

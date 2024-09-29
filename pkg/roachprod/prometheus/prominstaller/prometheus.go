@@ -17,18 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
-	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 )
 
 const defaultWorkloadPort = 2112
-
-// Client is an interface allowing queries against Prometheus.
-type Client interface {
-	Query(ctx context.Context, query string, ts time.Time, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
-	QueryRange(ctx context.Context, query string, r promv1.Range, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
-}
 
 // ScrapeNode is a node to scrape from.
 type ScrapeNode struct {
