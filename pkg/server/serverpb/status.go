@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
@@ -90,6 +91,7 @@ type TenantStatusServer interface {
 	// SpanStats is used to access MVCC stats from KV
 	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
 	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
+	Node(context.Context, *NodeRequest) (*statuspb.NodeStatus, error)
 	// TODO(adityamaru): DownloadSpan has the side effect of telling the engine to
 	// download remote files. A method that mutates state should not be on the
 	// status server and so in the long run we should move it.

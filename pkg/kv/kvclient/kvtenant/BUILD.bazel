@@ -29,6 +29,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
+        "//pkg/server/status/statuspb",
         "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/sql/isql",

@@ -146,6 +146,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Nodes":
 		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
+	case "/cockroach.server.serverpb.Status/Node":
+		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
+
 	case "/cockroach.server.serverpb.Admin/Liveness":
 		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 

@@ -108,6 +108,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/server/status/statuspb",
         "//pkg/util/errorutil",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",

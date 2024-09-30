@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -645,6 +646,16 @@ func (c *connector) Nodes(
 ) (resp *serverpb.NodesResponse, retErr error) {
 	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
 		resp, err = client.Nodes(ctx, req)
+		return
+	})
+	return
+}
+
+func (c *connector) Node(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (resp *statuspb.NodeStatus, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Node(ctx, req)
 		return
 	})
 	return

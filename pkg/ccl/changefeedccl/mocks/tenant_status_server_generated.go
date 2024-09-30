@@ -10,6 +10,7 @@ import (
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	serverpb "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	statuspb "github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -64,6 +65,21 @@ func (m *MockTenantStatusServer) HotRangesV2(arg0 context.Context, arg1 *serverp
 func (mr *MockTenantStatusServerMockRecorder) HotRangesV2(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HotRangesV2", reflect.TypeOf((*MockTenantStatusServer)(nil).HotRangesV2), arg0, arg1)
+}
+
+// Node mocks base method.
+func (m *MockTenantStatusServer) Node(arg0 context.Context, arg1 *serverpb.NodeRequest) (*statuspb.NodeStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Node", arg0, arg1)
+	ret0, _ := ret[0].(*statuspb.NodeStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Node indicates an expected call of Node.
+func (mr *MockTenantStatusServerMockRecorder) Node(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Node", reflect.TypeOf((*MockTenantStatusServer)(nil).Node), arg0, arg1)
 }
 
 // Nodes mocks base method.

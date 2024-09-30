@@ -2037,7 +2037,7 @@ func (s *systemStatusServer) nodesHelper(
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
-func (s *statusServer) Node(
+func (s *systemStatusServer) Node(
 	ctx context.Context, req *serverpb.NodeRequest,
 ) (*statuspb.NodeStatus, error) {
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
@@ -2054,6 +2054,25 @@ func (s *statusServer) Node(
 	// NB: not using srverrors.ServerError() here since nodeStatus
 	// already returns a proper gRPC error status.
 	return s.nodeStatus(ctx, req)
+}
+
+func (s *statusServer) Node(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*statuspb.NodeStatus, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are privileged information..
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		// NB: not using srverrors.ServerError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	// NB: not using srverrors.ServerError() here since nodeStatus
+	// already returns a proper gRPC error status.
+	return s.sqlServer.tenantConnect.Node(ctx, req)
 }
 
 func (s *statusServer) nodeStatus(
