@@ -33,8 +33,8 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		HeartbeatInterval:       3 * time.Millisecond,
 		LivenessInterval:        6 * time.Millisecond,
+		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
 	}
