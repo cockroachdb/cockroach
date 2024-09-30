@@ -735,7 +735,7 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 // maybeSendFortify sends a fortification RPC to the given peer if it isn't
 // fortified but the peer's store supports the leader's store in StoreLiveness.
 func (r *raft) maybeSendFortify(id pb.PeerID) {
-	if !r.storeLiveness.SupportFromEnabled() {
+	if !r.fortificationTracker.FortificationEnabled() {
 		// The underlying store liveness fabric hasn't been enabled to allow the
 		// leader to request support from peers. No-op.
 		return
