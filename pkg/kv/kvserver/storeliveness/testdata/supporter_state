@@ -17,6 +17,13 @@ support-for node-id=2 store-id=2
 ----
 epoch: 1, support provided: true
 
+# -------------------------------------------------------------
+# Store (n1, s1) does not provide support for an unknown store.
+# -------------------------------------------------------------
+
+support-for node-id=3 store-id=3
+----
+epoch: 0, support provided: false
 
 # -------------------------------------------------------------
 # Store (n1, s1) extends support.
@@ -54,7 +61,7 @@ withdraw-support now=201
 
 support-for node-id=2 store-id=2
 ----
-epoch: 0, support provided: false
+epoch: 2, support provided: false
 
 debug-supporter-state
 ----

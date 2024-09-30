@@ -156,7 +156,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 			if supported {
 				return errors.New("support not withdrawn yet")
 			}
-			require.Equal(t, slpb.Epoch(0), epoch)
+			require.Equal(t, slpb.Epoch(2), epoch)
 			require.False(t, supported)
 			return nil
 		},
