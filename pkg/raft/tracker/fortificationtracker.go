@@ -45,6 +45,11 @@ func MakeFortificationTracker(
 	return st
 }
 
+// FortificationEnabled returns whether the store liveness is currently active.
+func (st *FortificationTracker) FortificationEnabled() bool {
+	return st.storeLiveness.SupportFromEnabled()
+}
+
 // RecordFortification records that the node with the given id supported this
 // Raft instance until the supplied timestamp.
 func (st *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch) {

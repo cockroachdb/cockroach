@@ -22,6 +22,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFortificationEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		storeLiveness raftstoreliveness.StoreLiveness
+		expectEnabled bool
+	}{
+		{
+			storeLiveness: raftstoreliveness.Disabled{},
+			expectEnabled: false,
+		},
+		{
+			storeLiveness: raftstoreliveness.AlwaysLive{},
+			expectEnabled: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		cfg := quorum.MakeEmptyConfig()
+		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		require.Equal(t, tc.expectEnabled, fortificationTracker.FortificationEnabled())
+	}
+}
+
 func TestLeadSupportUntil(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -143,7 +168,7 @@ func TestLeadSupportUntil(t *testing.T) {
 	}
 }
 
-func TestIsSupportedBy(t *testing.T) {
+func TestIsFortifiedBy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
