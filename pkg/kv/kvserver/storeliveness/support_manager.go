@@ -97,10 +97,7 @@ var _ MessageHandler = (*SupportManager)(nil)
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 	ss := sm.supporterStateHandler.getSupportFor(id)
 	// An empty expiration implies support has expired.
-	if ss.Expiration.IsEmpty() {
-		return 0, false
-	}
-	return ss.Epoch, true
+	return ss.Epoch, !ss.Expiration.IsEmpty()
 }
 
 // SupportFrom implements the Fabric interface. It delegates the response to the
@@ -119,10 +116,6 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 			context.Background(), 2,
 			"store %+v enqueued to add remote store %+v", sm.storeID, id,
 		)
-		return 0, hlc.Timestamp{}
-	}
-	// An empty expiration implies support has expired.
-	if ss.Expiration.IsEmpty() {
 		return 0, hlc.Timestamp{}
 	}
 	return ss.Epoch, ss.Expiration
