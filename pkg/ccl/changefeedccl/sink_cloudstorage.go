@@ -872,7 +872,6 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 
 			if err != nil {
 				log.Errorf(ctx, "error flushing file to storage: %s", err)
-				s.metrics.recordSinkError(ctx, sinkTypeCloudstorage, err)
 				s.asyncFlushErr = err
 				return err
 			}
@@ -883,8 +882,13 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 // flushToStorage writes out file into external storage into 'dest'.
 func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
-) error {
+) (retErr error) {
 	defer f.releaseAlloc(ctx)
+	defer func() {
+		if retErr != nil {
+			f.recordError(ctx, retErr)
+		}
+	}()
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
