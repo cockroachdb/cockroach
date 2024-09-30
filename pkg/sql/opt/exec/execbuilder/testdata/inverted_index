@@ -367,7 +367,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /[]-/{} /???-/???
+              spans: /[]-/{} /Arr/-/Arr//PrefixEnd
 
 
 # TODO(rytaft): Fix the stats so we don't choose an inverted index scan here
@@ -397,7 +397,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /{}-/{}/PrefixEnd /???-/[]
+              spans: /{}-/{}/PrefixEnd /""-/[]
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
@@ -827,7 +827,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/???
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/Arr/
 
 # Note: we use an index hint here because we're unable to determine the
 # selectivity of the filter, which leads to a bad plan without the hint.
@@ -856,7 +856,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd /???-/???
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd /???-/Arr/
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo' AND b->'b' @> '{"a": "b"}'
@@ -883,7 +883,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"b"/"a"/"b"-/"b"/"a"/"b"/PrefixEnd /???-/???
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"b"/"a"/"b"-/"b"/"a"/"b"/PrefixEnd /???-/Arr/
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b ?| ARRAY['foo', 'bar']
@@ -910,7 +910,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/Arr/ /???-/Arr/
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b ?& ARRAY['foo', 'bar']
@@ -937,7 +937,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/Arr/ /???-/Arr/
 
 # Multi-path contains queries. Should create zigzag joins.
 
@@ -1130,7 +1130,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/2-/"b"/2/PrefixEnd
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /"a"/-/Arr/ /"b"/2-/"b"/2/PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
@@ -1157,7 +1157,7 @@ vectorized: true
               columns: (a, b_inverted_key)
               estimated row count: 111 (missing stats)
               table: d@foo_inv
-              spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/{}-/"b"/{}/PrefixEnd /???-/???
+              spans: /"a"/{}-/"a"/{}/PrefixEnd /"a"/-/Arr/ /"b"/{}-/"b"/{}/PrefixEnd /"b"/-/Arr/
 
 # Replicating the logic tests for filters with an integer on the RHS of the
 # fetch value.
@@ -1198,7 +1198,7 @@ vectorized: true
                       columns: (a, b_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: d@foo_inv
-                      spans: /Arr/[]-/Arr/{} /???-/???
+                      spans: /Arr/[]-/Arr/{} /Arr/Arr/-/Arr/Arr//PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b->0 = '"a"'
@@ -2226,7 +2226,7 @@ vectorized: true
                       columns: (a, b_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: d@foo_inv
-                      spans: /{}-/{}/PrefixEnd /???-/[]
+                      spans: /{}-/{}/PrefixEnd /""-/[]
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[]'
@@ -2261,7 +2261,7 @@ vectorized: true
                       columns: (a, b_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: d@foo_inv
-                      spans: /[]-/{} /???-/???
+                      spans: /[]-/{} /Arr/-/Arr//PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '{"b": 2, "a": 1}'
@@ -2514,7 +2514,7 @@ vectorized: true
                       columns: (a, b_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: d@foo_inv
-                      spans: /[]-/{} /???-/???
+                      spans: /[]-/{} /Arr/-/Arr//PrefixEnd
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('[1, 2, 3]', '[1]')
@@ -2584,7 +2584,7 @@ vectorized: true
                       columns: (a, b_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: d@foo_inv
-                      spans: /"a"/[]-/"a"/{}/PrefixEnd /???-/??? /???-/???
+                      spans: /"a"/[]-/"a"/{}/PrefixEnd /"a"/Arr/-/"a"/Arr//PrefixEnd /"a"/-/Arr/
 
 
 query T
@@ -3565,7 +3565,7 @@ index-join t117979
  └── scan t117979@idx_links,inverted [as=t]
       ├── columns: id:1
       ├── inverted constraint: /5/1
-      │    └── spans: ["\x12str1\x00\x01", "\x12str1\x00\x01"]
+      │    └── spans: ["str1", "str1"]
       ├── flags: force-index=idx_links
       ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
       ├── cost: 135.797778
