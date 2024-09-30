@@ -2629,7 +2629,7 @@ project
            └── scan fits@fits_items_idx,inverted
                 ├── columns: killmail:1!null
                 ├── inverted constraint: /13/1
-                │    └── spans: ["7\x00\x03\x00\x01,\v_>\x00", "7\x00\x03\x00\x01,\v_>\x00"]
+                │    └── spans: [Arr/54731, Arr/54731]
                 ├── stats: [rows=0.004711281, distinct(13)=0.00471128, null(13)=0]
                 │   histogram(13)=
                 └── key: (1)
