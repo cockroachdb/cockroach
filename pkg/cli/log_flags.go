@@ -481,6 +481,7 @@ sinks:
   sql-schema:             { channels: SQL_SCHEMA }
   sql-slow:               { channels: SQL_PERF }
   sql-slow-internal-only: { channels: SQL_INTERNAL_PERF }
+  store-liveness:         { channels: STORE_LIVENESS }
   telemetry:
     channels: TELEMETRY
     max-file-size: 102400

@@ -141,3 +141,6 @@ const TELEMETRY = logpb.Channel_TELEMETRY
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
 const KV_DISTRIBUTION = logpb.Channel_KV_DISTRIBUTION
+
+// STORE_LIVENESS is used for logging Store Liveness state transitions.
+const STORE_LIVENESS = logpb.Channel_STORE_LIVENESS

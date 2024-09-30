@@ -177,3 +177,7 @@ The `KV_DISTRIBUTION` channel is used to report data distribution events, such a
 replicas between stores in the cluster, or adding (removing) replicas to
 ranges.
 
+### `STORE_LIVENESS`
+
+The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+

@@ -6513,3 +6513,278 @@ func (loggerKvDistribution) VEventf(ctx context.Context, level Level, format str
 func (loggerKvDistribution) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_DISTRIBUTION, format, args...)
 }
+
+// loggerStoreLiveness is the logger type for the STORE_LIVENESS channel.
+type loggerStoreLiveness struct{}
+
+// StoreLiveness is a logger that logs to the STORE_LIVENESS channel.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+var StoreLiveness loggerStoreLiveness
+
+// StoreLiveness and loggerStoreLiveness implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = StoreLiveness
+
+// Infof logs to the STORE_LIVENESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerStoreLiveness) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.STORE_LIVENESS, format, args...)
+}
+
+// VInfof logs to the STORE_LIVENESS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerStoreLiveness) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.STORE_LIVENESS, format, args...)
+	}
+}
+
+// Info logs to the STORE_LIVENESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerStoreLiveness) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.STORE_LIVENESS, msg)
+}
+
+// InfofDepth logs to the STORE_LIVENESS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerStoreLiveness) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.STORE_LIVENESS, format, args...)
+}
+
+// Warningf logs to the STORE_LIVENESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerStoreLiveness) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.STORE_LIVENESS, format, args...)
+}
+
+// VWarningf logs to the STORE_LIVENESS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerStoreLiveness) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.STORE_LIVENESS, format, args...)
+	}
+}
+
+// Warning logs to the STORE_LIVENESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerStoreLiveness) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.STORE_LIVENESS, msg)
+}
+
+// WarningfDepth logs to the STORE_LIVENESS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerStoreLiveness) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.STORE_LIVENESS, format, args...)
+}
+
+// Errorf logs to the STORE_LIVENESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStoreLiveness) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.STORE_LIVENESS, format, args...)
+}
+
+// VErrorf logs to the STORE_LIVENESS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStoreLiveness) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.STORE_LIVENESS, format, args...)
+	}
+}
+
+// Error logs to the STORE_LIVENESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStoreLiveness) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.STORE_LIVENESS, msg)
+}
+
+// ErrorfDepth logs to the STORE_LIVENESS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerStoreLiveness) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.STORE_LIVENESS, format, args...)
+}
+
+// Fatalf logs to the STORE_LIVENESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStoreLiveness) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.STORE_LIVENESS, format, args...)
+}
+
+// VFatalf logs to the STORE_LIVENESS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStoreLiveness) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.STORE_LIVENESS, format, args...)
+	}
+}
+
+// Fatal logs to the STORE_LIVENESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStoreLiveness) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.STORE_LIVENESS, msg)
+}
+
+// FatalfDepth logs to the STORE_LIVENESS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerStoreLiveness) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.STORE_LIVENESS, format, args...)
+}
+
+// Shout logs to channel STORE_LIVENESS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+func (loggerStoreLiveness) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.STORE_LIVENESS, msg)
+}
+
+// Shoutf logs to channel STORE_LIVENESS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+func (loggerStoreLiveness) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.STORE_LIVENESS, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+func (loggerStoreLiveness) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.STORE_LIVENESS, "%s", msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+func (loggerStoreLiveness) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.STORE_LIVENESS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `STORE_LIVENESS` channel is used for logging Store Liveness state transitions.
+func (loggerStoreLiveness) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.STORE_LIVENESS, format, args...)
+}

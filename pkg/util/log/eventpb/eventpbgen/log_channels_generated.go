@@ -17,5 +17,6 @@ var channels = map[string]struct{}{
 	"SQL_INTERNAL_PERF": {},
 	"TELEMETRY": {},
 	"KV_DISTRIBUTION": {},
+	"STORE_LIVENESS": {},
 	"CHANNEL_MAX": {},
 }

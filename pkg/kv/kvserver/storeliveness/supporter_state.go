@@ -17,6 +17,7 @@ import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -241,7 +242,9 @@ func (ssh *supporterStateHandler) finishUpdate(ssfu *supporterStateForUpdate) {
 // handleHeartbeat handles a single heartbeat message. It updates the inProgress
 // view of supporterStateForUpdate only if there are any changes, and returns
 // a heartbeat response message.
-func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Message {
+func (ssfu *supporterStateForUpdate) handleHeartbeat(
+	ctx context.Context, msg *slpb.Message,
+) slpb.Message {
 	from := msg.From
 	ss, ok := ssfu.getSupportFor(from)
 	if !ok {
@@ -250,6 +253,7 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Mes
 	ssNew := handleHeartbeat(ss, msg)
 	if ss != ssNew {
 		ssfu.inProgress.supportFor[from] = ssNew
+		logSupportForChange(ctx, ss, ssNew)
 	}
 	return slpb.Message{
 		Type:       slpb.MsgHeartbeatResp,
@@ -275,12 +279,30 @@ func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState 
 	return ss
 }
 
+// logSupportForChange logs the old and new support state after handling a
+// heartbeat.
+func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.SupportState) {
+	if ss.Epoch == ssNew.Epoch && !ss.Expiration.IsEmpty() && !ssNew.Expiration.IsEmpty() {
+		log.StoreLiveness.VInfof(
+			ctx, 3, "extended support for store %+v; current = %+v, previous = %+v",
+			ss.Target, ssNew, ss,
+		)
+	} else {
+		log.StoreLiveness.Infof(
+			ctx, "provided support for store %+v; current = %+v, previous = %+v",
+			ss.Target, ssNew, ss,
+		)
+	}
+}
+
 // Functions for withdrawing support.
 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
 // The function returns the number of stores for which support was withdrawn.
-func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (numWithdrawn int) {
+func (ssfu *supporterStateForUpdate) withdrawSupport(
+	ctx context.Context, now hlc.ClockTimestamp,
+) (numWithdrawn int) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
@@ -291,6 +313,9 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (nu
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
 			ssfu.inProgress.supportFor[id] = ssNew
+			log.StoreLiveness.Infof(
+				ctx, "withdrew support for store %+v; new = %+v, previous = %+v", id, ssNew, ss,
+			)
 			meta := ssfu.getMeta()
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
