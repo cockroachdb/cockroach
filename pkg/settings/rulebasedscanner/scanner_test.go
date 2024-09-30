@@ -45,11 +45,11 @@ func TestScanner(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "scan"), func(t *testing.T, td *datadriven.TestData) string {
 		switch td.Cmd {
 		case "token":
-			remaining, tok, trailingComma, err := NextToken(td.Input)
+			remaining, tok, trailingComma, trailingEqualsOp, err := NextToken(td.Input)
 			if err != nil {
 				return fmt.Sprintf("error: %v", err)
 			}
-			return fmt.Sprintf("%# v %v %q", pretty.Formatter(tok), trailingComma, remaining)
+			return fmt.Sprintf("%# v %v %v %q", pretty.Formatter(tok), trailingComma, trailingEqualsOp, remaining)
 
 		case "field":
 			remaining, field, err := nextFieldExpand(td.Input)

@@ -10,6 +10,8 @@
 
 package rulebasedscanner
 
+import "strings"
+
 // ScannedInput represents the result of tokenizing the input
 // configuration data.
 //
@@ -51,4 +53,15 @@ func (s String) Empty() bool { return s.IsKeyword("") }
 // IsKeyword returns whether s is the non-quoted string v.
 func (s String) IsKeyword(v string) bool {
 	return !s.Quoted && s.Value == v
+}
+
+// Join concatenates the elements of its first argument to create a single
+// string. The separator string sep is placed between elements in the resulting
+// string.
+func Join(elems []String, sep string) string {
+	values := make([]string, len(elems))
+	for idx := range elems {
+		values[idx] = elems[idx].Value
+	}
+	return strings.Join(values, sep)
 }
