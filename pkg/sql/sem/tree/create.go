@@ -2289,7 +2289,7 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 	}
 	if o.EnableReaderTenant != nil {
 		maybeAddSep()
-		ctx.WriteString("READ CAPABILITIES")
+		ctx.WriteString("READ VIRTUAL CLUSTER")
 	}
 }
 
@@ -2314,7 +2314,7 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 
 	if o.EnableReaderTenant != nil {
 		if other.EnableReaderTenant != nil {
-			return errors.New("READ CAPABILITIES option specified multiple times")
+			return errors.New("READ VIRTUAL CLUSTER option specified multiple times")
 		} else {
 			o.EnableReaderTenant = other.EnableReaderTenant
 		}
