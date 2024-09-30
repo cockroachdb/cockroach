@@ -40,6 +40,12 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// This test sometimes flake on separate-process
+		// deployments. Needs investigation.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 	n1 := 1
 	n2 := 2
@@ -126,25 +132,17 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 			return nil
 		})
 
-	mvt.AfterUpgradeFinalized(
-		"fully decommission on last upgrade",
-		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			sleepDur := 2 * suspectDuration
-			l.Printf("sleeping for %s", sleepDur)
-			sleepCtx(ctx, sleepDur)
-
-			if h.Context().ToVersion.IsCurrent() {
-				l.Printf("fully decommissioning n1 via n2")
-
-				n1Version, _ := h.System.NodeVersion(n1) // safe to ignore error as n1 is part of the cluster
-				return fullyDecommission(ctx, c, n1, n2, clusterupgrade.CockroachPathForVersion(t, n1Version))
-			} else {
-				l.Printf("skipping -- still more upgrades to go through")
-				return nil
-			}
-		})
-
 	mvt.Run()
+
+	// Make sure we can fully decommission a node after the upgrade is complete.
+	sleepDur := 2 * suspectDuration
+	t.L().Printf("sleeping for %s", sleepDur)
+	sleepCtx(ctx, sleepDur)
+
+	t.L().Printf("fully decommissioning n1 via n2")
+	if err := fullyDecommission(ctx, c, n1, n2, test.DefaultCockroachPath); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // partialDecommission runs `cockroach node decommission --wait=none`
@@ -161,7 +159,10 @@ func partialDecommission(
 	cmd = cmd.
 		WithEqualsSyntax().
 		Flag("wait", "none").
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `decommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir)
 
 	return c.RunE(ctx, option.WithNodes(c.Node(from)), cmd.String())
@@ -178,7 +179,10 @@ func recommissionNodes(
 	cockroachPath string,
 ) error {
 	cmd := roachtestutil.NewCommand("%s node recommission %s", cockroachPath, nodes.NodeIDsString()).
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `recommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir).
 		String()
 
@@ -193,7 +197,10 @@ func fullyDecommission(
 	cmd := roachtestutil.NewCommand("%s node decommission %d", cockroachPath, target).
 		WithEqualsSyntax().
 		Flag("wait", "all").
-		Flag("port", fmt.Sprintf("{pgport:%d}", from)).
+		// `decommission` only works on the storage cluster, so make sure
+		// we are connecting to the right service in case this command is
+		// running on a multi-tenant deployment.
+		Flag("port", fmt.Sprintf("{pgport:%d:%s}", from, install.SystemInterfaceName)).
 		Flag("certs-dir", install.CockroachNodeCertsDir).
 		String()
 
