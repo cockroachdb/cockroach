@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -114,7 +115,7 @@ func (u *tableMetadataUpdater) upsertBatch(
 
 	upsertBatchSize := 0
 	for _, row := range batch {
-		if err := u.upsertQuery.addRow(&row); err != nil {
+		if err := u.upsertQuery.addRow(ctx, &row); err != nil {
 			log.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
 			continue
 		}
@@ -170,6 +171,7 @@ UPSERT INTO system.table_metadata (
 	total_live_data_bytes,
 	total_data_bytes,
 	perc_live_data,
+	details,
   last_updated
 ) VALUES
 `)
@@ -177,10 +179,12 @@ UPSERT INTO system.table_metadata (
 }
 
 // addRow adds a tableMetadataIterRow to the batch upsert query.
-func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error {
+func (q *tableMetadataBatchUpsertQuery) addRow(
+	ctx context.Context, row *tableMetadataIterRow,
+) error {
 	var stats roachpb.SpanStats
 	if err := gojson.Unmarshal(row.spanStatsJSON, &stats); err != nil {
-		log.Errorf(context.Background(), "failed to decode span stats: %v", err)
+		log.Errorf(ctx, "failed to decode span stats: %v", err)
 	}
 
 	livePercentage := float64(0)
@@ -197,6 +201,11 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 		storeIds[i] = int(id)
 	}
 
+	details := tableMetadataDetails{AutoStatsEnabled: row.autoStatsEnabled, StatsLastUpdated: row.statsLastUpdated}
+	detailsStr, err := gojson.Marshal(details)
+	if err != nil {
+		log.Errorf(ctx, "failed to encode details: %v", err)
+	}
 	args := []interface{}{
 		row.dbID,                   // db_id
 		row.tableID,                // table_id
@@ -212,6 +221,7 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 		liveBytes,                  // total_live_data_bytes
 		total,                      // total_data_bytes
 		livePercentage,             // perc_live_data
+		string(detailsStr),
 	}
 
 	if len(q.args) > 0 {
@@ -235,4 +245,9 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 
 func (q *tableMetadataBatchUpsertQuery) getQuery() string {
 	return q.stmt.String()
+}
+
+type tableMetadataDetails struct {
+	AutoStatsEnabled *bool      `json:"auto_stats_enabled"`
+	StatsLastUpdated *time.Time `json:"stats_last_updated"`
 }

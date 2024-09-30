@@ -256,6 +256,10 @@ const (
 	// control v1 is unsupported at this version.
 	V24_3_UseRACV2Full
 
+	// V24_3_AddTableMetadataCols is the migration to add additional columns
+	// to the system.table_metadata table
+	V24_3_AddTableMetadataCols
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -313,6 +317,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
 	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
 	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
+	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
