@@ -141,3 +141,9 @@ const TELEMETRY = logpb.Channel_TELEMETRY
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
 const KV_DISTRIBUTION = logpb.Channel_KV_DISTRIBUTION
+
+// LIVENESS is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+const LIVENESS = logpb.Channel_LIVENESS

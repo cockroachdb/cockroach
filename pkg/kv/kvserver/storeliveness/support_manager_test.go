@@ -252,7 +252,7 @@ func TestSupportManagerRestart(t *testing.T) {
 	manual.Pause()
 	manualBehind.Pause()
 	sm.SupportFrom(remoteStore)
-	sm.maybeAddStores()
+	sm.maybeAddStores(ctx)
 	sm.sendHeartbeats(ctx)
 	requestedTime := sm.requesterStateHandler.requesterState.meta.MaxRequested
 	heartbeatResp := &slpb.Message{
@@ -316,7 +316,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 
 	// Establish support for and from the remote store.
 	sm.SupportFrom(remoteStore)
-	sm.maybeAddStores()
+	sm.maybeAddStores(ctx)
 	sm.sendHeartbeats(ctx)
 	requestedTime := sm.requesterStateHandler.requesterState.meta.MaxRequested
 	heartbeatResp := &slpb.Message{

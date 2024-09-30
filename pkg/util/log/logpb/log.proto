@@ -192,9 +192,15 @@ enum Channel {
   // ranges.
   KV_DISTRIBUTION = 13;
 
+  // LIVENESS is used for logging any node and store liveness events, such as
+  // failed node liveness heartbeats and store liveness support withdrawals.
+  // These can be due to disk stalls/slowness, poor connectivity, and are some
+  // of the key indicators of cluster health problems.
+  LIVENESS = 14;
+
   // CHANNEL_MAX is the maximum allocated channel number so far.
   // This should be increased every time a new channel is added.
-  CHANNEL_MAX = 14;
+  CHANNEL_MAX = 15;
 }
 
 // Entry represents a cockroach log entry in the following two cases:

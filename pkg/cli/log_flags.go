@@ -473,6 +473,7 @@ sinks:
       INFO: [DEV, OPS]
       WARNING: all except [DEV, OPS]
   health:                 { channels: HEALTH  }
+  liveness:               { channels: LIVENESS }
   pebble:                 { channels: STORAGE }
   security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
   sql-auth:               { channels: SESSIONS, auditable: true }
