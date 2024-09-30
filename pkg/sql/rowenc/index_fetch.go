@@ -40,6 +40,8 @@ func InitIndexFetchSpec(
 		// TODO: should we update TableID field according to ExternalRowData? If
 		// so, we will only need to re-map the tenant prefix. Also, what should
 		// be the value of tableoid system column?
+		//
+		// michae2: not sure if this is a good idea yet
 		TableID:             table.GetID(),
 		TableName:           table.GetName(),
 		IndexID:             index.GetID(),
@@ -59,13 +61,18 @@ func InitIndexFetchSpec(
 
 	if ext := table.ExternalRowData(); ext != nil {
 		newCodec := keys.MakeSQLCodec(ext.TenantID)
-		oldPrefix := codec.TablePrefix(uint32(s.TableID))
+		//oldPrefix := codec.TablePrefix(uint32(s.TableID))
 		newPrefix := newCodec.TablePrefix(uint32(ext.TableID))
 		s.KeyPrefixLength = uint32(len(newPrefix) + encoding.EncodedLengthUvarintAscending(uint64(index.GetID())))
 		s.External = &fetchpb.IndexFetchSpec_ExternalRowData{
-			AsOf:      ext.AsOf,
-			OldPrefix: oldPrefix,
+			AsOf: ext.AsOf,
+			// Use newPrefix as a hacky way to disable the key rewrite in
+			// kv_batch_fetcher and kv_batch_streamer since we're now setting it in
+			// span_builder.
+			OldPrefix: newPrefix,
 			NewPrefix: newPrefix,
+			TenantID:  ext.TenantID,
+			TableID:   ext.TableID,
 		}
 	}
 

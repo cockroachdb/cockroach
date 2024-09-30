@@ -53,6 +53,10 @@ func (s *Builder) Init(
 	s.codec = codec
 	s.keyAndPrefixCols = table.IndexFetchSpecKeyAndSuffixColumns(index)
 	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
+	if ext := table.ExternalRowData(); ext != nil {
+		s.codec = keys.MakeSQLCodec(ext.TenantID)
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(s.codec, ext.TableID, index.GetID())
+	}
 }
 
 // InitWithFetchSpec creates a Builder using IndexFetchSpec.
@@ -63,6 +67,10 @@ func (s *Builder) InitWithFetchSpec(
 	s.codec = codec
 	s.keyAndPrefixCols = spec.KeyAndSuffixColumns
 	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, spec.TableID, spec.IndexID)
+	if ext := spec.External; ext != nil {
+		s.codec = keys.MakeSQLCodec(ext.TenantID)
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(s.codec, ext.TableID, spec.IndexID)
+	}
 }
 
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the
