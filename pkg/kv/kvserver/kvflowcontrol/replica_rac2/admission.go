@@ -5,7 +5,11 @@
 
 package replica_rac2
 
-import "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
+)
 
 // lowPriOverrideState records which raft log entries have their priority
 // overridden to be raftpb.LowPri. Used at follower replicas.
@@ -88,6 +92,8 @@ type interval struct {
 // leader we only extend the existing state, as discussed in the correctness
 // comment above.
 //
+// Both first and last are inclusive, so represent the interval [first, last].
+//
 // Returns true iff the leaderTerm was not stale.
 //
 // INVARIANT: first <= last.
@@ -154,8 +160,22 @@ func (p *lowPriOverrideState) sideChannelForV1Leader(leaderTerm uint64) bool {
 }
 
 func (p *lowPriOverrideState) getEffectivePriority(
-	index uint64, pri raftpb.Priority,
+	leaderTerm uint64, index uint64, pri raftpb.Priority,
 ) raftpb.Priority {
+	if p.leaderTerm != leaderTerm {
+		// Querying on behalf of some other term. The sideChannel* methods are
+		// totally ordered wrt getEffectivePriority, due to raftMu being held on
+		// both, so getEffectivePriority will only be called on the contents of
+		// the unstable log as of the last sideChannel* methods. So
+		// getEffectivePriority should never be asking for the effective priority
+		// for an entry with an incorrect leaderTerm.
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("stale leaderTerm %d < %d", leaderTerm, p.leaderTerm))
+		}
+		// Don't use the state below since we don't want to garbage collect state
+		// that will be needed in the future.
+		return pri
+	}
 	// Garbage collect intervals ending before the given index.
 	drop := 0
 	for n := len(p.intervals); drop < n && p.intervals[drop].last < index; drop++ {

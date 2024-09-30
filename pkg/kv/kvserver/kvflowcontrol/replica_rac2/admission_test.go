@@ -12,9 +12,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLowPriOverrideState(t *testing.T) {
@@ -66,13 +68,28 @@ func TestLowPriOverrideState(t *testing.T) {
 
 			case "get-effective-priority":
 				// Example:
-				//  get-effective-priority index=4 pri=HighPri
+				//  get-effective-priority leader-term=3 index=4 pri=HighPri
 				// Gets the effective priority for index 4, where the original
 				// priority is HighPri
+				var leaderTerm uint64
+				d.ScanArgs(t, "leader-term", &leaderTerm)
 				var index uint64
 				d.ScanArgs(t, "index", &index)
 				pri := readPriority(t, d)
-				effectivePri := lpos.getEffectivePriority(index, pri)
+				shouldPanic := false
+				if d.HasArg("should-panic") {
+					shouldPanic = true
+				}
+				var effectivePri raftpb.Priority
+				if shouldPanic && buildutil.CrdbTestBuild {
+					require.Panics(t, func() {
+						lpos.getEffectivePriority(leaderTerm, index, pri)
+					})
+					// Make output match what to expect when !buildutil.CrdbTestBuild.
+					effectivePri = pri
+				} else {
+					effectivePri = lpos.getEffectivePriority(leaderTerm, index, pri)
+				}
 				return fmt.Sprintf("pri: %s\n%s", effectivePri, lposString())
 
 			default:

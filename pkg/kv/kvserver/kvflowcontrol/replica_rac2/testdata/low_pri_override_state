@@ -1,4 +1,5 @@
-get-effective-priority index=10 pri=NormalPri
+# Ask for effective priority using a future term. Will panic.
+get-effective-priority leader-term=2 index=10 pri=NormalPri should-panic
 ----
 pri: NormalPri
 leader-term: 0
@@ -29,7 +30,7 @@ intervals:
  [ 11,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=4 pri=HighPri
+get-effective-priority leader-term=4 index=4 pri=HighPri
 ----
 pri: HighPri
 leader-term: 4
@@ -38,7 +39,7 @@ intervals:
  [ 11,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=6 pri=AboveNormalPri
+get-effective-priority leader-term=4 index=6 pri=AboveNormalPri
 ----
 pri: LowPri
 leader-term: 4
@@ -47,7 +48,18 @@ intervals:
  [ 11,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=10 pri=NormalPri
+# Ask for effective priority using an old term. Will panic, and state does not
+# change.
+get-effective-priority leader-term=3 index=10 pri=NormalPri should-panic
+----
+pri: NormalPri
+leader-term: 4
+intervals:
+ [  7,  10] => true
+ [ 11,  14] => false
+ [ 15,  20] => true
+
+get-effective-priority leader-term=4 index=10 pri=NormalPri
 ----
 pri: LowPri
 leader-term: 4
@@ -55,7 +67,7 @@ intervals:
  [ 11,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=11 pri=HighPri
+get-effective-priority leader-term=4 index=11 pri=HighPri
 ----
 pri: HighPri
 leader-term: 4
@@ -63,7 +75,7 @@ intervals:
  [ 12,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=13 pri=AboveNormalPri
+get-effective-priority leader-term=4 index=13 pri=AboveNormalPri
 ----
 pri: AboveNormalPri
 leader-term: 4
@@ -71,7 +83,7 @@ intervals:
  [ 14,  14] => false
  [ 15,  20] => true
 
-get-effective-priority index=15 pri=HighPri
+get-effective-priority leader-term=4 index=15 pri=HighPri
 ----
 pri: LowPri
 leader-term: 4
@@ -113,14 +125,14 @@ intervals:
  [ 26,  30] => true
  [ 35,  40] => true
 
-get-effective-priority index=32 pri=NormalPri
+get-effective-priority leader-term=6 index=32 pri=NormalPri
 ----
 pri: NormalPri
 leader-term: 6
 intervals:
  [ 35,  40] => true
 
-get-effective-priority index=40 pri=HighPri
+get-effective-priority leader-term=6 index=40 pri=HighPri
 ----
 pri: LowPri
 leader-term: 6
