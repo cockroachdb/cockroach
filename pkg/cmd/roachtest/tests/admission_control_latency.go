@@ -840,12 +840,6 @@ func (v variations) waitForRebalanceToStop(ctx context.Context, t test.Test) {
 // waitForIOOverloadToEnd polls the system.metrics every second to see if there
 // is any IO overload on the target nodes. It returns once the overload ends.
 func (v variations) waitForIOOverloadToEnd(ctx context.Context, t test.Test) {
-	var dbs []*gosql.DB
-	for _, nodeId := range v.targetNodes() {
-		db := v.Conn(ctx, t.L(), nodeId)
-		defer db.Close()
-		dbs = append(dbs, db)
-	}
 	q := `SELECT value FROM crdb_internal.node_metrics WHERE name = 'admission.io.overload'`
 
 	opts := retry.Options{
@@ -854,16 +848,20 @@ func (v variations) waitForIOOverloadToEnd(ctx context.Context, t test.Test) {
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		anyOverloaded := false
-		for _, db := range dbs {
+		for _, nodeId := range v.targetNodes() {
+			db := v.Conn(ctx, t.L(), nodeId)
 			if row := db.QueryRow(q); row != nil {
 				var overload float64
 				if err := row.Scan(&overload); err != nil && !errors.Is(err, gosql.ErrNoRows) {
+					db.Close()
 					t.Fatal(err)
+					return
 				}
 				if overload > 0.01 {
 					anyOverloaded = true
 				}
 			}
+			db.Close()
 		}
 		if !anyOverloaded {
 			return
