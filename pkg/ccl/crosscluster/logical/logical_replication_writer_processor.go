@@ -142,24 +142,24 @@ func newLogicalReplicationWriterProcessor(
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		sqlRP, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, procConfigByDestTableID,
-			jobspb.JobID(spec.JobID),
-			// Initialize the executor with a fresh session data - this will
-			// avoid creating a new copy on each executor usage.
-			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-		)
-		if err != nil {
-			return nil, err
-		}
 		var rp RowProcessor
+		var err error
 		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, procConfigByDestTableID, sqlRP)
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, procConfigByDestTableID)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			rp = sqlRP
+			rp, err = makeSQLProcessor(
+				ctx, flowCtx.Cfg.Settings, procConfigByDestTableID,
+				jobspb.JobID(spec.JobID),
+				// Initialize the executor with a fresh session data - this will
+				// avoid creating a new copy on each executor usage.
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -188,6 +188,14 @@ func newLogicalReplicationWriterProcessor(
 	lrw := &logicalReplicationWriterProcessor{
 		spec: spec,
 		getBatchSize: func() int {
+			// TODO(ssd): We set this to 1 since putting more than 1
+			// row in a KV batch using the new ConditionalPut-based
+			// conflict resolution would require more complex error
+			// handling and tracking that we haven't implemented
+			// yet.
+			if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
+				return 1
+			}
 			// We want to decide whether to use implicit txns or not based on
 			// the schema of the dest table. Benchmarking has shown that
 			// implicit txns are beneficial on tables with no secondary indexes
@@ -696,6 +704,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
+	if l := lrw.spec.MetricsLabel; l != "" {
+		lrw.metrics.LabeledEventsIngested.Inc(map[string]string{"label": l}, stats.processed.success)
+		lrw.metrics.LabeledEventsDLQed.Inc(map[string]string{"label": l}, stats.processed.dlq)
+	}
 
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 

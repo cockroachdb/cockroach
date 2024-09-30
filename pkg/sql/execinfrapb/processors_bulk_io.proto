@@ -538,5 +538,7 @@ message LogicalReplicationWriterSpec {
 
     optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
 
-    // Next ID: 11.
+    optional string metrics_label = 11 [(gogoproto.nullable) = false];
+
+    // Next ID: 12.
 }

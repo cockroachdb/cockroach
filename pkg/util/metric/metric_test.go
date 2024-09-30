@@ -24,6 +24,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,6 +53,40 @@ func TestGauge(t *testing.T) {
 		t.Fatalf("unexpected value: %d", v)
 	}
 	testMarshal(t, g, "10")
+}
+
+func TestGaugeVector(t *testing.T) {
+	g := NewExportedGaugeVec(emptyMetadata, []string{"label1", "label2"})
+	ls1 := map[string]string{"label1": "value1", "label2": "value2"}
+	ls2 := map[string]string{"label1": "value3", "label2": "value4"}
+
+	g.Update(ls1, 10)
+	g.Update(ls2, 10)
+
+	metrics := g.ToPrometheusMetrics()
+	require.Len(t, metrics, 2)
+	require.Equal(t, *metrics[0].Gauge.Value, 10.0)
+	require.Equal(t, *metrics[1].Gauge.Value, 10.0)
+
+	var wg sync.WaitGroup
+	for i := int64(0); i < 10; i++ {
+		wg.Add(2)
+		go func() { g.Inc(ls1, 1); wg.Done() }()
+		go func() { g.Inc(ls2, 2); wg.Done() }()
+	}
+	wg.Wait()
+
+	metrics = g.ToPrometheusMetrics()
+	require.Equal(t, 20.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 30.0, *metrics[1].Gauge.Value)
+	require.Equal(t, "label1", *metrics[0].GetLabel()[0].Name)
+	require.Equal(t, "value1", *metrics[0].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[0].GetLabel()[1].Name)
+	require.Equal(t, "value2", *metrics[0].GetLabel()[1].Value)
+	require.Equal(t, "label1", *metrics[1].GetLabel()[0].Name)
+	require.Equal(t, "value3", *metrics[1].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[1].GetLabel()[1].Name)
+	require.Equal(t, "value4", *metrics[1].GetLabel()[1].Value)
 }
 
 func TestFunctionalGauge(t *testing.T) {
@@ -567,4 +602,213 @@ func TestMergeWindowedHistogram(t *testing.T) {
 			require.Equal(t, uint64(1), *bucket.CumulativeCount)
 		}
 	}
+}
+
+type toPromMetricsTC struct {
+	labels [][]string
+	value  float64
+}
+
+func (cv *CounterVec) assertPrometheusMetrics(t *testing.T, tc []toPromMetricsTC) {
+	t.Helper()
+
+	promMetrics := cv.ToPrometheusMetrics()
+	assert.Len(t, promMetrics, len(tc))
+
+	for i, m := range promMetrics {
+		labels := []*prometheusgo.LabelPair{}
+
+		for _, l := range tc[i].labels {
+			labels = append(labels, &prometheusgo.LabelPair{
+				Name:  &l[0],
+				Value: &l[1],
+			})
+		}
+
+		assert.Equal(t, &prometheusgo.Metric{
+			Label: labels,
+			Counter: &prometheusgo.Counter{
+				Value: &tc[i].value,
+			},
+		}, m)
+	}
+
+}
+
+func TestCounterVec(t *testing.T) {
+	t.Run("labels provided match what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+
+				c.Update(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 10)
+
+				// overwrite the previous value
+				c.Update(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 20)
+			})
+		})
+
+		t.Run("inc", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Inc(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+
+				c.Inc(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(20), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+			}))
+
+			assert.Equal(t, int64(30), c.Count(map[string]string{
+				"label1": "value3",
+				"label2": "value4",
+			}))
+
+			// timeseries doesn't exist
+			assert.Equal(t, int64(0), c.Count(map[string]string{
+				"label1": "value5",
+				"label2": "value6",
+			}))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{{
+				labels: [][]string{{"label1", "value1"}, {"label2", "value2"}},
+				value:  20,
+			}, {
+				labels: [][]string{{"label1", "value3"}, {"label2", "value4"}},
+				value:  30,
+			}})
+		})
+	})
+
+	t.Run("labels provided exceed what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+				}, 10)
+
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+					"label4": "value4",
+					"label5": "value5",
+				}, 50)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				assert.Equal(t, int64(50), c.Count(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+					"label6": "value6",
+				}))
+			})
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", "value1"}, {"label2", "value2"}},
+					value:  50,
+				},
+			})
+		})
+		// we don't have to test all operation again
+	})
+
+	t.Run("labels provided are less than what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2", "label3"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(10), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+				"label3": "",
+			}))
+
+			assert.Equal(t, int64(0), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+				"label3": "value3",
+			}))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", "value1"}, {"label2", "value2"}, {"label3", ""}},
+					value:  10,
+				},
+			})
+		})
+	})
+
+	t.Run("no matching labels", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label3": "value3",
+					"label4": "value4",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(10), c.Count(map[string]string{
+				"label1": "",
+				"label2": "",
+			}))
+
+			// TODO(arjunmahishi): Handle this case carefully. This is a bug.
+			// assert.Equal(t, int64(0), c.Count(map[string]string{
+			// 	"label3": "value3",
+			// 	"label4": "value4",
+			// }))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", ""}, {"label2", ""}},
+					value:  10,
+				},
+			})
+		})
+	})
 }

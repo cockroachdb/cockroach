@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Deleter abstracts the key/value operations for deleting table rows.
@@ -32,7 +34,8 @@ type Deleter struct {
 	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex catalog.TableColMap
 	// For allocation avoidance.
-	key roachpb.Key
+	key         roachpb.Key
+	rawValueBuf []byte
 }
 
 // MakeDeleter creates a Deleter for the given table.
@@ -106,7 +109,12 @@ func MakeDeleter(
 // orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
 // be nil if not.
 func (rd *Deleter) DeleteRow(
-	ctx context.Context, b *kv.Batch, values []tree.Datum, pm PartialIndexUpdateHelper, traceKV bool,
+	ctx context.Context,
+	b *kv.Batch,
+	values []tree.Datum,
+	pm PartialIndexUpdateHelper,
+	oth *OriginTimestampCPutHelper,
+	traceKV bool,
 ) error {
 
 	// Delete the row from any secondary indices.
@@ -155,11 +163,85 @@ func (rd *Deleter) DeleteRow(
 		}
 		familyID := family.ID
 		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
+
+		if oth.IsSet() {
+			prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
+			if err != nil {
+				return err
+			}
+			var expValue []byte
+			if prevValue.IsPresent() {
+				expValue = prevValue.TagAndDataBytes()
+			}
+			oth.DelWithCPut(ctx, &KVBatchAdapter{b}, &rd.key, expValue, traceKV)
+		} else {
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
+			}
+			b.Del(&rd.key)
 		}
-		b.Del(&rd.key)
+
 		rd.key = nil
 		return nil
 	})
+}
+
+// encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value
+// for the given family and valuses.
+//
+// TODO(ssd): Lots of duplication between this and
+// prepareInsertOrUpdateBatch. This is rather unfortunate.
+func (rd *Deleter) encodeValueForPrimaryIndexFamily(
+	family *descpb.ColumnFamilyDescriptor, values []tree.Datum,
+) (roachpb.Value, error) {
+	if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
+		idx, ok := rd.FetchColIDtoRowIndex.Get(family.DefaultColumnID)
+		if !ok {
+			return roachpb.Value{}, nil
+		}
+		if rd.Helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]) {
+			return roachpb.Value{}, nil
+		}
+		typ := rd.FetchCols[idx].GetType()
+		marshaled, err := valueside.MarshalLegacy(typ, values[idx])
+		if err != nil {
+			return roachpb.Value{}, err
+		}
+
+		return marshaled, err
+	}
+
+	rd.rawValueBuf = rd.rawValueBuf[:0]
+	var lastColID descpb.ColumnID
+	familySortedColumnIDs, ok := rd.Helper.SortedColumnFamily(family.ID)
+	if !ok {
+		return roachpb.Value{}, errors.AssertionFailedf("invalid family sorted column id map")
+	}
+	for _, colID := range familySortedColumnIDs {
+		idx, ok := rd.FetchColIDtoRowIndex.Get(colID)
+		if !ok || values[idx] == tree.DNull {
+			continue
+		}
+
+		if skip := rd.Helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
+			continue
+		}
+
+		col := rd.FetchCols[idx]
+		if lastColID > col.GetID() {
+			return roachpb.Value{}, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+		}
+		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
+		lastColID = col.GetID()
+		var err error
+		rd.rawValueBuf, err = valueside.Encode(rd.rawValueBuf, colIDDelta, values[idx], nil)
+		if err != nil {
+			return roachpb.Value{}, err
+		}
+	}
+	ret := roachpb.Value{}
+	if len(rd.rawValueBuf) > 0 {
+		ret.SetTuple(rd.rawValueBuf)
+	}
+	return ret, nil
 }
