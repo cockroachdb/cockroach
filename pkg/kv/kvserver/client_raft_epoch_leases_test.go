@@ -752,7 +752,7 @@ func TestRaftPreVoteEpochLeases(t *testing.T) {
 			// transfers, to avoid range writes.
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
-			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // disable metamorphism
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // disable metamorphism
 
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,

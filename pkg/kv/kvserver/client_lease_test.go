@@ -916,9 +916,13 @@ func TestLeaseholderRelocate(t *testing.T) {
 		locality("us"),
 	}
 
+	// TODO(arul): figure out why this test is flaky under leader leases.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	const numNodes = 4
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			Settings: st,
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
