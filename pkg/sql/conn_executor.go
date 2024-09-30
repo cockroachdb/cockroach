@@ -980,8 +980,9 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 			UserProto: args.User.EncodeProto(),
 		},
 		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
-			RemoteAddr: args.RemoteAddr,
-			IsSSL:      args.IsSSL,
+			RemoteAddr:           args.RemoteAddr,
+			IsSSL:                args.IsSSL,
+			AuthenticationMethod: args.AuthenticationMethod,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize:   args.ConnResultsBufferSize,
@@ -4366,6 +4367,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		PGBackendPID:               ex.planner.extendedEvalCtx.QueryCancelKey.GetPGBackendPID(),
 		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
 		GoroutineID:                ex.ctxHolder.goroutineID,
+		AuthenticationMethod:       sd.AuthenticationMethod,
 	}
 }
 

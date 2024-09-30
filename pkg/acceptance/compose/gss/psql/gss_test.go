@@ -174,7 +174,7 @@ func TestGSS(t *testing.T) {
 			})
 			t.Run("cockroach", func(t *testing.T) {
 				out, err := exec.Command("/cockroach/cockroach", "sql",
-					"-e", "SELECT 1",
+					"-e", "SELECT authentication_method FROM [SHOW SESSIONS]",
 					"--certs-dir", "/certs",
 					// TODO(mjibson): Teach the CLI to not ask for passwords during kerberos.
 					// See #51588.
@@ -183,6 +183,11 @@ func TestGSS(t *testing.T) {
 				err = errors.Wrap(err, strings.TrimSpace(string(out)))
 				if !IsError(err, tc.gssErr) {
 					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+				if tc.gsErr == "" {
+					if !strings.Contains(string(out), "gss") {
+						t.Errorf("expected authentication_method=gss, got %s", out)
+					}
 				}
 			})
 		})

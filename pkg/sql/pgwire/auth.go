@@ -523,6 +523,7 @@ func (p *authPipe) AuthFail(err error) {
 
 func (p *authPipe) SetAuthMethod(method redact.SafeString) {
 	p.authMethod = method
+	p.c.sessionArgs.AuthenticationMethod = method
 }
 
 func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {

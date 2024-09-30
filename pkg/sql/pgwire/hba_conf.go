@@ -259,7 +259,7 @@ var insecureEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   rulebasedscanner.String{Value: "--insecure"},
+	Method:   rulebasedscanner.String{Value: "insecure"},
 }
 
 var sessionRevivalEntry = hba.Entry{

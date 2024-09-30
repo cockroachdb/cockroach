@@ -477,6 +477,13 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						showSystemIdentity = true
 					}
 
+					// Whether to display the authentication_method as well.
+					showAuthMethod := false
+					if td.HasArg("show_authentication_method") {
+						rmArg("show_authentication_method")
+						showAuthMethod = true
+					}
+
 					certName := ""
 					if td.HasArg("cert_name") {
 						td.ScanArgs(t, "cert_name", &certName)
@@ -580,6 +587,23 @@ func hbaRunTest(t *testing.T, insecure bool) {
 							t.Fatal(err)
 						}
 						result += " " + name
+					}
+					if showAuthMethod {
+						var method, methodFromShowSessions string
+						row := dbSQL.QueryRow(`SHOW authentication_method`)
+						if err := row.Scan(&method); err != nil {
+							t.Fatal(err)
+						}
+						// Verify that the session variable agrees with the information
+						// in SHOW SESSIONS.
+						row = dbSQL.QueryRow(`SELECT authentication_method FROM [SHOW SESSIONS] WHERE session_id = current_setting('session_id');`)
+						if err := row.Scan(&methodFromShowSessions); err != nil {
+							t.Fatal(err)
+						}
+						if method != methodFromShowSessions {
+							t.Fatalf("SHOW SESSIONS disagrees with SHOW: %s vs %s", method, methodFromShowSessions)
+						}
+						result += " " + method
 					}
 
 					return "ok " + result, nil
