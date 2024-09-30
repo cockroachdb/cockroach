@@ -121,6 +121,14 @@ support-from node-id=2 store-id=2
 ----
 epoch: 2, expiration: 410.000000000,0
 
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=0
+----
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0
+
 
 # -------------------------------------------------------------
 # Store (n1, s1) requests support but receives no response.
@@ -220,6 +228,6 @@ heartbeats:
 debug-metrics
 ----
 HeartbeatSuccess: 8, HeartbeatFailure: 1
-MessageHandleSuccess: 7, MessageHandleFailure: 0
+MessageHandleSuccess: 8, MessageHandleFailure: 0
 SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
 SupportFromStores: 1, SupportForStores: 0

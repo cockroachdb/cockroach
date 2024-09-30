@@ -124,7 +124,7 @@ func (sm *SupportManager) InspectSupportFor() slpb.SupportStatesPerStore {
 // SupportFrom implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
 func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp) {
-	ss, ok := sm.requesterStateHandler.getSupportFrom(id)
+	ss, ok, wasIdle := sm.requesterStateHandler.getSupportFrom(id)
 	if !ok {
 		// If this is the first time SupportFrom has been called for this store,
 		// the store will be added to requesterStateHandler before the next
@@ -133,10 +133,14 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
-		log.VInfof(
-			context.Background(), 2, "SupportFrom called for the first time with store id %+v", id,
-		)
+		log.VInfof(context.TODO(), 2, "store %+v is not heartbeating store %+v yet", sm.storeID, id)
 		return 0, hlc.Timestamp{}
+	}
+	if wasIdle {
+		log.Infof(
+			context.TODO(), "store %+v is starting to heartbeat store %+v (after being idle)",
+			sm.storeID, id,
+		)
 	}
 	return ss.Epoch, ss.Expiration
 }
@@ -232,7 +236,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 
 		select {
 		case <-sm.storesToAdd.sig:
-			sm.maybeAddStores()
+			sm.maybeAddStores(ctx)
 			sm.sendHeartbeats(ctx)
 
 		case <-heartbeatTicker.C:
@@ -242,7 +246,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 			sm.withdrawSupport(ctx)
 
 		case <-idleSupportFromTicker.C:
-			sm.requesterStateHandler.markIdleStores()
+			sm.requesterStateHandler.markIdleStores(ctx)
 
 		case <-receiveQueueSig:
 			// Decrementing the queue metrics is done in handleMessages.
@@ -257,14 +261,11 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 
 // maybeAddStores drains storesToAdd and delegates adding any new stores to the
 // SupportManager's requesterStateHandler.
-func (sm *SupportManager) maybeAddStores() {
+func (sm *SupportManager) maybeAddStores(ctx context.Context) {
 	sta := sm.storesToAdd.drainStoresToAdd()
 	for _, store := range sta {
 		if sm.requesterStateHandler.addStore(store) {
-			log.VInfof(
-				context.Background(), 2, "store %+v is starting to request support from store %+v",
-				sm.storeID, store,
-			)
+			log.Infof(ctx, "starting to heartbeat store %+v", store)
 			sm.metrics.SupportFromStores.Inc(1)
 		}
 	}
@@ -294,12 +295,12 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 		if sent := sm.sender.SendAsync(ctx, msg); sent {
 			successes++
 		} else {
-			log.Warningf(ctx, "sending heartbeat to store %+v failed", msg.To)
+			log.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
 	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
-	log.VInfof(ctx, 2, "store %+v sent heartbeats to %d stores", sm.storeID, successes)
+	log.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
@@ -311,7 +312,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
 	defer sm.supporterStateHandler.finishUpdate(ssfu)
-	numWithdrawn := ssfu.withdrawSupport(now)
+	numWithdrawn := ssfu.withdrawSupport(ctx, now)
 	if numWithdrawn == 0 {
 		// No support to withdraw.
 		return
@@ -330,7 +331,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		return
 	}
 	sm.supporterStateHandler.checkInUpdate(ssfu)
-	log.VInfof(ctx, 2, "store %+v withdrew support from %d stores", sm.storeID, numWithdrawn)
+	log.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 }
 
@@ -338,7 +339,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 // to either the requesterStateHandler or supporterStateHandler. It then writes
 // all updates to disk in a single batch, and sends any responses via Transport.
 func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Message) {
-	log.VInfof(ctx, 2, "store %+v drained receive queue of size %d", sm.storeID, len(msgs))
+	log.VInfof(ctx, 2, "drained receive queue of size %d", len(msgs))
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
@@ -349,11 +350,11 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		sm.metrics.ReceiveQueueBytes.Dec(int64(msg.Size()))
 		switch msg.Type {
 		case slpb.MsgHeartbeat:
-			responses = append(responses, ssfu.handleHeartbeat(msg))
+			responses = append(responses, ssfu.handleHeartbeat(ctx, msg))
 		case slpb.MsgHeartbeatResp:
-			rsfu.handleHeartbeatResponse(msg)
+			rsfu.handleHeartbeatResponse(ctx, msg)
 		default:
-			log.Errorf(context.Background(), "unexpected message type: %v", msg.Type)
+			log.Errorf(ctx, "unexpected message type: %v", msg.Type)
 		}
 	}
 
@@ -383,7 +384,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	for _, response := range responses {
 		_ = sm.sender.SendAsync(ctx, response)
 	}
-	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
+	log.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
 
 // maxReceiveQueueSize is the maximum number of messages the receive queue can
