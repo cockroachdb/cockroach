@@ -2289,3 +2289,81 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	after := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 	require.Equal(t, before, after)
 }
+
+// write unit tests for the function publishConnMetric
+func TestPublishConnMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := conn{
+		metrics: &tenantSpecificMetrics{
+			AuthJWTTokenConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthJWTTokenConnLatency, time.Hour)),
+			AuthCertConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthCertConnLatency, time.Hour)),
+			AuthPassConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthPassConnLatency, time.Hour)),
+			AuthLDAPConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatency, time.Hour)),
+			AuthGSSConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthGSSConnLatency, time.Hour)),
+			AuthScramConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthScramConnLatency, time.Hour)),
+		},
+	}
+
+	// JWT Token Authentication
+	jwtDuration := int64(10010)
+	c.publishConnMetric(jwtDuration, jwtTokenHBAEntry.string())
+	w := c.metrics.AuthJWTTokenConnLatency.WindowedSnapshot()
+	count, sum := w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(10010), sum)
+
+	// republish on JWT
+	jwtDuration = int64(100)
+	c.publishConnMetric(jwtDuration, jwtTokenHBAEntry.string())
+	w = c.metrics.AuthJWTTokenConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(2), count)
+	require.Equal(t, float64(10110), sum)
+
+	// Cert
+	certDuration := int64(120000)
+	c.publishConnMetric(certDuration, certHBAEntry.string())
+	w = c.metrics.AuthCertConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(120000), sum)
+
+	// Password
+	passDuration := int64(123)
+	c.publishConnMetric(passDuration, passwordHBAEntry.string())
+	w = c.metrics.AuthPassConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(123), sum)
+
+	// LDAP
+	ldapDuration := int64(1234)
+	c.publishConnMetric(ldapDuration, ldapHBAEntry.string())
+	w = c.metrics.AuthLDAPConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(1234), sum)
+
+	// LDAP
+	gssDuration := int64(12345)
+	c.publishConnMetric(gssDuration, gssHBAEntry.string())
+	w = c.metrics.AuthGSSConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(12345), sum)
+
+	// scram
+	scramDuration := int64(123456)
+	c.publishConnMetric(scramDuration, scramSHA256HBAEntry.string())
+	w = c.metrics.AuthScramConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(123456), sum)
+}

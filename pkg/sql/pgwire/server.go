@@ -180,6 +180,42 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+	AuthJWTTokenConnLatency = metric.Metadata{
+		Name:        "auth.jwt-token.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using JWT Token",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	AuthCertConnLatency = metric.Metadata{
+		Name:        "auth.cert.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using certificate",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	AuthPassConnLatency = metric.Metadata{
+		Name:        "auth.password.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using password",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	AuthLDAPConnLatency = metric.Metadata{
+		Name:        "auth.ldap.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using LDAP",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	AuthGSSConnLatency = metric.Metadata{
+		Name:        "auth.gss.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using GSS",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	AuthScramConnLatency = metric.Metadata{
+		Name:        "auth.scram.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection using SCRAM",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 const (
@@ -323,6 +359,12 @@ type tenantSpecificMetrics struct {
 	PGWireCancelSuccessfulCount *metric.Counter
 	ConnMemMetrics              sql.BaseMemoryMetrics
 	SQLMemMetrics               sql.MemoryMetrics
+	AuthJWTTokenConnLatency     metric.IHistogram
+	AuthCertConnLatency         metric.IHistogram
+	AuthPassConnLatency         metric.IHistogram
+	AuthLDAPConnLatency         metric.IHistogram
+	AuthGSSConnLatency          metric.IHistogram
+	AuthScramConnLatency        metric.IHistogram
 }
 
 func newTenantSpecificMetrics(
@@ -345,6 +387,29 @@ func newTenantSpecificMetrics(
 		PGWireCancelSuccessfulCount: metric.NewCounter(MetaPGWireCancelSuccessful),
 		ConnMemMetrics:              sql.MakeBaseMemMetrics("conns", histogramWindow),
 		SQLMemMetrics:               sqlMemMetrics,
+		AuthJWTTokenConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthJWTTokenConnLatency, histogramWindow)),
+		AuthCertConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthCertConnLatency, histogramWindow)),
+		AuthPassConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthPassConnLatency, histogramWindow)),
+		AuthLDAPConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthLDAPConnLatency, histogramWindow)),
+		AuthGSSConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthGSSConnLatency, histogramWindow)),
+		AuthScramConnLatency: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthScramConnLatency, histogramWindow)),
+	}
+}
+
+func getHistogramOptionsForIOLatency(
+	metadata metric.Metadata, histogramWindow time.Duration,
+) metric.HistogramOptions {
+	return metric.HistogramOptions{
+		Mode:         metric.HistogramModePreferHdrLatency,
+		Metadata:     metadata,
+		Duration:     histogramWindow,
+		BucketConfig: metric.IOLatencyBuckets,
 	}
 }
 
