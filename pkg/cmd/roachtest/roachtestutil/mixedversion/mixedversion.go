@@ -993,12 +993,20 @@ func randomPredecessor(
 }
 
 func (t *Test) updateOptionsForDeploymentMode(mode DeploymentMode) {
-	if mode != SharedProcessDeployment {
-		return
+	if mode == SharedProcessDeployment {
+		if v := OldestSupportedVersionSP; !t.options.minimumSupportedVersion.AtLeast(v) {
+			t.options.minimumSupportedVersion = v
+		}
 	}
 
-	if v := OldestSupportedVersionSP; !t.options.minimumSupportedVersion.AtLeast(v) {
-		t.options.minimumSupportedVersion = v
+	if mode == SeparateProcessDeployment {
+		// We use latest predecessors in separate-process deployments
+		// since they are more prone to flake (due to the relative lack of
+		// testing historically). In addition, production separate-process
+		// deployments (Serverless) run in much more controlled
+		// environments than self-hosted and are generally running the
+		// latest patch releases.
+		t.options.predecessorFunc = latestPredecessor
 	}
 }
 
