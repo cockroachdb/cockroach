@@ -8,9 +8,10 @@ package inverted
 import (
 	"bytes"
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -153,14 +154,18 @@ func (is Spans) Format(tp treeprinter.Node, label string, redactable bool) {
 }
 
 func formatSpan(span Span, redactable bool) string {
-	end := span.End
 	spanEndOpenOrClosed := ')'
+	vals, _ := encoding.PrettyPrintValuesWithTypes(nil, span.Start)
+	start := strings.Join(vals, "/")
+	var end string
 	if span.IsSingleVal() {
-		end = span.Start
+		end = start
 		spanEndOpenOrClosed = ']'
+	} else {
+		vals, _ := encoding.PrettyPrintValuesWithTypes(nil, span.End)
+		end = strings.Join(vals, "/")
 	}
-	output := fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
-		strconv.Quote(string(end)), spanEndOpenOrClosed)
+	output := fmt.Sprintf("[%s, %s%c", start, end, spanEndOpenOrClosed)
 	if redactable {
 		output = string(redact.Sprintf("%s", redact.Unsafe(output)))
 	}
