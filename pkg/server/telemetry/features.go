@@ -269,3 +269,50 @@ func RecordError(err error) {
 		}
 	}
 }
+
+type CounterVecWithMetric struct {
+	telemetry Counter
+	metric    *metric.CounterVec
+}
+
+var _ metric.Iterable = CounterVecWithMetric{}
+
+func NewCounterVecWithMetric(metadata metric.Metadata, labelNames []string) CounterVecWithMetric {
+	return CounterVecWithMetric{
+		telemetry: GetCounter(metadata.Name),
+		metric:    metric.NewCounterVec(metadata, labelNames),
+	}
+}
+
+func (c CounterVecWithMetric) Inc(labels map[string]string) {
+	Inc(c.telemetry)
+	c.metric.Inc(labels, 1)
+}
+
+func (c CounterVecWithMetric) Count(labels map[string]string) int64 {
+	return c.metric.Count(labels)
+}
+
+func (c CounterVecWithMetric) GetName() string {
+	return c.metric.GetName()
+}
+
+func (c CounterVecWithMetric) GetHelp() string {
+	return c.metric.GetHelp()
+}
+
+func (c CounterVecWithMetric) GetMeasurement() string {
+	return c.metric.GetMeasurement()
+}
+
+func (c CounterVecWithMetric) GetUnit() metric.Unit {
+	return c.metric.GetUnit()
+}
+
+func (c CounterVecWithMetric) GetMetadata() metric.Metadata {
+	return c.metric.GetMetadata()
+}
+
+func (c CounterVecWithMetric) Inspect(f func(interface{})) {
+	c.metric.Inspect(f)
+}
