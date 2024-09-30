@@ -13,7 +13,9 @@ import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 // requesterState stores the core data structures for requesting support.
@@ -66,7 +68,7 @@ const (
 // stores. The typical interactions with requesterStateHandler are:
 //   - getSupportFrom(id slpb.StoreIdent)
 //   - addStore(id slpb.StoreIdent)
-//   - removeStore(id slpb.StoreIdent)
+//   - markIdleStores()
 //   - rsfu := checkOutUpdate()
 //     rsfu.getHeartbeatsToSend(now hlc.Timestamp, interval time.Duration)
 //     checkInUpdate(rsfu)
@@ -135,18 +137,19 @@ type requesterStateForUpdate struct {
 // requesterState.supportFrom. The returned boolean indicates whether the given
 // store is present in the supportFrom map; it does NOT indicate whether support
 // from that store is provided.
-func (rsh *requesterStateHandler) getSupportFrom(id slpb.StoreIdent) (slpb.SupportState, bool) {
+func (rsh *requesterStateHandler) getSupportFrom(
+	id slpb.StoreIdent,
+) (supportState slpb.SupportState, exists bool, wasIdle bool) {
 	rsh.mu.RLock()
 	defer rsh.mu.RUnlock()
-	rs, ok := rsh.requesterState.supportFrom[id]
-	var supportState slpb.SupportState
-	if ok {
+	rs, exists := rsh.requesterState.supportFrom[id]
+	if exists {
 		// If a store is present, set recentlyQueried to true. Otherwise, if
 		// this is a new store, recentlyQueried will be set to true in addStore.
-		rs.recentlyQueried.Store(active)
+		wasIdle = rs.recentlyQueried.Swap(active) == idle
 		supportState = rs.state
 	}
-	return supportState, ok
+	return supportState, exists, wasIdle
 }
 
 // exportAllSupportFrom exports a copy of all SupportStates from the
@@ -176,7 +179,7 @@ func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) bool {
 		}
 		// Adding a store is done in response to SupportFrom, so it's ok to set
 		// recentlyQueried to active here. This also ensures the store will not
-		// be removed immediately after adding.
+		// be marked as idle immediately after adding.
 		rs.recentlyQueried.Store(active)
 		rsh.requesterState.supportFrom[id] = &rs
 		return true
@@ -187,7 +190,7 @@ func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) bool {
 // markIdleStores marks all stores in the requesterState.supportFrom map as
 // idle if they have not appeared in a getSupportFrom call since the last time
 // markIdleStores was called.
-func (rsh *requesterStateHandler) markIdleStores() {
+func (rsh *requesterStateHandler) markIdleStores(ctx context.Context) {
 	// Marking stores doesn't require persisting anything to disk, so it doesn't
 	// need to go through the full checkOut/checkIn process. However, we still
 	// check out the update to ensure that there are no concurrent updates.
@@ -197,7 +200,9 @@ func (rsh *requesterStateHandler) markIdleStores() {
 	defer rsh.mu.RUnlock()
 	for _, rs := range rsh.requesterState.supportFrom {
 		if !rs.recentlyQueried.CompareAndSwap(active, inactive) {
-			rs.recentlyQueried.CompareAndSwap(inactive, idle)
+			if rs.recentlyQueried.CompareAndSwap(inactive, idle) {
+				log.Infof(ctx, "stopping heartbeats to idle store %+v", rs.state.Target)
+			}
 		}
 	}
 }
@@ -370,7 +375,9 @@ func (rsfu *requesterStateForUpdate) generateHeartbeats(from slpb.StoreIdent) []
 // handleHeartbeatResponse handles a single heartbeat response message. It
 // updates the inProgress view of requesterStateForUpdate only if there are any
 // changes.
-func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg *slpb.Message) {
+func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(
+	ctx context.Context, msg *slpb.Message,
+) {
 	from := msg.From
 	meta := rsfu.getMeta()
 	ss, ok := rsfu.getSupportFrom(from)
@@ -385,6 +392,7 @@ func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg *slpb.Message) 
 	}
 	if ss != ssNew {
 		rsfu.inProgress.supportFrom[from] = &requestedSupport{state: ssNew}
+		logSupportFromChange(ctx, ss, ssNew)
 	}
 }
 
@@ -399,18 +407,28 @@ func handleHeartbeatResponse(
 	if ss.Epoch == msg.Epoch {
 		ss.Expiration.Forward(msg.Expiration)
 	} else if ss.Epoch < msg.Epoch {
-		assert(
-			ss.Epoch == msg.Epoch-1,
-			"the supporter epoch leads the requester epoch by more than 1",
-		)
+		assert(ss.Epoch == msg.Epoch-1, "epoch incremented by more than 1")
 		ss.Epoch = msg.Epoch
-		assert(
-			msg.Expiration == hlc.Timestamp{},
-			"the supporter responded with an incremented epoch but non-zero timestamp",
-		)
+		assert(msg.Expiration == hlc.Timestamp{}, "incremented epoch but non-zero timestamp")
 		ss.Expiration = msg.Expiration
 	}
 	return rm, ss
+}
+
+// logSupportFromChange logs the old and new support state after handling a
+// heartbeat response. The logic mirrors that in handleHeartbeatResponse and
+// uses the same assertions.
+func logSupportFromChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.SupportState) {
+	if ss.Epoch == ssNew.Epoch {
+		if ss.Expiration.IsEmpty() {
+			log.Infof(ctx, "received support from %s", supportChangeStr(ss, ssNew))
+		} else if log.ExpensiveLogEnabled(ctx, 3) {
+			log.VInfof(ctx, 3, "extended support from %s", supportChangeStr(ss, ssNew))
+		}
+	} else {
+		assert(ss.Epoch < ssNew.Epoch, "epoch regressed")
+		log.Infof(ctx, "lost support from %s", supportChangeStr(ss, ssNew))
+	}
 }
 
 // Functions for incrementing MaxEpoch.
@@ -427,4 +445,12 @@ func assert(condition bool, msg string) {
 	if !condition {
 		panic(msg)
 	}
+}
+
+func supportChangeStr(
+	current slpb.SupportState, previous slpb.SupportState,
+) redact.RedactableString {
+	return redact.Sprintf(
+		"store %+v; current = %+v, previous = %+v", current.Target, current, previous,
+	)
 }
