@@ -59,6 +59,7 @@ type pubsubSinkClient struct {
 	format                 changefeedbase.FormatType
 	batchCfg               sinkBatchConfig
 	withTableNameAttribute bool
+	metrics                metricsRecorder
 	mu                     struct {
 		syncutil.RWMutex
 
@@ -134,6 +135,7 @@ func makePubsubSinkClient(
 		batchCfg:               batchCfg,
 		projectID:              projectID,
 		withTableNameAttribute: withTableNameAttribute,
+		metrics:                m,
 	}
 	sinkClient.mu.topicCache = make(map[string]struct{})
 
@@ -195,7 +197,13 @@ func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {
 }
 
 // Flush implements the SinkClient interface
-func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
+func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			sc.metrics.recordSinkError(ctx, sinkTypeWebhook, retErr)
+		}
+	}()
+
 	publishRequest := payload.(*pb.PublishRequest)
 
 	err := sc.maybeCreateTopic(publishRequest.Topic)
