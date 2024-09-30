@@ -71,3 +71,7 @@ local     all      all          password
 connect password=abc user=testuser sslmode=disable
 ----
 ERROR: authentication rejected by configuration (SQLSTATE 28000)
+
+# Revert enable non-TLS secure connections.
+reject_sql_without_tls
+----
