@@ -144,6 +144,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

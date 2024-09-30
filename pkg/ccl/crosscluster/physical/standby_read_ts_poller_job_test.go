@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -88,4 +90,153 @@ INSERT INTO a VALUES (1);
 		}
 		return nil
 	}, time.Minute)
+}
+
+func TestReaderTenantWhenCutoverToLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	readerTenantID := stats.IngestionDetails.ReadTenantID
+	require.NotNil(t, readerTenantID)
+
+	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName, 0)
+
+	pollInterval := time.Microsecond
+	serverutils.SetClusterSetting(t, c.DestCluster, "bulkio.stream_ingestion.standby_read_ts_poll_interval", pollInterval)
+
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	waitForPollerJobToStart(t, c)
+
+	var jobID jobspb.JobID
+	c.ReaderTenantSQL.QueryRow(t, `
+SELECT job_id 
+FROM crdb_internal.jobs 
+WHERE job_type = 'STANDBY READ TS POLLER'
+`).Scan(&jobID)
+	jobutils.WaitForJobToRun(t, c.ReaderTenantSQL, jobID)
+
+	c.Cutover(ctx, producerJobID, ingestionJobID, time.Time{}, false)
+	waitForTenantDataState(t, c.DestSysSQL, readerTenantName, mtinfopb.DataStateReady)
+	waitForTenantCount(t, c.DestSysSQL, readerTenantName, 1)
+}
+
+func TestReaderTenantWhenCutoverToSystemTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	readerTenantID := stats.IngestionDetails.ReadTenantID
+	require.NotNil(t, readerTenantID)
+
+	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName, 0)
+
+	pollInterval := time.Microsecond
+	serverutils.SetClusterSetting(t, c.DestCluster, "bulkio.stream_ingestion.standby_read_ts_poll_interval", pollInterval)
+
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	waitForPollerJobToStart(t, c)
+
+	var jobID jobspb.JobID
+	c.ReaderTenantSQL.QueryRow(t, `
+SELECT job_id 
+FROM crdb_internal.jobs 
+WHERE job_type = 'STANDBY READ TS POLLER'
+`).Scan(&jobID)
+
+	jobutils.WaitForJobToRun(t, c.ReaderTenantSQL, jobID)
+
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
+	waitForTenantCount(t, c.DestSysSQL, readerTenantName, 0)
+}
+
+func waitForTenantDataState(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	tenantName string,
+	expectedDataState mtinfopb.TenantDataState,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		var dataState mtinfopb.TenantDataState
+		db.QueryRow(t, fmt.Sprintf(`
+SELECT data_state 
+FROM system.tenants
+WHERE name = '%s'`, tenantName)).Scan(&dataState)
+
+		if dataState != expectedDataState {
+			return errors.Errorf("expected data state %s, got %s", expectedDataState, dataState)
+		}
+		return nil
+	})
+}
+
+func waitForTenantCount(
+	t testing.TB, db *sqlutils.SQLRunner, tenantName string, expectedTenantCount int,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		rows := db.QueryStr(t, `SELECT name FROM system.tenants`)
+		var numTenants int
+		for _, row := range rows {
+			require.Equal(t, 1, len(row))
+			if row[0] == tenantName {
+				numTenants += 1
+			}
+		}
+
+		if numTenants != expectedTenantCount {
+			return errors.Errorf("expected %d tenant, got %d", expectedTenantCount, numTenants)
+		}
+		return nil
+	})
+}
+
+func waitForPollerJobToStart(t *testing.T, c *replicationtestutils.TenantStreamingClusters) {
+	testutils.SucceedsSoon(t, func() error {
+		var numJobs int
+
+		c.ReaderTenantSQL.QueryRow(t, `
+SELECT count(*)
+FROM crdb_internal.jobs 
+WHERE job_type = 'STANDBY READ TS POLLER';
+`).Scan(&numJobs)
+
+		if numJobs != 1 {
+			return errors.Errorf("expected 1 standby read ts poller job, but got %d instead", numJobs)
+		}
+		return nil
+	})
 }
