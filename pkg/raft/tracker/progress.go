@@ -315,15 +315,16 @@ func (pr *Progress) IsPaused() bool {
 // In StateReplicate, generally a message is sent if there are log entries that
 // are not yet in-flight, and the in-flight limits are not exceeded. Otherwise,
 // we don't send a message, or send a "probe" message in a few situations (see
-// ShouldSendPing).
+// ShouldSendPing). If lazyReplication flag is true, entries sending is disabled
+// and delegated to the application layer.
 //
 // In StateSnapshot, we do not send append messages.
-func (pr *Progress) ShouldSendEntries(last uint64) bool {
+func (pr *Progress) ShouldSendEntries(last uint64, lazyReplication bool) bool {
 	switch pr.State {
 	case StateProbe:
 		return !pr.MsgAppProbesPaused && pr.CanSendEntries(last)
 	case StateReplicate:
-		return pr.CanSendEntries(last)
+		return !lazyReplication && pr.CanSendEntries(last)
 	case StateSnapshot:
 		return false
 	default:

@@ -180,6 +180,17 @@ type Config struct {
 	// TODO(#129411): deprecate !AsyncStorageWrites mode as it's not used in
 	// CRDB.
 	AsyncStorageWrites bool
+	// LazyReplication instructs raft to hold off constructing MsgApp messages
+	// eagerly in reaction to Step() calls.
+	//
+	// If LazyReplication is false, a MsgApp can be constructed any time it
+	// becomes possible, e.g. when a new entry is appended to the leader's log, or
+	// the in-flight volume to a peer drops below the max-inflight limits.
+	//
+	// If LazyReplication is true, MsgApp messages for StateReplicate peers are
+	// constructed on demand, when requested by the application layer via the
+	// RawNode.SendMsgApp method.
+	LazyReplication bool
 
 	// MaxSizePerMsg limits the max byte size of each append message. Smaller
 	// value lowers the raft recovery cost(initial probing and message lost
@@ -331,6 +342,7 @@ type raft struct {
 	trk                  tracker.ProgressTracker
 	electionTracker      tracker.ElectionTracker
 	fortificationTracker tracker.FortificationTracker
+	lazyReplication      bool
 
 	state StateType
 
@@ -448,6 +460,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -671,7 +684,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	sendEntries := pr.ShouldSendEntries(last)
+	sendEntries := pr.ShouldSendEntries(last, r.lazyReplication)
 	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, r.advanceCommitViaMsgAppOnly())
 	if !sendEntries && !sendProbe {
 		return false
