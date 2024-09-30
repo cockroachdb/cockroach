@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
@@ -64,7 +65,10 @@ CREATE TABLE a (i INT PRIMARY KEY);
 INSERT INTO a VALUES (1);
 `)
 	waitForPollerJobToStart(t, c, ingestionJobID)
+	observeValueInReaderTenant(t, c)
+}
 
+func observeValueInReaderTenant(t *testing.T, c *replicationtestutils.TenantStreamingClusters) {
 	now := timeutil.Now()
 	// Verify that updates have been replicated to reader tenant. This may take a
 	// second as the historical timestamp these AOST queries run needs to advance.
@@ -228,6 +232,63 @@ WHERE name = $1
 
 		if numTenants != 1 {
 			return errors.Errorf("expected 1 tenant, got %d", numTenants)
+		}
+		return nil
+	})
+}
+
+func TestReaderTenantCutover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "cutoverToLatest", func(t *testing.T, cutoverToLatest bool) {
+		ctx := context.Background()
+		args := replicationtestutils.DefaultTenantStreamingClustersArgs
+		args.EnableReaderTenant = true
+		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+		defer cleanup()
+
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+		srcTime := c.SrcCluster.Server(0).Clock().Now()
+		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+		readerTenantID := stats.IngestionDetails.ReadTenantID
+		require.NotNil(t, readerTenantID)
+
+		readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+		c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName, 0)
+
+		c.SrcTenantSQL.Exec(t, `
+USE defaultdb;
+CREATE TABLE a (i INT PRIMARY KEY);
+INSERT INTO a VALUES (1);
+`)
+
+		waitForPollerJobToStart(t, c, ingestionJobID)
+		if cutoverToLatest {
+			observeValueInReaderTenant(t, c)
+			c.Cutover(ctx, producerJobID, ingestionJobID, time.Time{}, false)
+			jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+			observeValueInReaderTenant(t, c)
+		} else {
+			c.Cutover(ctx, producerJobID, ingestionJobID, c.SrcCluster.Server(0).Clock().Now().GoTime(), false)
+			waitToRemoveTenant(t, c.DestSysSQL, readerTenantName)
+			jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		}
+	})
+}
+
+func waitToRemoveTenant(t testing.TB, db *sqlutils.SQLRunner, tenantName string) {
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		db.QueryRow(t, `SELECT count(*) FROM system.tenants where name = $1`, tenantName).Scan(&count)
+		if count != 0 {
+			return errors.Newf("expected tenant %s to be removed, but it still exists", tenantName)
 		}
 		return nil
 	})

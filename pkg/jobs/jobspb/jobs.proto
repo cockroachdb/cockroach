@@ -184,7 +184,9 @@ message StreamIngestionProgress {
   // if different than ReplicatedTime.
   util.hlc.Timestamp initial_revert_to = 11 [(gogoproto.nullable) = false];
 
-  // Next Id: 10
+  util.hlc.Timestamp replicated_time_at_cutover = 12 [(gogoproto.nullable) = false];
+
+  // Next Id: 13
 }
 
 message HistoryRetentionDetails {
