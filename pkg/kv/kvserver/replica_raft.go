@@ -632,7 +632,10 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
-		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
+		if r.store.TestingKnobs() == nil ||
+			!r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep {
+			r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
+		}
 		switch req.Message.Type {
 		case raftpb.MsgPreVote, raftpb.MsgVote:
 			// If we receive a (pre)vote request, and we find our leader to be dead or
@@ -1381,7 +1384,8 @@ func (r *Replica) tick(
 
 		r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
-		leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
+		storeClockTimestamp := r.store.Clock().NowAsClockTimestamp()
+		leaseStatus := r.leaseStatusAtRLocked(ctx, storeClockTimestamp)
 		// TODO(pav-kv): modify the quiescence criterion so that we don't quiesce if
 		// RACv2 holds some send tokens.
 		if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus, livenessMap) {
@@ -1422,6 +1426,9 @@ func (r *Replica) tick(
 		// live even when quiesced.
 		if r.isRaftLeaderRLocked() {
 			r.mu.lastUpdateTimes.update(r.replicaID, r.Clock().PhysicalTime())
+			// We also update lastUpdateTimes for replicas that provide store liveness
+			// support to the leader.
+			r.updateLastUpdateTimesUsingStoreLivenessRLocked(storeClockTimestamp)
 		}
 
 		r.mu.ticks++
@@ -3016,6 +3023,37 @@ func (r *Replica) printRaftTail(
 		}
 	}
 	return sb.String(), nil
+}
+
+// updateLastUpdateTimesUsingStoreLivenessRLocked updates the lastUpdateTimes
+// map if the follower's store is providing store liveness support. This is
+// useful because typically this map is updated on every message, but that
+// assumes that raft will periodically heartbeat. This assumption doesn't hold
+// under the raft fortification protocol, where failure detection is subsumed by
+// store liveness.
+// This method assume that Replica.mu is held in read mode.
+func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
+	storeClockTimestamp hlc.ClockTimestamp,
+) {
+	// If store liveness is not enabled, there is nothing to do.
+	if !(*replicaRLockedStoreLiveness)(r).SupportFromEnabled() {
+		return
+	}
+
+	for _, desc := range r.descRLocked().Replicas().Descriptors() {
+		// Updating the leader's time is not necessary as it's done every tick
+		// regardless of store liveness support.
+		if r.replicaID == desc.ReplicaID {
+			continue
+		}
+
+		// If the replica's store if providing store liveness support, update
+		// lastUpdateTimes to indicate that it is alive.
+		_, curExp := (*replicaRLockedStoreLiveness)(r).SupportFrom(raftpb.PeerID(desc.ReplicaID))
+		if storeClockTimestamp.ToTimestamp().LessEq(curExp) {
+			r.mu.lastUpdateTimes.update(desc.ReplicaID, r.Clock().PhysicalTime())
+		}
+	}
 }
 
 func truncateEntryString(s string, maxChars int) string {
