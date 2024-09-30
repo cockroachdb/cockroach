@@ -167,7 +167,7 @@
 /pkg/cli/syncbench/          @cockroachdb/storage @cockroachdb/kv-prs
 /pkg/cli/swappable_fs*       @cockroachdb/storage
 /pkg/cli/testutils.go        @cockroachdb/test-eng
-/pkg/cli/tsdump.go           @cockroachdb/obs-prs @cockroachdb/obs-india-prs
+/pkg/cli/tsdump*.go          @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/cli/userfile.go         @cockroachdb/disaster-recovery
 /pkg/cli/workload*           @cockroachdb/sql-foundations
 /pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
