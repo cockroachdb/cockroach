@@ -1264,7 +1264,7 @@ func (r *testRunner) runTest(
 	testReturnedCh := make(chan struct{})
 	go func() {
 		defer close(testReturnedCh) // closed only after we've grabbed the debug info below
-
+		defer logger.BridgeCRDBLog(t.L())()
 		defer func() {
 			// We only have to record panics if the panic'd value is not the sentinel
 			// produced by t.Fatal*().
