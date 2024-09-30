@@ -20,4 +20,4 @@ const connected = withRouter(
   })(DatabaseDetailsPage),
 );
 
-export { connected as DatabaseDetailsPage };
+export { connected as DatabaseDetailsPageLegacy };
