@@ -20,6 +20,7 @@ go_library(
         "interaction_env_handler_raft_log.go",
         "interaction_env_handler_raftstate.go",
         "interaction_env_handler_report_unreachable.go",
+        "interaction_env_handler_send_msgapp.go",
         "interaction_env_handler_send_snapshot.go",
         "interaction_env_handler_set_randomized_election_timeout.go",
         "interaction_env_handler_stabilize.go",
