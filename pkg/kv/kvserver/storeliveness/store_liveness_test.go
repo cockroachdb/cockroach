@@ -49,7 +49,7 @@ func TestStoreLiveness(t *testing.T) {
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
 					switch d.Cmd {
 					case "mark-idle-stores":
-						sm.requesterStateHandler.markIdleStores()
+						sm.requesterStateHandler.markIdleStores(ctx)
 						return ""
 
 					case "support-from":
@@ -66,7 +66,7 @@ func TestStoreLiveness(t *testing.T) {
 						now := parseTimestamp(t, d, "now")
 						manual.AdvanceTo(now.GoTime())
 						sm.options.LivenessInterval = parseDuration(t, d, "liveness-interval")
-						sm.maybeAddStores()
+						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
 						heartbeats := sender.drainSentMessages()
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
