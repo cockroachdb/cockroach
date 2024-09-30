@@ -4470,7 +4470,7 @@ ORDER BY streams DESC;
 }
 
 type flowControlTestHelper struct {
-	t             *testing.T
+	t             testing.TB
 	tc            *testcluster.TestCluster
 	st            *cluster.Settings
 	buf           *strings.Builder
@@ -4481,7 +4481,7 @@ type flowControlTestHelper struct {
 }
 
 func newFlowControlTestHelper(
-	t *testing.T,
+	t testing.TB,
 	tc *testcluster.TestCluster,
 	testdata string,
 	level kvflowcontrol.V2EnabledWhenLeaderLevel,
@@ -4501,7 +4501,7 @@ func newFlowControlTestHelper(
 	}
 }
 
-func newFlowControlTestHelperV1(t *testing.T, tc *testcluster.TestCluster) *flowControlTestHelper {
+func newFlowControlTestHelperV1(t testing.TB, tc *testcluster.TestCluster) *flowControlTestHelper {
 	return newFlowControlTestHelper(t,
 		tc,
 		"flow_control_integration", /* testdata */
@@ -4512,7 +4512,7 @@ func newFlowControlTestHelperV1(t *testing.T, tc *testcluster.TestCluster) *flow
 }
 
 func newFlowControlTestHelperV2(
-	t *testing.T, tc *testcluster.TestCluster, level kvflowcontrol.V2EnabledWhenLeaderLevel,
+	t testing.TB, tc *testcluster.TestCluster, level kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) *flowControlTestHelper {
 	return newFlowControlTestHelper(t,
 		tc,
@@ -4775,7 +4775,8 @@ func (h *flowControlTestHelper) put(
 // close writes the buffer to a file in the testdata directory and compares it
 // against the expected output.
 func (h *flowControlTestHelper) close(filename string) {
-	echotest.Require(h.t, h.buf.String(), datapathutils.TestDataPath(h.t, h.testdata, filename))
+	echotest.Require(
+		h.t.(*testing.T), h.buf.String(), datapathutils.TestDataPath(h.t, h.testdata, filename))
 }
 
 func (h *flowControlTestHelper) getInspectHandlesForLevel(
@@ -4828,4 +4829,54 @@ func makeV2EnabledTestFileName(
 		panic("unknown v2EnabledWhenLeaderLevel")
 	}
 	return filename + s
+}
+
+func BenchmarkFlowControlV2Basic(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	testutils.RunValues(b, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
+		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
+		kvflowcontrol.V2EnabledWhenLeaderV2Encoding,
+	}, func(b *testing.B, v2EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: settings,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+							UseOnlyForScratchRanges: true,
+							OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+								return v2EnabledWhenLeaderLevel
+							},
+						},
+					},
+					AdmissionControl: &admission.TestingKnobs{
+						DisableWorkQueueFastPath: false,
+					},
+				},
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		// Set up the benchmark state with 3 voters, one on each of the three
+		// node/stores.
+		k := tc.ScratchRange(b)
+		tc.AddVotersOrFatal(b, k, tc.Targets(1, 2)...)
+		h := newFlowControlTestHelperV2(b, tc, v2EnabledWhenLeaderLevel)
+		h.init()
+
+		desc, err := tc.LookupRange(k)
+		require.NoError(b, err)
+		h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			h.put(ctx, k, 1<<10 /* 1KiB */, admissionpb.UserLowPri)
+		}
+		h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
+		b.StopTimer()
+	})
 }
