@@ -89,6 +89,7 @@ go_proto_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_redact//:redact",  # keep
         "@com_github_gogo_protobuf//gogoproto",
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.

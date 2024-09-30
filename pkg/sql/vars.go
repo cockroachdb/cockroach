@@ -1438,6 +1438,15 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	// This is a read-only setting that shows the method that was used
+	// to authenticate this session.
+	`authentication_method`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(evalCtx.SessionData().AuthenticationMethod), nil
+		},
+	},
+
 	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
 	`ssl`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
