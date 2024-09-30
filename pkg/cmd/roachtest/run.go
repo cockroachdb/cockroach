@@ -26,9 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -77,6 +74,33 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			parallelism = 1
 		}
 	}
+
+	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
+	if err != nil {
+		return err
+	}
+
+	n := len(specs)
+	if n*roachtestflags.Count < parallelism {
+		// Don't spin up more workers than necessary. This has particular
+		// implications for the common case of running a single test once: if
+		// parallelism is set to 1, we'll use teeToStdout below to get logs to
+		// stdout/stderr.
+		parallelism = n * roachtestflags.Count
+	}
+
+	artifactsDir := roachtestflags.ArtifactsDir
+	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
+	if literalArtifactsDir == "" {
+		literalArtifactsDir = artifactsDir
+	}
+	redirectLogger := redirectCRDBLogger(context.Background(), filepath.Join(artifactsDir, "roachtest.crdb.log"))
+	logger.InitCRDBLogConfig(redirectLogger)
+	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
 
 	if runtime.GOOS == "darwin" {
 		// This will suppress the annoying "Allow incoming network connections" popup from
@@ -191,20 +215,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	return err
-}
-
-// This diverts all the default non fatal logging to a file in `baseDir`. This is particularly
-// useful in CI, where without this, stderr/stdout are cluttered with logs from various
-// packages used in roachtest like sarama and testutils.
-func setLogConfig(baseDir string) {
-	logConf := logconfig.DefaultStderrConfig()
-	logConf.Sinks.Stderr.Filter = logpb.Severity_FATAL
-	if err := logConf.Validate(&baseDir); err != nil {
-		panic(err)
-	}
-	if _, err := log.ApplyConfig(logConf); err != nil {
-		panic(err)
-	}
 }
 
 // getUser takes the value passed on the command line and comes up with the
@@ -355,6 +365,17 @@ func testRunnerLogger(
 	}
 	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
 	return l, teeOpt
+}
+
+func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
+	verboseCfg := logger.Config{}
+	var err error
+	l, err := verboseCfg.NewLogger(path)
+	if err != nil {
+		panic(err)
+	}
+	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
+	return l
 }
 
 func maybeDumpSummaryMarkdown(r *testRunner) error {
