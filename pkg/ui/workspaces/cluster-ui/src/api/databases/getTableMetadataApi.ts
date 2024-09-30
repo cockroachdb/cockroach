@@ -43,7 +43,7 @@ export type TableMetadata = {
 
 type TableMetadataResponse = APIV2ResponseWithPaginationState<TableMetadata[]>;
 
-export type TableMetadataRequest = {
+export type ListTableMetadataRequest = {
   dbId?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
@@ -52,8 +52,8 @@ export type TableMetadataRequest = {
   name?: string;
 };
 
-export async function getTableMetadata(
-  req: TableMetadataRequest,
+async function getTableMetadata(
+  req: ListTableMetadataRequest,
 ): Promise<TableMetadataResponse> {
   const urlParams = new URLSearchParams();
   if (req.dbId) {
@@ -82,7 +82,7 @@ export async function getTableMetadata(
   return fetchDataJSON(TABLE_METADATA_API_PATH + "?" + urlParams.toString());
 }
 
-const createKey = (req: TableMetadataRequest) => {
+const createKey = (req: ListTableMetadataRequest) => {
   const { dbId, sortBy, sortOrder, pagination, storeIds, name } = req;
   return [
     "tableMetadata",
@@ -96,7 +96,7 @@ const createKey = (req: TableMetadataRequest) => {
   ].join("|");
 };
 
-export const useTableMetadata = (req: TableMetadataRequest) => {
+export const useTableMetadata = (req: ListTableMetadataRequest) => {
   const key = createKey(req);
   const { data, error, isLoading, mutate } = useSWR<TableMetadataResponse>(
     key,
@@ -104,4 +104,30 @@ export const useTableMetadata = (req: TableMetadataRequest) => {
   );
 
   return { data, error, isLoading, refreshTables: mutate };
+};
+
+type TableDetailsRequest = {
+  tableId: number;
+};
+
+export type TableDetailsResponse = {
+  metadata: TableMetadata;
+  create_statement: string;
+};
+async function getTableDetails(
+  req: TableDetailsRequest,
+): Promise<TableDetailsResponse> {
+  if (!req.tableId || Number.isNaN(req.tableId)) {
+    throw new Error("Table ID is required");
+  }
+  return fetchDataJSON(`${TABLE_METADATA_API_PATH}${req.tableId}/`);
+}
+
+export const useTableDetails = (req: TableDetailsRequest) => {
+  const { data, error, isLoading } = useSWR<TableDetailsResponse>(
+    req.tableId.toString(),
+    () => getTableDetails(req),
+  );
+
+  return { data, error: error, isLoading };
 };
