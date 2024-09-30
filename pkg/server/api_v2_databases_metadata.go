@@ -451,10 +451,14 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 			tbm.total_live_data_bytes,
 			tbm.total_data_bytes,
 			tbm.store_ids, 
+			COALESCE((tbm.details->>'auto_stats_enabled')::BOOL, csc.auto_stats_enabled) as auto_stats_enabled,
+			parse_timestamp(tbm.details->>'stats_last_updated') as stats_last_updated,
 			COALESCE(tbm.last_update_error, '') as last_update_error,
 			tbm.last_updated,
 			count(*) OVER() as total_row_count
-		FROM system.table_metadata tbm
+		FROM system.table_metadata tbm,
+		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
+		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
 		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
 		WHERE (rm.role = 'admin' OR tbm.db_name in (
 	  			SELECT cdp.database_name
@@ -512,6 +516,12 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 		return tmd, err
 	}
 	if err = scanner.Scan(row, "last_updated", &tmd.LastUpdated); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "auto_stats_enabled", &tmd.AutoStatsEnabled); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "stats_last_updated", &tmd.StatsLastUpdated); err != nil {
 		return tmd, err
 	}
 
@@ -1063,21 +1073,23 @@ type paginationInfo struct {
 }
 
 type tableMetadata struct {
-	DbId                 int64     `json:"db_id"`
-	DbName               string    `json:"db_name"`
-	TableId              int64     `json:"table_id"`
-	SchemaName           string    `json:"schema_name"`
-	TableName            string    `json:"table_name"`
-	ReplicationSizeBytes int64     `json:"replication_size_bytes"`
-	RangeCount           int64     `json:"range_count"`
-	ColumnCount          int64     `json:"column_count"`
-	IndexCount           int64     `json:"index_count"`
-	PercentLiveData      float32   `json:"percent_live_data"`
-	TotalLiveDataBytes   int64     `json:"total_live_data_bytes"`
-	TotalDataBytes       int64     `json:"total_data_bytes"`
-	StoreIds             []int64   `json:"store_ids"`
-	LastUpdateError      string    `json:"last_update_error,omitempty"`
-	LastUpdated          time.Time `json:"last_updated"`
+	DbId                 int64      `json:"db_id"`
+	DbName               string     `json:"db_name"`
+	TableId              int64      `json:"table_id"`
+	SchemaName           string     `json:"schema_name"`
+	TableName            string     `json:"table_name"`
+	ReplicationSizeBytes int64      `json:"replication_size_bytes"`
+	RangeCount           int64      `json:"range_count"`
+	ColumnCount          int64      `json:"column_count"`
+	IndexCount           int64      `json:"index_count"`
+	PercentLiveData      float32    `json:"percent_live_data"`
+	TotalLiveDataBytes   int64      `json:"total_live_data_bytes"`
+	TotalDataBytes       int64      `json:"total_data_bytes"`
+	StoreIds             []int64    `json:"store_ids"`
+	AutoStatsEnabled     bool       `json:"auto_stats_enabled"`
+	StatsLastUpdated     *time.Time `json:"stats_last_updated"`
+	LastUpdateError      string     `json:"last_update_error,omitempty"`
+	LastUpdated          time.Time  `json:"last_updated"`
 }
 
 type dbMetadata struct {

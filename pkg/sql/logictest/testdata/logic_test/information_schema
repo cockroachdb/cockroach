@@ -1847,6 +1847,7 @@ system              public             29_67_13_not_null                        
 system              public             29_67_15_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_16_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_17_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_18_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_1_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_2_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_3_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
@@ -2219,6 +2220,7 @@ system              public             29_67_12_not_null                        
 system              public             29_67_13_not_null                                                                                               perc_live_data IS NOT NULL
 system              public             29_67_15_not_null                                                                                               last_updated IS NOT NULL
 system              public             29_67_16_not_null                                                                                               table_type IS NOT NULL
+system              public             29_67_17_not_null                                                                                               details IS NOT NULL
 system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
 system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
 system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
@@ -2788,6 +2790,7 @@ system              public             29_67_12_not_null                        
 system              public             29_67_13_not_null                                                                                               perc_live_data IS NOT NULL
 system              public             29_67_15_not_null                                                                                               last_updated IS NOT NULL
 system              public             29_67_16_not_null                                                                                               table_type IS NOT NULL
+system              public             29_67_17_not_null                                                                                               details IS NOT NULL
 system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
 system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
 system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
@@ -3182,9 +3185,10 @@ system         public        statement_statistics             service_latency   
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             total_estimated_execution_time                                                                            18
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
-system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              17
+system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              18
 system         public        table_metadata                   db_id                                                                                                     1
 system         public        table_metadata                   db_name                                                                                                   3
+system         public        table_metadata                   details                                                                                                   17
 system         public        table_metadata                   last_update_error                                                                                         14
 system         public        table_metadata                   last_updated                                                                                              15
 system         public        table_metadata                   perc_live_data                                                                                            13
