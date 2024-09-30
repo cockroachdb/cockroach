@@ -190,21 +190,31 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	for _, desc := range sortReplicas(s.ranges[rangeID]) {
 		r := s.ranges[rangeID]
 		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
-		rss := r.rc.replicaMap[desc.ReplicaID]
+		rs := r.rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
-		if rss.sendStream == nil {
+		rss := rs.sendStream
+		if rss == nil {
 			fmt.Fprintf(&b, "closed\n")
+			b.WriteString("++++\n")
 			continue
 		}
-		rss.sendStream.mu.Lock()
-		defer rss.sendStream.mu.Unlock()
+		rss.mu.Lock()
+		defer rss.mu.Unlock()
 
-		fmt.Fprintf(&b, "state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v)\n",
-			rss.sendStream.mu.connectedState, rss.sendStream.mu.closed,
-			testRepl.info.Match+1, rss.sendStream.mu.sendQueue.indexToSend,
-			rss.sendStream.mu.sendQueue.indexToSend,
-			rss.sendStream.mu.sendQueue.nextRaftIndex)
-		b.WriteString(formatTrackerState(&rss.sendStream.mu.tracker))
+		fmt.Fprintf(&b,
+			"state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v) precise_q_size=%v force-flush=%t\n",
+			rss.mu.connectedState, rss.mu.closed,
+			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend,
+			rss.mu.sendQueue.indexToSend,
+			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum,
+			rss.mu.sendQueue.forceFlushScheduled)
+		fmt.Fprintf(&b, "eval deducted: reg=%v ela=%v\n",
+			rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass],
+			rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass])
+		fmt.Fprintf(&b, "eval original in send-q: reg=%v ela=%v\n",
+			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass],
+			rss.mu.sendQueue.originalEvalTokens[admissionpb.ElasticWorkClass])
+		b.WriteString(formatTrackerState(&rss.mu.tracker))
 		b.WriteString("++++\n")
 	}
 	return b.String()
@@ -234,7 +244,9 @@ func (s *testingRCState) maybeSetInitialTokens(r testingRange) {
 	}
 }
 
-func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRCRange {
+func (s *testingRCState) getOrInitRange(
+	t *testing.T, r testingRange, mode RaftMsgAppMode,
+) *testingRCRange {
 	testRC, ok := s.ranges[r.rangeID]
 	if !ok {
 		testRC = &testingRCRange{}
@@ -265,7 +277,9 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 	s.maybeSetInitialTokens(r)
 	// Send through an empty raft event to trigger creating necessary replica
 	// send streams for the range.
-	require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, testRC.makeRaftEventWithReplicasState()))
+	event := testRC.makeRaftEventWithReplicasState()
+	event.MsgAppMode = mode
+	require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, event))
 	return testRC
 }
 
@@ -326,7 +340,30 @@ func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
 func (r *testingRCRange) MakeMsgAppRaftMuLocked(
 	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
 ) (raftpb.Message, error) {
-	panic("unimplemented")
+	if start >= end {
+		panic("start >= end")
+	}
+	msg := raftpb.Message{Type: raftpb.MsgApp}
+	var size int64
+	for _, entry := range r.entries {
+		if entry.Index >= start && entry.Index < end {
+			msg.Entries = append(msg.Entries, entry)
+			size += int64(len(entry.Data))
+			if size > maxSize {
+				break
+			}
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	testR, ok := r.mu.r.replicaSet[replicaID]
+	if !ok {
+		panic("unknown replica")
+	}
+	testR.info.Match = max(msg.Entries[0].Index-1, testR.info.Match)
+	testR.info.Next = msg.Entries[len(msg.Entries)-1].Index + 1
+	r.mu.r.replicaSet[replicaID] = testR
+	return msg, nil
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -865,7 +902,7 @@ func TestRangeController(t *testing.T) {
 				}
 
 				for _, r := range scanRanges(t, d.Input) {
-					state.getOrInitRange(t, r)
+					state.getOrInitRange(t, r, MsgAppPush)
 				}
 				return state.rangeStateString() + state.tokenCountsString()
 
@@ -894,6 +931,10 @@ func TestRangeController(t *testing.T) {
 				return state.evalStateString()
 
 			case "adjust_tokens":
+				eval := true
+				if d.HasArg("send") {
+					eval = false
+				}
 				for _, line := range strings.Split(d.Input, "\n") {
 					parts := strings.Fields(line)
 					parts[0] = strings.TrimSpace(parts[0])
@@ -912,10 +953,19 @@ func TestRangeController(t *testing.T) {
 					tokens, err := humanizeutil.ParseBytes(tokenString)
 					require.NoError(t, err)
 
-					state.ssTokenCounter.Eval(kvflowcontrol.Stream{
-						StoreID:  roachpb.StoreID(store),
-						TenantID: roachpb.SystemTenantID,
-					}).adjust(ctx,
+					var tc *tokenCounter
+					if eval {
+						tc = state.ssTokenCounter.Eval(kvflowcontrol.Stream{
+							StoreID:  roachpb.StoreID(store),
+							TenantID: roachpb.SystemTenantID,
+						})
+					} else {
+						tc = state.ssTokenCounter.Send(kvflowcontrol.Stream{
+							StoreID:  roachpb.StoreID(store),
+							TenantID: roachpb.SystemTenantID,
+						})
+					}
+					tc.adjust(ctx,
 						admissionpb.WorkClassFromPri(pri),
 						kvflowcontrol.Tokens(tokens),
 						false, /* disconnect */
@@ -939,8 +989,12 @@ func TestRangeController(t *testing.T) {
 				return state.evalStateString()
 
 			case "set_replicas":
+				mode := MsgAppPush
+				if d.HasArg("pull-mode") {
+					mode = MsgAppPull
+				}
 				for _, r := range scanRanges(t, d.Input) {
-					testRC := state.getOrInitRange(t, r)
+					testRC := state.getOrInitRange(t, r, mode)
 					func() {
 						testRC.mu.Lock()
 						defer testRC.mu.Unlock()
@@ -949,7 +1003,9 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, testRC.rc.SetReplicasRaftMuLocked(ctx, r.replicas()))
 					// Send an empty raft event in order to trigger any potential
 					// connectedState changes.
-					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, testRC.makeRaftEventWithReplicasState()))
+					event := testRC.makeRaftEventWithReplicasState()
+					event.MsgAppMode = mode
+					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, event))
 				}
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
@@ -1029,8 +1085,13 @@ func TestRangeController(t *testing.T) {
 				return state.tokenCountsString()
 
 			case "raft_event":
+				mode := MsgAppPush
+				if d.HasArg("pull-mode") {
+					mode = MsgAppPull
+				}
 				for _, event := range parseRaftEvents(t, d.Input) {
 					raftEvent := RaftEvent{
+						MsgAppMode:        mode,
 						Entries:           make([]raftpb.Entry, len(event.entries)),
 						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
 						ReplicasStateInfo: state.ranges[event.rangeID].replicasStateInfo(),
@@ -1054,27 +1115,40 @@ func TestRangeController(t *testing.T) {
 						for replicaID, testR := range testRC.mu.r.replicaSet {
 							msgApp.Entries = nil
 							msgApp.To = raftpb.PeerID(replicaID)
-							if event.sendingEntryRange == nil ||
-								testingFirst(0, event.sendingEntryRange[replicaID]) == nil {
-								// When sendingEntryRange is not specified, include all
-								// entries for this replica.
-								msgApp.Entries = raftEvent.Entries
-							} else {
-								fromIndex := event.sendingEntryRange[replicaID].fromIndex
-								toIndex := event.sendingEntryRange[replicaID].toIndex
-								for _, entry := range testRC.entries {
-									if entry.Index >= fromIndex && entry.Index <= toIndex {
-										msgApp.Entries = append(msgApp.Entries, entry)
+							if mode == MsgAppPush {
+								if event.sendingEntryRange == nil ||
+									testingFirst(0, event.sendingEntryRange[replicaID]) == nil {
+									// When sendingEntryRange is not specified, include all
+									// entries for this replica.
+									msgApp.Entries = raftEvent.Entries
+								} else {
+									fromIndex := event.sendingEntryRange[replicaID].fromIndex
+									toIndex := event.sendingEntryRange[replicaID].toIndex
+									for _, entry := range testRC.entries {
+										if entry.Index >= fromIndex && entry.Index <= toIndex {
+											msgApp.Entries = append(msgApp.Entries, entry)
+										}
 									}
 								}
+								raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
 							}
-							raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
+							// Else MsgAppPull mode, so raftEvent.MsgApps is unpopulated.
+
 							if len(msgApp.Entries) > 0 {
 								// Bump the Next and Index fields for replicas that have
 								// MsgApps being sent to them. The Match index is only updated
 								// if it increases.
 								testR.info.Match = max(msgApp.Entries[0].Index-1, testR.info.Match)
 								testR.info.Next = msgApp.Entries[len(msgApp.Entries)-1].Index + 1
+								testRC.mu.r.replicaSet[replicaID] = testR
+							} else if testR.desc.ReplicaID == testRC.mu.r.localReplicaID &&
+								len(raftEvent.Entries) > 0 {
+								// Leader does not see MsgApps, but the Next needs to be bumped.
+								//
+								// TODO(sumeer): many of the test cases are sending MsgApps to
+								// the leader. Stop doing it.
+								testR.info.Match = max(raftEvent.Entries[0].Index-1, testR.info.Match)
+								testR.info.Next = raftEvent.Entries[len(raftEvent.Entries)-1].Index + 1
 								testRC.mu.r.replicaSet[replicaID] = testR
 							}
 						}
@@ -1937,6 +2011,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				require.Panics(t, func() {
 					constructRaftEventForReplica(
 						ctx,
+						MsgAppPush,
 						tc.raftEventAppendState,
 						tc.latestReplicaStateInfo,
 						tc.existingSendStreamState,
@@ -1947,6 +2022,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			} else {
 				gotRaftEventReplica, gotScratch := constructRaftEventForReplica(
 					ctx,
+					MsgAppPush,
 					tc.raftEventAppendState,
 					tc.latestReplicaStateInfo,
 					tc.existingSendStreamState,
