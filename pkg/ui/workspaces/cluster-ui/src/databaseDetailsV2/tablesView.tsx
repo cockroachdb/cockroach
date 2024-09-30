@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
 import {
-  TableMetadataRequest,
+  ListTableMetadataRequest,
   TableSortOption,
   useTableMetadata,
 } from "src/api/databases/getTableMetadataApi";
@@ -167,7 +167,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
 const createTableMetadataRequestFromParams = (
   dbID: string,
   params: TableParams,
-): TableMetadataRequest => {
+): ListTableMetadataRequest => {
   return {
     pagination: {
       pageSize: params.pagination.pageSize,
