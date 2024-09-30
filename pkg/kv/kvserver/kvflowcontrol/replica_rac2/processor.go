@@ -224,7 +224,8 @@ type ProcessorOptions struct {
 type SideChannelInfoUsingRaftMessageRequest struct {
 	UsingV2Protocol bool
 	LeaderTerm      uint64
-	// Following are only used if UsingV2Protocol is true.
+	// Following are only used if UsingV2Protocol is true. Represents [First,
+	// Last], i.e., both are inclusive.
 	First, Last    uint64
 	LowPriOverride bool
 }
@@ -974,7 +975,10 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			if raftPri != priBits {
 				panic(errors.AssertionFailedf("inconsistent priorities %s, %s", raftPri, priBits))
 			}
-			raftPri = p.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
+			if p.leaderID != p.opts.ReplicaID {
+				// Follower.
+				raftPri = p.follower.lowPriOverrideState.getEffectivePriority(e.Term, entry.Index, raftPri)
+			}
 		} else {
 			raftPri = raftpb.LowPri
 			if admissionpb.WorkClassFromPri(admissionpb.WorkPriority(meta.AdmissionPriority)) ==
@@ -1090,7 +1094,8 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	} else {
 		if p.follower.lowPriOverrideState.sideChannelForV1Leader(info.LeaderTerm) &&
 			p.follower.isLeaderUsingV2Protocol {
-			// Leader term advanced, so this is switching back to v1.
+			// Leader term advanced, so this is a different leader switching back to
+			// v1.
 			p.follower.isLeaderUsingV2Protocol = false
 		}
 	}
