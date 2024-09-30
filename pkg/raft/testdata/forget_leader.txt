@@ -113,7 +113,9 @@ grant-support 4 1
 # When receiving MsgFortifyLeader from the leader, they revert to followers.
 tick-heartbeat 1
 ----
-ok
+INFO 1 sending MsgFortifyLeader to 1
+INFO 1 sending MsgFortifyLeader to 2
+INFO 1 sending MsgFortifyLeader to 4
 
 stabilize
 ----

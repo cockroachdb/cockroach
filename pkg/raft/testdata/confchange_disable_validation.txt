@@ -59,6 +59,8 @@ stabilize 1
   CommittedEntries:
   1/5 EntryConfChangeV2 l2 l3
   INFO 1 switched to configuration voters=(1)&&(1) learners=(2 3)
+  INFO 1 sending MsgFortifyLeader to 2
+  INFO 1 sending MsgFortifyLeader to 3
 > 1 handling Ready
   Ready MustSync=false:
   Messages:

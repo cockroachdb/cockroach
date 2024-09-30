@@ -125,6 +125,8 @@ stabilize
   INFO 1 received MsgVoteResp from 2 at term 1
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
+  INFO 1 sending MsgFortifyLeader to 1
+  INFO 1 sending MsgFortifyLeader to 2
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
@@ -450,6 +452,9 @@ stabilize
   INFO 2 received MsgVoteResp from 1 at term 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
+  INFO 2 sending MsgFortifyLeader to 1
+  INFO 2 sending MsgFortifyLeader to 2
+  INFO 2 sending MsgFortifyLeader to 3
   3->2 MsgVoteResp Term:2 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
@@ -783,6 +788,9 @@ stabilize
   INFO 3 received MsgVoteResp from 1 at term 4
   INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 3 became leader at term 4
+  INFO 3 sending MsgFortifyLeader to 1
+  INFO 3 sending MsgFortifyLeader to 2
+  INFO 3 sending MsgFortifyLeader to 3
 > 3 handling Ready
   Ready MustSync=true:
   State:StateLeader
@@ -1068,6 +1076,9 @@ stabilize
   INFO 2 received MsgVoteResp from 1 at term 5
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 5
+  INFO 2 sending MsgFortifyLeader to 1
+  INFO 2 sending MsgFortifyLeader to 2
+  INFO 2 sending MsgFortifyLeader to 3
   3->2 MsgVoteResp Term:5 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
@@ -1342,6 +1353,8 @@ stabilize
   INFO 1 received MsgVoteResp from 2 at term 6
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 6
+  INFO 1 sending MsgFortifyLeader to 1
+  INFO 1 sending MsgFortifyLeader to 2
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader

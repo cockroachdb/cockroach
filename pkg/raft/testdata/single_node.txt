@@ -22,6 +22,7 @@ stabilize
   INFO 1 received MsgVoteResp from 1 at term 1
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
+  INFO 1 sending MsgFortifyLeader to 1
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader

@@ -68,6 +68,7 @@ stabilize
   Messages:
   1->2 MsgApp Term:1 Log:1/4 Commit:4
   INFO 1 switched to configuration voters=(1 2 3)&&(1 2) autoleave
+  INFO 1 sending MsgFortifyLeader to 3
   INFO initiating automatic transition out of joint configuration voters=(1 2 3)&&(1 2) autoleave
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/4 Commit:4

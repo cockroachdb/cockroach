@@ -219,7 +219,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 		select {
 		case <-sm.storesToAdd.sig:
 			sm.maybeAddStores()
-			sm.sendHeartbeats(ctx)
+			continue
 
 		case <-heartbeatTicker.C:
 			sm.sendHeartbeats(ctx)

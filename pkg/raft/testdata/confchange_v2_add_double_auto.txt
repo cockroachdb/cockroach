@@ -22,6 +22,7 @@ HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
 INFO 1 received MsgVoteResp from 1 at term 1
 INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 INFO 1 became leader at term 1
+INFO 1 sending MsgFortifyLeader to 1
 
 propose-conf-change 1 transition=auto
 v2 v3
@@ -60,6 +61,8 @@ CommittedEntries:
 1/3 EntryNormal ""
 1/4 EntryConfChangeV2 v2 v3
 INFO 1 switched to configuration voters=(1 2 3)&&(1) autoleave
+INFO 1 sending MsgFortifyLeader to 2
+INFO 1 sending MsgFortifyLeader to 3
 INFO initiating automatic transition out of joint configuration voters=(1 2 3)&&(1) autoleave
 
 # n1 immediately probes n2 and n3.
@@ -156,6 +159,7 @@ stabilize 1 2
   Messages:
   1->2 MsgApp Term:1 Log:1/5 Commit:5
   INFO 1 switched to configuration voters=(1 2 3)
+  INFO 1 sending MsgFortifyLeader to 3
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/5 Commit:5
 > 1 handling Ready

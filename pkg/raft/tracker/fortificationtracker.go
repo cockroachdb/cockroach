@@ -269,6 +269,16 @@ func (ft *FortificationTracker) QuorumActive() bool {
 	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil(pb.StateLeader))
 }
 
+func (ft *FortificationTracker) QuorumSupported() bool {
+	votes := map[pb.PeerID]bool{}
+	for _, cfg := range ft.config.Voters {
+		for id := range cfg {
+			_, votes[id] = ft.IsFortifiedBy(id)
+		}
+	}
+	return ft.config.Voters.VoteResult(votes) == quorum.VoteWon
+}
+
 // Term returns the leadership term for which the tracker is/was tracking
 // fortification state.
 func (ft *FortificationTracker) Term() uint64 {
