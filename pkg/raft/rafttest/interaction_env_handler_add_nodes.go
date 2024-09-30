@@ -57,6 +57,8 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &snap.Data)
 			case "async-storage-writes":
 				arg.Scan(t, i, &cfg.AsyncStorageWrites)
+			case "lazy-replication":
+				arg.Scan(t, i, &cfg.LazyReplication)
 			case "prevote":
 				arg.Scan(t, i, &cfg.PreVote)
 			case "checkquorum":
