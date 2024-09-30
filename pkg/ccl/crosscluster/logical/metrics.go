@@ -125,6 +125,26 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Labeled metrics.
+	metaLabeledReplicatedTime = metric.Metadata{
+		Name:        "logical_replication.replicated_time_by_label",
+		Help:        "Replicated time of the logical replication stream by label",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+	metaLabeledEventsIngetsted = metric.Metadata{
+		Name:        "logical_replication.events_ingested_by_label",
+		Help:        "Events ingested by all replication jobs by label",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledEventsDLQed = metric.Metadata{
+		Name:        "logical_replication.events_dlqed_by_label",
+		Help:        "Row update events sent to DLQ by label",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -157,6 +177,11 @@ type Metrics struct {
 	// a specific way.
 	CheckpointEvents *metric.Counter
 	ReplanCount      *metric.Counter
+
+	// Labeled export-only metrics.
+	LabeledReplicatedTime *metric.GaugeVec
+	LabeledEventsIngested *metric.CounterVec
+	LabeledEventsDLQed    *metric.CounterVec
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -193,5 +218,10 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		RetriedApplyFailures:  metric.NewCounter(metaRetriedApplyFailures),
 		CheckpointEvents:      metric.NewCounter(metaCheckpointEvents),
 		ReplanCount:           metric.NewCounter(metaDistSQLReplanCount),
+
+		// Labeled export-only metrics.
+		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
+		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngetsted, []string{"label"}),
+		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
 	}
 }
