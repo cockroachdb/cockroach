@@ -820,6 +820,7 @@ func (r *raft) maybeSendFortify(id pb.PeerID) {
 
 	// Only send a fortify message if we don't know that the follower supports us
 	// at the current epoch.
+	r.logger.Infof("%x sending MsgFortifyLeader to %x", r.id, id)
 	r.sendFortify(id)
 }
 
@@ -1209,6 +1210,10 @@ func (r *raft) hup(t CampaignType) {
 	}
 	if !r.promotable() {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		return
+	}
+	if r.storeLiveness.SupportFromEnabled() && !r.fortificationTracker.QuorumSupported() {
+		r.logger.Warningf("%x is not a suitable candidate, not supported in store liveness", r.id)
 		return
 	}
 	// NB: The leader is allowed to bump its term by calling an election. Note that

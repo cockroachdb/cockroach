@@ -215,10 +215,11 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 		}
 
 		select {
-		case <-heartbeatTicker.C:
-			// First check if any stores need to be added to ensure they are included
-			// in the round of heartbeats below.
+		case <-sm.storesToAdd.sig:
 			sm.maybeAddStores()
+			continue
+
+		case <-heartbeatTicker.C:
 			if sm.SupportFromEnabled(ctx) {
 				sm.sendHeartbeats(ctx)
 			}
@@ -417,11 +418,13 @@ func (q *receiveQueue) Drain() []*slpb.Message {
 // requesterState.supportFrom.
 type storesToAdd struct {
 	mu     syncutil.Mutex
+	sig    chan struct{}
 	stores map[slpb.StoreIdent]struct{}
 }
 
 func newStoresToAdd() storesToAdd {
 	return storesToAdd{
+		sig:    make(chan struct{}),
 		stores: make(map[slpb.StoreIdent]struct{}),
 	}
 }
@@ -430,6 +433,10 @@ func (sta *storesToAdd) addStore(id slpb.StoreIdent) {
 	sta.mu.Lock()
 	defer sta.mu.Unlock()
 	sta.stores[id] = struct{}{}
+	select {
+	case sta.sig <- struct{}{}:
+	default:
+	}
 }
 
 func (sta *storesToAdd) drainStoresToAdd() []slpb.StoreIdent {

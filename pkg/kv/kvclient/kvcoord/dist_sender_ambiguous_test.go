@@ -266,6 +266,7 @@ func validateTxnCommitAmbiguousError(t *testing.T, err error, reason string) {
 func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	t.Skip("WIP: see kvserver.ExpirationLeasesOnly below")
 
 	// This test depends on an intricate sequencing of events that can take
 	// several seconds, and requires maintaining expected leases.

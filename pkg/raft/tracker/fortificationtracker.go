@@ -109,6 +109,16 @@ func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
+func (st *FortificationTracker) QuorumSupported() bool {
+	votes := map[pb.PeerID]bool{}
+	for _, cfg := range st.config.Voters {
+		for id := range cfg {
+			_, votes[id] = st.IsFortifiedBy(id)
+		}
+	}
+	return st.config.Voters.VoteResult(votes) == quorum.VoteWon
+}
+
 // QuorumActive returns whether the leader is currently supported by a quorum or
 // not.
 func (ft *FortificationTracker) QuorumActive() bool {
