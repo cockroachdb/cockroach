@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,6 +38,7 @@ import (
 
 func TestLWWInsertQueryGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -311,6 +313,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 // last write wins mode.
 func TestLWWConflictResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
