@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -99,6 +100,8 @@ func (c *conn) handleAuthentication(
 	if authOpt.testingAuthHook != nil {
 		return nil, authOpt.testingAuthHook(ctx)
 	}
+	// To book-keep the authentication start time.
+	authStartTime := timeutil.Now()
 
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, authMethod, err := c.findAuthenticationMethod(authOpt)
@@ -242,7 +245,30 @@ func (c *conn) handleAuthentication(
 		}
 	}
 
+	// Compute the authentication latency needed to serve a SQL query.
+	// The metric published is based on the authentication type.
+	duration := timeutil.Since(authStartTime).Nanoseconds()
+	c.publishConnMetric(duration, hbaEntry.Method.String())
+
 	return connClose, nil
+}
+
+// publishConnMetric publishes the latency
+func (c *conn) publishConnMetric(duration int64, authMethod string) {
+	switch authMethod {
+	case jwtTokenHBAEntry.string():
+		c.metrics.AuthJWTTokenConnLatency.RecordValue(duration)
+	case certHBAEntry.string():
+		c.metrics.AuthCertConnLatency.RecordValue(duration)
+	case passwordHBAEntry.string():
+		c.metrics.AuthPassConnLatency.RecordValue(duration)
+	case ldapHBAEntry.string():
+		c.metrics.AuthLDAPConnLatency.RecordValue(duration)
+	case gssHBAEntry.string():
+		c.metrics.AuthGSSConnLatency.RecordValue(duration)
+	case scramSHA256HBAEntry.string():
+		c.metrics.AuthScramConnLatency.RecordValue(duration)
+	}
 }
 
 func (c *conn) authOKMessage() error {
