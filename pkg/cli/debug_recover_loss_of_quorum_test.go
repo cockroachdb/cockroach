@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -182,13 +183,18 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// would not be able to progress, but we will apply recovery procedure and
 	// mark on replicas on node 1 as designated survivors. After that, starting
 	// single node should succeed.
+	st := cluster.MakeTestingClusterSettings()
+	// We currently don't clear out the LeadEpoch field when recovering from a
+	// loss of quorum, so we can't run with leader leases on in this test.
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// This logic is specific to the storage layer.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Settings:          st,
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
+			0: {Settings: st, StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 		},
 	})
 	tcBefore.Start(t)
@@ -255,10 +261,11 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// This logic is specific to the storage layer.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Settings:          st,
 		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
+			0: {Settings: st, StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 		},
 	})
 	// NB: If recovery is not performed, new cluster will just hang on startup.

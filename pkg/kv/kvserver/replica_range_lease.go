@@ -166,6 +166,7 @@ func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roac
 	switch typ {
 	case roachpb.LeaseExpiration:
 		ExpirationLeasesOnly.Override(ctx, sv, true)
+		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)
 	case roachpb.LeaseEpoch:
 		ExpirationLeasesOnly.Override(ctx, sv, false)
 		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)

@@ -2678,6 +2678,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
+					Settings:   settings,
 					RaftConfig: raftConfig,
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -5735,6 +5736,8 @@ func TestElectionAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 
 	// We use a single node to avoid rare flakes due to dueling elections.
 	// The code is set up to support multiple nodes, though the test will
@@ -5756,6 +5759,7 @@ func TestElectionAfterRestart(t *testing.T) {
 			ReplicationMode: replMode,
 			ParallelStart:   parallel,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				RaftConfig: base.RaftConfig{
 					RaftElectionTimeoutTicks: electionTimeoutTicks,
 					RaftTickInterval:         raftTickInterval,
