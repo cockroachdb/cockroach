@@ -82,7 +82,7 @@ stabilize 3
   Messages:
   3->1 MsgHeartbeatResp Term:1 Log:0/0
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  
+
 # The leader in turn will realize that n3 needs a snapshot, which it initiates.
 stabilize 1
 ----
