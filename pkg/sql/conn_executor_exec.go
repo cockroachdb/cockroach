@@ -2471,6 +2471,13 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	asOfClause := ex.asOfClauseWithSessionDefault(modes.AsOf)
 	if asOfClause.Expr == nil {
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
+		if ex.executorType == executorTypeExec {
+			// Check if a PCR reader catalog timestamp is set, which
+			// will cause to turn all txns into system time queries.
+			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() {
+				return tree.ReadOnly, now, &newTS, nil
+			}
+		}
 		return rwMode, now, nil, nil
 	}
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
