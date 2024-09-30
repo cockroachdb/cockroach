@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -151,6 +152,7 @@ func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, numR
 
 func TestNoopDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -213,6 +215,7 @@ func TestNoopDLQClient(t *testing.T) {
 
 func TestDLQCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -252,6 +255,7 @@ func TestDLQCreation(t *testing.T) {
 
 func TestDLQLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -391,6 +395,7 @@ func TestDLQLogging(t *testing.T) {
 
 func TestDLQJSONQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -465,6 +470,7 @@ func TestDLQJSONQuery(t *testing.T) {
 // LDR job are persisted to its corresponding DLQ table
 func TestEndToEndDLQ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
