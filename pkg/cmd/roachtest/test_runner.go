@@ -383,6 +383,8 @@ func (r *testRunner) Run(
 			if err != nil {
 				l.ErrorfCtx(ctx, "unable to create logger %s: %s", name, err)
 				childLogger = l
+			} else {
+				defer logger.BridgeCRDBLog(childLogger)()
 			}
 
 			err = r.runWorker(
