@@ -260,8 +260,9 @@ func (d *datadogWriter) flush(data []DatadogSeries) error {
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 5
+	var req *http.Request
 	for retry := retry.Start(retryOpts); retry.Next(); {
-		req, err := http.NewRequest("POST", d.targetURL, &zipBuf)
+		req, err = http.NewRequest("POST", d.targetURL, &zipBuf)
 		if err != nil {
 			return err
 		}
@@ -313,7 +314,7 @@ func (d *datadogWriter) upload(fileName string) error {
 			for data := range ch {
 				err := d.emitDataDogMetrics(data)
 				if err != nil {
-					fmt.Printf("retries exhausted for datadog upload containing series %s with error %v", data[0].Metric, err)
+					fmt.Printf("retries exhausted for datadog upload containing series %s with error %v\n", data[0].Metric, err)
 					wg.Done()
 					return
 				}
