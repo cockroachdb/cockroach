@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -829,6 +831,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx,
+		executorTypeExec,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
@@ -1015,6 +1018,7 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 // executor with non-nil txn.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
+	executorType executorType,
 	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
@@ -1091,7 +1095,7 @@ func (s *Server) newConnExecutor(
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx, goroutineID: goid.Get()},
 		phaseTimes:                sessionphase.NewTimes(),
-		executorType:              executorTypeExec,
+		executorType:              executorType,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
@@ -1192,6 +1196,18 @@ func (s *Server) newConnExecutor(
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+
+	if lm := ex.server.cfg.LeaseManager; executorType == executorTypeExec && lm != nil {
+		if desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID); err != nil {
+			log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+		} else {
+			defer desc.Release(ctx)
+			// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
+			// which guarantees that all user tenant sql connections to the reader tenant will
+			// correctly set this
+			ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
+		}
+	}
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -1785,6 +1801,11 @@ type connExecutor struct {
 	// transaction which committed. It is zero-valued when there is a transaction
 	// open or the previous transaction did not successfully commit.
 	previousTransactionCommitTimestamp hlc.Timestamp
+
+	// isPCRReader catalog indicates this connection executor is for
+	// PCR reader catalog, which is done by checking for the ReplicatedPCRVersion
+	// field on the system database (which is set during tenant bootstrap).
+	isPCRReaderCatalog bool
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -3720,6 +3741,16 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
+}
+
+// GetPCRReaderTimestamp if the system database is setup as PCR
+// catalog reader, then this function will return an non-zero timestamp
+// to use for all read operations.
+func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
+	if ex.isPCRReaderCatalog {
+		return ex.server.cfg.LeaseManager.GetSafeReplicationTS()
+	}
+	return hlc.Timestamp{}
 }
 
 // resetEvalCtx initializes the fields of evalCtx that can change
