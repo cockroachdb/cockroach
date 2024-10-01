@@ -2063,7 +2063,6 @@ var cockroachdbMetrics = map[string]string{
 	"txn_restarts_txnpush":                                        "txn.restarts.txnpush",
 	"txn_restarts_unknown":                                        "txn.restarts.unknown",
 	"txn_restarts_writetooold":                                    "txn.restarts.writetooold",
-	"txn_restarts_writetoooldmulti":                               "txn.restarts.writetoooldmulti",
 	"txn_rollbacks_async_failed":                                  "txn.rollbacks.async.failed",
 	"txn_rollbacks_failed":                                        "txn.rollbacks.failed",
 	"txn_server_side_1PC_failure":                                 "txn.server_side.1PC.failure",
