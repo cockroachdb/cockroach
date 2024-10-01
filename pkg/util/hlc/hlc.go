@@ -12,13 +12,13 @@ package hlc
 
 import (
 	"context"
+	fmt "fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -263,7 +263,7 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 		return errors.New("clock jumps are already being monitored")
 	}
 
-	ctx, sp := tracing.ForkSpan(ctx, "clock monitor")
+	_, sp := tracing.ForkSpan(ctx, "clock monitor")
 	go func() {
 		defer sp.Finish()
 		// Create a ticker object which can be used in selects.
@@ -286,11 +286,11 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 					// jumps. Otherwise the gap between the previous call to
 					// Now() and the time of the first tick would look like a
 					// forward jump.
-					c.getPhysicalClockAndCheck(ctx)
+					c.getPhysicalClockAndCheck()
 				}
 				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
 			case <-ticker.C:
-				c.getPhysicalClockAndCheck(ctx)
+				c.getPhysicalClockAndCheck()
 			}
 
 			if tickCallback != nil {
@@ -332,7 +332,7 @@ func (c *Clock) ToleratedOffset() time.Duration {
 
 // getPhysicalClockAndCheck reads the physical time as nanos since epoch. It
 // also checks for backwards and forwards jumps, as configured.
-func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
+func (c *Clock) getPhysicalClockAndCheck() int64 {
 	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
 	newTime := c.wallClock.Now().UnixNano()
 	lastPhysTime := oldTime
@@ -352,14 +352,14 @@ func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 		// Someone else did an update to an earlier time than what we got in newTime.
 		// So try one more time to update.
 	}
-	c.checkPhysicalClock(ctx, oldTime, newTime)
+	c.checkPhysicalClock(oldTime, newTime)
 	return newTime
 }
 
 // checkPhysicalClock checks for time jumps.
 // oldTime is the lastPhysicalTime before the call to get a new time.
 // newTime is the result of the call to get a new time.
-func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) {
+func (c *Clock) checkPhysicalClock(oldTime, newTime int64) {
 	if oldTime == 0 {
 		return
 	}
@@ -367,18 +367,16 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 	interval := oldTime - newTime
 	if interval > int64(c.maxOffset/10) {
 		atomic.AddInt32(&c.monotonicityErrorsCount, 1)
-		log.Warningf(ctx, "backward time jump detected (%f seconds)", float64(-interval)/1e9)
 	}
 
 	if atomic.LoadInt32(&c.forwardClockJumpCheckEnabled) != 0 {
 		toleratedForwardClockJump := c.toleratedForwardClockJump()
 		if int64(toleratedForwardClockJump) <= -interval {
-			log.Fatalf(
-				ctx,
+			panic(fmt.Sprintf(
 				"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
 				redact.Safe(float64(-interval)/1e9),
 				redact.Safe(float64(toleratedForwardClockJump)/1e9),
-			)
+			))
 		}
 	}
 }
@@ -397,7 +395,7 @@ func (c *Clock) Now() Timestamp {
 // callers that intend to use the returned timestamp to update a peer's
 // HLC clock should use this method.
 func (c *Clock) NowAsClockTimestamp() ClockTimestamp {
-	physicalClock := c.getPhysicalClockAndCheck(context.TODO())
+	physicalClock := c.getPhysicalClockAndCheck()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.timestamp.WallTime >= physicalClock {
@@ -418,12 +416,11 @@ func (c *Clock) NowAsClockTimestamp() ClockTimestamp {
 func (c *Clock) enforceWallTimeWithinBoundLocked() {
 	// WallTime should not cross the upper bound (if WallTimeUpperBound is set)
 	if c.mu.wallTimeUpperBound != 0 && c.mu.timestamp.WallTime > c.mu.wallTimeUpperBound {
-		log.Fatalf(
-			context.TODO(),
+		panic(fmt.Sprintf(
 			"wall time %d is not allowed to be greater than upper bound of %d.",
 			redact.Safe(c.mu.timestamp.WallTime),
 			redact.Safe(c.mu.wallTimeUpperBound),
-		)
+		))
 	}
 }
 
@@ -492,7 +489,7 @@ func IsUntrustworthyRemoteWallTimeError(err error) bool {
 // If an error is returned, it will be detectable with
 // IsUntrustworthyRemoteWallTimeError.
 func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
-	physicalClock := c.getPhysicalClockAndCheck(ctx)
+	physicalClock := c.getPhysicalClockAndCheck()
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
