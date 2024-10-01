@@ -58,6 +58,10 @@ const (
 	// identifiers without wrapping quotes in any case.
 	FmtBareIdentifiers = FmtFlags(lexbase.EncBareIdentifiers)
 
+	// FmtBareReservedKeywords instructs the pretty-printer to print
+	// reserved keywords without wrapping quotes.
+	FmtBareReservedKeywords = FmtFlags(lexbase.EncBareReservedKeywords)
+
 	// FmtShowPasswords instructs the pretty-printer to not suppress passwords.
 	// If not set, passwords are replaced by *****.
 	FmtShowPasswords = FmtFlags(lexbase.EncFirstFreeFlagBit) << iota
