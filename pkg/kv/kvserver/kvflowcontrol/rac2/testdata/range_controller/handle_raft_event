@@ -228,3 +228,98 @@ check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
   name=a pri=low-pri  done=true  waited=true  err=<nil>
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+
+# Schedule replica 2 for scheduler event. The schedule-controller-event-count becomes 1.
+internal_schedule_replica range_id=1 replica_id=2
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
+
+# Schedule replica 3 for scheduler event. The schedule-controller-event-count
+# stays 1 since we have already told the scheduler. Both replicas are being
+# tracked in scheduled-replicas.
+internal_schedule_replica range_id=1 replica_id=3
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3
+
+# Handle the scheduler event. There are no replicas remaining in
+# scheduled-replicas.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B force-flush=false
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=5  tokens=1048576
+  term=1 index=6  tokens=1048576
+  term=1 index=7  tokens=1048576
+++++
+schedule-controller-event-count: 1

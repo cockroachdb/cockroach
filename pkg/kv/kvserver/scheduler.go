@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -120,6 +121,8 @@ type raftProcessor interface {
 	// Process piggybacked admitted vectors that may advance admitted state for
 	// the given range's peer replicas. Used for RACv2.
 	processRACv2PiggybackedAdmitted(ctx context.Context, id roachpb.RangeID)
+	// Process the RACv2 RangeController.
+	processRACv2RangeController(ctx context.Context, id roachpb.RangeID)
 }
 
 type raftScheduleFlags int
@@ -130,6 +133,7 @@ const (
 	stateRaftRequest
 	stateRaftTick
 	stateRACv2PiggybackedAdmitted
+	stateRACv2RangeController
 )
 
 type raftScheduleState struct {
@@ -414,6 +418,9 @@ func (ss *raftSchedulerShard) worker(
 		if state.flags&stateRaftReady != 0 {
 			processor.processReady(id)
 		}
+		if state.flags&stateRACv2RangeController != 0 {
+			processor.processRACv2RangeController(ctx, id)
+		}
 
 		ss.Lock()
 		state = ss.state[id]
@@ -555,6 +562,18 @@ func (s *raftScheduler) EnqueueRACv2PiggybackAdmitted(id roachpb.RangeID) {
 	s.enqueue1(stateRACv2PiggybackedAdmitted, id)
 }
 
+func (s *raftScheduler) EnqueueRACv2RangeController(id roachpb.RangeID) {
+	s.enqueue1(stateRACv2RangeController, id)
+}
+
+type racV2Scheduler raftScheduler
+
+var _ rac2.Scheduler = &racV2Scheduler{}
+
+// ScheduleControllerEvent implements rac2.Scheduler.
+func (s *racV2Scheduler) ScheduleControllerEvent(rangeID roachpb.RangeID) {
+	(*raftScheduler)(s).EnqueueRACv2RangeController(rangeID)
+}
 func nowNanos() int64 {
 	return timeutil.Now().UnixNano()
 }
