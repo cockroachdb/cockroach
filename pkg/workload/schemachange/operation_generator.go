@@ -1660,11 +1660,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
-	// TODO(#126967): We need to add a check for the column being in an expression
-	// to an index. In the case where the expression does not already exist for
-	// us to use, we add an internal crdb_internal_idx_expr prefixed column to
-	// the table.
-	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
 	// For legacy schema changer its possible for create index operations to interfere if they
 	// are in progress.
 	if !og.useDeclarativeSchemaChanger {
