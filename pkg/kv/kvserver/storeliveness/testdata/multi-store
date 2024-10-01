@@ -119,3 +119,10 @@ heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} Epoch:1 Expiration:210.000000000,0}
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:3} Epoch:2 Expiration:210.000000000,0}
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:4} Epoch:1 Expiration:210.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 6, HeartbeatFailure: 0
+MessageHandleSuccess: 6, MessageHandleFailure: 2
+SupportWithdrawSuccess: 2, SupportWithdrawFailure: 0
+SupportFromStores: 3, SupportForStores: 3
