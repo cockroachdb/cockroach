@@ -1206,7 +1206,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(upgradePriority)
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
-	t.WriteTooOld = false
 	t.ReadTimestampFixed = false
 	t.LockSpans = nil
 	t.InFlightWrites = nil
@@ -1247,8 +1246,6 @@ func (t *Transaction) BumpEpoch() {
 func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
 	t.ReadTimestamp.Forward(timestamp)
 	t.WriteTimestamp.Forward(t.ReadTimestamp)
-	// TODO(nvanbenschoten): remove this when the WriteTooOld flag is removed.
-	t.WriteTooOld = false
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
@@ -1283,7 +1280,6 @@ func (t *Transaction) Update(o *Transaction) {
 		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
-		t.WriteTooOld = o.WriteTooOld
 		t.ReadTimestampFixed = o.ReadTimestampFixed
 		t.Sequence = o.Sequence
 		t.LockSpans = o.LockSpans
@@ -1307,17 +1303,8 @@ func (t *Transaction) Update(o *Transaction) {
 		}
 
 		if t.ReadTimestamp == o.ReadTimestamp {
-			// If neither of the transactions has a bumped ReadTimestamp, then the
-			// WriteTooOld flag is cumulative.
-			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
 			t.ReadTimestampFixed = t.ReadTimestampFixed || o.ReadTimestampFixed
 		} else if t.ReadTimestamp.Less(o.ReadTimestamp) {
-			// If `o` has a higher ReadTimestamp (i.e. it's the result of a refresh,
-			// which refresh generally clears the WriteTooOld field), then it dictates
-			// the WriteTooOld field. This relies on refreshes not being performed
-			// concurrently with any requests whose response's WriteTooOld field
-			// matters.
-			t.WriteTooOld = o.WriteTooOld
 			t.ReadTimestampFixed = o.ReadTimestampFixed
 		}
 		// If t has a higher ReadTimestamp, than it gets to dictate the
@@ -1426,8 +1413,8 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
 		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		w.Printf(" int=%d", ni)
 	}
