@@ -1265,3 +1265,13 @@ sort
       ├── columns: a:1!null b:2 c:3 d:4
       └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+# TODO(#92165): Allow ordering by VECTOR columns.
+exec-ddl
+CREATE TABLE t_vector (v VECTOR)
+----
+
+build
+SELECT * FROM t_vector ORDER BY v
+----
+error (0A000): unimplemented: can't order by column type VECTOR
