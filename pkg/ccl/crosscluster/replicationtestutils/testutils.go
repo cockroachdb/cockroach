@@ -208,6 +208,10 @@ func (c *TenantStreamingClusters) ConnectToReaderTenant(
 		TenantName:  roachpb.TenantName(tenantName),
 		UseDatabase: "defaultdb",
 	})
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING bulkio.stream_ingestion.standby_read_ts_poll_interval = '500ms'`, tenantName)
+	// TODO(annezhu): speed up the ts we use for historical queries.
+
 	require.NoError(c.T, err)
 	c.ReaderTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T,
 		serverutils.DBName("cluster:"+tenantName+"/defaultdb"))
@@ -554,6 +558,7 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
+	now := timeutil.Now()
 	testutils.SucceedsSoon(t, func() error {
 		err := requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
 		if err == nil {
@@ -571,6 +576,7 @@ func WaitUntilReplicatedTime(
 		}
 		return err
 	})
+	t.Logf("waited for %s to advance to %s", timeutil.Since(now), targetTime)
 }
 
 func requireReplicatedTime(targetTime hlc.Timestamp, progress *jobspb.Progress) error {
