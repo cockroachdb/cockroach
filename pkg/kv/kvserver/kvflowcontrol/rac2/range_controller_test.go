@@ -182,8 +182,8 @@ func (s *testingRCState) evalStateString() string {
 func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	var b strings.Builder
 
-	for _, desc := range sortReplicas(s.ranges[rangeID]) {
-		r := s.ranges[rangeID]
+	r := s.ranges[rangeID]
+	for _, desc := range sortReplicas(r) {
 		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
 		rs := r.rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
@@ -212,6 +212,31 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		b.WriteString(formatTrackerState(&rss.mu.tracker))
 		b.WriteString("++++\n")
 	}
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.mu.scheduleControllerEventCount > 0 {
+			fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", r.mu.scheduleControllerEventCount)
+		}
+	}()
+	func() {
+		rc := r.rc
+		rc.scheduledMu.Lock()
+		defer rc.scheduledMu.Unlock()
+		if len(rc.scheduledMu.replicas) == 0 {
+			return
+		}
+		var scheduledReplicas []roachpb.ReplicaID
+		for r := range rc.scheduledMu.replicas {
+			scheduledReplicas = append(scheduledReplicas, r)
+		}
+		slices.Sort(scheduledReplicas)
+		fmt.Fprintf(&b, "scheduled-replicas:")
+		for _, r := range scheduledReplicas {
+			fmt.Fprintf(&b, " %d", r)
+		}
+		fmt.Fprintf(&b, "\n")
+	}()
 	return b.String()
 }
 
@@ -257,6 +282,7 @@ func (s *testingRCState) getOrInitRange(
 			RaftInterface:       testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
+			Scheduler:           testRC,
 			EvalWaitMetrics:     s.evalMetrics,
 			Knobs:               &kvflowcontrol.TestingKnobs{},
 		}
@@ -307,7 +333,8 @@ type testingRCRange struct {
 		// requires determinism on a smaller timescale than calling WaitForEval via
 		// multiple goroutines would allow. See testingNonBlockingAdmit to see how
 		// WaitForEval is done in simulation tests.
-		evals map[string]*testingRCEval
+		evals                        map[string]*testingRCEval
+		scheduleControllerEventCount int
 	}
 }
 
@@ -330,6 +357,12 @@ func (r *testingRCRange) replicasStateInfo() map[roachpb.ReplicaID]ReplicaStateI
 
 func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
 	return false
+}
+
+func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.scheduleControllerEventCount++
 }
 
 func (r *testingRCRange) MakeMsgAppRaftMuLocked(
@@ -1152,6 +1185,23 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, raftEvent))
 				}
 				return state.tokenCountsString()
+
+			case "internal_schedule_replica":
+				// scheduleReplica is called internally by replicaSendStream. Calling
+				// this here is artificial.
+				var rangeID, replicaID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				d.ScanArgs(t, "replica_id", &replicaID)
+				testRC := state.ranges[roachpb.RangeID(rangeID)]
+				testRC.rc.scheduleReplica(roachpb.ReplicaID(replicaID))
+				return state.sendStreamString(roachpb.RangeID(rangeID))
+
+			case "handle_scheduler_event":
+				var rangeID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				testRC := state.ranges[roachpb.RangeID(rangeID)]
+				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx)
+				return state.sendStreamString(roachpb.RangeID(rangeID))
 
 			case "stream_state":
 				var rangeID int

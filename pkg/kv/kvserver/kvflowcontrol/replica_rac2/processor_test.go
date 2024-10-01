@@ -237,7 +237,7 @@ func (c *testRangeController) HandleRaftEventRaftMuLocked(
 	return nil
 }
 
-func (c *testRangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) error {
+func (c *testRangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) {
 	panic("HandleSchedulerEventRaftMuLocked should not be called when no send-queues")
 }
 
