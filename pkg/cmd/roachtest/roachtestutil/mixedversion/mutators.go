@@ -253,8 +253,10 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 
 			// We skip restart steps as we might insert the cluster setting
 			// change step concurrently with the selected step.
-			_, isRestartNode := s.impl.(restartWithNewBinaryStep)
-			return s.context.System.Stage >= OnStartupStage && !isRestartNode
+			_, isRestartSystem := s.impl.(restartWithNewBinaryStep)
+			_, isRestartTenant := s.impl.(restartVirtualClusterStep)
+			isRestart := isRestartSystem || isRestartTenant
+			return s.context.System.Stage >= OnStartupStage && !isRestart
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
