@@ -65,7 +65,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0
+epoch: 2, expiration: 0,0
 
 debug-requester-state
 ----

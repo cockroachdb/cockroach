@@ -23,7 +23,8 @@ type Fabric interface {
 	// SupportFor returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the local store (S_local) for the store (S_remote)
 	// corresponding to the specified id, and a boolean indicating whether S_local
-	// supports S_remote. The epoch is 0 if and only if the boolean is false.
+	// supports S_remote. Epochs returned by successive SupportFor calls are
+	// guaranteed to be monotonically increasing.
 	//
 	// S_remote may not be aware of the full extent of support from S_local, as
 	// Store Liveness heartbeat response messages may be lost or delayed. However,
@@ -35,11 +36,16 @@ type Fabric interface {
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support for the local store (S_local) from the store (S_remote)
 	// corresponding to the specified id, and the timestamp until which the
-	// support is provided (an expiration). The epoch is 0 if and only if the
-	// timestamp is the zero timestamp.
+	// support is provided (an expiration).
 	//
-	// It is the caller's responsibility to infer whether support has expired, by
-	// comparing the returned timestamp to its local clock.
+	// Epochs returned by SupportFrom are guaranteed to be monotonically
+	// increasing except after a restart, when a zero epoch and zero timestamp are
+	// returned until support is established again. This is because support-from
+	// state is not persisted to disk.
+	//
+	// A zero timestamp indicates that S_local does not have support from
+	// S_remote. It is the caller's responsibility to infer whether support has
+	// expired, by comparing the returned timestamp to its local clock.
 	//
 	// S_local may not be aware of the full extent of support from S_remote, as
 	// Store Liveness heartbeat response messages may be lost or delayed. However,

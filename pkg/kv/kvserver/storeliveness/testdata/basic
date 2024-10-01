@@ -35,7 +35,7 @@ withdraw-support now=201
 
 support-for node-id=2 store-id=2
 ----
-epoch: 0, support provided: false
+epoch: 3, support provided: false
 
 debug-requester-state
 ----

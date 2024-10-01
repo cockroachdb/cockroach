@@ -33,8 +33,8 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		HeartbeatInterval:       3 * time.Millisecond,
 		LivenessInterval:        6 * time.Millisecond,
+		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
 	}
@@ -156,7 +156,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 			if supported {
 				return errors.New("support not withdrawn yet")
 			}
-			require.Equal(t, slpb.Epoch(0), epoch)
+			require.Equal(t, slpb.Epoch(2), epoch)
 			require.False(t, supported)
 			return nil
 		},
