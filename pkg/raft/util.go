@@ -54,11 +54,12 @@ var isResponseMsg = [...]bool{
 }
 
 var isMsgFromLeader = [...]bool{
-	pb.MsgApp:           true,
-	pb.MsgSnap:          true,
-	pb.MsgHeartbeat:     true,
-	pb.MsgFortifyLeader: true,
-	pb.MsgTimeoutNow:    true,
+	pb.MsgApp:             true,
+	pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
 }
 
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
