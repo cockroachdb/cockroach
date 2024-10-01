@@ -630,3 +630,7 @@ func (rn *RawNode) TestingStepDown() error {
 func (rn *RawNode) TestingFortificationStateString() string {
 	return rn.raft.fortificationTracker.String()
 }
+
+func (rn *RawNode) TestingSendDeFortify(id pb.PeerID) error {
+	return rn.raft.testingSendDeFortify(id)
+}
