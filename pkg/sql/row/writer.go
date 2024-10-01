@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -147,9 +146,6 @@ func prepareInsertOrUpdateBatch(
 				return nil, err
 			}
 
-			// TODO(ssd): Here and below investigate reducing the
-			// number of allocations required to marshal the old
-			// value.
 			var oldVal []byte
 			if oth.IsSet() && len(oldValues) > 0 {
 				old, err := valueside.MarshalLegacy(typ, oldValues[idx])
@@ -187,51 +183,34 @@ func prepareInsertOrUpdateBatch(
 			continue
 		}
 
-		rawValueBuf = rawValueBuf[:0]
-
-		var lastColID descpb.ColumnID
-		var oldBytes []byte
-
 		familySortedColumnIDs, ok := helper.SortedColumnFamily(family.ID)
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
-		for _, colID := range familySortedColumnIDs {
-			idx, ok := valColIDMapping.Get(colID)
-			if !ok || values[idx] == tree.DNull {
-				// Column not being updated or inserted.
-				continue
-			}
 
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
-				continue
-			}
+		rawValueBuf = rawValueBuf[:0]
+		var err error
+		rawValueBuf, err = helper.encodePrimaryIndexValuesToBuf(values, valColIDMapping, familySortedColumnIDs, fetchedCols, rawValueBuf)
+		if err != nil {
+			return nil, err
+		}
 
-			col := fetchedCols[idx]
-			if lastColID > col.GetID() {
-				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-			}
-			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-			lastColID = col.GetID()
-			var err error
-			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
+		// TODO(ssd): Here and below investigate reducing the number of
+		// allocations required to marshal the old value.
+		var expBytes []byte
+		if oth.IsSet() && len(oldValues) > 0 {
+			var oldBytes []byte
+			oldBytes, err = helper.encodePrimaryIndexValuesToBuf(oldValues, valColIDMapping, familySortedColumnIDs, fetchedCols, oldBytes)
 			if err != nil {
 				return nil, err
 			}
-			if oth.IsSet() && len(oldValues) > 0 {
-				var err error
-				oldBytes, err = valueside.Encode(oldBytes, colIDDelta, oldValues[idx], nil)
-				if err != nil {
-					return nil, err
-				}
+			// For family 0, we expect a value even when
+			// no columns have been encoded to oldBytes.
+			if family.ID == 0 || len(oldBytes) > 0 {
+				old := &roachpb.Value{}
+				old.SetTuple(oldBytes)
+				expBytes = old.TagAndDataBytes()
 			}
-		}
-
-		var expBytes []byte
-		if oth.IsSet() && len(oldBytes) > 0 {
-			old := &roachpb.Value{}
-			old.SetTuple(oldBytes)
-			expBytes = old.TagAndDataBytes()
 		}
 
 		if family.ID != 0 && len(rawValueBuf) == 0 {
