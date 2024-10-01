@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -7206,38 +7207,79 @@ func TestReplicaDestroy(t *testing.T) {
 }
 
 // TestQuotaPoolDisabled tests that the no quota is acquired by proposals when
-// the quota pool enablement setting is disabled.
+// the quota pool enablement setting is disabled or the flow control mode is
+// set to kvflowcontrol.ApplyToAll.
 func TestQuotaPoolDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+	testutils.RunTrueAndFalse(t, "enableRaftProposalQuota", func(t *testing.T, quotaPoolSettingEnabled bool) {
+		testutils.RunValues(t, "flowControlMode",
+			[]kvflowcontrol.ModeT{
+				kvflowcontrol.ApplyToElastic,
+				kvflowcontrol.ApplyToAll,
+			}, func(t *testing.T, flowControlMode kvflowcontrol.ModeT) {
+				ctx := context.Background()
+				propErr := errors.New("proposal error")
+				type magicKey struct{}
 
-	tsc := TestStoreConfig(nil /* clock */)
-	enableRaftProposalQuota.Override(ctx, &tsc.Settings.SV, false)
-	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-		// Expect no quota allocation when the quota pool is disabled.
-		require.Nil(t, args.QuotaAlloc)
-		return nil
-	}
-	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+				// We expect the quota pool to be enabled when both the quota pool
+				// setting is enabled and the flow control mode is set to
+				// ApplyToElastic.
+				expectEnabled := quotaPoolSettingEnabled &&
+					flowControlMode == kvflowcontrol.ApplyToElastic
 
-	// Flush a write all the way through the Raft proposal pipeline to ensure
-	// that the replica becomes the Raft leader and sets up its quota pool.
-	iArgs := incrementArgs([]byte("a"), 1)
-	_, pErr := tc.SendWrapped(iArgs)
-	require.Nil(t, pErr)
+				tc := testContext{}
+				stopper := stop.NewStopper()
+				defer stopper.Stop(ctx)
 
-	initialQuota := tc.repl.QuotaAvailable()
-	for i := 0; i < 10; i++ {
-		pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
-		_, pErr = tc.SendWrapped(&pArg)
-		require.Nil(t, pErr)
-	}
-	require.Equal(t, initialQuota, tc.repl.QuotaAvailable())
+				tsc := TestStoreConfig(nil /* clock */)
+				enableRaftProposalQuota.Override(ctx, &tsc.Settings.SV, quotaPoolSettingEnabled)
+				kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, flowControlMode)
+				tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+					// Expect no quota allocation when the quota pool is disabled,
+					// otherwise expect some quota for our requests only (some ranges are
+					// also disabled selectively).
+					if v := args.Ctx.Value(magicKey{}); v != nil && expectEnabled {
+						require.NotNil(t, args.QuotaAlloc)
+						return kvpb.NewError(propErr)
+					} else if !expectEnabled {
+						require.Nil(t, args.QuotaAlloc)
+					}
+					return nil
+				}
+				tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+				// Flush a write all the way through the Raft proposal pipeline to ensure
+				// that the replica becomes the Raft leader and sets up its quota pool.
+				iArgs := incrementArgs([]byte("a"), 1)
+				_, pErr := tc.SendWrapped(iArgs)
+				require.Nil(t, pErr)
+
+				// The quota pool shouldn't be initialized if the pool is disabled via
+				// either setting.
+				if expectEnabled {
+					require.NotNil(t, tc.repl.mu.proposalQuota)
+				} else {
+					require.Nil(t, tc.repl.mu.proposalQuota)
+				}
+
+				for i := 0; i < 10; i++ {
+					ctx = context.WithValue(ctx, magicKey{}, "foo")
+					ba := &kvpb.BatchRequest{}
+					pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
+					ba.Add(&pArg)
+					_, pErr := tc.Sender().Send(ctx, ba)
+					if expectEnabled {
+						if !testutils.IsPError(pErr, propErr.Error()) {
+							t.Fatalf("expected error %v, found %v", propErr, pErr)
+						}
+					} else {
+						require.Nil(t, pErr)
+					}
+				}
+			})
+	})
 }
 
 // TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by
