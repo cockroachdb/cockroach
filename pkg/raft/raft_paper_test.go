@@ -35,6 +35,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
@@ -288,13 +289,13 @@ func TestCandidateFallback(t *testing.T) {
 }
 
 func TestFollowerElectionTimeoutRandomized(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
+	raftlogger.SetLogger(raftlogger.DiscardLogger)
+	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
 	testNonleaderElectionTimeoutRandomized(t, StateFollower)
 }
 func TestCandidateElectionTimeoutRandomized(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
+	raftlogger.SetLogger(raftlogger.DiscardLogger)
+	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
 	testNonleaderElectionTimeoutRandomized(t, StateCandidate)
 }
 
@@ -327,13 +328,13 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 }
 
 func TestFollowersElectionTimeoutNonconflict(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
+	raftlogger.SetLogger(raftlogger.DiscardLogger)
+	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
 	testNonleadersElectionTimeoutNonconflict(t, StateFollower)
 }
 func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
-	SetLogger(discardLogger)
-	defer SetLogger(defaultLogger)
+	raftlogger.SetLogger(raftlogger.DiscardLogger)
+	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
 	testNonleadersElectionTimeoutNonconflict(t, StateCandidate)
 }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package raft
+package raftlogger
 
 import (
 	"fmt"
@@ -44,25 +44,25 @@ type Logger interface {
 
 func SetLogger(l Logger) {
 	raftLoggerMu.Lock()
-	raftLogger = l
+	RaftLogger = l
 	raftLoggerMu.Unlock()
 }
 
 func ResetDefaultLogger() {
-	SetLogger(defaultLogger)
+	SetLogger(DefaultRaftLogger)
 }
 
-func getLogger() Logger {
+func GetLogger() Logger {
 	raftLoggerMu.Lock()
 	defer raftLoggerMu.Unlock()
-	return raftLogger
+	return RaftLogger
 }
 
 var (
-	defaultLogger = &DefaultLogger{Logger: log.New(os.Stderr, "raft", log.LstdFlags)}
-	discardLogger = &DefaultLogger{Logger: log.New(io.Discard, "", 0)}
-	raftLoggerMu  sync.Mutex
-	raftLogger    = Logger(defaultLogger)
+	DefaultRaftLogger = &DefaultLogger{Logger: log.New(os.Stderr, "raft", log.LstdFlags)}
+	DiscardLogger     = &DefaultLogger{Logger: log.New(io.Discard, "", 0)}
+	raftLoggerMu      sync.Mutex
+	RaftLogger        = Logger(DefaultRaftLogger)
 )
 
 const (

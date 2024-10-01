@@ -17,7 +17,10 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
 // "log" can be represented by a snapshot, and/or a contiguous slice of entries.
@@ -96,10 +99,10 @@ type unstable struct {
 	// together with the entries.
 	entryInProgress uint64
 
-	logger Logger
+	logger raftlogger.Logger
 }
 
-func newUnstable(last entryID, logger Logger) unstable {
+func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	// To initialize the last accepted term (logSlice.term) correctly, we make
 	// sure its invariant is true: the log is a prefix of the term's leader's log.
 	// This can be achieved by conservatively initializing to the term of the last
