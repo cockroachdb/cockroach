@@ -136,6 +136,7 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		defer leaktest.AfterTest(t)()
 		hbaRunTest(t, insecure)
 	})
 }
@@ -268,6 +269,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 				case "accept_sql_without_tls":
 					testServer.Cfg.AcceptSQLWithoutTLS = true
+
+				case "reject_sql_without_tls":
+					testServer.Cfg.AcceptSQLWithoutTLS = false
 
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),
