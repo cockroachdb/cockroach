@@ -115,6 +115,42 @@ func (rn *RawNode) Step(m pb.Message) error {
 	return rn.raft.Step(m)
 }
 
+// SetLazyReplication enables or disables the lazy MsgApp replication for
+// StateReplicate flows. See Config.LazyReplication which defines the initial
+// value of this setting - the semantics are explained in its comment.
+//
+// When the lazy mode flips to enabled, there might be MsgApp messages in the
+// RawNode's message queue which were previously sent eagerly from within the
+// RawNode. These will be extracted with the next Ready handling cycle. If this
+// call is placed immediately after the Ready() call, there are no outstanding
+// MsgApp messages in the queue, and there won't be any in the future (except
+// the probes).
+//
+// When the lazy mode flips to disabled, RawNode scans the peers and may put
+// MsgApp messages into the queue immediately. These will be extracted with the
+// next Ready handling cycle.
+func (rn *RawNode) SetLazyReplication(lazy bool) {
+	r := rn.raft
+	if r.lazyReplication == lazy {
+		return
+	}
+	r.lazyReplication = lazy
+	if lazy {
+		// The lazy replication mode was enabled. There is nothing to do. From now
+		// on, MsgApp messages for StateReplicate peers are constructed using the
+		// SendMsgApp method.
+		return
+	}
+	// The lazy mode was disabled. We need to check whether any replication flows
+	// are unblocked and can be saturated.
+	if r.state == StateLeader {
+		// TODO(pav-kv): this sends at most one MsgApp message per peer. It may not
+		// completely saturate the flow. Consider looping while maybeSendAppend()
+		// returns true.
+		r.bcastAppend()
+	}
+}
+
 // LogSnapshot returns a point-in-time read-only state of the raft log.
 //
 // The returned snapshot can be read from while RawNode continues operation, as
