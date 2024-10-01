@@ -160,6 +160,13 @@ func UploadCockroach(
 	nodes option.NodeListOption,
 	v *Version,
 ) (string, error) {
+	// Short-circuit this special case to avoid the extra SSH
+	// connections: the current version is always uploaded to every node
+	// in the cluster in a fixed location.
+	if v.IsCurrent() {
+		return test.DefaultCockroachPath, nil
+	}
+
 	return uploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
 }
 
@@ -228,7 +235,7 @@ func uploadBinaryVersion(
 		return "", fmt.Errorf("unknown binary name: %s", binary)
 	}
 
-	if v.IsCurrent() || isOverridden {
+	if isOverridden {
 		if err := c.PutE(ctx, l, defaultBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}

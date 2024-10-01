@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -42,21 +41,13 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 		install.MakeClusterSettings(),
 	)
 
-	virtualClusterURL := func() string {
-		urls, err := c.ExternalPGUrl(ctx, t.L(), virtualClusterNode, roachprod.PGURLOptions{
-			VirtualClusterName: virtualClusterName,
-		})
-		require.NoError(t, err)
-
-		return urls[0]
-	}()
-
 	t.L().Printf("checking that a client can connect to the tenant server")
-	verifySQL(t, virtualClusterURL,
-		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
-		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
-		mkStmt(`SELECT * FROM foo LIMIT 1`).
-			withResults([][]string{{"1", "bar"}}))
+	workloadDuration := 30 * time.Second
+	cmd := fmt.Sprintf(
+		"./cockroach workload run tpcc --init --duration %s {pgurl:%d:%s}",
+		workloadDuration, virtualClusterNode[0], virtualClusterName,
+	)
+	c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 
 	// Verify that we are able to stop the virtual cluster instance.
 	t.L().Printf("stopping the virtual cluster instance")
