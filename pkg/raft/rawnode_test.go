@@ -23,6 +23,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/logger"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -892,7 +893,7 @@ func BenchmarkStatus(b *testing.B) {
 			peers[i] = pb.PeerID(i + 1)
 		}
 		cfg := newTestConfig(1, 3, 1, newTestMemoryStorage(withPeers(peers...)))
-		cfg.Logger = discardLogger
+		cfg.Logger = logger.DiscardLogger
 		r := newRaft(cfg)
 		r.becomeFollower(1, 1)
 		r.becomeCandidate()
@@ -1013,7 +1014,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 	s := newTestMemoryStorage(withPeers(peers...))
 	cfg := newTestConfig(1, 10, 1, s)
 	if !debug {
-		cfg.Logger = discardLogger // avoid distorting benchmark output
+		cfg.Logger = logger.DiscardLogger // avoid distorting benchmark output
 	}
 	rn, err := NewRawNode(cfg)
 	if err != nil {

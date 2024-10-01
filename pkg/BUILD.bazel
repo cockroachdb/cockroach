@@ -1605,6 +1605,7 @@ GO_TARGETS = [
     "//pkg/obsservice/obspb:obspb",
     "//pkg/raft/confchange:confchange",
     "//pkg/raft/confchange:confchange_test",
+    "//pkg/raft/logger:logger",
     "//pkg/raft/quorum:quorum",
     "//pkg/raft/quorum:quorum_test",
     "//pkg/raft/raftpb:raftpb",
