@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -516,7 +515,7 @@ func (r *testRunner) runWorker(
 	stdout := lopt.stdout
 
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
-	wStatus := r.addWorker(ctx, name)
+	wStatus := r.addWorker(ctx, l, name)
 	defer func() {
 		r.removeWorker(ctx, name)
 	}()
@@ -575,7 +574,7 @@ func (r *testRunner) runWorker(
 		testToRun := testToRunRes{noWork: true}
 		if c != nil {
 			// Try to reuse cluster.
-			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
+			testToRun = work.selectTestForCluster(ctx, l, c.spec, r.cr)
 			if !testToRun.noWork {
 				// We found a test to run on this cluster. Wipe the cluster.
 				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
@@ -1454,12 +1453,12 @@ func (r *testRunner) generateReport() string {
 }
 
 // addWorker updates the bookkeeping for one more worker.
-func (r *testRunner) addWorker(ctx context.Context, name string) *workerStatus {
+func (r *testRunner) addWorker(ctx context.Context, l *logger.Logger, name string) *workerStatus {
 	r.workersMu.Lock()
 	defer r.workersMu.Unlock()
 	w := &workerStatus{name: name}
 	if _, ok := r.workersMu.workers[name]; ok {
-		log.Fatalf(ctx, "worker %q already exists", name)
+		l.FatalfCtx(ctx, "worker %q already exists", name)
 	}
 	r.workersMu.workers[name] = w
 	return w
