@@ -1377,7 +1377,11 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// they are resolved. We conservatively redact function names if requested.
 	// TODO(111385): Investigate ways to identify built-in functions before
 	// type-checking.
-	ctx.WithFlags(ctx.flags|FmtBareIdentifiers, func() {
+	//
+	// Instruct the pretty-printer not to wrap reserved keywords in quotes. Only
+	// builtin functions can have reserved keywords as names, and it is not
+	// necessary (or desirable) to quote them.
+	ctx.WithFlags(ctx.flags|FmtBareReservedKeywords, func() {
 		ctx.FormatNode(&node.Func)
 	})
 
