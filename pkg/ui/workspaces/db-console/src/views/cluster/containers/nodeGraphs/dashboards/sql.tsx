@@ -523,11 +523,6 @@ export default function (props: GraphDashboardProps) {
           nonNegativeRate
         />
         <Metric
-          name="cr.node.txn.restarts.writetoooldmulti"
-          title="Write Too Old (multiple)"
-          nonNegativeRate
-        />
-        <Metric
           name="cr.node.txn.restarts.serializable"
           title="Forwarded Timestamp (iso=serializable)"
           nonNegativeRate

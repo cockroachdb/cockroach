@@ -526,18 +526,6 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(txn_restarts_writetoooldmulti{test_run_id=~\"$test_run_id\", test_name=~\"$test_name\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "Write Too Old (multiple)",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
           "expr": "sum(rate(txn_restarts_serializable{test_run_id=~\"$test_run_id\", test_name=~\"$test_name\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
           "hide": false,
           "interval": "",
