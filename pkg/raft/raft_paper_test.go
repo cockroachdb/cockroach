@@ -106,7 +106,7 @@ func TestStartAsFollower(t *testing.T) {
 // Reference: section 5.2
 func TestLeaderBcastBeat(t *testing.T) {
 	// heartbeat interval
-	hi := 1
+	hi := 3
 
 	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
 		func(t *testing.T, storeLivenessEnabled bool) {
@@ -126,6 +126,7 @@ func TestLeaderBcastBeat(t *testing.T) {
 			}
 
 			for i := 0; i < hi; i++ {
+				require.Empty(t, r.readMessages())
 				r.tick()
 			}
 
