@@ -245,6 +245,13 @@ type RaftEvent struct {
 	ReplicasStateInfo map[roachpb.ReplicaID]ReplicaStateInfo
 }
 
+// Scheduler abstracts the raftScheduler to allow the RangeController to
+// schedule its own internal processing. This internal processing is to pop
+// some entries from the send queue and send them in a MsgApp.
+type Scheduler interface {
+	ScheduleControllerEvent(rangeID roachpb.RangeID)
+}
+
 // RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
 // given raft MsgStorageAppend message, and outboundMsgs. The replicaID is the
 // local replica. The outboundMsgs will only contain MsgApps on the leader.
@@ -359,6 +366,7 @@ type RangeControllerOptions struct {
 	RaftInterface       RaftInterface
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
+	Scheduler           Scheduler
 	EvalWaitMetrics     *EvalWaitMetrics
 	Knobs               *kvflowcontrol.TestingKnobs
 }
@@ -399,6 +407,14 @@ type rangeController struct {
 	}
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
+
+	scheduledMu struct {
+		syncutil.Mutex
+		// Demultiplexer. When HandleControllerSchedulerEventRaftMuLocked is called,
+		// this is used to call into the replicaSendStreams that have asked to be
+		// scheduled.
+		replicas map[roachpb.ReplicaID]struct{}
+	}
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -442,6 +458,7 @@ func NewRangeController(
 		nextRaftIndex: init.NextRaftIndex,
 		replicaMap:    make(map[roachpb.ReplicaID]*replicaState),
 	}
+	rc.scheduledMu.replicas = make(map[roachpb.ReplicaID]struct{})
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSet(ctx, init.ReplicaSet)
 	rc.updateWaiterSetsRaftMuLocked()
@@ -1044,7 +1061,39 @@ func (rc *rangeController) computeVoterDirectives(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) error {
-	panic("unimplemented")
+	var scheduledScratch [5]*replicaState
+	scheduled := scheduledScratch[:0:cap(scheduledScratch)]
+	func() {
+		rc.scheduledMu.Lock()
+		defer rc.scheduledMu.Unlock()
+		for r := range rc.scheduledMu.replicas {
+			if rs, ok := rc.replicaMap[r]; ok && rs.sendStream != nil {
+				scheduled = append(scheduled, rs)
+			}
+		}
+		clear(rc.scheduledMu.replicas)
+	}()
+
+	nextScheduled := scheduled[:0]
+	for _, rs := range scheduled {
+		scheduleAgain := rs.sendStream.scheduled(ctx)
+		if scheduleAgain {
+			nextScheduled = append(nextScheduled, rs)
+		}
+	}
+	if len(nextScheduled) > 0 {
+		func() {
+			rc.scheduledMu.Lock()
+			defer rc.scheduledMu.Unlock()
+			if len(rc.scheduledMu.replicas) == 0 {
+				rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
+			}
+			for _, rs := range nextScheduled {
+				rc.scheduledMu.replicas[rs.desc.ReplicaID] = struct{}{}
+			}
+		}()
+	}
+	return nil
 }
 
 // AdmitRaftMuLocked handles the notification about the given replica's
@@ -1261,6 +1310,17 @@ func (rc *rangeController) updateWaiterSetsRaftMuLocked() {
 	rc.mu.nonVoterSet = nonVoterSet
 	close(rc.mu.waiterSetRefreshCh)
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
+}
+
+// scheduleReplica may be called with or without raftMu held.
+func (rc *rangeController) scheduleReplica(r roachpb.ReplicaID) {
+	rc.scheduledMu.Lock()
+	defer rc.scheduledMu.Unlock()
+
+	rc.scheduledMu.replicas[r] = struct{}{}
+	if len(rc.scheduledMu.replicas) == 1 {
+		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
+	}
 }
 
 type replicaState struct {
@@ -1970,6 +2030,11 @@ func (rss *replicaSendStream) startForceFlushLocked(ctx context.Context) {
 func (rss *replicaSendStream) stopForceFlushLocked(ctx context.Context) {
 	// TODO(kvoli):
 	rss.mu.sendQueue.forceFlushScheduled = false
+}
+
+func (rss *replicaSendStream) scheduled(ctx context.Context) bool {
+	// TODO(sumeer):
+	return false
 }
 
 func (rss *replicaSendStream) isEmptySendQueueLocked() bool {

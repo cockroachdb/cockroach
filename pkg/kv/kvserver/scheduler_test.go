@@ -182,6 +182,9 @@ func (p *testProcessor) processTick(_ context.Context, rangeID roachpb.RangeID) 
 func (p *testProcessor) processRACv2PiggybackedAdmitted(_ context.Context, _ roachpb.RangeID) {
 }
 
+func (p *testProcessor) processRACv2RangeController(_ context.Context, _ roachpb.RangeID) {
+}
+
 func (p *testProcessor) readyCount(rangeID roachpb.RangeID) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -1465,6 +1465,12 @@ func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
 	r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
 }
 
+func (r *Replica) processRACv2RangeController(ctx context.Context) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(ctx)
+}
+
 func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
