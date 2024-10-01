@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -220,6 +221,48 @@ func ValidateRolesInDescriptor(
 				descriptor.GetID(),
 				priv.User())
 		}
+	}
+	return nil
+}
+
+// ValidateRolesInDefaultPrivilegeDescriptor validates roles within a
+// catalog.DefaultPrivilegeDescriptor.
+func ValidateRolesInDefaultPrivilegeDescriptor(
+	defaultDesc DefaultPrivilegeDescriptor, roleExists func(username.SQLUsername) (bool, error),
+) error {
+	err := defaultDesc.ForEachDefaultPrivilegeForRole(func(defaultPriv catpb.DefaultPrivilegesForRole) error {
+		// If we have a default privilege on a specific role, validate whether the
+		// role exists.
+		if defaultPriv.IsExplicitRole() {
+			user := defaultPriv.GetExplicitRole().UserProto.Decode()
+			exists, err := roleExists(user)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.AssertionFailedf("a default privilege exists on a role %q that doesn't exist",
+					user)
+			}
+		}
+		// Loop through to find which users have a default privilege assigned to
+		// them. If any user does not exist, return an error.
+		for _, privDesc := range defaultPriv.DefaultPrivilegesPerObject {
+			for _, userPriv := range privDesc.Users {
+				user := userPriv.User()
+				exists, err := roleExists(user)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return errors.AssertionFailedf("a default privilege exists for a role %q that doesn't exist",
+						user)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	return nil
 }
