@@ -35,6 +35,8 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes, EncodeDatabaseTableUri } from "src/util";
 
+import { ColumnTitle } from "../components/columnTitle";
+
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
 import { rawTableMetadataToRows } from "./utils";
@@ -42,7 +44,14 @@ import { rawTableMetadataToRows } from "./utils";
 const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
   [
     {
-      title: TableColName.NAME,
+      title: (
+        <ColumnTitle
+          title={TableColName.NAME}
+          withToolTip={{
+            tooltipText: "The name of the table.",
+          }}
+        />
+      ),
       width: "15%",
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (t: TableRow) => {
@@ -54,7 +63,15 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       sortKey: TableSortOption.NAME,
     },
     {
-      title: TableColName.REPLICATION_SIZE,
+      title: (
+        <ColumnTitle
+          title={TableColName.REPLICATION_SIZE}
+          withToolTip={{
+            tooltipText:
+              "The approximate compressed total disk size across all replicas of the table.",
+          }}
+        />
+      ),
       width: "fit-content",
       sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
       render: (t: TableRow) => {
@@ -63,7 +80,14 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       sortKey: TableSortOption.REPLICATION_SIZE,
     },
     {
-      title: TableColName.RANGE_COUNT,
+      title: (
+        <ColumnTitle
+          title={TableColName.RANGE_COUNT}
+          withToolTip={{
+            tooltipText: "The number of ranges the table.",
+          }}
+        />
+      ),
       width: "fit-content",
       sorter: true,
       render: (t: TableRow) => {
@@ -81,7 +105,14 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       sortKey: TableSortOption.COLUMNS,
     },
     {
-      title: TableColName.NODE_REGIONS,
+      title: (
+        <ColumnTitle
+          title={TableColName.NODE_REGIONS}
+          withToolTip={{
+            tooltipText: "Regions/Nodes on which the table's data is stored.",
+          }}
+        />
+      ),
       width: "20%",
       render: (t: TableRow) => (
         <div>
@@ -96,7 +127,16 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       ),
     },
     {
-      title: TableColName.LIVE_DATA_PERCENTAGE,
+      title: (
+        <ColumnTitle
+          title={TableColName.LIVE_DATA_PERCENTAGE}
+          withToolTip={{
+            tooltipText: `
+            % of total uncompressed logical data that has not been modified (updated or deleted).
+            A low percentage can cause statements to scan more data`,
+          }}
+        />
+      ),
       sorter: true,
       width: "fit-content",
       sortKey: TableSortOption.LIVE_DATA,
@@ -112,7 +152,15 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       },
     },
     {
-      title: TableColName.STATS_LAST_UPDATED,
+      title: (
+        <ColumnTitle
+          title={TableColName.STATS_LAST_UPDATED}
+          withToolTip={{
+            tooltipText:
+              "The last time table statistics used by the SQL optimizer were updated.",
+          }}
+        />
+      ),
       sorter: true,
       render: (t: TableRow) => {
         return t.statsLastUpdated.format("YYYY-MM-DD HH:mm:ss");
