@@ -37,6 +37,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/raft",
+        "//pkg/raft/logger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",

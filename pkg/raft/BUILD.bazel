@@ -7,7 +7,6 @@ go_library(
         "doc.go",
         "log.go",
         "log_unstable.go",
-        "logger.go",
         "node.go",
         "raft.go",
         "rawnode.go",
@@ -21,6 +20,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/raft/confchange",
+        "//pkg/raft/logger",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
@@ -53,6 +53,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":raft"],
     deps = [
+        "//pkg/raft/logger",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
