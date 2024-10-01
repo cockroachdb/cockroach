@@ -224,8 +224,14 @@ func (ms *MemoryStorage) FirstIndex() uint64 {
 
 // LogSnapshot implements the LogStorage interface.
 func (ms *MemoryStorage) LogSnapshot() LogStorageSnapshot {
-	// TODO(pav-kv): return an immutable subset of MemoryStorage.
-	return ms
+	// Copy the log slice, and protect MemoryStorage from potential appends to it.
+	// Both MemoryStorage and the caller can append to the slice, but the full
+	// slice expression makes sure the two don't corrupt each other's slices.
+	ls := ms.ls
+	ls.entries = ls.entries[:len(ls.entries):len(ls.entries)]
+	// TODO(pav-kv): we don't need all other fields in MemoryStorage. Factor out a
+	// LogStorage sub-type, and return just the log slice with it.
+	return &MemoryStorage{ls: ls}
 }
 
 // Snapshot implements the Storage interface.
