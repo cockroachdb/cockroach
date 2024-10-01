@@ -36,6 +36,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/leaktest",

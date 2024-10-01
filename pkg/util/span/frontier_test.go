@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -520,6 +521,52 @@ func TestForwardToSameTimestamp(t *testing.T) {
 	// Frontier should remain the same since we forwarded a subspan
 	// to the same timestamp.
 	require.Equal(t, "[{A-Z}@0,0]", f.String())
+}
+
+func TestFrontierImplementationsMatch(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("seed: %d", seed)
+
+	mkSpan := func(key, end int) roachpb.Span {
+		return roachpb.Span{
+			Key:    encoding.EncodeVarintAscending(nil, int64(key)),
+			EndKey: encoding.EncodeVarintAscending(nil, int64(end)),
+		}
+	}
+
+	start, total := 100, 1000
+	totalSpan := mkSpan(start, start+total)
+
+	for run := 1; run <= 10; run++ {
+		l := &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+		b := &btreeFrontier{}
+
+		require.NoError(t, l.AddSpansAt(hlc.Timestamp{}, totalSpan))
+		require.NoError(t, b.AddSpansAt(hlc.Timestamp{}, totalSpan))
+
+		for i := 0; i < 100000; i++ {
+			k := start + rng.Intn(total)
+			sp := mkSpan(k, k+1+rng.Intn(3))
+			ts := hlc.Timestamp{WallTime: int64(rng.Intn(20 * run))}
+
+			lFwd, err := l.Forward(sp, ts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bFwd, err := b.Forward(sp, ts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if lFwd != bFwd {
+				t.Fatalf("%v != %v (run %d, i %d)", lFwd, bFwd, run, i)
+			}
+			if lF, bF := l.Frontier(), b.Frontier(); lF != bF {
+				t.Fatalf("%v != %v (run %d, i %d)", lF, bF, run, i)
+			}
+		}
+		t.Logf("%s vs %s", l.Frontier(), b.Frontier())
+	}
 }
 
 func TestAddOverlappingSpans(t *testing.T) {
