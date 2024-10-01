@@ -4835,7 +4835,7 @@ replication_options:
   {
       $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
   }
-| READ CAPABILITIES
+| READ VIRTUAL CLUSTER
   {
     $$.val = &tree.TenantReplicationOptions{EnableReaderTenant: tree.MakeDBool(true)}
   }

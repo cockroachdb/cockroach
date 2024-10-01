@@ -354,9 +354,9 @@ func (c *TenantStreamingClusters) BuildCreateTenantQuery(externalConnection stri
 	}
 	if c.Args.EnableReaderTenant {
 		if c.Args.RetentionTTLSeconds == 0 {
-			streamReplStmt = fmt.Sprintf("%s WITH READ CAPABILITIES", streamReplStmt)
+			streamReplStmt = fmt.Sprintf("%s WITH READ VIRTUAL CLUSTER", streamReplStmt)
 		} else {
-			streamReplStmt = fmt.Sprintf("%s, READ CAPABILITIES", streamReplStmt)
+			streamReplStmt = fmt.Sprintf("%s, READ VIRTUAL CLUSTER", streamReplStmt)
 		}
 	}
 	return streamReplStmt
