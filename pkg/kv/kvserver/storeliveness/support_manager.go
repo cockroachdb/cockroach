@@ -215,18 +215,19 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 		// inbound messages from delaying the other work due to the random selection
 		// between multiple enabled channels.
 		var receiveQueueSig <-chan struct{}
-		if len(heartbeatTicker.C) == 0 && len(supportExpiryTicker.C) == 0 {
+		if len(heartbeatTicker.C) == 0 &&
+			len(supportExpiryTicker.C) == 0 &&
+			len(sm.storesToAdd.sig) == 0 {
 			receiveQueueSig = sm.receiveQueue.Sig()
 		}
 
 		select {
-		case <-heartbeatTicker.C:
-			// First check if any stores need to be added to ensure they are included
-			// in the round of heartbeats below.
+		case <-sm.storesToAdd.sig:
 			sm.maybeAddStores()
-			if sm.SupportFromEnabled(ctx) {
-				sm.sendHeartbeats(ctx)
-			}
+			sm.sendHeartbeats(ctx)
+
+		case <-heartbeatTicker.C:
+			sm.sendHeartbeats(ctx)
 
 		case <-supportExpiryTicker.C:
 			sm.withdrawSupport(ctx)
@@ -263,6 +264,10 @@ func (sm *SupportManager) maybeAddStores() {
 // sendHeartbeats delegates heartbeat generation to the requesterStateHandler
 // and sends the resulting messages via Transport.
 func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
+	// If Store Liveness is not enabled, don't send heartbeats.
+	if !sm.SupportFromEnabled(ctx) {
+		return
+	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.LivenessInterval
@@ -422,11 +427,13 @@ func (q *receiveQueue) Drain() []*slpb.Message {
 // requesterState.supportFrom.
 type storesToAdd struct {
 	mu     syncutil.Mutex
+	sig    chan struct{}
 	stores map[slpb.StoreIdent]struct{}
 }
 
 func newStoresToAdd() storesToAdd {
 	return storesToAdd{
+		sig:    make(chan struct{}, 1),
 		stores: make(map[slpb.StoreIdent]struct{}),
 	}
 }
@@ -435,6 +442,10 @@ func (sta *storesToAdd) addStore(id slpb.StoreIdent) {
 	sta.mu.Lock()
 	defer sta.mu.Unlock()
 	sta.stores[id] = struct{}{}
+	select {
+	case sta.sig <- struct{}{}:
+	default:
+	}
 }
 
 func (sta *storesToAdd) drainStoresToAdd() []slpb.StoreIdent {
