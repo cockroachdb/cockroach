@@ -1080,6 +1080,16 @@ func (r *raft) tickHeartbeat() {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
 
+		// Mark fortifying followers as recently active. We disable heartbeats when
+		// leader fortification is enabled, instead deferring to StoreLiveness for
+		// failure detection. As such, if there is no append activity for a raft
+		// group, it's possible for the leader to not communicate with a follower in
+		// a electionTimeout. We do not want to infer that the leader can't
+		// communicate with a follower in such cases, which could then cause the
+		// leader to spuriously step down because of CheckQuorum. Instead, we
+		// compute RecentlyActive based on StoreLiveness instead.
+		r.markFortifyingFollowersAsRecentlyActive()
+
 		// Try to refortify any followers that don't currently support us.
 		r.bcastFortify()
 		// TODO(ibrahim): add/call maybeUnpauseAndBcastAppend() here.
@@ -2476,6 +2486,24 @@ func (r *raft) testingStepDown() error {
 	}
 	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
 	return nil
+}
+
+// markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
+// mark them as recently active if they are supporting the leader.
+func (r *raft) markFortifyingFollowersAsRecentlyActive() {
+	if !r.fortificationTracker.FortificationEnabled() {
+		return
+	}
+
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if pr.RecentActive {
+			return // return early as it's already marked as recently active
+		}
+
+		if isFortified, _ := r.fortificationTracker.IsFortifiedBy(id); isFortified {
+			pr.RecentActive = true
+		}
+	})
 }
 
 // advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
