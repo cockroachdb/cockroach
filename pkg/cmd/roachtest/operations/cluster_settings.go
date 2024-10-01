@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-//
 
 package operations
 
@@ -88,7 +87,7 @@ func registerClusterSettings(r registry.Registry) {
 		// Weekly cycle.
 		{
 			Name:      "kv.expiration_leases_only.enabled",
-			Generator: timeBasedValues(timeSupplier, []string{"true", "false"}, 24*7*time.Minute),
+			Generator: timeBasedValues(timeSupplier, []string{"true", "false"}, 24*7*time.Hour),
 			Owner:     registry.OwnerKV,
 		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
