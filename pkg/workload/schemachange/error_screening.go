@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -337,20 +338,62 @@ func (og *operationGenerator) columnIsDependedOn(
 func (og *operationGenerator) colIsRefByComputed(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, `SELECT EXISTS(
-    SELECT
-       attrelid::REGCLASS AS table_name,
-       attname AS column_name,
-       pg_get_expr(adbin, adrelid) AS computed_formula
-    FROM
-       pg_attribute
-    JOIN
-       pg_attrdef ON attrelid = adrelid AND attnum = adnum
-    WHERE
-       atthasdef
-       AND attrelid = $1::REGCLASS
-       AND pg_get_expr(adbin, adrelid) ILIKE '%%' || $2 || '%%'
-)`, tableName.String(), columnName)
+	colIsRefByGeneratedExpr := false
+
+	query := `WITH tab_json AS (
+		SELECT crdb_internal.pb_to_json(
+		'desc',
+		descriptor
+	)->'table' AS t
+	FROM system.descriptor
+	WHERE id = $1::REGCLASS
+	),
+	columns_json AS (
+		SELECT json_array_elements(t->'columns') AS c FROM tab_json
+	),
+	columns AS (
+		SELECT c->>'computeExpr' AS generation_expression,
+		c->>'name' AS column_name,
+		c->>'id' AS ordinal
+	FROM columns_json
+	)
+	SELECT generation_expression FROM columns WHERE generation_expression IS NOT NULL
+	`
+	generatedExpressions, err := Collect[string](ctx, og, tx, pgx.RowTo[string], query, tableName.String())
+	if err != nil {
+		return false, err
+	}
+	for _, generatedExpression := range generatedExpressions {
+		expr, err := parser.ParseExpr(generatedExpression)
+		if err != nil {
+			return false, err
+		}
+
+		if _, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			vBase, ok := expr.(tree.VarName)
+			if !ok {
+				return true, expr, nil
+			}
+
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+
+			c, ok := v.(*tree.ColumnItem)
+			if !ok {
+				return true, expr, nil
+			}
+			if c.ColumnName == columnName {
+				colIsRefByGeneratedExpr = true
+				return false, expr, nil
+			}
+			return true, expr, nil
+		}); err != nil {
+			return false, err
+		}
+	}
+	return colIsRefByGeneratedExpr, nil
 }
 
 func (og *operationGenerator) columnIsDependedOnByView(
