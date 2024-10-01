@@ -101,8 +101,10 @@ type Progress struct {
 	// case the follower does not erroneously remain in StateSnapshot.
 	PendingSnapshot uint64
 
-	// RecentActive is true if the progress is recently active. Receiving any messages
-	// from the corresponding follower indicates the progress is active.
+	// RecentActive is true if the progress is recently active. Receiving any
+	// messages from the corresponding follower indicates the progress is active.
+	// Also, it's set to true on every heartbeat timeout if the follower is
+	// fortifying the leader.
 	// RecentActive can be reset to false after an election timeout.
 	// This is always true on the leader.
 	RecentActive bool
