@@ -1382,9 +1382,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// they are resolved. We conservatively redact function names if requested.
 	// TODO(111385): Investigate ways to identify built-in functions before
 	// type-checking.
-	ctx.WithFlags(ctx.flags|FmtBareIdentifiers, func() {
-		ctx.FormatNode(&node.Func)
-	})
+	ctx.FormatNode(&node.Func)
 
 	ctx.WriteByte('(')
 	ctx.WriteString(typ)

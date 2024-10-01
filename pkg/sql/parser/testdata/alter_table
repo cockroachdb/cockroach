@@ -518,10 +518,10 @@ ALTER TABLE _ ALTER COLUMN _ SET ON UPDATE NULL -- identifiers removed
 parse
 ALTER TABLE a ALTER COLUMN b SET ON UPDATE current_timestamp()
 ----
-ALTER TABLE a ALTER COLUMN b SET ON UPDATE current_timestamp()
-ALTER TABLE a ALTER COLUMN b SET ON UPDATE (current_timestamp()) -- fully parenthesized
-ALTER TABLE a ALTER COLUMN b SET ON UPDATE current_timestamp() -- literals removed
-ALTER TABLE _ ALTER COLUMN _ SET ON UPDATE current_timestamp() -- identifiers removed
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE "current_timestamp"() -- normalized!
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE ("current_timestamp"()) -- fully parenthesized
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE "current_timestamp"() -- literals removed
+ALTER TABLE _ ALTER COLUMN _ SET ON UPDATE _() -- identifiers removed
 
 parse
 ALTER TABLE a ALTER b SET ON UPDATE c IS NOT DISTINCT FROM FALSE

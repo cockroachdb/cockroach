@@ -61,10 +61,10 @@ SELECT crdb_internal.decode_external_plan_gist('$gist')
       table: ?@?
       spans: FULL SCAN
 
-statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
+statement error pq: unknown signature: \"crdb_internal\.decode_plan_gist\"\(int\)
 SELECT * FROM crdb_internal.decode_plan_gist(10)
 
-statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
+statement error pq: unknown signature: \"crdb_internal\.decode_plan_gist\"\(int\)
 SELECT crdb_internal.decode_plan_gist(10)
 
 statement error pq: illegal base64 data at input byte 0
