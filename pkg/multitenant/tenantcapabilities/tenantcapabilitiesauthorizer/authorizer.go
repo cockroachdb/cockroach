@@ -192,14 +192,6 @@ func newTenantDoesNotHaveCapabilityError(cap tenantcapabilities.ID, req kvpb.Req
 	return errors.Newf("client tenant does not have capability %q (%T)", cap, req)
 }
 
-var (
-	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
-	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
-	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
-	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
-	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
-)
-
 // methodCapability associates a KV method with a capability. The capability can
 // either be static for all instances of the method, or it can be determined
 // dynamically by a function based on the request's contents.
@@ -316,10 +308,29 @@ func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 	a.capabilitiesReader = reader
 }
 
-func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+var (
+	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
+	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
+	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
+	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
+	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
+)
+
+var insufficientCapErrMap = map[tenantcapabilities.ID]error{
+	tenantcapabilities.CanViewNodeInfo:        errCannotQueryMetadata,
+	tenantcapabilities.CanViewTSDBMetrics:     errCannotQueryTSDB,
+	tenantcapabilities.CanUseNodelocalStorage: errCannotUseNodelocal,
+	tenantcapabilities.CanDebugProcess:        errCannotDebugProcess,
+	tenantcapabilities.CanViewAllMetrics:      errCannotQueryAllMetrics,
+}
+
+func (a *Authorizer) hasCapability(
+	ctx context.Context, tenID roachpb.TenantID, cap tenantcapabilities.ID,
+) error {
 	if tenID.IsSystem() {
 		return nil
 	}
+
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
@@ -327,74 +338,41 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
-		return errCannotQueryMetadata
+		return insufficientCapErrMap[cap]
 	default:
 		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
 		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
 		return err
 	}
 
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewNodeInfo,
-	) {
-		return errCannotQueryMetadata
+	if !tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, cap) {
+		return insufficientCapErrMap[cap]
 	}
 	return nil
 }
 
+func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewNodeInfo)
+}
+
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotQueryTSDB
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewTSDBMetrics,
-	) {
-		return errCannotQueryTSDB
-	}
-	return nil
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewTSDBMetrics)
 }
 
 func (a *Authorizer) HasNodelocalStorageCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotUseNodelocal
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanUseNodelocalStorage)
+}
 
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanUseNodelocalStorage,
-	) {
-		return errCannotUseNodelocal
-	}
-	return nil
+func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanDebugProcess)
+}
+
+func (a *Authorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewAllMetrics)
 }
 
 // IsExemptFromRateLimiting returns true if the tenant is not subject to rate limiting.
@@ -417,61 +395,6 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	}
 
 	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilities.ExemptFromRateLimiting)
-}
-
-func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotDebugProcess
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanDebugProcess,
-	) {
-		return errCannotDebugProcess
-	}
-	return nil
-}
-
-func (a *Authorizer) HasTSDBAllMetricsCapability(
-	ctx context.Context, tenID roachpb.TenantID,
-) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotQueryTSDB
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
-	) {
-		return errCannotQueryAllMetrics
-	}
-	return nil
 }
 
 // getMode retrieves the authorization mode.
