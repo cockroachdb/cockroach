@@ -589,10 +589,15 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 						}
 					}
 
+					var freezeStr string
+					if s.Freeze != "" {
+						freezeStr = fmt.Sprintf("; using frozen stats %s", s.Freeze)
+					}
+
 					e.ob.AddField("estimated row count", fmt.Sprintf(
-						"%s (%s%% of the table; stats collected %s ago%s)",
+						"%s (%s%% of the table; stats collected %s ago%s%s)",
 						estimatedRowCountString, percentageStr,
-						duration, forecastStr,
+						duration, forecastStr, freezeStr,
 					))
 				} else {
 					e.ob.AddField("estimated row count", estimatedRowCountString)

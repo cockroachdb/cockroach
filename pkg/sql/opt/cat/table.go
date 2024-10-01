@@ -257,6 +257,9 @@ type TableStatistic interface {
 
 	// IsAuto returns true if this statistic was collected automatically.
 	IsAuto() bool
+
+	// Name returns the name of the statistics.
+	Name() string
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note

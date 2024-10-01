@@ -202,6 +202,7 @@ type Memo struct {
 	usePolymorphicParameterFix                 bool
 	useConditionalHoistFix                     bool
 	pushLimitIntoProjectFilteredScan           bool
+	freezeStats                                string
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -290,6 +291,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		usePolymorphicParameterFix:                 evalCtx.SessionData().OptimizerUsePolymorphicParameterFix,
 		useConditionalHoistFix:                     evalCtx.SessionData().OptimizerUseConditionalHoistFix,
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
+		freezeStats:                                evalCtx.SessionData().OptimizerFreezeStats,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -456,6 +458,7 @@ func (m *Memo) IsStale(
 		m.usePolymorphicParameterFix != evalCtx.SessionData().OptimizerUsePolymorphicParameterFix ||
 		m.useConditionalHoistFix != evalCtx.SessionData().OptimizerUseConditionalHoistFix ||
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
+		m.freezeStats != evalCtx.SessionData().OptimizerFreezeStats ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

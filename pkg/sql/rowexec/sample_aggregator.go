@@ -539,16 +539,18 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 
 			// Delete old stats that have been superseded,
 			// if the new statistic is not partial
-			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
-					return err
+			/*
+				if si.spec.PartialPredicate == "" {
+					if err := stats.DeleteOldStatsForColumns(
+						ctx,
+						txn,
+						s.tableID,
+						columnIDs,
+					); err != nil {
+						return err
+					}
 				}
-			}
+			*/
 
 			// Insert the new stat.
 			if err := stats.InsertNewStat(

@@ -406,10 +406,12 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			tab := b.mem.Metadata().Table(scan.Table)
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent full one.
+				freezeStatsName := b.evalCtx.SessionData().OptimizerFreezeStats
 				var first int
 				for first < tab.StatisticCount() &&
 					tab.Statistic(first).IsPartial() ||
-					(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts) {
+					(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts) ||
+					(tab.Statistic(first).Name() != freezeStatsName && freezeStatsName != "") {
 					first++
 				}
 
@@ -432,6 +434,9 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 								break
 							}
 						}
+					}
+					if freezeStatsName != "" {
+						val.Freeze = stat.Name()
 					}
 				}
 			}

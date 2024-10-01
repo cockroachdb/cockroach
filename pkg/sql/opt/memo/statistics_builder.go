@@ -647,12 +647,15 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
+	freezeStatsName := sb.evalCtx.SessionData().OptimizerFreezeStats
+
 	// Find the most recent full statistic. (Stats are ordered with most recent first.)
 	var first int
 	for first < tab.StatisticCount() &&
 		(tab.Statistic(first).IsPartial() ||
 			tab.Statistic(first).IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
-			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
+			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts ||
+			tab.Statistic(first).Name() != freezeStatsName && freezeStatsName != "") {
 		first++
 	}
 
@@ -684,6 +687,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				continue
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
+				continue
+			}
+			if stat.Name() != freezeStatsName && freezeStatsName != "" {
 				continue
 			}
 

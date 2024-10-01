@@ -548,6 +548,9 @@ message LocalOnlySessionData {
   // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
   // optimizer should push limit expressions into projects of filtered scans.
   bool optimizer_push_limit_into_project_filtered_scan = 139;
+  // OptimizerFreezeStats, when set to something other than the empty string,
+  // forces the optimizer to use only stats matching the provided name.
+  string optimizer_freeze_stats = 140;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

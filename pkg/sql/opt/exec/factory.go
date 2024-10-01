@@ -402,6 +402,8 @@ type EstimatedStats struct {
 	// ForecastAt is set only for scans with forecasted stats; it is the time the
 	// forecast was for (which could be in the past, present, or future).
 	ForecastAt time.Time
+	// Freeze is set when using frozen stats.
+	Freeze string
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the
