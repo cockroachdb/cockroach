@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -30,8 +29,6 @@ import (
 func TestStandbyReadTSPollerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 131611)
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -54,22 +51,27 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
 	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName, 0)
 
-	pollInterval := time.Microsecond
-	serverutils.SetClusterSetting(t, c.DestCluster, "bulkio.stream_ingestion.standby_read_ts_poll_interval", pollInterval)
-
-	var jobID jobspb.JobID
-	c.ReaderTenantSQL.QueryRow(t, `
-SELECT job_id 
-FROM crdb_internal.jobs 
-WHERE job_type = 'STANDBY READ TS POLLER'
-`).Scan(&jobID)
-	jobutils.WaitForJobToRun(t, c.ReaderTenantSQL, jobID)
-
 	c.SrcTenantSQL.Exec(t, `
 USE defaultdb;
 CREATE TABLE a (i INT PRIMARY KEY);
 INSERT INTO a VALUES (1);
 `)
+
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	pollInterval := time.Microsecond
+	serverutils.SetClusterSetting(t, c.DestCluster, "bulkio.stream_ingestion.standby_read_ts_poll_interval", pollInterval)
+
+	waitForPollerJobToStart(t, c)
+
+	var jobID jobspb.JobID
+	c.ReaderTenantSQL.QueryRow(t, `
+SELECT job_id
+FROM crdb_internal.jobs 
+WHERE job_type = 'STANDBY READ TS POLLER'
+`).Scan(&jobID)
+	jobutils.WaitForJobToRun(t, c.ReaderTenantSQL, jobID)
 
 	// Verify that updates have been replicated to reader tenant
 	testutils.SucceedsWithin(t, func() error {
@@ -87,5 +89,22 @@ INSERT INTO a VALUES (1);
 				1, actualQueryResult)
 		}
 		return nil
-	}, time.Minute)
+	}, time.Minute*2)
+}
+
+func waitForPollerJobToStart(t *testing.T, c *replicationtestutils.TenantStreamingClusters) {
+	testutils.SucceedsSoon(t, func() error {
+		var numJobs int
+
+		c.ReaderTenantSQL.QueryRow(t, `
+SELECT count(*)
+FROM crdb_internal.jobs 
+WHERE job_type = 'STANDBY READ TS POLLER';
+`).Scan(&numJobs)
+
+		if numJobs != 1 {
+			return errors.Errorf("expected 1 standby read ts poller job, but got %d instead", numJobs)
+		}
+		return nil
+	})
 }
