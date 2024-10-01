@@ -29,6 +29,7 @@ var RegisterCallbackOnLicenseChange = func(context.Context, *cluster.Settings, *
 // enforcer.
 type LicType int
 
+//go:generate stringer -type=LicType
 const (
 	LicTypeNone LicType = iota
 	LicTypeTrial

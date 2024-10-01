@@ -249,6 +249,7 @@ var _ = [...]interface{}{
 	NodeLivenessPrefix,              // "\x00liveness-"
 	BootstrapVersionKey,             // "bootstrap-version"
 	ClusterInitGracePeriodTimestamp, // "lic-gpi-ts"
+	TrialLicenseUsageCount,          // "lic-tluc"
 	NodeIDGenerator,                 // "node-idgen"
 	RangeIDGenerator,                // "range-idgen"
 	StatusPrefix,                    // "status-"
