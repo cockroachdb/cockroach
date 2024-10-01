@@ -6205,7 +6205,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 			for _, validationError := range ve {
 				doError(validationError)
 			}
-			doError(catalog.ValidateRolesInDescriptor(descriptor, func(username username.SQLUsername) (bool, error) {
+			roleExists := func(username username.SQLUsername) (bool, error) {
 				if username.IsRootUser() ||
 					username.IsAdminRole() ||
 					username.IsNodeUser() ||
@@ -6220,7 +6220,17 @@ CREATE TABLE crdb_internal.invalid_objects (
 					return false, err
 				}
 				return true, nil
-			}))
+			}
+			doError(catalog.ValidateRolesInDescriptor(descriptor, roleExists))
+			if dbDesc, ok := descriptor.(catalog.DatabaseDescriptor); ok {
+				doError(
+					catalog.ValidateRolesInDefaultPrivilegeDescriptor(
+						dbDesc.GetDefaultPrivilegeDescriptor(), roleExists))
+			} else if schemaDesc, ok := descriptor.(catalog.SchemaDescriptor); ok {
+				doError(
+					catalog.ValidateRolesInDefaultPrivilegeDescriptor(
+						schemaDesc.GetDefaultPrivilegeDescriptor(), roleExists))
+			}
 			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, doError)
 			return err
 		}
