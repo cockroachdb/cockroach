@@ -215,3 +215,50 @@ CREATE OR REPLACE FUNCTION f1(a INT = f2()) RETURNS INT LANGUAGE SQL AS $$ SELEC
 statement ok
 DROP FUNCTION f2;
 DROP FUNCTION f1;
+
+subtest regression_131354
+
+# Case-sensitive routine names should be preserved when called from another
+# routine.
+statement ok
+CREATE FUNCTION "fooBAR"() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE FUNCTION f131354() RETURNS INT LANGUAGE SQL AS $$ SELECT "fooBAR"(); $$;
+
+statement ok
+CREATE PROCEDURE p131354() LANGUAGE SQL AS $$ SELECT "fooBAR"(); $$;
+
+query I
+SELECT f131354();
+----
+1
+
+statement ok
+CALL p131354();
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f131354];
+----
+CREATE FUNCTION public.f131354()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT public."fooBAR"();
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p131354];
+----
+CREATE PROCEDURE public.p131354()
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT public."fooBAR"();
+$$
+
+subtest end
