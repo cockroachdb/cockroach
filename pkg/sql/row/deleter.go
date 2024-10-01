@@ -160,13 +160,15 @@ func (rd *Deleter) DeleteRow(
 		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
 
 		if oth.IsSet() {
-			prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
-			if err != nil {
-				return err
-			}
 			var expValue []byte
-			if prevValue.IsPresent() {
-				expValue = prevValue.TagAndDataBytes()
+			if !oth.PreviousWasDeleted {
+				prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
+				if err != nil {
+					return err
+				}
+				if prevValue.IsPresent() {
+					expValue = prevValue.TagAndDataBytes()
+				}
 			}
 			oth.DelWithCPut(ctx, &KVBatchAdapter{b}, &rd.key, expValue, traceKV)
 		} else {
@@ -207,35 +209,20 @@ func (rd *Deleter) encodeValueForPrimaryIndexFamily(
 	}
 
 	rd.rawValueBuf = rd.rawValueBuf[:0]
-	var lastColID descpb.ColumnID
 	familySortedColumnIDs, ok := rd.Helper.SortedColumnFamily(family.ID)
 	if !ok {
 		return roachpb.Value{}, errors.AssertionFailedf("invalid family sorted column id map")
 	}
-	for _, colID := range familySortedColumnIDs {
-		idx, ok := rd.FetchColIDtoRowIndex.Get(colID)
-		if !ok || values[idx] == tree.DNull {
-			continue
-		}
 
-		if skip, _ := rd.Helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
-			continue
-		}
-
-		col := rd.FetchCols[idx]
-		if lastColID > col.GetID() {
-			return roachpb.Value{}, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-		}
-		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-		lastColID = col.GetID()
-		var err error
-		rd.rawValueBuf, err = valueside.Encode(rd.rawValueBuf, colIDDelta, values[idx], nil)
-		if err != nil {
-			return roachpb.Value{}, err
-		}
+	var err error
+	rd.rawValueBuf, err = rd.Helper.encodePrimaryIndexValuesToBuf(values, rd.FetchColIDtoRowIndex, familySortedColumnIDs, rd.FetchCols, rd.rawValueBuf)
+	if err != nil {
+		return roachpb.Value{}, err
 	}
 	ret := roachpb.Value{}
-	if len(rd.rawValueBuf) > 0 {
+	// For family 0, we expect a value even when no columns have
+	// been encoded to oldBytes.
+	if family.ID == 0 || len(rd.rawValueBuf) > 0 {
 		ret.SetTuple(rd.rawValueBuf)
 	}
 	return ret, nil
