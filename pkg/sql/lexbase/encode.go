@@ -51,6 +51,10 @@ const (
 	// escaped when they are used as escape quotes.
 	EncNoDoubleEscapeQuotes
 
+	// EncBareReservedKeywords indicates that reserved keywords will be rendered
+	// without wrapping quotes.
+	EncBareReservedKeywords
+
 	// EncFirstFreeFlagBit needs to remain unused; it is used as base
 	// bit offset for tree.FmtFlags.
 	EncFirstFreeFlagBit
@@ -61,7 +65,8 @@ const (
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
 func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
-	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && IsBareIdentifier(s)) {
+	if flags.HasFlags(EncBareIdentifiers) ||
+		(IsBareIdentifier(s) && (flags.HasFlags(EncBareReservedKeywords) || !isReservedKeyword(s))) {
 		buf.WriteString(s)
 		return
 	}
