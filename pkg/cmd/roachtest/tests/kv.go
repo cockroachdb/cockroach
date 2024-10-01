@@ -526,7 +526,14 @@ func registerKVGracefulDraining(r registry.Registry) {
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,"+
 				"store_rebalancer=2,liveness=2")
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
+			// TODO(kvoli): We are enabling continous profiling here to help debug
+			// #131569, disable this once the issue is resolved.
+			settings := install.MakeClusterSettings()
+			settings.ClusterSettings["server.cpu_profile.duration"] = "5s"
+			settings.ClusterSettings["server.cpu_profile.interval"] = "0s"
+			settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "15"
+			settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = fmt.Sprintf("%d", 256<<20 /* 256MB */)
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 			// Don't connect to the node we are going to shut down.
 			dbs := make([]*gosql.DB, nodes-1)
