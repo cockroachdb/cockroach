@@ -305,6 +305,9 @@ var (
 	// set during cluster initialization, by which a license must be installed to avoid
 	// throttling. The value is stored as the number of seconds since the Unix epoch.
 	ClusterInitGracePeriodTimestamp = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-gpi-ts")))
+	// TrialLicenseUsageCount is used to keep track of the number of times a trial
+	// license was installed on the cluster.
+	TrialLicenseUsageCount = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-tluc")))
 	//
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
