@@ -435,7 +435,9 @@ var _ RangeController = &rangeController{}
 func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
-	log.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+	if log.V(1) {
+		log.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+	}
 	rc := &rangeController{
 		opts:          o,
 		leaseholder:   init.Leaseholder,
@@ -557,8 +559,10 @@ retry:
 		}
 	}
 	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
-	log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%s wait-for-all=%v)",
-		rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%s wait-for-all=%v)",
+			rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
+	}
 	rc.opts.EvalWaitMetrics.OnAdmitted(wc, waitDuration)
 	return true, nil
 }
@@ -1091,7 +1095,9 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 	if replica == rc.leaseholder {
 		return
 	}
-	log.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+	if log.V(1) {
+		log.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+	}
 	rc.leaseholder = replica
 	rc.updateWaiterSetsRaftMuLocked()
 }
@@ -1100,7 +1106,9 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
-	log.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+	if log.V(1) {
+		log.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+	}
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -1464,8 +1472,10 @@ func (rss *replicaSendStream) shouldPing() bool {
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
-	log.VInfof(ctx, 2, "r%v:%v stream %v admit %v",
-		rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
+	if log.V(2) {
+		log.VInfof(ctx, 2, "r%v:%v stream %v admit %v",
+			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
+	}
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
@@ -1498,7 +1508,9 @@ func (rs *replicaState) createReplicaSendStream(
 	ctx context.Context, mode RaftMsgAppMode, indexToSend uint64, nextRaftIndex uint64,
 ) {
 	// Must be in StateReplicate on creation.
-	log.VEventf(ctx, 1, "creating send stream %v for replica %v", rs.stream, rs.desc)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.VEventf(ctx, 1, "creating send stream %v for replica %v", rs.stream, rs.desc)
+	}
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
 	}
@@ -1761,7 +1773,9 @@ func (rs *replicaState) handleReadyState(
 }
 
 func (rss *replicaState) closeSendStream(ctx context.Context) {
-	log.VEventf(ctx, 1, "closing send stream %v for replica %v", rss.stream, rss.desc)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.VEventf(ctx, 1, "closing send stream %v for replica %v", rss.stream, rss.desc)
+	}
 	rss.sendStream.mu.Lock()
 	defer rss.sendStream.mu.Unlock()
 
@@ -1978,8 +1992,10 @@ func (rss *replicaSendStream) isEmptySendQueueLocked() bool {
 
 // INVARIANT: no send-queue, and therefore not force-flushing.
 func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.Time) {
-	log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
-		rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
+			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
+	}
 	// This is the first time we've seen the replica change to StateProbe,
 	// update the connected state and start time. If the state doesn't
 	// change within probeRecentlyNoSendQDuration, we will close the
