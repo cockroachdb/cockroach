@@ -481,7 +481,7 @@ func TestRawNodeStart(t *testing.T) {
 	}
 
 	storage := NewMemoryStorage()
-	storage.ents[0].Index = 1
+	storage.ls = LogSlice{term: 1, prev: entryID{index: 1, term: 1}}
 
 	// TODO(tbg): this is a first prototype of what bootstrapping could look
 	// like (without the annoying faux ConfChanges). We want to persist a
@@ -500,16 +500,13 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
 		require.NotEmpty(t, cs.Voters, "no voters specified")
-		fi := storage.FirstIndex()
+		fi, li := storage.FirstIndex(), storage.LastIndex()
 		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
+		require.Equal(t, fi, li+1, "the log must be empty")
 
-		_, err := storage.Entries(fi, fi, math.MaxUint64)
-		// TODO(tbg): match exact error
-		require.Error(t, err, "should not have been able to load first index")
-
-		li := storage.LastIndex()
-		_, err = storage.Entries(li, li, math.MaxUint64)
-		require.Error(t, err, "should not have been able to load last index")
+		entries, err := storage.Entries(fi, li+1, math.MaxUint64)
+		require.NoError(t, err)
+		require.Empty(t, entries, "should not have been able to load any entries")
 
 		hs, ics, err := storage.InitialState()
 		require.NoError(t, err)
@@ -672,34 +669,32 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	s := &ignoreSizeHintMemStorage{
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
-	persistedHardState := pb.HardState{
+	s.hardState = pb.HardState{
 		Term:   1,
 		Vote:   1,
 		Commit: 10,
 	}
-
-	s.hardState = persistedHardState
-	s.ents = make([]pb.Entry, 10)
+	entries := make([]pb.Entry, 10)
 	var size uint64
-	for i := range s.ents {
+	for i := range entries {
 		ent := pb.Entry{
 			Term:  1,
 			Index: uint64(i + 1),
 			Type:  pb.EntryNormal,
 			Data:  []byte("a"),
 		}
-
-		s.ents[i] = ent
+		entries[i] = ent
 		size += uint64(ent.Size())
 	}
+	s.ls = LogSlice{term: 1, entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
 	// not be included in the initial rd.CommittedEntries. However, our storage will ignore
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
-	cfg.MaxSizePerMsg = size - uint64(s.ents[len(s.ents)-1].Size()) - 1
+	cfg.MaxSizePerMsg = size - uint64(entries[len(entries)-1].Size()) - 1
 
-	s.ents = append(s.ents, pb.Entry{
+	s.ls.entries = append(s.ls.entries, pb.Entry{
 		Term:  1,
 		Index: uint64(11),
 		Type:  pb.EntryNormal,
