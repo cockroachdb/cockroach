@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -98,9 +99,14 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 }
 
 // HasCrossTenantRead returns true if a tenant can read from other tenants.
-func (a *Authorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
+func (a *Authorizer) HasCrossTenantRead(
+	ctx context.Context, tenID roachpb.TenantID, key roachpb.RKey,
+) bool {
 	if tenID.IsSystem() {
 		// The system tenant has access to all request types.
+		return true
+	}
+	if a.isCrossTenantReadableKey(key) {
 		return true
 	}
 	_, mode := a.getMode(ctx, tenID)
@@ -476,4 +482,10 @@ func (a *Authorizer) getMode(
 		}
 	}
 	return entry, selectedMode
+}
+
+// isCrossTenantReadableKey returns true if the given key is allowed
+// to be read by any tenant, regardless of tenant boundaries.
+func (a *Authorizer) isCrossTenantReadableKey(key roachpb.RKey) bool {
+	return key.Equal(keys.ClusterInitGracePeriodTimestamp)
 }

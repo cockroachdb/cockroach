@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",

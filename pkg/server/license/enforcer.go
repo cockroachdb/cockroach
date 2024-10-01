@@ -181,7 +181,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.maybeWriteClusterInitGracePeriodTS(ctx, options); err != nil {
+		if err := e.readClusterMetadata(ctx, options); err != nil {
 			return err
 		}
 	}
@@ -204,23 +204,26 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	return nil
 }
 
-// maybeWriteClusterInitGracePeriodTS checks if the cluster init grace period
-// timestamp needs to be written to the KV layer and writes it if needed.
-func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(ctx context.Context, options options) error {
-	// Secondary tenants do not have access to the system keyspace where
-	// the cluster init grace period is stored. As a fallback, we apply a 7-day
-	// grace period from the tenant's start time, which is used only when no
-	// license is installed. This logic applies specifically when secondary
-	// tenants are started in a separate process from the system tenant. If they
-	// are not, a shared enforcer will have access to the system keyspace and
-	// handle the grace period.
-	// TODO(spilchen): Change to give the secondary tenant read access to the
-	// system keyspace KV.
+// readClusterMetadata will read, and maybe write, cluster metadata for license
+// enforcement. The metadata is stored in the KV system keyspace.
+func (e *Enforcer) readClusterMetadata(ctx context.Context, options options) error {
+	// Secondary tenants do not have write access to the system keyspace where
+	// the cluster init grace period is stored. We are simply going to read
+	// what is there. It is expected to exist already as the system tenant
+	// starts up, and initializes this ahead of the secondary tenant.
 	if !options.isSystemTenant {
-		gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
-		end := e.getStartTime().Add(gracePeriodLength)
-		e.clusterInitGracePeriodEndTS.Store(end.Unix())
-		return nil
+		return options.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			val, err := txn.KV().Get(ctx, keys.ClusterInitGracePeriodTimestamp)
+			if err != nil {
+				return err
+			}
+			if val.Value == nil {
+				return errors.AssertionFailedf("cluster init grace period should have been initialized at the system tenant")
+			}
+			e.clusterInitGracePeriodEndTS.Store(val.ValueInt())
+			log.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS().String())
+			return nil
+		})
 	}
 
 	return options.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

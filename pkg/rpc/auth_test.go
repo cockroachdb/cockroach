@@ -1120,7 +1120,9 @@ func (m mockAuthorizer) HasProcessDebugCapability(
 	return errors.New("tenant does not have capability")
 }
 
-func (m mockAuthorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
+func (m mockAuthorizer) HasCrossTenantRead(
+	ctx context.Context, tenID roachpb.TenantID, key roachpb.RKey,
+) bool {
 	return m.hasCrossTenantRead
 }
 

@@ -32,7 +32,7 @@ func NewAllowNothingAuthorizer() *AllowNothingAuthorizer {
 
 // HasCrossTenantRead returns true if a tenant can read from other tenants.
 func (n *AllowNothingAuthorizer) HasCrossTenantRead(
-	ctx context.Context, tenID roachpb.TenantID,
+	ctx context.Context, tenID roachpb.TenantID, key roachpb.RKey,
 ) bool {
 	return false
 }

@@ -205,7 +205,7 @@ func (a tenantAuthorizer) authBatch(
 	tenSpan := tenantPrefix(tenID)
 
 	if outsideTenant(rSpan, tenSpan) {
-		if args.IsReadOnly() && a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID) {
+		if args.IsReadOnly() && a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID, rSpan.Key) {
 			return nil
 		}
 		return spanErr(rSpan, tenSpan)
@@ -239,7 +239,7 @@ func (a tenantAuthorizer) authRangeLookup(
 	tenSpan := tenantPrefix(tenID)
 	if !tenSpan.ContainsKey(args.Key) {
 		// Allow it anyway if the tenant can read other tenants.
-		if a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID) {
+		if a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID, args.Key) {
 			return nil
 		}
 		return authErrorf("requested key %s not fully contained in tenant keyspace %s", args.Key, tenSpan)
@@ -491,7 +491,7 @@ func validateSpan(
 	}
 	if outsideTenant(rSpan, tenSpan) {
 		// Allow it anyway if the tenant can read other tenants.
-		if isRead && a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID) {
+		if isRead && a.capabilitiesAuthorizer.HasCrossTenantRead(ctx, tenID, rSpan.Key) {
 			return nil
 		}
 		return spanErr(rSpan, tenSpan)

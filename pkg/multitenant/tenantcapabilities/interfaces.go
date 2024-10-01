@@ -42,7 +42,7 @@ type Reader interface {
 // usage pattern over a timespan.
 type Authorizer interface {
 	// HasCrossTenantRead returns true if a tenant can read other tenant spans.
-	HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool
+	HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID, key roachpb.RKey) bool
 
 	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
 	// is not allowed to execute the supplied batch request given the capabilities
