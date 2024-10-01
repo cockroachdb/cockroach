@@ -68,9 +68,6 @@ func setSessionVariables(
 }
 
 func registerSessionVariables(r registry.Registry) {
-	timeSupplier := func() time.Time {
-		return timeutil.Now()
-	}
 	ops := []sessionVariableOp{
 		// Sets the default transaction isolation level for a tpcc-like database.
 		// 1-hour cycle.
@@ -78,7 +75,7 @@ func registerSessionVariables(r registry.Registry) {
 			Name:      "default_transaction_isolation",
 			DBPattern: "tpcc",
 			Generator: timeBasedValues(
-				timeSupplier,
+				timeutil.Now,
 				[]string{"read committed", "repeatable read", "serializable"},
 				1*time.Hour,
 			),
