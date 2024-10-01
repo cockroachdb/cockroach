@@ -1608,6 +1608,8 @@ GO_TARGETS = [
     "//pkg/raft/confchange:confchange_test",
     "//pkg/raft/quorum:quorum",
     "//pkg/raft/quorum:quorum_test",
+    "//pkg/raft/raftlogger:logger",
+    "//pkg/raft/raftlogger:raftlogger",
     "//pkg/raft/raftpb:raftpb",
     "//pkg/raft/raftpb:raftpb_test",
     "//pkg/raft/raftstoreliveness:raftstoreliveness",

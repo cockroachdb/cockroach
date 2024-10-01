@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -238,7 +239,7 @@ type Config struct {
 
 	// Logger is the logger used for raft log. For multinode which can host
 	// multiple raft group, each raft group can have its own logger
-	Logger Logger
+	Logger raftlogger.Logger
 
 	// DisableProposalForwarding set to true means that followers will drop
 	// proposals, rather than forwarding them to the leader. One use case for
@@ -320,7 +321,7 @@ func (c *Config) validate() error {
 	}
 
 	if c.Logger == nil {
-		c.Logger = getLogger()
+		c.Logger = raftlogger.GetLogger()
 	}
 
 	return nil
@@ -439,7 +440,7 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger        Logger
+	logger        raftlogger.Logger
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
 }
