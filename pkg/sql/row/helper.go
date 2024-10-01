@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -212,6 +214,42 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	return rh.indexEntries, nil
 }
 
+// encodePrimaryIndexValuesToBuf encodes the given values, writing
+// into the given buffer.
+func (rh *RowHelper) encodePrimaryIndexValuesToBuf(
+	vals []tree.Datum,
+	valColIDMapping catalog.TableColMap,
+	sortedColumnIDs []descpb.ColumnID,
+	fetchedCols []catalog.Column,
+	buf []byte,
+) ([]byte, error) {
+	var lastColID descpb.ColumnID
+	for _, colID := range sortedColumnIDs {
+		idx, ok := valColIDMapping.Get(colID)
+		if !ok || vals[idx] == tree.DNull {
+			// Column not being updated or inserted.
+			continue
+		}
+
+		if skip := rh.SkipColumnNotInPrimaryIndexValue(colID, vals[idx]); skip {
+			continue
+		}
+
+		col := fetchedCols[idx]
+		if lastColID > col.GetID() {
+			return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+		}
+		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
+		lastColID = col.GetID()
+		var err error
+		buf, err = valueside.Encode(buf, colIDDelta, vals[idx], nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf, nil
+}
+
 // SkipColumnNotInPrimaryIndexValue returns true if the value at column colID
 // does not need to be encoded, either because it is already part of the primary
 // key, or because it is not part of the primary index altogether. Composite
@@ -328,8 +366,9 @@ func (rh *RowHelper) deleteIndexEntry(
 }
 
 type OriginTimestampCPutHelper struct {
-	OriginTimestamp hlc.Timestamp
-	ShouldWinTie    bool
+	OriginTimestamp    hlc.Timestamp
+	ShouldWinTie       bool
+	PreviousWasDeleted bool
 }
 
 func (oh *OriginTimestampCPutHelper) IsSet() bool {
