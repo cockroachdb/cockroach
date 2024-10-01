@@ -115,8 +115,12 @@ func (ft *FortificationTracker) QuorumActive() bool {
 	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
 }
 
+func (ft *FortificationTracker) Empty() bool {
+	return len(ft.fortification) == 0
+}
+
 func (ft *FortificationTracker) String() string {
-	if len(ft.fortification) == 0 {
+	if ft.Empty() {
 		return "empty"
 	}
 	// Print the map in sorted order as we assert on its output in tests.
