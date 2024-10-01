@@ -33,7 +33,7 @@ import {
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
-import { Bytes, EncodeDatabaseTableUri } from "src/util";
+import { Bytes, EncodeDatabaseTableUri, tabAttr } from "src/util";
 
 import { ColumnTitle } from "../components/columnTitle";
 
@@ -198,9 +198,12 @@ const initialParams: TableParams = {
   },
 };
 
+const ignoreParams = [tabAttr];
+
 export const TablesPageV2 = () => {
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
+    paramsToIgnore: ignoreParams,
   });
 
   // Get db id from the URL.
