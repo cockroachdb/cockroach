@@ -2187,9 +2187,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
-	heartbeatInterval, livenessInterval := s.cfg.StoreLivenessDurations()
+	livenessInterval, heartbeatInterval := s.cfg.StoreLivenessDurations()
 	supportGracePeriod := s.cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
-	options := storeliveness.NewOptions(heartbeatInterval, livenessInterval, supportGracePeriod)
+	options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 	sm := storeliveness.NewSupportManager(
 		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.StateEngine(), options,
 		s.cfg.Settings, s.stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport,
