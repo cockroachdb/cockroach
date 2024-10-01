@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -844,13 +845,18 @@ func TestCandidateConcede(t *testing.T) {
 	// heal the partition
 	tt.recover()
 	// send heartbeat; reset wait
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgBeat})
+	p := tt.peers[pb.PeerID(3)].(*raft)
+	for ticks := p.heartbeatTimeout; ticks > 0; ticks-- {
+		tt.tick(p)
+	}
 
 	data := []byte("force follower")
 	// send a proposal to 3 to flush out a MsgApp to 1
 	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgProp, Entries: []pb.Entry{{Data: data}}})
 	// send heartbeat; flush out commit
-	tt.send(pb.Message{From: 3, To: 3, Type: pb.MsgBeat})
+	for ticks := p.heartbeatTimeout; ticks > 0; ticks-- {
+		tt.tick(p)
+	}
 
 	a := tt.peers[1].(*raft)
 	assert.Equal(t, StateFollower, a.state)
@@ -1977,42 +1983,74 @@ func TestLeaderAppResp(t *testing.T) {
 // TestBcastBeat is when the leader receives a heartbeat tick, it should
 // send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries.
 func TestBcastBeat(t *testing.T) {
-	offset := uint64(1000)
-	// make a state machine with log.offset = 1000
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
-			Index:     offset,
-			Term:      1,
-			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
-		},
-	}
-	storage := NewMemoryStorage()
-	storage.ApplySnapshot(s)
-	sm := newTestRaft(1, 10, 1, storage)
-	sm.Term = 1
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			offset := uint64(1000)
+			// make a state machine with log.offset = 1000
+			s := pb.Snapshot{
+				Metadata: pb.SnapshotMetadata{
+					Index:     offset,
+					Term:      1,
+					ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+				},
+			}
+			storage := NewMemoryStorage()
+			storage.ApplySnapshot(s)
 
-	sm.becomeCandidate()
-	sm.becomeLeader()
-	for i := 0; i < 10; i++ {
-		mustAppendEntry(sm, pb.Entry{Index: uint64(i) + 1})
-	}
-	sm.advanceMessagesAfterAppend()
+			testOptions := emptyTestConfigModifierOpt()
+			if !storeLivenessEnabled {
+				testOptions = withFortificationDisabled()
+			}
 
-	// slow follower
-	sm.trk.Progress(2).Match, sm.trk.Progress(2).Next = 5, 6
-	// normal follower
-	sm.trk.Progress(3).Match, sm.trk.Progress(3).Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
+			sm := newTestRaft(1, 10, 1, storage, testOptions)
 
-	sm.Step(pb.Message{Type: pb.MsgBeat})
-	msgs := sm.readMessages()
-	require.Len(t, msgs, 2)
+			sm.Term = 1
 
-	for i, m := range msgs {
-		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
-		require.Zero(t, m.Index, "#%d", i)
-		require.Zero(t, m.LogTerm, "#%d", i)
-		require.Empty(t, m.Entries, "#%d", i)
-	}
+			sm.becomeCandidate()
+			sm.becomeLeader()
+
+			for i := 0; i < 10; i++ {
+				mustAppendEntry(sm, pb.Entry{Index: uint64(i) + 1})
+			}
+			sm.advanceMessagesAfterAppend()
+
+			// slow follower
+			sm.trk.Progress(2).Match, sm.trk.Progress(2).Next = 5, 6
+			// normal follower
+			sm.trk.Progress(3).Match, sm.trk.Progress(3).Next = sm.raftLog.lastIndex(),
+				sm.raftLog.lastIndex()+1
+
+			// TODO(ibrahim): Create a test helper function that takes the number of
+			// ticks and calls tick() that many times. Then we can refactor a lot of
+			// tests that have this pattern.
+			for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
+				sm.tick()
+			}
+			msgs := sm.readMessages()
+			// If storeliveness is enabled, the heartbeat timeout will also send a
+			// MsgFortifyLeader to all followers if they need fortification.
+			if storeLivenessEnabled {
+				assert.Equal(t, []pb.Message{
+					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
+					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
+					{From: 1, To: 2, Term: 2, Type: pb.MsgFortifyLeader},
+					{From: 1, To: 3, Term: 2, Type: pb.MsgFortifyLeader},
+				}, msgs)
+			} else {
+				assert.Equal(t, []pb.Message{
+					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
+					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
+				}, msgs)
+			}
+
+			// Make sure that the heartbeat messages contain the expected fields.
+			for i, m := range msgs[:2] {
+				require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
+				require.Zero(t, m.Index, "#%d", i)
+				require.Zero(t, m.LogTerm, "#%d", i)
+				require.Empty(t, m.Entries, "#%d", i)
+			}
+		})
 }
 
 // TestRecvMsgBeat tests the output of the state machine when receiving MsgBeat
@@ -2082,50 +2120,79 @@ func TestLeaderIncreaseNext(t *testing.T) {
 }
 
 func TestSendAppendForProgressProbe(t *testing.T) {
-	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.becomeCandidate()
-	r.becomeLeader()
-	r.readMessages()
-	r.trk.Progress(2).BecomeProbe()
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testOptions := emptyTestConfigModifierOpt()
+			if !storeLivenessEnabled {
+				// TODO(ibrahim): allow the test option to take a boolean to
+				// enable/disable fortification. This way we can refactor the tests and
+				// make them less verbose.
+				testOptions = withFortificationDisabled()
+			}
 
-	// each round is a heartbeat
-	for i := 0; i < 3; i++ {
-		if i == 0 {
-			// we expect that raft will only send out one msgAPP on the first
-			// loop. After that, the follower is paused until a heartbeat response is
-			// received.
-			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
-			r.maybeSendAppend(2)
+			r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+				testOptions)
+
+			r.becomeCandidate()
+			r.becomeLeader()
+
+			r.readMessages()
+			r.trk.Progress(2).BecomeProbe()
+
+			// each round is a heartbeat
+			for i := 0; i < 3; i++ {
+				if i == 0 {
+					// we expect that raft will only send out one msgAPP on the first
+					// loop. After that, the follower is paused until a heartbeat response
+					// is received.
+					mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+					r.maybeSendAppend(2)
+					msg := r.readMessages()
+					assert.Len(t, msg, 1)
+					assert.Zero(t, msg[0].Index)
+				}
+
+				assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+				for j := 0; j < 10; j++ {
+					mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+					r.maybeSendAppend(2)
+					assert.Empty(t, r.readMessages())
+				}
+
+				// do a heartbeat
+				for j := 0; j < r.heartbeatTimeout; j++ {
+					r.tick()
+				}
+				assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+
+				// consume the heartbeat, and the MsgApp if storeliveness is enabled
+				msg := r.readMessages()
+				if storeLivenessEnabled {
+					assert.Len(t, msg, 2)
+					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+					assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
+				} else {
+					assert.Len(t, msg, 1)
+					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+				}
+			}
+
+			// The next heartbeat timeout will allow another message to be sent.
+			for ticks := r.heartbeatTimeout; ticks > 0; ticks-- {
+				r.tick()
+			}
 			msg := r.readMessages()
-			assert.Len(t, msg, 1)
-			assert.Zero(t, msg[0].Index)
-		}
-
-		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
-		for j := 0; j < 10; j++ {
-			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
-			r.maybeSendAppend(2)
-			assert.Empty(t, r.readMessages())
-		}
-
-		// do a heartbeat
-		for j := 0; j < r.heartbeatTimeout; j++ {
-			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-		}
-		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
-
-		// consume the heartbeat
-		msg := r.readMessages()
-		assert.Len(t, msg, 1)
-		assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-	}
-
-	// a heartbeat response will allow another message to be sent
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-	msg := r.readMessages()
-	assert.Len(t, msg, 1)
-	assert.Zero(t, msg[0].Index)
-	assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+			if storeLivenessEnabled {
+				assert.Len(t, msg, 2)
+				assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+				assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
+				assert.Zero(t, msg[1].Index)
+			} else {
+				assert.Len(t, msg, 1)
+				assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+			}
+			assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+		})
 }
 
 func TestSendAppendForProgressReplicate(t *testing.T) {
@@ -4013,6 +4080,16 @@ func (nw *network) send(msgs ...pb.Message) {
 		_ = p.Step(m)
 		p.advanceMessagesAfterAppend()
 		msgs = append(msgs[1:], nw.filter(p.readMessages())...)
+	}
+}
+
+// tick takes a raft instance and calls tick(). It then uses the network.send
+// function if that generates any messages.
+func (nw *network) tick(p *raft) {
+	p.tick()
+	msgs := nw.filter(p.readMessages())
+	if len(msgs) > 0 {
+		nw.send(msgs...)
 	}
 }
 

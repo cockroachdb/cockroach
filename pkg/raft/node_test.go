@@ -765,7 +765,10 @@ func TestAppendPagination(t *testing.T) {
 
 	// After the partition recovers, tick the clock to wake everything
 	// back up and send the messages.
-	n.send(raftpb.Message{From: 1, To: 1, Type: raftpb.MsgBeat})
+	p := n.peers[raftpb.PeerID(1)].(*raft)
+	for ticks := p.heartbeatTimeout; ticks > 0; ticks-- {
+		n.tick(p)
+	}
 	assert.True(t, seenFullMessage, "didn't see any messages more than half the max size; something is wrong with this test")
 }
 
