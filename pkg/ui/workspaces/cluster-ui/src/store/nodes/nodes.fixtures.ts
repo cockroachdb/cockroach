@@ -657,7 +657,6 @@ export const getNodeStatus = (): INodeStatus => {
       "txn.restarts.txnpush": 0,
       "txn.restarts.unknown": 0,
       "txn.restarts.writetooold": 0,
-      "txn.restarts.writetoooldmulti": 0,
     },
     store_statuses: [
       {

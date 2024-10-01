@@ -55,6 +55,7 @@ type SupportManager struct {
 	minWithdrawalTS       hlc.Timestamp
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
+	metrics               *SupportManagerMetrics
 }
 
 // NewSupportManager creates a new Store Liveness SupportManager. The main
@@ -81,13 +82,24 @@ func NewSupportManager(
 		storesToAdd:           newStoresToAdd(),
 		requesterStateHandler: newRequesterStateHandler(),
 		supporterStateHandler: newSupporterStateHandler(),
+		metrics:               newSupportManagerMetrics(),
 	}
+}
+
+// Metrics returns metrics tracking this SupportManager.
+func (sm *SupportManager) Metrics() *SupportManagerMetrics {
+	return sm.metrics
 }
 
 // HandleMessage implements the MessageHandler interface. It appends incoming
 // messages to a queue and does not block on processing the messages.
 func (sm *SupportManager) HandleMessage(msg *slpb.Message) error {
-	return sm.receiveQueue.Append(msg)
+	if err := sm.receiveQueue.Append(msg); err != nil {
+		return err
+	}
+	sm.metrics.ReceiveQueueSize.Inc(1)
+	sm.metrics.ReceiveQueueBytes.Inc(int64(msg.Size()))
+	return nil
 }
 
 var _ MessageHandler = (*SupportManager)(nil)
@@ -113,8 +125,7 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
 		log.VInfof(
-			context.Background(), 2,
-			"store %+v enqueued to add remote store %+v", sm.storeID, id,
+			context.Background(), 2, "SupportFrom called for the first time with store id %+v", id,
 		)
 		return 0, hlc.Timestamp{}
 	}
@@ -156,6 +167,8 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 	if err := sm.requesterStateHandler.read(ctx, sm.engine); err != nil {
 		return err
 	}
+	// Update the support-for metric.
+	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 	// Advance the clock to the maximum withdrawal time.
 	if err := sm.clock.UpdateAndCheckMaxOffset(
 		ctx, sm.supporterStateHandler.supporterState.meta.MaxWithdrawn,
@@ -222,6 +235,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 			sm.requesterStateHandler.markIdleStores()
 
 		case <-receiveQueueSig:
+			// Decrementing the queue metrics is done in handleMessages.
 			msgs := sm.receiveQueue.Drain()
 			sm.handleMessages(ctx, msgs)
 
@@ -236,7 +250,13 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 func (sm *SupportManager) maybeAddStores() {
 	sta := sm.storesToAdd.drainStoresToAdd()
 	for _, store := range sta {
-		sm.requesterStateHandler.addStore(store)
+		if sm.requesterStateHandler.addStore(store) {
+			log.VInfof(
+				context.Background(), 2, "store %+v is starting to request support from store %+v",
+				sm.storeID, store,
+			)
+			sm.metrics.SupportFromStores.Inc(1)
+		}
 	}
 }
 
@@ -249,19 +269,23 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
+	successes := 0
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); !sent {
+		if sent := sm.sender.SendAsync(ctx, msg); sent {
+			successes++
+		} else {
 			log.Warningf(ctx, "sending heartbeat to store %+v failed", msg.To)
 		}
 	}
-	log.VInfof(
-		ctx, 2, "store %+v sent heartbeats to %d stores", sm.storeID, len(heartbeats),
-	)
+	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
+	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
+	log.VInfof(ctx, 2, "store %+v sent heartbeats to %d stores", sm.storeID, successes)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
@@ -273,23 +297,23 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
 	defer sm.supporterStateHandler.finishUpdate(ssfu)
-	ssfu.withdrawSupport(now)
+	numWithdrawn := ssfu.withdrawSupport(now)
 
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write supporter meta and state: %v", err)
+		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
+		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
-	log.VInfof(
-		ctx, 2, "store %+v withdrew support from %d stores",
-		sm.storeID, len(ssfu.inProgress.supportFor),
-	)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
+	log.VInfof(ctx, 2, "store %+v withdrew support from %d stores", sm.storeID, numWithdrawn)
+	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 }
 
 // handleMessages iterates over the given messages and delegates their handling
@@ -303,6 +327,8 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	defer sm.supporterStateHandler.finishUpdate(ssfu)
 	var responses []slpb.Message
 	for _, msg := range msgs {
+		sm.metrics.ReceiveQueueSize.Dec(1)
+		sm.metrics.ReceiveQueueBytes.Dec(int64(msg.Size()))
 		switch msg.Type {
 		case slpb.MsgHeartbeat:
 			responses = append(responses, ssfu.handleHeartbeat(msg))
@@ -317,18 +343,24 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	defer batch.Close()
 	if err := rsfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
+	sm.metrics.MessageHandleSuccesses.Inc(int64(len(msgs)))
+	// Handling heartbeats is the only way to add a store to the supportFor map.
+	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 
 	for _, response := range responses {
 		_ = sm.sender.SendAsync(ctx, response)

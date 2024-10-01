@@ -843,7 +843,6 @@ sum(abort) as abort</query>
           <query>| mstats 
 rate_sum(txn_restarts_asyncwritefailure) as async_failure,
 rate_sum(txn_restarts_writetooold_count) as write_too_old,
-rate_sum(txn_restarts_writetoooldmulti_count) as write_too_old_multi
 rate_sum(txn_restarts_commitdeadlineexceeded_count) as commit_deadline_exceeded ,
 rate_sum(txn_restarts_readwithinuncertainty_count) as read_within_uncertainty_interval,
 rate_sum(txn_restarts_txnaborted_count) as aborted ,
