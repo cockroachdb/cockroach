@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -61,7 +62,6 @@ import (
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
@@ -3348,7 +3348,7 @@ func (k kafkaManager) startTopicConsumers(
 				return err
 			}
 			defer topicConsumer.close()
-			everyN := log.Every(30 * time.Second)
+			everyN := roachtestutil.Every(30 * time.Second)
 			for {
 				select {
 				case <-stopper:
