@@ -89,7 +89,9 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110023),
+		// Test only shared tenants. More fixes are needed to make
+		// it work for external tenants.
+		DefaultTestTenant: base.SharedTestTenantAlwaysEnabled,
 	})
 	defer srv.Stopper().Stop(context.Background())
 
