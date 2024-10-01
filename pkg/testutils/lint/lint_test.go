@@ -62,6 +62,7 @@ var (
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 `)
 	cslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
+//
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 `)
