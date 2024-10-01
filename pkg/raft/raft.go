@@ -671,7 +671,9 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit, r.advanceCommitViaMsgAppOnly()) {
+	sendEntries := pr.ShouldSendEntries(last)
+	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, r.advanceCommitViaMsgAppOnly())
+	if !sendEntries && !sendProbe {
 		return false
 	}
 
@@ -683,7 +685,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		return r.maybeSendSnapshot(to, pr)
 	}
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
+	if sendEntries {
 		if entries, err = r.raftLog.entries(prevIndex, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
