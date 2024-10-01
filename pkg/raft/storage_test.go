@@ -229,3 +229,24 @@ func TestStorageApplySnapshot(t *testing.T) {
 	tt = tests[i]
 	require.Equal(t, ErrSnapOutOfDate, s.ApplySnapshot(tt))
 }
+
+func TestStorageLogSnapshot(t *testing.T) {
+	s := NewMemoryStorage()
+	require.NoError(t, s.Append(index(1).terms(1, 2, 3)))
+	snap := s.LogSnapshot()
+	// The snapshot must be immutable regardless of mutations on the storage.
+	check := func() {
+		require.Equal(t, uint64(1), snap.FirstIndex())
+		require.Equal(t, uint64(3), snap.LastIndex())
+		entries, err := snap.Entries(snap.FirstIndex(), snap.LastIndex()+1, math.MaxUint64)
+		require.NoError(t, err)
+		require.Equal(t, index(1).terms(1, 2, 3), entries)
+	}
+	check()
+	require.NoError(t, s.Append(index(4).terms(4, 5))) // regular append
+	check()
+	require.NoError(t, s.Append(index(2).terms(7, 7, 7))) // truncation and append
+	check()
+	require.NoError(t, s.Compact(4)) // compaction
+	check()
+}
