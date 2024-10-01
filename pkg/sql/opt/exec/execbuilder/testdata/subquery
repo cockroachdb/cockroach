@@ -516,7 +516,7 @@ vectorized: true
 • filter
 │ columns: (k, i)
 │ estimated row count: 333 (missing stats)
-│ filter: CASE WHEN k < 5 THEN COALESCE(exists(k), false) ELSE CAST(NULL AS BOOL) END
+│ filter: CASE WHEN k < 5 THEN COALESCE("exists"(k), false) ELSE CAST(NULL AS BOOL) END
 │
 └── • scan
       columns: (k, i)
@@ -537,7 +537,7 @@ vectorized: true
 ·
 • render
 │ columns: (k, i, "case")
-│ render case: CASE WHEN k < 5 THEN COALESCE(exists(k), false) ELSE CAST(NULL AS BOOL) END
+│ render case: CASE WHEN k < 5 THEN COALESCE("exists"(k), false) ELSE CAST(NULL AS BOOL) END
 │ render k: k
 │ render i: i
 │
