@@ -1031,10 +1031,17 @@ COMMIT
 statement ok
 RESET DEFAULT_TRANSACTION_ISOLATION
 
+skipif config local-read-committed
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 serializable
+
+onlyif config local-read-committed
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+read committed
 
 # SHOW TRANSACTION STATUS
 
@@ -1099,7 +1106,12 @@ COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
+skipif config local-read-committed
 query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
+
+onlyif config local-read-committed
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
@@ -1236,7 +1248,12 @@ BEGIN TRANSACTION;
   SAVEPOINT cockroach_restart;
   SELECT 1;
 
+skipif config local-read-committed
 query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
+
+onlyif config local-read-committed
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1497,7 +1514,12 @@ BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
 statement ok
 BEGIN; SELECT 1
 
+skipif config local-read-committed
 query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
+
+onlyif config local-read-committed
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1587,7 +1609,9 @@ SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE
 # Test retry rewinds correctly.
 
 statement ok
-SET intervalstyle = 'postgres';
+SET intervalstyle = 'postgres'
+
+statement ok
 CREATE TABLE rewind_session_test (s string primary key);
 
 statement ok
@@ -1610,10 +1634,10 @@ SHOW intervalstyle
 iso_8601
 
 statement ok
-TRUNCATE rewind_session_test;
+TRUNCATE rewind_session_test
 
 statement ok
-SET intervalstyle = 'postgres';
+SET intervalstyle = 'postgres'
 
 statement ok
 BEGIN;
