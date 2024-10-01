@@ -195,7 +195,7 @@ func TestIsFortifiedBy(t *testing.T) {
 			ids: []pb.PeerID{1},
 			// No support recorded at the store liveness fabric.
 			storeLiveness: makeMockStoreLiveness(map[pb.PeerID]mockLivenessEntry{}),
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// No support recorded.
 			},
 			expSupported: false,
@@ -204,7 +204,7 @@ func TestIsFortifiedBy(t *testing.T) {
 		{
 			ids:           []pb.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// No support recorded.
 			},
 			expSupported: true,
@@ -213,10 +213,10 @@ func TestIsFortifiedBy(t *testing.T) {
 		{
 			ids:           []pb.PeerID{2},
 			storeLiveness: mockLivenessOnePeer,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Support recorded for a different follower than the one in
 				// storeLiveness.
-				supportTracker.RecordFortification(2, 10)
+				fortificationTracker.RecordFortification(2, 10)
 			},
 			expSupported: true,
 			expFortified: false,
@@ -224,9 +224,9 @@ func TestIsFortifiedBy(t *testing.T) {
 		{
 			ids:           []pb.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Support recorded for an expired epoch.
-				supportTracker.RecordFortification(1, 9)
+				fortificationTracker.RecordFortification(1, 9)
 			},
 			expSupported: true,
 			expFortified: false,
@@ -234,13 +234,13 @@ func TestIsFortifiedBy(t *testing.T) {
 		{
 			ids:           []pb.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record support at newer epochs than what are present in
 				// StoreLiveness.
 				//
 				// NB: This is possible if there is a race between store liveness
 				// heartbeats updates and fortification responses.
-				supportTracker.RecordFortification(1, 11)
+				fortificationTracker.RecordFortification(1, 11)
 			},
 			expSupported: true,
 			expFortified: false,
@@ -248,9 +248,9 @@ func TestIsFortifiedBy(t *testing.T) {
 		{
 			ids:           []pb.PeerID{1},
 			storeLiveness: mockLivenessOnePeer,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record support at the same epoch as the storeLiveness.
-				supportTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(1, 10)
 			},
 			expSupported: true,
 			expFortified: true,
@@ -262,10 +262,10 @@ func TestIsFortifiedBy(t *testing.T) {
 		for _, id := range tc.ids {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		supportTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
 
-		tc.setup(&supportTracker)
-		isFortified, isSupported := supportTracker.IsFortifiedBy(1)
+		tc.setup(&fortificationTracker)
+		isFortified, isSupported := fortificationTracker.IsFortifiedBy(1)
 		require.Equal(t, tc.expSupported, isSupported)
 		require.Equal(t, tc.expFortified, isFortified)
 	}
