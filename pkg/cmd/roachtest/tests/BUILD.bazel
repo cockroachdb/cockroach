@@ -273,7 +273,6 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
         "//pkg/util/ioctx",
-        "//pkg/util/log",
         "//pkg/util/parquet",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
