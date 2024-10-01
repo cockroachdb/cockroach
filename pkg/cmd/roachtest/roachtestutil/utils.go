@@ -5,10 +5,34 @@
 
 package roachtestutil
 
-import "github.com/cockroachdb/cockroach/pkg/roachprod/install"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
 
 // SystemInterfaceSystemdUnitName is a convenience function that
 // returns the systemd unit name for the system interface
 func SystemInterfaceSystemdUnitName() string {
 	return install.VirtualClusterLabel(install.SystemInterfaceName, 0)
+}
+
+// EveryN provides a way to rate limit noisy log messages. It tracks how
+// recently a given log message has been emitted so that it can determine
+// whether it's worth logging again.
+type EveryN struct {
+	util.EveryN
+}
+
+// Every is a convenience constructor for an EveryN object that allows a log
+// message every n duration.
+func Every(n time.Duration) EveryN {
+	return EveryN{EveryN: util.Every(n)}
+}
+
+// ShouldLog returns whether it's been more than N time since the last event.
+func (e *EveryN) ShouldLog() bool {
+	return e.ShouldProcess(timeutil.Now())
 }
