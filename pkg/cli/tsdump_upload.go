@@ -50,7 +50,9 @@ var (
 		"us1-fed": "api.ddog-gov.com",
 	}
 
-	targetURLFormat = "https://%s/api/v2/series"
+	targetURLFormat           = "https://%s/api/v2/series"
+	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/bif-kwe-gx2/self-hosted-db-console-tsdump?" +
+		"tpl_var_cluster=%s&tpl_var_upload_id=%s&from_ts=%d&to_ts=%d"
 )
 
 // DatadogPoint is a single metric point in Datadog format
@@ -210,10 +212,6 @@ func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
 
 	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
 
-	d.Do(func() {
-		fmt.Println("Upload ID:", d.uploadID)
-	})
-
 	for i := 0; i < len(data); i++ {
 		data[i].Tags = append(data[i].Tags, tags...)
 		data[i].Metric = d.namePrefix + data[i].Metric
@@ -336,6 +334,13 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 
 	wg.Wait()
+	toUnixTimestamp := timeutil.Now().UnixMilli()
+	//create timestamp for T-30 days.
+	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+	dashboardLink := fmt.Sprintf(datadogDashboardURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID, fromUnixTimestamp, toUnixTimestamp)
+
+	fmt.Println("upload id:", d.uploadID)
+	fmt.Printf("datadog dashboard link: %s\n", dashboardLink)
 	close(ch)
 	return nil
 }
