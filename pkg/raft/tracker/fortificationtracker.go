@@ -47,22 +47,22 @@ func MakeFortificationTracker(
 
 // FortificationEnabled returns whether the raft fortification protocol is
 // enabled or not.
-func (st *FortificationTracker) FortificationEnabled() bool {
-	return st.storeLiveness.SupportFromEnabled()
+func (ft *FortificationTracker) FortificationEnabled() bool {
+	return ft.storeLiveness.SupportFromEnabled()
 }
 
-// RecordFortification records that the node with the given id supported this
-// Raft instance until the supplied timestamp.
-func (st *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch) {
+// RecordFortification records fortification of the given peer for the supplied
+// epoch.
+func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch) {
 	// The supported epoch should never regress. Guard against out of order
 	// delivery of fortify responses by using max.
-	st.fortification[id] = max(st.fortification[id], epoch)
+	ft.fortification[id] = max(ft.fortification[id], epoch)
 }
 
 // Reset clears out any previously tracked fortification.
-func (st *FortificationTracker) Reset() {
-	clear(st.fortification)
-	// TODO(arul): when we introduce st.LeadSupportUntil we need to make sure it
+func (ft *FortificationTracker) Reset() {
+	clear(ft.fortification)
+	// TODO(arul): when we introduce ft.LeadSupportUntil we need to make sure it
 	// isn't reset here, because we don't want it to regress when a leader steps
 	// down.
 }
@@ -71,15 +71,15 @@ func (st *FortificationTracker) Reset() {
 // If the follower's store doesn't support the leader's store in the store
 // liveness fabric, then both isSupported and isFortified will be false.
 // If isFortified is true, it implies that isSupported is also true.
-func (st *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, isSupported bool) {
-	supportEpoch, curExp := st.storeLiveness.SupportFrom(id)
-	if st.storeLiveness.SupportExpired(curExp) {
+func (ft *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, isSupported bool) {
+	supportEpoch, curExp := ft.storeLiveness.SupportFrom(id)
+	if ft.storeLiveness.SupportExpired(curExp) {
 		return false, false
 	}
 
 	// At this point we know that the follower's store is providing support
 	// at the store liveness fabric.
-	fortificationEpoch, exist := st.fortification[id]
+	fortificationEpoch, exist := ft.fortification[id]
 	if !exist {
 		// We don't know that the follower is fortified.
 		return false, true
@@ -96,12 +96,12 @@ func (st *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, i
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // fortification until based on the fortification being tracked for it by its
 // peers.
-func (st *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
+func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
-	for id, supportEpoch := range st.fortification {
-		curEpoch, curExp := st.storeLiveness.SupportFrom(id)
+	for id, supportEpoch := range ft.fortification {
+		curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
 		// NB: We can't assert that supportEpoch <= curEpoch because there may be a
 		// race between a successful MsgFortifyLeaderResp and the store liveness
 		// heartbeat response that lets the leader know the follower's store is
@@ -111,28 +111,28 @@ func (st *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 			supportExpMap[id] = curExp
 		}
 	}
-	return st.config.Voters.LeadSupportExpiration(supportExpMap)
+	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or
 // not.
-func (st *FortificationTracker) QuorumActive() bool {
-	return !st.storeLiveness.SupportExpired(st.LeadSupportUntil())
+func (ft *FortificationTracker) QuorumActive() bool {
+	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
 }
 
-func (st *FortificationTracker) String() string {
-	if len(st.fortification) == 0 {
+func (ft *FortificationTracker) String() string {
+	if len(ft.fortification) == 0 {
 		return "empty"
 	}
 	// Print the map in sorted order as we assert on its output in tests.
-	ids := make([]pb.PeerID, 0, len(st.fortification))
-	for id := range st.fortification {
+	ids := make([]pb.PeerID, 0, len(ft.fortification))
+	for id := range ft.fortification {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 	var buf strings.Builder
 	for _, id := range ids {
-		fmt.Fprintf(&buf, "%d : %d\n", id, st.fortification[id])
+		fmt.Fprintf(&buf, "%d : %d\n", id, ft.fortification[id])
 	}
 	return buf.String()
 }
