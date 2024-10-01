@@ -122,12 +122,12 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2.LogTracker).errorf": true,
 
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Debugf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Infof":    true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Warningf": true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Errorf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Fatalf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Panicf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Debugf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Infof":    true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Warningf": true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Errorf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Fatalf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Panicf":   true,
 
 	"(google.golang.org/grpc/grpclog.Logger).Infof":    true,
 	"(google.golang.org/grpc/grpclog.Logger).Warningf": true,

@@ -20,6 +20,7 @@ package raft
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
@@ -42,7 +43,7 @@ type LogSnapshot struct {
 	// unstable contains the unstable log entries.
 	unstable logSlice
 	// logger gives access to logging errors.
-	logger Logger
+	logger raftlogger.Logger
 }
 
 type raftLog struct {
@@ -71,7 +72,7 @@ type raftLog struct {
 	// Invariant: applied <= committed
 	applied uint64
 
-	logger Logger
+	logger raftlogger.Logger
 
 	// maxApplyingEntsSize limits the outstanding byte size of the messages
 	// returned from calls to nextCommittedEnts that have not been acknowledged
@@ -89,14 +90,14 @@ type raftLog struct {
 // newLog returns log using the given storage and default options. It
 // recovers the log to the state that it just commits and applies the
 // latest snapshot.
-func newLog(storage Storage, logger Logger) *raftLog {
+func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
 	return newLogWithSize(storage, logger, noLimit)
 }
 
 // newLogWithSize returns a log using the given storage and max
 // message size.
 func newLogWithSize(
-	storage Storage, logger Logger, maxApplyingEntsSize entryEncodingSize,
+	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
 ) *raftLog {
 	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
