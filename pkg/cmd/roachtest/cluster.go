@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"math/rand"
 	"net"
 	"net/url"
@@ -52,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -979,7 +979,7 @@ func (f *clusterFactory) newCluster(
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", genName+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
-			log.Fatalf(ctx, "%v", err)
+			log.Fatalf("%v", err)
 		}
 
 		c := &clusterImpl{
