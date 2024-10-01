@@ -81,10 +81,10 @@ SELECT _, _ AS _, _._ FROM _ AS _, _ AS _, _ AS _ ORDER BY _, _ -- identifiers r
 parse
 SELECT index::index, index->'index', EXTRACT(seconds FROM index)
 ----
-SELECT index::index, index->'index', extract('seconds', index) -- normalized!
-SELECT ((index)::index), ((index)->('index')), (extract(('seconds'), (index))) -- fully parenthesized
-SELECT index::index, index->'_', extract('_', index) -- literals removed
-SELECT _::_, _->'index', extract('seconds', _) -- identifiers removed
+SELECT index::index, index->'index', "extract"('seconds', index) -- normalized!
+SELECT ((index)::index), ((index)->('index')), ("extract"(('seconds'), (index))) -- fully parenthesized
+SELECT index::index, index->'_', "extract"('_', index) -- literals removed
+SELECT _::_, _->'index', _('seconds', _) -- identifiers removed
 
 # The following exercises ", index(" in a scalar position. This requires
 # special handling in func_expr.

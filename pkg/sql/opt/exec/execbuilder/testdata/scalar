@@ -987,7 +987,7 @@ vectorized: true
 ·
 • render
 │ columns: ("least")
-│ render least: least(NULL, 3, 6, a)
+│ render least: "least"(NULL, 3, 6, a)
 │
 └── • scan
       columns: (a)

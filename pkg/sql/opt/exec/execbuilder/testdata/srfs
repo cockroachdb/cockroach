@@ -164,7 +164,7 @@ vectorized: true
     └── • project set
         │ columns: (x, y, x, z, x, n)
         │ estimated row count: 3,267 (missing stats)
-        │ render 0: information_schema._pg_expandarray(ARRAY[x, y, z])
+        │ render 0: "information_schema._pg_expandarray"(ARRAY[x, y, z])
         │
         └── • merge join (inner)
             │ columns: (x, y, x, z)

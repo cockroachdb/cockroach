@@ -247,7 +247,7 @@ SET tracing = off; SET tracing = off;
 # start tracing, then might get an error, then want to stop tracing.
 subtest aborted_txn
 
-query error pq: foo
+query error pq: .* foo
 BEGIN; SELECT crdb_internal.force_error('', 'foo')
 
 statement ok
