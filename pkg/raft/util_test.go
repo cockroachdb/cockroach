@@ -99,6 +99,8 @@ func TestIsLocalMsg(t *testing.T) {
 		{pb.MsgForgetLeader, false},
 		{pb.MsgFortifyLeader, false},
 		{pb.MsgFortifyLeaderResp, false},
+		{pb.MsgDeFortifyLeader, false},
+		{pb.MsgDeFortifyLeaderResp, false},
 	}
 
 	for _, tt := range tests {
@@ -137,6 +139,8 @@ func TestIsResponseMsg(t *testing.T) {
 		{pb.MsgForgetLeader, false},
 		{pb.MsgFortifyLeader, false},
 		{pb.MsgFortifyLeaderResp, true},
+		{pb.MsgDeFortifyLeader, false},
+		{pb.MsgDeFortifyLeaderResp, true},
 	}
 
 	for i, tt := range tests {
@@ -149,8 +153,8 @@ func TestIsResponseMsg(t *testing.T) {
 
 func TestMsgFromLeader(t *testing.T) {
 	tests := []struct {
-		msgt       pb.MessageType
-		isResponse bool
+		msgt            pb.MessageType
+		isMsgFromLeader bool
 	}{
 		{pb.MsgHup, false},
 		{pb.MsgBeat, false},
@@ -176,12 +180,15 @@ func TestMsgFromLeader(t *testing.T) {
 		{pb.MsgForgetLeader, false},
 		{pb.MsgFortifyLeader, true},
 		{pb.MsgFortifyLeaderResp, false},
+		// NB: a leader only sends de-fortification messages once it's stepped down
+		{pb.MsgDeFortifyLeader, false},
+		{pb.MsgFortifyLeaderResp, false},
 	}
 
 	for i, tt := range tests {
 		got := IsMsgFromLeader(tt.msgt)
-		if got != tt.isResponse {
-			t.Errorf("#%d: got %v, want %v", i, got, tt.isResponse)
+		if got != tt.isMsgFromLeader {
+			t.Errorf("#%d: got %v, want %v", i, got, tt.isMsgFromLeader)
 		}
 	}
 }

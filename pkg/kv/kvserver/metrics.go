@@ -1624,6 +1624,18 @@ cache will already have moved on to newer entries.
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftRcvdDeFortifyLeader = metric.Metadata{
+		Name:        "raft.rcvd.defortifyleader",
+		Help:        "Number of MsgDeFortifyLeader messages received by this store",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftRcvdDeFortifyLeaderResp = metric.Metadata{
+		Name:        "raft.rcvd.defortifyleaderresp",
+		Help:        "Number of MsgDeFortifyLeaderResp messages received by this store",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftRcvdDropped = metric.Metadata{
 		Name:        "raft.rcvd.dropped",
 		Help:        "Number of incoming Raft messages dropped (due to queue length or size)",
@@ -3542,20 +3554,22 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{
-			raftpb.MsgProp:              metric.NewCounter(metaRaftRcvdProp),
-			raftpb.MsgApp:               metric.NewCounter(metaRaftRcvdApp),
-			raftpb.MsgAppResp:           metric.NewCounter(metaRaftRcvdAppResp),
-			raftpb.MsgVote:              metric.NewCounter(metaRaftRcvdVote),
-			raftpb.MsgVoteResp:          metric.NewCounter(metaRaftRcvdVoteResp),
-			raftpb.MsgPreVote:           metric.NewCounter(metaRaftRcvdPreVote),
-			raftpb.MsgPreVoteResp:       metric.NewCounter(metaRaftRcvdPreVoteResp),
-			raftpb.MsgSnap:              metric.NewCounter(metaRaftRcvdSnap),
-			raftpb.MsgHeartbeat:         metric.NewCounter(metaRaftRcvdHeartbeat),
-			raftpb.MsgHeartbeatResp:     metric.NewCounter(metaRaftRcvdHeartbeatResp),
-			raftpb.MsgTransferLeader:    metric.NewCounter(metaRaftRcvdTransferLeader),
-			raftpb.MsgTimeoutNow:        metric.NewCounter(metaRaftRcvdTimeoutNow),
-			raftpb.MsgFortifyLeader:     metric.NewCounter(metaRaftRcvdFortifyLeader),
-			raftpb.MsgFortifyLeaderResp: metric.NewCounter(metaRaftRcvdFortifyLeaderResp),
+			raftpb.MsgProp:                metric.NewCounter(metaRaftRcvdProp),
+			raftpb.MsgApp:                 metric.NewCounter(metaRaftRcvdApp),
+			raftpb.MsgAppResp:             metric.NewCounter(metaRaftRcvdAppResp),
+			raftpb.MsgVote:                metric.NewCounter(metaRaftRcvdVote),
+			raftpb.MsgVoteResp:            metric.NewCounter(metaRaftRcvdVoteResp),
+			raftpb.MsgPreVote:             metric.NewCounter(metaRaftRcvdPreVote),
+			raftpb.MsgPreVoteResp:         metric.NewCounter(metaRaftRcvdPreVoteResp),
+			raftpb.MsgSnap:                metric.NewCounter(metaRaftRcvdSnap),
+			raftpb.MsgHeartbeat:           metric.NewCounter(metaRaftRcvdHeartbeat),
+			raftpb.MsgHeartbeatResp:       metric.NewCounter(metaRaftRcvdHeartbeatResp),
+			raftpb.MsgTransferLeader:      metric.NewCounter(metaRaftRcvdTransferLeader),
+			raftpb.MsgTimeoutNow:          metric.NewCounter(metaRaftRcvdTimeoutNow),
+			raftpb.MsgFortifyLeader:       metric.NewCounter(metaRaftRcvdFortifyLeader),
+			raftpb.MsgFortifyLeaderResp:   metric.NewCounter(metaRaftRcvdFortifyLeaderResp),
+			raftpb.MsgDeFortifyLeader:     metric.NewCounter(metaRaftRcvdDeFortifyLeader),
+			raftpb.MsgDeFortifyLeaderResp: metric.NewCounter(metaRaftRcvdDeFortifyLeaderResp),
 		},
 		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
 		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),

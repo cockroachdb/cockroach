@@ -352,8 +352,8 @@ type raft struct {
 	// Messages in this list may target other nodes or may target this node.
 	//
 	// Messages in this list have the type MsgAppResp, MsgVoteResp,
-	// MsgPreVoteResp, or MsgFortifyLeaderResp. See the comment in raft.send for
-	// details.
+	// MsgPreVoteResp, MsgFortifyLeaderResp, or MsgDeFortifyLeaderResp. See the
+	// comment in raft.send for details.
 	msgsAfterAppend []pb.Message
 
 	// the leader id
@@ -465,7 +465,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
-	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
+	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness, r.logger)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -529,7 +529,7 @@ func (r *raft) send(m pb.Message) {
 		m.From = r.id
 	}
 	switch m.Type {
-	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp:
+	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp, pb.MsgDeFortifyLeader:
 		if m.Term == 0 {
 			// All {pre-,}campaign messages need to have the term set when
 			// sending.
@@ -543,6 +543,10 @@ func (r *raft) send(m pb.Message) {
 			// - MsgPreVoteResp: m.Term is the term received in the original
 			//   MsgPreVote if the pre-vote was granted, non-zero for the
 			//   same reasons MsgPreVote is
+			//
+			// MsgDeFortifyLeader needs to have the term set when sending as well; it
+			// should correspond to the term leadership term that's being
+			// de-fortified.
 			r.logger.Panicf("term should be set when sending %s", m.Type)
 		}
 	case pb.MsgApp:
@@ -561,7 +565,8 @@ func (r *raft) send(m pb.Message) {
 	}
 
 	switch m.Type {
-	case pb.MsgAppResp, pb.MsgVoteResp, pb.MsgPreVoteResp, pb.MsgFortifyLeaderResp:
+	case pb.MsgAppResp, pb.MsgVoteResp, pb.MsgPreVoteResp, pb.MsgFortifyLeaderResp,
+		pb.MsgDeFortifyLeaderResp:
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
 		// writes and election votes) have been durably synced to the local
@@ -575,7 +580,9 @@ func (r *raft) send(m pb.Message) {
 		// acknowledge a log append to the leader before that entry has been synced
 		// to stable storage locally. Similarly, it would also be incorrect to
 		// promise fortification to a leader without durably persisting the
-		// leader's epoch being supported.
+		// leader's epoch being supported. The same applies to de-fortifying a
+		// leader as well, as once the leader has successfully de-fortified a
+		// follower, it will not try again.
 		//
 		// Per the Raft thesis, section 3.8 Persisted state and server restarts:
 		//
@@ -831,6 +838,42 @@ func (r *raft) sendFortify(to pb.PeerID) {
 	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
 }
 
+// maybeSendDeFortify sends a de-fortification RPC to the given peer if, as per
+// the leader, the peer is currently fortified.
+func (r *raft) maybeSendDeFortify(to pb.PeerID) {
+	if r.fortificationTracker.AlreadyDeFortified(to) {
+		r.logger.Debugf(
+			"skipping sending de-fortification message to %d because it has been de-fortified already",
+			to,
+		)
+		return // no need to de-fortify again
+	}
+	r.sendDeFortify(to)
+}
+
+// sendDeFortify sends a de-fortification RPC to the given peer.
+func (r *raft) sendDeFortify(to pb.PeerID) {
+	if to == r.id {
+		// We handle the case where the leader is trying to de-fortify itself
+		// specially. Doing so avoids a self-addressed message.
+		epoch, _ := r.storeLiveness.SupportFor(r.lead)
+		// TODO(arul): Same comment as below. This r.Term is incorrect.
+		r.deFortify(r.id, r.Term)
+		// NB: Technically speaking, we do not need to durably update LeadEpoch. We
+		// could instead record de-fortification directly on to the fortification
+		// tracker which is held in memory, as a leader restart that loses this
+		// in-memory state will come with leader come with the leader restarting
+		// with a higher epoch as well (i.e. the previous epoch will have expired).
+		// However, despite this, we still explicitly persist de-fortification on
+		// the leader instead of handling everything in memory.
+		r.send(pb.Message{To: r.id, Type: pb.MsgDeFortifyLeaderResp, LeadEpoch: epoch})
+		return
+	}
+	// TODO(arul): instead of the current term, we need to freeze it when the
+	// leader steps down and copy that over here instead.
+	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.Term})
+}
+
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
 // according to the progress recorded in r.trk.
 func (r *raft) bcastAppend() {
@@ -942,6 +985,12 @@ func (r *raft) reset(term uint64) {
 		r.Vote = None
 		r.lead = None
 		r.leadEpoch = 0
+		// TODO(arul): We'll only want to reset the fortification tracker when we're
+		// stepping up to become the leader again. This allows us to de-fortify any
+		// followers that may still be providing us support once we've stepped down,
+		// as the state of who to de-fortify, when to de-fortify, and which term to
+		// de-fortify for will be stored in the fortificationTracker.
+		r.fortificationTracker.Reset()
 	}
 
 	r.electionElapsed = 0
@@ -951,7 +1000,6 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.electionTracker.ResetVotes()
-	r.fortificationTracker.Reset()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:       0,
@@ -1379,10 +1427,24 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if IsMsgFromLeader(m.Type) {
+			if IsMsgFromLeader(m.Type) ||
+				m.Type == pb.MsgDeFortifyLeader {
 				// We've just received a message from the new leader which was elected
 				// at a higher term. The old leader is no longer fortified, so it's
-				// safe to defortify at this point.
+				// safe to de-fortify at this point.
+				//
+				// Similarly, if we receive a MsgDeFortifyLeader for a higher term than
+				// what we're aware of[1], then a new leader must have been elected that
+				// has since stepped down. The old leader must not be fortified in this
+				// case as well, so we should de-fortify.
+				//
+				// [1] A leader must broadcast MsgDeFortifyLeader to all peers when it
+				// steps down, not just those that it thinks were fortifying it (read:
+				// it was tracking in its FortificationTracker). That's because the
+				// leader can't distinguish between followers that weren't actually
+				// fortifying it and followers that were fortifying it but the leader
+				// just hadn't heard that they were yet. It thus needs to be pessimistic
+				// and assume the latter.
 				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
 			} else {
@@ -1423,6 +1485,16 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
+		} else if m.Type == pb.MsgDeFortifyLeader {
+			// We've received a MsgDeFortifyLeader from a leader at a lower term. We
+			// must have de-fortified this old leader when we learned of the new one,
+			// so the de-fortification by itself is a no-op. However, the old leader
+			// doesn't know this yet -- acknowledge its de-fortification request so
+			// that it stops bothering us.
+			r.logger.Infof(
+				"%x received %s from [%d, term %d]; de-fortification is a no-op; current term %d",
+				r.id, pb.MsgDeFortifyLeader, m.From, m.Term, r.Term)
+			r.send(pb.Message{To: m.From, Type: pb.MsgDeFortifyLeaderResp, LeadEpoch: 0})
 		} else {
 			// ignore other cases
 			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
@@ -1925,6 +1997,18 @@ func stepCandidate(r *raft, m pb.Message) error {
 	case pb.MsgFortifyLeader:
 		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
 		r.handleFortify(m)
+	case pb.MsgDeFortifyLeader:
+		// Candidates that receive a MsgDeFortifyLeader should already be
+		// de-fortified[1]. As such, the de-fortification attempt should be a no-op,
+		// but we should still let the leader know we're de-fortified (lest it
+		// needlessly keeps sending us MsgDeFortifyLeader messages).
+		//
+		// [1] Presumably, their support for the leader's epoch expired, which is why
+		// they were able to become a candidate in the first place. Note that they
+		// must have been a fortified follower at some point; otherwise, the leader
+		// wouldn't attempt to de-fortify them in the first place.
+		assertTrue(r.leadEpoch == 0, "candidates shouldn't be fortified")
+		r.handleDeFortify(m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
@@ -1944,6 +2028,11 @@ func stepCandidate(r *raft, m pb.Message) error {
 		}
 	case pb.MsgTimeoutNow:
 		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
+	case pb.MsgDeFortifyLeaderResp:
+		// NB: A leader that has stepped down, and is actively de-fortifying
+		// followers from its previous leadership term, may still become a
+		// candidate.
+		r.handleDeFortifyResp(m)
 	}
 	return nil
 }
@@ -1984,6 +2073,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.electionElapsed = 0
 		r.lead = m.From
 		r.handleFortify(m)
+	case pb.MsgDeFortifyLeader:
+		r.handleDeFortify(m)
 	case pb.MsgTransferLeader:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
@@ -2031,6 +2122,10 @@ func stepFollower(r *raft, m pb.Message) error {
 		// de-fortify without bumping the term.
 		r.leadEpoch = 0
 		r.hup(campaignTransfer)
+	case pb.MsgDeFortifyLeaderResp:
+		// NB: A leader only sends out de-fortification requests once it has stepped
+		// down.
+		r.handleDeFortifyResp(m)
 	}
 	return nil
 }
@@ -2217,12 +2312,38 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
 }
 
+func (r *raft) handleDeFortify(m pb.Message) {
+	assertTrue(r.state == StateFollower, "leaders should locally de-fortify without sending a message")
+	assertTrue(r.lead == m.From, "only the leader should send de-fortification requests")
+
+	leadEpoch := r.leadEpoch
+	r.deFortify(m.From, m.Term)
+	r.send(pb.Message{
+		To:        m.From,
+		Type:      pb.MsgDeFortifyLeaderResp,
+		LeadEpoch: leadEpoch,
+	})
+}
+
+func (r *raft) handleDeFortifyResp(m pb.Message) {
+	assertTrue(r.state != StateLeader, "a leader should not send out MsgDefortify until it has stepped down")
+
+	r.fortificationTracker.RecordDeFortification(m.From, m.LeadEpoch)
+}
+
 // deFortify (conceptually) revokes previously provided fortification to a
 // leader.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
-	assertTrue(term > r.Term ||
-		(term == r.Term && from == r.lead) ||
-		(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
+	assertTrue(
+		// We're not currently de-fortified, so de-fortification is a no-op...
+		r.leadEpoch == 0 ||
+			// ...OR we were fortified at a lower term that has since advanced...
+			term > r.Term ||
+			// ...OR the current term is being explicitly de-fortified by the leader...
+			(term == r.Term && from == r.lead) ||
+			// ...OR we've unilaterally decided to de-fortify because we are no longer
+			// supporting the fortified leader (in StoreLiveness).
+			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
 		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
 	r.leadEpoch = 0
@@ -2482,14 +2603,6 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	}
 }
 
-func (r *raft) testingStepDown() error {
-	if r.lead != r.id {
-		return errors.New("cannot step down if not the leader")
-	}
-	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
-	return nil
-}
-
 // markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
 // mark them as recently active if they are supporting the leader.
 func (r *raft) markFortifyingFollowersAsRecentlyActive() {
@@ -2515,4 +2628,17 @@ func (r *raft) markFortifyingFollowersAsRecentlyActive() {
 func (r *raft) advanceCommitViaMsgAppOnly() bool {
 	return r.crdbVersion.IsActive(context.Background(),
 		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps)
+}
+
+func (r *raft) testingStepDown() error {
+	if r.lead != r.id {
+		return errors.New("cannot step down if not the leader")
+	}
+	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	return nil
+}
+
+func (r *raft) testingMaybeSendDeFortify(to pb.PeerID) error {
+	r.maybeSendDeFortify(to)
+	return nil
 }

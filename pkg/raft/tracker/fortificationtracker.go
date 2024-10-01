@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/logger"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -31,16 +32,29 @@ type FortificationTracker struct {
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
 	fortification map[pb.PeerID]pb.Epoch
+
+	// deFortification contains a map of nodes that are known to have been
+	// successfully de-fortified.
+	//
+	// The presence of a node in this map does not mean the node was definitely
+	// fortified at some point. It simply means it is definitely no longer
+	// fortified, and therefore we no longer need to send it de-fortification
+	// requests.
+	deFortification map[pb.PeerID]struct{}
+
+	logger logger.Logger
 }
 
 // MakeFortificationTracker initializes a FortificationTracker.
 func MakeFortificationTracker(
-	config *quorum.Config, storeLiveness raftstoreliveness.StoreLiveness,
+	config *quorum.Config, storeLiveness raftstoreliveness.StoreLiveness, logger logger.Logger,
 ) FortificationTracker {
 	st := FortificationTracker{
-		config:        config,
-		storeLiveness: storeLiveness,
-		fortification: map[pb.PeerID]pb.Epoch{},
+		config:          config,
+		storeLiveness:   storeLiveness,
+		fortification:   map[pb.PeerID]pb.Epoch{},
+		deFortification: map[pb.PeerID]struct{}{},
+		logger:          logger,
 	}
 	return st
 }
@@ -57,6 +71,41 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 	// The supported epoch should never regress. Guard against out of order
 	// delivery of fortify responses by using max.
 	ft.fortification[id] = max(ft.fortification[id], epoch)
+}
+
+// AlreadyDeFortified returns whether the supplied peer is known to have been
+// de-fortified already.
+func (ft *FortificationTracker) AlreadyDeFortified(id pb.PeerID) bool {
+	_, isDefortified := ft.deFortification[id]
+	return isDefortified
+}
+
+// RecordDeFortification records that the peer with the supplied id has been
+// successfully de-fortified.
+func (ft *FortificationTracker) RecordDeFortification(id pb.PeerID, epoch pb.Epoch) {
+	ft.deFortification[id] = struct{}{}
+
+	// Perform some sanity checks before returning.
+	curEpoch, found := ft.fortification[id]
+	if !found {
+		ft.logger.Debugf("recorded de-fortification for %d that we weren't tracking fortification for", id)
+		return
+	}
+	// NB: The follower may have been supporting the epoch we're tracking here, or
+	// a higher epoch that we never heard about. However, if the follower tells us
+	// it was supporting a lower epoch than what we've been tracking here, we've
+	// got a bug.
+	//
+	// TODO(arul): I think we'll need to make an exception of epoch == 0, where the
+	// follower independently de-fortified because it was safe to do so. Make sure
+	// something breaks before adding that conditional.
+	if epoch < curEpoch {
+		panic("leader tracking an epoch that is greater than what the follower says it was supporting")
+	}
+	// Clear out the fortification epoch we were tracking for this peer. While not
+	// necessary, doing so prevents misuse in case someone accesses the
+	// fortification state in the future.
+	delete(ft.fortification, id)
 }
 
 // Reset clears out any previously tracked fortification.

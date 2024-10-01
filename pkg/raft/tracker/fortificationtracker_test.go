@@ -13,6 +13,7 @@ package tracker
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/logger"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -42,7 +43,7 @@ func TestFortificationEnabled(t *testing.T) {
 
 	for _, tc := range testCases {
 		cfg := quorum.MakeEmptyConfig()
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness, logger.DiscardLogger)
 		require.Equal(t, tc.expectEnabled, fortificationTracker.FortificationEnabled())
 	}
 }
@@ -161,7 +162,7 @@ func TestLeadSupportUntil(t *testing.T) {
 		for _, id := range tc.ids {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness, logger.DiscardLogger)
 
 		tc.setup(&fortificationTracker)
 		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil())
@@ -255,6 +256,32 @@ func TestIsFortifiedBy(t *testing.T) {
 			expSupported: true,
 			expFortified: true,
 		},
+		{
+			ids:           []pb.PeerID{1},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(fortificationTracker *FortificationTracker) {
+				// Fortification followed by de-fortification.
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordDeFortification(1, 10)
+			},
+			expSupported: true,
+			expFortified: false,
+		},
+		{
+			ids:           []pb.PeerID{1},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(fortificationTracker *FortificationTracker) {
+				// Fortification followed by de-fortification.
+				fortificationTracker.RecordFortification(1, 10)
+				// De-fortify a higher epoch. This tests the scenario where we tried to
+				// (and successfully) re-fortified a follower at a higher epoch, but we
+				// never learned about this. Maybe we then hear about this when trying
+				// to de-fortify.
+				fortificationTracker.RecordDeFortification(1, 11)
+			},
+			expSupported: true,
+			expFortified: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -262,7 +289,7 @@ func TestIsFortifiedBy(t *testing.T) {
 		for _, id := range tc.ids {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness, logger.DiscardLogger)
 
 		tc.setup(&fortificationTracker)
 		isFortified, isSupported := fortificationTracker.IsFortifiedBy(1)
@@ -395,7 +422,7 @@ func TestQuorumActive(t *testing.T) {
 		for _, id := range []pb.PeerID{1, 2, 3} {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, mockLiveness)
+		fortificationTracker := MakeFortificationTracker(&cfg, mockLiveness, logger.DiscardLogger)
 
 		tc.setup(&fortificationTracker)
 		require.Equal(t, tc.expQuorumActive, fortificationTracker.QuorumActive(), "#%d %s %s",

@@ -167,6 +167,23 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// step-down 1
 		err = env.handleStepDown(t, d)
+	case "maybe-send-de-fortify":
+		// Testing hook into (*raft).maybeSendDeFortify. Takes 2 nodes -- the
+		// leader, which will be de-fortified, and the follower that's going to
+		// de-fortify.
+		//
+		// maybe-send-de-fortify lead_id peer_id
+		// Arguments are:
+		//    lead_id - the node id of the leader.
+		//    peer_id - the node id of the follower that'll de-fortify.
+		//
+		// Example:
+		//
+		// maybe-de-fortify 1 2
+		//
+		// Explanation:
+		// 1 is no longer fortified by 2 (assuming it previously was, otherwise it's
+		err = env.handleMaybeSendDeFortify(t, d)
 	case "propose":
 		// Propose an entry.
 		//

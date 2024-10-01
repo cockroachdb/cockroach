@@ -43,14 +43,15 @@ var isLocalMsg = [...]bool{
 }
 
 var isResponseMsg = [...]bool{
-	pb.MsgAppResp:           true,
-	pb.MsgVoteResp:          true,
-	pb.MsgHeartbeatResp:     true,
-	pb.MsgUnreachable:       true,
-	pb.MsgPreVoteResp:       true,
-	pb.MsgStorageAppendResp: true,
-	pb.MsgStorageApplyResp:  true,
-	pb.MsgFortifyLeaderResp: true,
+	pb.MsgAppResp:             true,
+	pb.MsgVoteResp:            true,
+	pb.MsgHeartbeatResp:       true,
+	pb.MsgUnreachable:         true,
+	pb.MsgPreVoteResp:         true,
+	pb.MsgStorageAppendResp:   true,
+	pb.MsgStorageApplyResp:    true,
+	pb.MsgFortifyLeaderResp:   true,
+	pb.MsgDeFortifyLeaderResp: true,
 }
 
 var isMsgFromLeader = [...]bool{
