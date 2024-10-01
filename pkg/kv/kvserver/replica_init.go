@@ -237,6 +237,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		RaftScheduler:          r.store.scheduler,
 		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
 		ACWorkQueue:            r.store.cfg.KVAdmissionController,
+		Scheduler:              (*racV2Scheduler)(r.store.scheduler),
 		Settings:               r.store.cfg.Settings,
 		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
 		RangeControllerFactory: r.store.kvflowRangeControllerFactory,

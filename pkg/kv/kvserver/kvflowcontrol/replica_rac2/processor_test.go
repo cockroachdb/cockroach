@@ -98,6 +98,10 @@ func (rs *testRaftScheduler) EnqueueRaftReady(id roachpb.RangeID) {
 	fmt.Fprintf(rs.b, " RaftScheduler.EnqueueRaftReady(rangeID=%s)\n", id)
 }
 
+func (rs *testRaftScheduler) ScheduleControllerEvent(id roachpb.RangeID) {
+	fmt.Fprintf(rs.b, " RaftScheduler.ScheduleControllerEvent(rangeID=%s)\n", id)
+}
+
 type testRaftNode struct {
 	b *strings.Builder
 	r *testReplica
@@ -315,6 +319,7 @@ func TestProcessorBasic(t *testing.T) {
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
+			Scheduler:              &sched,
 			RangeControllerFactory: &rcFactory,
 			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
