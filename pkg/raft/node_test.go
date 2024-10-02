@@ -587,52 +587,47 @@ func TestIsHardStateEqual(t *testing.T) {
 }
 
 func TestNodeProposeAddLearnerNode(t *testing.T) {
-	ticker := time.NewTicker(time.Millisecond * 100)
-	defer ticker.Stop()
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
-	go n.run()
-	n.Campaign(context.TODO())
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	applyConfChan := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			select {
-			case <-stop:
-				return
-			case <-ticker.C:
-				n.Tick()
-			case rd := <-n.Ready():
-				s.Append(rd.Entries)
-				t.Logf("raft: %v", rd.Entries)
-				for _, ent := range rd.Entries {
-					if ent.Type != raftpb.EntryConfChange {
-						continue
-					}
-					var cc raftpb.ConfChange
-					cc.Unmarshal(ent.Data)
-					state := n.ApplyConfChange(cc)
-					assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.NodeID && cc.NodeID == 2,
-						"apply conf change should return new added learner: %v", state.String())
-					assert.Len(t, state.Voters, 1,
-						"add learner should not change the nodes: %v", state.String())
+	require.NoError(t, rn.Campaign())
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-					t.Logf("apply raft conf %v changed to: %v", cc, state.String())
-					applyConfChan <- struct{}{}
-				}
-				n.Advance()
+	ready := func() (appliedConfChange bool) {
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
+		t.Logf("raft: %v", rd.Entries)
+		for _, ent := range rd.CommittedEntries {
+			if ent.Type != raftpb.EntryConfChange {
+				continue
+			}
+			var cc raftpb.ConfChange
+			require.NoError(t, cc.Unmarshal(ent.Data))
+			state := rn.ApplyConfChange(cc)
+			assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.NodeID && cc.NodeID == 2,
+				"apply conf change should return new added learner: %v", state.String())
+			assert.Len(t, state.Voters, 1,
+				"add learner should not change the nodes: %v", state.String())
+
+			t.Logf("apply raft conf %v changed to: %v", cc, state.String())
+			appliedConfChange = true
+		}
+		rn.Advance(rd)
+		return appliedConfChange
+	}
+	waitAppliedConfChange := func() bool {
+		for i := 0; i < 10; i++ {
+			if ready() {
+				return true
 			}
 		}
-	}()
+		return false
+	}
+
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddLearnerNode, NodeID: 2}
-	n.ProposeConfChange(context.TODO(), cc)
-	<-applyConfChan
-	close(stop)
-	<-done
-	n.Stop()
+	require.NoError(t, rn.ProposeConfChange(cc))
+	require.True(t, waitAppliedConfChange())
 }
 
 func TestAppendPagination(t *testing.T) {
