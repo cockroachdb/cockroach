@@ -68,19 +68,17 @@ index-join t
       ├── columns: k:1(int!null)
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
-      │    └── union spans: ["", ""]
+      │    └── union spans: ["", "\xff\xff")
       ├── stats: [rows=1020]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
-           │    └── spans: ["", ""]
+           │    └── spans: ["", "\xff\xff")
            ├── flags: force-index=a_idx
-           ├── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
-           │   histogram(5)=  0    10    0   990    0    10    0    10
-           │                <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
-           ├── key: (1)
-           └── fd: (1)-->(5)
+           └── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
+               histogram(5)=  0    10    0   990    0    10    0    10
+                            <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
 
 # An inverted index scan is preferred for a more selective filter.
 opt
