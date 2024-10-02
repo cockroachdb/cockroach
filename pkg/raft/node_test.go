@@ -315,33 +315,15 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 func TestBlockProposal(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
-	go n.run()
-	defer n.Stop()
 
-	errc := make(chan error, 1)
-	go func() {
-		errc <- n.Propose(context.TODO(), []byte("somedata"))
-	}()
+	require.ErrorIs(t, ErrProposalDropped, rn.Propose([]byte("somedata")))
 
-	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, rn.Campaign())
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	select {
-	case err := <-errc:
-		t.Errorf("err = %v, want blocking", err)
-	default:
-	}
-
-	n.Campaign(context.TODO())
-	rd := <-n.Ready()
-	s.Append(rd.Entries)
-	n.Advance()
-	select {
-	case err := <-errc:
-		assert.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Errorf("blocking proposal, want unblocking")
-	}
+	require.NoError(t, rn.Propose([]byte("somedata")))
 }
 
 func TestNodeProposeWaitDropped(t *testing.T) {
