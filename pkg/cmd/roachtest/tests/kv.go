@@ -525,7 +525,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// #131569, disable this once the issue is resolved.
 			settings := install.MakeClusterSettings()
 			settings.ClusterSettings["server.cpu_profile.duration"] = "5s"
-			settings.ClusterSettings["server.cpu_profile.interval"] = "0s"
+			settings.ClusterSettings["server.cpu_profile.interval"] = "1s"
 			settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "15"
 			settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = fmt.Sprintf("%d", 256<<20 /* 256MB */)
 			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
