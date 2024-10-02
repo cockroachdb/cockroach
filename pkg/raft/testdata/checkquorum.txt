@@ -77,47 +77,27 @@ stabilize
   State:StateFollower
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgHeartbeat Term:1 Log:0/0
   1->2 MsgFortifyLeader Term:1 Log:0/0
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=false:
@@ -127,20 +107,10 @@ stabilize
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
@@ -154,21 +124,6 @@ stabilize
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  2->1 MsgAppResp Term:2 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   INFO 1 [term: 2] ignored a MsgFortifyLeaderResp message with lower term from 3 [term: 1]
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
