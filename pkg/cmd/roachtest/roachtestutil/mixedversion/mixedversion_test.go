@@ -187,6 +187,16 @@ func Test_assertValidTest(t *testing.T) {
 		fatalErr.Error(),
 	)
 
+	// separate-process deployments requires cluster validation
+	mvt = newTest(NeverUseFixtures, EnabledDeploymentModes(allDeploymentModes...))
+	mvt.crdbNodes = option.NodeListOption{1}
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: separate-process deployments require cluster with at least 3 nodes`,
+		fatalErr.Error(),
+	)
+
 	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)

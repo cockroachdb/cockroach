@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -75,13 +76,8 @@ func (c tenantSystemSchemaComparison) Diff() error {
 	return nil
 }
 
-// This test tests that, after bootstrapping a cluster from a previous
-// release's binary and upgrading it to the latest version, the `system`
-// database "contains the expected tables".
-// Specifically, we do the check with `USE system; SHOW CREATE ALL TABLES;`
-// and assert that the output matches the expected output content.
-func runValidateSystemSchemaAfterVersionUpgrade(
-	ctx context.Context, t test.Test, c cluster.Cluster,
+func validateSystemSchemaAfterUpgradeTest(
+	ctx context.Context, t test.Test, c cluster.Cluster, opts ...mixedversion.CustomOption,
 ) {
 	// Obtain system table definitions with `SHOW CREATE ALL TABLES` in the SYSTEM db.
 	obtainSystemSchema := func(
@@ -114,28 +110,6 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	systemComparison := newTenantSystemSchemaComparison(install.SystemInterfaceName)
 	var tenantComparison *tenantSystemSchemaComparison
 	var deploymentMode mixedversion.DeploymentMode
-
-	opts := []mixedversion.CustomOption{
-		// We limit the number of upgrades since the test is not expected to work
-		// on versions older than 22.2.
-		mixedversion.MaxUpgrades(3),
-		// Fixtures are generated on a version that's too old for this test.
-		mixedversion.NeverUseFixtures,
-	}
-
-	if c.IsLocal() {
-		opts = append(opts,
-			// Separate-process deployments are still in its early
-			// days. Disable it in local clusters (such as in CI) to avoid
-			// disruptions.
-			//
-			// TODO(testeng): enable separate-process deployments once it is
-			// considered stable enough.
-			mixedversion.EnabledDeploymentModes(
-				mixedversion.SystemOnlyDeployment,
-				mixedversion.SharedProcessDeployment,
-			))
-	}
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
 	mvt.AfterUpgradeFinalized(
@@ -205,4 +179,58 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 
 		t.L().Printf("validation succeeded for non-system tenant")
 	}
+}
+
+// This test tests that, after bootstrapping a cluster from a previous
+// release's binary and upgrading it to the latest version, the `system`
+// database "contains the expected tables".
+// Specifically, we do the check with `USE system; SHOW CREATE ALL TABLES;`
+// and assert that the output matches the expected output content.
+func runValidateSystemSchemaAfterVersionUpgrade(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) {
+	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
+		// We limit the number of upgrades since the test is not expected to work
+		// on versions older than 22.2.
+		mixedversion.MaxUpgrades(3),
+		// Fixtures are generated on a version that's too old for this test.
+		mixedversion.NeverUseFixtures,
+		// Separate-process deployments can't run in 1-node clusters since
+		// the tenant process can die when the storage cluster is
+		// restarting. See `runValidateSystemSchemaAfterVersionUpgradeSeparateProcess`
+		// for a variant of this test for separate-process deployments.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
+	)
+}
+
+// Like `runValidateSystemSchemaAfterVersionUpgrade`, but for
+// separate-process deployments.
+func runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) {
+	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
+		// We limit the number of upgrades since the test is not expected to work
+		// on versions older than 22.2.
+		mixedversion.MaxUpgrades(3),
+		// Fixtures are generated on a version that's too old for this test.
+		mixedversion.NeverUseFixtures,
+		mixedversion.EnabledDeploymentModes(mixedversion.SeparateProcessDeployment),
+	)
+}
+
+func registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "validate-system-schema-after-version-upgrade/separate-process",
+		Owner:            registry.OwnerSQLFoundations,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Cluster:          r.MakeClusterSpec(3),
+		RequiresLicense:  false,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(ctx, t, c)
+		},
+	})
 }
