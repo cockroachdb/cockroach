@@ -218,25 +218,31 @@ const (
 // any mixedversion test plan.
 var planMutators = []mutator{
 	preserveDowngradeOptionRandomizerMutator{},
-	newClusterSettingMutator(
-		"kv.expiration_leases_only.enabled",
-		[]bool{true, false},
-		clusterSettingMinimumVersion("v23.1.0"),
-	),
+	// v23.2 cluster settings
 	newClusterSettingMutator(
 		"storage.ingest_split.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.2.0"),
+		clusterSettingSystemOnly,
 	),
 	newClusterSettingMutator(
 		"kv.snapshot_receiver.excise.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.2.0"),
+		clusterSettingSystemOnly,
 	),
+	// v24.1 cluster settings
 	newClusterSettingMutator(
 		"storage.sstable.compression_algorithm",
 		[]string{"snappy", "zstd"},
-		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
+		clusterSettingMinimumVersion("v24.1.0"),
+		clusterSettingSystemOnly,
+	),
+	// v24.2 cluster settings
+	newClusterSettingMutator(
+		"kv.transaction.randomized_anchor_key.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v24.2.0"),
 	),
 }
 
@@ -1039,7 +1045,7 @@ func (p *testPlanner) changeServiceProcess(service *ServiceContext, fn func(*Ser
 }
 
 func (p *testPlanner) isMultitenant() bool {
-	return p.deploymentMode != SystemOnlyDeployment
+	return isMultitenant(p.deploymentMode)
 }
 
 func (p *testPlanner) tenantName() string {
@@ -1538,6 +1544,10 @@ func (plan *TestPlan) Steps() []testStep {
 	return steps
 }
 
+func (plan *TestPlan) isMultitenant() bool {
+	return isMultitenant(plan.deploymentMode)
+}
+
 // Steps returns the list of steps to be performed to setup the
 // cluster for the test (which may include creating tenants where the
 // tests will run).
@@ -1725,6 +1735,10 @@ func (u UpgradeStage) String() string {
 	default:
 		return fmt.Sprintf("invalid upgrade stage (%d)", u)
 	}
+}
+
+func isMultitenant(mode DeploymentMode) bool {
+	return mode != SystemOnlyDeployment
 }
 
 func versionToClusterVersion(v *clusterupgrade.Version) string {

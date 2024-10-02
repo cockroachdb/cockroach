@@ -48,7 +48,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Name() string {
 // plan's approach of resetting the cluster setting when all nodes are
 // upgraded is the most sensible / common.
 func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
-	return 0.3
+	return 1
 }
 
 // Generate returns mutations to remove the existing step to reset the
@@ -62,29 +62,58 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 ) []mutation {
 	var mutations []mutation
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
-		removeExistingStep := upgradeSelector.
+		tenantSupportsAutoUpgrade := upgradeSelector.upgrade.to.AtLeast(tenantSupportsAutoUpgradeVersion)
+		changeTenant := plan.deploymentMode == SharedProcessDeployment &&
+			tenantSupportsAutoUpgrade &&
+			rng.Float64() < 0.5
+
+		serviceContext := func(c Context) *ServiceContext {
+			if changeTenant {
+				return c.Tenant
+			}
+
+			return c.System
+		}
+
+		var serviceName string
+		removeExistingStep := upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
 				step, ok := s.impl.(allowUpgradeStep)
-				return ok && step.virtualClusterName == install.SystemInterfaceName
+				isSystem := step.virtualClusterName == install.SystemInterfaceName
+
+				var matched bool
+				if changeTenant {
+					matched = ok && !isSystem
+				} else {
+					matched = ok && isSystem
+				}
+
+				if matched {
+					serviceName = step.virtualClusterName
+				}
+
+				return matched
 			}).
 			Remove()
 
-		addRandomly := upgradeSelector.
+		addRandomly := upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
+				service := serviceContext(s.context)
+
 				// It is valid to reset the cluster setting when we are
 				// performing a rollback (as we know the next upgrade will be
 				// the final one); or during the final upgrade itself.
-				return (s.context.System.Stage == LastUpgradeStage || s.context.System.Stage == RollbackUpgradeStage) &&
+				return (service.Stage == LastUpgradeStage || service.Stage == RollbackUpgradeStage) &&
 					// We also don't want all nodes to be running the latest
 					// binary, as that would be equivalent to the test plan
 					// without this mutator.
-					len(s.context.System.NodesInNextVersion()) < len(s.context.System.Descriptor.Nodes)
+					len(service.NodesInNextVersion()) < len(service.Descriptor.Nodes)
 			}).
 			RandomStep(rng).
 			// Note that we don't attempt a concurrent insert because the
 			// selected step could be one that restarts a cockroach node,
 			// and `allowUpgradeStep` could fail in that situation.
-			InsertBefore(allowUpgradeStep{virtualClusterName: install.SystemInterfaceName})
+			InsertBefore(allowUpgradeStep{virtualClusterName: serviceName})
 
 		// Finally, we update the context associated with every step where
 		// all nodes are running the next version to indicate they are in
@@ -92,12 +121,13 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		// after `allowUpgradeStep` but, when this mutator is enabled,
 		// `Finalizing` should be `true` as soon as all nodes are on the
 		// next version.
-		for _, step := range upgradeSelector.
+		for _, step := range upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage == LastUpgradeStage &&
-					len(s.context.System.NodesInNextVersion()) == len(s.context.System.Descriptor.Nodes)
+				service := serviceContext(s.context)
+				return service.Stage == LastUpgradeStage &&
+					len(service.NodesInNextVersion()) == len(service.Descriptor.Nodes)
 			}) {
-			step.context.System.Finalizing = true
+			serviceContext(step.context).Finalizing = true
 		}
 
 		mutations = append(mutations, removeExistingStep...)
@@ -107,10 +137,17 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	return mutations
 }
 
+// upgradeSelector groups together an upgrade performed during the
+// test with the corresponding step selector for that upgrade.
+type upgradeSelector struct {
+	upgrade  *upgradePlan
+	selector stepSelector
+}
+
 // randomUpgrades returns selectors for the steps of a random subset
 // of upgrades in the plan. The last upgrade is always returned, as
 // that is the most critical upgrade being tested.
-func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
+func randomUpgrades(rng *rand.Rand, plan *TestPlan) []upgradeSelector {
 	allUpgrades := plan.allUpgrades()
 	numChanges := rng.Intn(len(allUpgrades)) // other than last upgrade
 	allExceptLastUpgrade := append([]*upgradePlan{}, allUpgrades[:len(allUpgrades)-1]...)
@@ -119,18 +156,19 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 		allExceptLastUpgrade[i], allExceptLastUpgrade[j] = allExceptLastUpgrade[j], allExceptLastUpgrade[i]
 	})
 
-	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
-		return func(s *singleStep) bool {
-			return s.context.System.FromVersion.Equal(upgrade.from)
+	newUpgradeSelector := func(upgrade *upgradePlan) upgradeSelector {
+		return upgradeSelector{
+			upgrade: upgrade,
+			selector: plan.newStepSelector().Filter(func(s *singleStep) bool {
+				return s.context.System.FromVersion.Equal(upgrade.from)
+			}),
 		}
 	}
 
 	// By default, include the last upgrade.
-	selectors := []stepSelector{
-		plan.newStepSelector().Filter(byUpgrade(allUpgrades[len(allUpgrades)-1])),
-	}
+	selectors := []upgradeSelector{newUpgradeSelector(allUpgrades[len(allUpgrades)-1])}
 	for _, upgrade := range allExceptLastUpgrade[:numChanges] {
-		selectors = append(selectors, plan.newStepSelector().Filter(byUpgrade(upgrade)))
+		selectors = append(selectors, newUpgradeSelector(upgrade))
 	}
 
 	return selectors
@@ -147,10 +185,6 @@ func ClusterSettingMutator(name string) string {
 
 // clusterSettingMutator implements a mutator that randomly sets (or
 // resets) a cluster setting during a mixed-version test.
-//
-// TODO(renato): currently this can only be used for changing settings
-// on the system tenant; support for non-system virtual clusters will
-// be added in the future.
 type clusterSettingMutator struct {
 	// The name of the cluster setting.
 	name string
@@ -162,6 +196,12 @@ type clusterSettingMutator struct {
 	minVersion *clusterupgrade.Version
 	// The maximum number of changes (set or reset) we will perform.
 	maxChanges int
+	// If systemOnly is true, the setting is only applicable to the
+	// storage cluster.
+	systemOnly bool
+	// serviceName is the name of the main service in the test (system
+	// or tenant).
+	serviceName string
 }
 
 // clusterSettingMutatorOption is the signature of functions passed to
@@ -180,6 +220,10 @@ func clusterSettingMinimumVersion(v string) clusterSettingMutatorOption {
 	return func(csm *clusterSettingMutator) {
 		csm.minVersion = clusterupgrade.MustParseVersion(v)
 	}
+}
+
+func clusterSettingSystemOnly(csm *clusterSettingMutator) {
+	csm.systemOnly = true
 }
 
 //lint:ignore U1000 currently unused // TODO(renato): remove when used.
@@ -205,6 +249,7 @@ func newClusterSettingMutator[T any](
 		probability:    0.3,
 		possibleValues: possibleValues,
 		maxChanges:     3,
+		systemOnly:     false,
 	}
 
 	for _, opt := range opts {
@@ -228,6 +273,21 @@ func (m clusterSettingMutator) Probability() float64 {
 // happen any time after cluster setup.
 func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	var mutations []mutation
+	service := func(c Context) *ServiceContext {
+		s := c.System
+		if plan.isMultitenant() && !m.systemOnly {
+			s = c.Tenant
+		}
+
+		// Set the service name if we are seeing it for the first
+		// time. This will be used in the future when generating
+		// `setClusterSetting` steps.
+		if m.serviceName == "" {
+			m.serviceName = s.Descriptor.Name
+		}
+
+		return s
+	}
 
 	// possiblePointsInTime is the list of steps in the plan that are
 	// valid points in time during the mixedversion test where applying
@@ -238,7 +298,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 			if m.minVersion != nil {
 				// If we have a minimum version set, we need to make sure we
 				// are upgrading to a supported version.
-				if !s.context.System.ToVersion.AtLeast(m.minVersion) {
+				if !service(s.context).ToVersion.AtLeast(m.minVersion) {
 					return false
 				}
 
@@ -246,7 +306,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 				// minimum supported version, then only upgraded nodes are
 				// able to service the cluster setting change request. In that
 				// case, we ensure there is at least one such node.
-				if !s.context.System.FromVersion.AtLeast(m.minVersion) && len(s.context.System.NodesInNextVersion()) == 0 {
+				if !service(s.context).FromVersion.AtLeast(m.minVersion) && len(service(s.context).NodesInNextVersion()) == 0 {
 					return false
 				}
 			}
@@ -254,7 +314,7 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 			// We skip restart steps as we might insert the cluster setting
 			// change step concurrently with the selected step.
 			_, isRestartNode := s.impl.(restartWithNewBinaryStep)
-			return s.context.System.Stage >= OnStartupStage && !isRestartNode
+			return service(s.context).Stage >= OnStartupStage && !isRestartNode
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -334,7 +394,7 @@ func (m clusterSettingMutator) changeSteps(
 				minVersion:         m.minVersion,
 				name:               m.name,
 				value:              newValue,
-				virtualClusterName: install.SystemInterfaceName,
+				virtualClusterName: m.serviceName,
 			},
 			slot: nextSlot(),
 		})
@@ -349,7 +409,7 @@ func (m clusterSettingMutator) changeSteps(
 			impl: resetClusterSettingStep{
 				minVersion:         m.minVersion,
 				name:               m.name,
-				virtualClusterName: install.SystemInterfaceName,
+				virtualClusterName: m.serviceName,
 			},
 			slot: nextSlot(),
 		})
