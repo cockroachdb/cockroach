@@ -1220,6 +1220,7 @@ type RangeControllerFactoryImpl struct {
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
 	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 	scheduler                  rac2.Scheduler
+	sendTokenWatcher           *rac2.SendTokenWatcher
 	knobs                      *kvflowcontrol.TestingKnobs
 }
 
@@ -1229,6 +1230,7 @@ func NewRangeControllerFactoryImpl(
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
 	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
 	scheduler rac2.Scheduler,
+	sendTokenWatcher *rac2.SendTokenWatcher,
 	knobs *kvflowcontrol.TestingKnobs,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
@@ -1237,6 +1239,7 @@ func NewRangeControllerFactoryImpl(
 		streamTokenCounterProvider: streamTokenCounterProvider,
 		closeTimerScheduler:        closeTimerScheduler,
 		scheduler:                  scheduler,
+		sendTokenWatcher:           sendTokenWatcher,
 		knobs:                      knobs,
 	}
 }
@@ -1257,6 +1260,7 @@ func (f RangeControllerFactoryImpl) New(
 			Clock:               f.clock,
 			CloseTimerScheduler: f.closeTimerScheduler,
 			Scheduler:           f.scheduler,
+			SendTokenWatcher:    f.sendTokenWatcher,
 			EvalWaitMetrics:     f.evalWaitMetrics,
 			Knobs:               f.knobs,
 		},

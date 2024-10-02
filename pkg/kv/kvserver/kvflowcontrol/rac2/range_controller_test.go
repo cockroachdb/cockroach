@@ -51,6 +51,7 @@ type testingRCState struct {
 	ts                    *timeutil.ManualTime
 	clock                 *hlc.Clock
 	ssTokenCounter        *StreamTokenCounterProvider
+	sendTokenWatcher      *SendTokenWatcher
 	probeToCloseScheduler ProbeToCloseTimerScheduler
 	evalMetrics           *EvalWaitMetrics
 	// ranges contains the controllers for each range. It is the main state being
@@ -71,6 +72,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.clock = hlc.NewClockForTesting(s.ts)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
+	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.evalMetrics = NewEvalWaitMetrics()
 	s.ranges = make(map[roachpb.RangeID]*testingRCRange)
@@ -308,6 +310,7 @@ func (s *testingRCState) getOrInitRange(
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			Scheduler:           testRC,
+			SendTokenWatcher:    s.sendTokenWatcher,
 			EvalWaitMetrics:     s.evalMetrics,
 			Knobs:               &kvflowcontrol.TestingKnobs{},
 		}

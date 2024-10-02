@@ -369,6 +369,7 @@ type RangeControllerOptions struct {
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
 	Scheduler           Scheduler
+	SendTokenWatcher    *SendTokenWatcher
 	EvalWaitMetrics     *EvalWaitMetrics
 	Knobs               *kvflowcontrol.TestingKnobs
 }
@@ -1511,26 +1512,26 @@ type replicaSendStream struct {
 			// an index >= nextRaftIndexInitial and >= indexToSend.
 			preciseSizeSum kvflowcontrol.Tokens
 
-			// watcherHandleID, deductedForScheduler, forceFlushScheduled can only
-			// be non-zero when connectedState == replicate, and the send-queue is
-			// non-empty.
+			// tokenWatcherHandle, deductedForSchedulerTokens, forceFlushScheduled
+			// can only be non-zero when connectedState == replicate, and the
+			// send-queue is non-empty.
 			//
 			// INVARIANTS:
 			//
-			// forceFlushScheduled => watcherHandleID is invalid and
+			// forceFlushScheduled => tokenWatcherHandle is zero and
 			// deductedForSchedulerTokens == 0.
 			//
-			// watcherHandleID is valid => deductedForSchedulerTokens == 0 and
+			// tokenWatcherHandle is non-zero => deductedForSchedulerTokens == 0 and
 			// !forceFlushScheduled.
 			//
-			// deductedForSchedulerTokens == 0 => watcherHandleID is invalid and
+			// It follows from the above that:
+			//
+			// deductedForSchedulerTokens != 0 => tokenWatcherHandle is zero and
 			// !forceFlushScheduled.
 			forceFlushScheduled bool
 
-			// TODO(kvoli):
-			//
-			// watcherHandleID StoreStreamSendTokenHandleID
-			// deductedForSchedulerTokens kvflowcontrol.Tokens
+			tokenWatcherHandle         SendTokenWatcherHandle
+			deductedForSchedulerTokens kvflowcontrol.Tokens
 		}
 		closed bool
 	}
@@ -1855,18 +1856,19 @@ func (rs *replicaState) scheduled(ctx context.Context) (scheduleAgain bool, clos
 	rss := rs.sendStream
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	if !rss.mu.sendQueue.forceFlushScheduled {
+	if !rss.mu.sendQueue.forceFlushScheduled && rss.mu.sendQueue.deductedForSchedulerTokens == 0 {
 		return false, false
 	}
 	if rss.isEmptySendQueueLocked() {
-		panic(errors.AssertionFailedf("forceFlushScheduled is true with empty send-queue"))
+		panic(errors.AssertionFailedf("scheduled with empty send-queue"))
 	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
 	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
-	// TODO(kvoli): this same code can be extended to handle
-	// rss.mu.sendQueue.deductedForScheduler.tokens, with bytesToSend =
-	// rss.mu.sendQueue.deductedForScheduler.tokens.
-	//
+	bytesToSend := MaxBytesToSend
+	if !rss.mu.sendQueue.forceFlushScheduled &&
+		rss.mu.sendQueue.deductedForSchedulerTokens < bytesToSend {
+		bytesToSend = rss.mu.sendQueue.deductedForSchedulerTokens
+	}
 	// NB: the rss.mu.sendQueue.deductedForScheduler.tokens represent what is
 	// subject to RAC. But Raft is unaware of this linkage between admission
 	// control and flow tokens, and MakeMsgApp will use this bytesToSend to
@@ -1879,7 +1881,7 @@ func (rs *replicaState) scheduled(ctx context.Context) (scheduleAgain bool, clos
 	// unused tokens for entries not subject to flow control.
 	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
 		rss.parent.desc.ReplicaID, rss.mu.sendQueue.indexToSend, rss.mu.sendQueue.nextRaftIndex,
-		int64(MaxBytesToSend))
+		int64(bytesToSend))
 	if err != nil {
 		// Transitioned to StateSnapshot, or some other error that Raft needs to
 		// deal with.
@@ -1890,10 +1892,16 @@ func (rs *replicaState) scheduled(ctx context.Context) (scheduleAgain bool, clos
 	rss.dequeueFromQueueAndSendLocked(ctx, msg)
 	isEmpty := rss.isEmptySendQueueLocked()
 	if isEmpty {
-		rss.mu.sendQueue.forceFlushScheduled = false
+		rss.stopAttemptingToEmptySendQueue(ctx, false)
 		return false, false
 	}
-	return true, false
+	// Still have a send-queue.
+	watchForTokens :=
+		!rss.mu.sendQueue.forceFlushScheduled && rss.mu.sendQueue.deductedForSchedulerTokens == 0
+	if watchForTokens {
+		rss.startAttemptingToEmptySendQueueViaWatcher(ctx)
+	}
+	return !watchForTokens, false
 }
 
 func (rs *replicaState) closeSendStream(ctx context.Context) {
@@ -1916,31 +1924,20 @@ func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
 func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	rss.returnSendTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
 	rss.returnAllEvalTokens(ctx)
-	if rss.mu.sendQueue.forceFlushScheduled {
-		rss.stopForceFlushLocked(ctx)
-	}
-	// TODO(kvoli): cancel watcher, and return any tokens we have grabbed via
-	// watching.
+	rss.stopAttemptingToEmptySendQueue(ctx, true)
 	rss.mu.closed = true
 }
 
 func (rss *replicaSendStream) handleReadyEntriesLocked(
 	ctx context.Context, event raftEventForReplica, directive replicaDirective,
 ) (transitionedSendQStateAsVoter bool, err error) {
-	rss.tryHandleModeChange(ctx, event.mode)
 	wasEmptySendQ := rss.isEmptySendQueueLocked()
-	if event.mode == MsgAppPush {
-		if rss.mu.sendQueue.forceFlushScheduled {
-			// Must be switching from MsgAppPull to MsgAppPush mode.
-			rss.stopForceFlushLocked(ctx)
-		}
-		// TODO(kvoli): other switching things: cancel watcher, and return any
-		// tokens we have grabbed via watching.
-	} else {
+	rss.tryHandleModeChange(ctx, event.mode, wasEmptySendQ, directive.forceFlush)
+	if event.mode == MsgAppPull {
 		// MsgAppPull mode (i.e., followers). Populate sendingEntries.
 		n := len(event.sendingEntries)
 		if n != 0 {
-			panic("pull mode must not have sending entries")
+			panic(errors.AssertionFailedf("pull mode must not have sending entries"))
 		}
 		if directive.forceFlush {
 			if !rss.mu.sendQueue.forceFlushScheduled {
@@ -1953,9 +1950,10 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 			if rss.mu.sendQueue.forceFlushScheduled {
 				// Must have a send-queue, so sendingEntries should stay empty (these
 				// will be queued).
-				rss.stopForceFlushLocked(ctx)
+				rss.mu.sendQueue.forceFlushScheduled = false
+				rss.startAttemptingToEmptySendQueueViaWatcher(ctx)
 				if directive.hasSendTokens {
-					panic("hasSendTokens true despite send-queue")
+					panic(errors.AssertionFailedf("hasSendTokens true despite send-queue"))
 				}
 			} else if directive.hasSendTokens {
 				// Send everything that is being added.
@@ -2056,6 +2054,10 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
 	}
 
+	hasEmptySendQ := rss.isEmptySendQueueLocked()
+	if wasEmptySendQ && !hasEmptySendQ && !rss.mu.sendQueue.forceFlushScheduled {
+		rss.startAttemptingToEmptySendQueueViaWatcher(ctx)
+	}
 	// NB: we don't special case to an empty send-queue in push mode, where Raft
 	// is responsible for causing this send-queue. Raft does not keep track of
 	// whether the send-queues are causing a loss of quorum, so in the worst
@@ -2063,12 +2065,13 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 	// send-queue. But in push mode only elastic work will be subject to
 	// replication admission control, and regular work will not call
 	// WaitForEval, so we accept this behavior.
-	transitionedSendQStateAsVoter =
-		rss.parent.desc.IsAnyVoter() && (wasEmptySendQ != rss.isEmptySendQueueLocked())
+	transitionedSendQStateAsVoter = rss.parent.desc.IsAnyVoter() && (wasEmptySendQ != hasEmptySendQ)
 	return transitionedSendQStateAsVoter, nil
 }
 
-func (rss *replicaSendStream) tryHandleModeChange(ctx context.Context, mode RaftMsgAppMode) {
+func (rss *replicaSendStream) tryHandleModeChange(
+	ctx context.Context, mode RaftMsgAppMode, isEmptySendQ bool, toldToForceFlush bool,
+) {
 	if mode == rss.mu.mode {
 		// Common case
 		return
@@ -2086,6 +2089,7 @@ func (rss *replicaSendStream) tryHandleModeChange(ctx context.Context, mode Raft
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
+		rss.stopAttemptingToEmptySendQueue(ctx, false)
 	} else {
 		// Switching from push to pull. Regular needs to be counted as elastic, so
 		// return to regular and deduct from elastic.
@@ -2097,24 +2101,25 @@ func (rss *replicaSendStream) tryHandleModeChange(ctx context.Context, mode Raft
 			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
+		if !isEmptySendQ && !toldToForceFlush {
+			rss.startAttemptingToEmptySendQueueViaWatcher(ctx)
+		}
 	}
 }
 
 func (rss *replicaSendStream) startForceFlushLocked(ctx context.Context) {
 	rss.mu.sendQueue.forceFlushScheduled = true
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
-	// TODO(kvoli): cancel any watcher and return deducted tokens.
+	rss.stopAttemptingToEmptySendQueueViaWatcher(ctx, false)
 }
 
-func (rss *replicaSendStream) stopForceFlushLocked(ctx context.Context) {
-	rss.mu.sendQueue.forceFlushScheduled = false
-}
-
-// Only called in MsgAppPull mode.
+// Only called in MsgAppPull mode. Either when force-flushing or when
+// rss.mu.sendQueue.deductedFromSchedulerTokens > 0.
 func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	ctx context.Context, msg raftpb.Message,
 ) {
 	rss.mu.AssertHeld()
+	var tokensNeeded kvflowcontrol.Tokens
 	for _, entry := range msg.Entries {
 		entryState := getEntryFCStateOrFatal(ctx, entry)
 		if entryState.index != rss.mu.sendQueue.indexToSend {
@@ -2130,9 +2135,24 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 			rss.mu.sendQueue.preciseSizeSum -= entryState.tokens
 			rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entryState.pri)] -=
 				entryState.tokens
-			rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, entryState.tokens)
+			tokensNeeded += entryState.tokens
 			rss.mu.tracker.Track(ctx, entryState.term, entryState.index, raftpb.LowPri, entryState.tokens)
 		}
+	}
+	if !rss.mu.sendQueue.forceFlushScheduled {
+		// Subtract from already deducted tokens.
+		rss.mu.sendQueue.deductedForSchedulerTokens -= tokensNeeded
+		if rss.mu.sendQueue.deductedForSchedulerTokens < 0 {
+			// Used more than what we had already deducted. Will need to subtract
+			// these now.
+			tokensNeeded = -rss.mu.sendQueue.deductedForSchedulerTokens
+			rss.mu.sendQueue.deductedForSchedulerTokens = 0
+		} else {
+			tokensNeeded = 0
+		}
+	}
+	if tokensNeeded > 0 {
+		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, tokensNeeded)
 	}
 	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
@@ -2162,12 +2182,88 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 	rss.returnAllEvalTokens(ctx)
 	rss.mu.sendQueue.originalEvalTokens = [admissionpb.NumWorkClasses]kvflowcontrol.Tokens{}
 	if !rss.isEmptySendQueueLocked() {
-		panic("transitioning to probeRecentlyNoSendQ when have a send-queue")
+		panic(errors.AssertionFailedf("transitioning to probeRecentlyNoSendQ when have a send-queue"))
 	}
 	if rss.mu.sendQueue.forceFlushScheduled {
-		panic("no send-queue but force-flushing")
+		panic(errors.AssertionFailedf("no send-queue but force-flushing"))
 	}
-	// TODO(kvoli): assert no watcher, and no tokens grabbed via watching.
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 ||
+		rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
+		panic(errors.AssertionFailedf("no send-queue but trying to empty send-queue via watcher"))
+	}
+}
+
+func (rss *replicaSendStream) stopAttemptingToEmptySendQueue(ctx context.Context, disconnect bool) {
+	rss.mu.sendQueue.forceFlushScheduled = false
+	rss.stopAttemptingToEmptySendQueueViaWatcher(ctx, disconnect)
+}
+
+func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcher(
+	ctx context.Context, disconnect bool,
+) {
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+		rss.parent.sendTokenCounter.Return(
+			ctx, admissionpb.ElasticWorkClass, rss.mu.sendQueue.deductedForSchedulerTokens, disconnect)
+		rss.mu.sendQueue.deductedForSchedulerTokens = 0
+	}
+	if rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
+		rss.parent.parent.opts.SendTokenWatcher.CancelHandle(ctx, rss.mu.sendQueue.tokenWatcherHandle)
+		rss.mu.sendQueue.tokenWatcherHandle = SendTokenWatcherHandle{}
+	}
+}
+
+func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcher(ctx context.Context) {
+	if rss.mu.sendQueue.forceFlushScheduled {
+		panic(errors.AssertionFailedf("already trying to empty send-queue using force-flush"))
+	}
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 ||
+		rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
+		panic(errors.AssertionFailedf("already trying to empty send-queue via watcher"))
+	}
+	rss.parent.parent.opts.SendTokenWatcher.NotifyWhenAvailable(ctx, rss.parent.sendTokenCounter, rss)
+}
+
+// Notify implements TokenGrantNotification.
+func (rss *replicaSendStream) Notify(ctx context.Context) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	if rss.mu.sendQueue.tokenWatcherHandle == (SendTokenWatcherHandle{}) {
+		return
+	}
+	rss.mu.sendQueue.tokenWatcherHandle = SendTokenWatcherHandle{}
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+		panic(errors.AssertionFailedf("watcher was registered when already had tokens"))
+	}
+	queueSize := rss.approxQueueSize()
+	if queueSize == 0 {
+		panic(errors.AssertionFailedf("watcher was registered with empty send-queue"))
+	}
+	// Deduct a bit more, so we can also dequeue things that get enqueued later,
+	// and transition to an empty send-queue.
+	//
+	// TODO(sumeer): refine this heuristic.
+	queueSize = kvflowcontrol.Tokens(float64(queueSize) * 1.1)
+	if queueSize < 2048 {
+		queueSize = 4096
+	}
+	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize)
+	if tokens == 0 {
+		// Rare case: no tokens available despite notification. Register again.
+		rss.startAttemptingToEmptySendQueueViaWatcher(ctx)
+		return
+	}
+	rss.mu.sendQueue.deductedForSchedulerTokens = tokens
+	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+}
+
+func (rss *replicaSendStream) approxQueueSize() kvflowcontrol.Tokens {
+	var size kvflowcontrol.Tokens
+	countWithApproxStats := int64(rss.mu.nextRaftIndexInitial) - int64(rss.mu.sendQueue.indexToSend)
+	if countWithApproxStats > 0 {
+		size = kvflowcontrol.Tokens(countWithApproxStats) * rss.mu.sendQueue.approxMeanSizeBytes
+	}
+	size += rss.mu.sendQueue.preciseSizeSum
+	return size
 }
 
 // returnSendTokens takes the tokens untracked by the tracker and returns them
