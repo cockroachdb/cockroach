@@ -108,8 +108,8 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
 	// TODO(pav-kv): we should rather always remember the last entry term, and
 	// remove invalidLastTerm special case.
-	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
-		return r.mu.lastTermNotDurable, nil
+	if r.shMu.lastIndexNotDurable == i && r.shMu.lastTermNotDurable != invalidLastTerm {
+		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
@@ -138,7 +138,7 @@ func (r *replicaLogStorage) LastIndex() uint64 {
 
 // raftLastIndexRLocked implements the LastIndex() call.
 func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
-	return r.mu.lastIndexNotDurable
+	return r.shMu.lastIndexNotDurable
 }
 
 // GetLastIndex returns the index of the last entry in the raft log.
@@ -158,7 +158,7 @@ func (r *replicaLogStorage) FirstIndex() uint64 {
 // raftFirstIndexRLocked implements the FirstIndex() call.
 func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 	// TruncatedState is guaranteed to be non-nil.
-	return r.mu.state.TruncatedState.Index + 1
+	return r.shMu.state.TruncatedState.Index + 1
 }
 
 // GetFirstIndex returns the index of the first entry in the raft log.
@@ -244,8 +244,8 @@ func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm
 	r.raftMu.AssertHeld()
 	// NB: the r.mu fields accessed here are always written under both r.raftMu
 	// and r.mu, and the reads are safe under r.raftMu.
-	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
-		return r.mu.lastTermNotDurable, nil
+	if r.shMu.lastIndexNotDurable == i && r.shMu.lastTermNotDurable != invalidLastTerm {
+		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
@@ -260,7 +260,7 @@ func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 	// safe to access while holding any of these mutexes. We enforce raftMu
 	// because this is a raftMu-based snapshot.
 	r.raftMu.AssertHeld()
-	return uint64(r.mu.lastIndexNotDurable)
+	return uint64(r.shMu.lastIndexNotDurable)
 }
 
 // FirstIndex implements the raft.LogStorageSnapshot interface.
@@ -268,7 +268,7 @@ func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 func (r *replicaRaftMuLogSnap) FirstIndex() uint64 {
 	r.raftMu.AssertHeld()
 	// r.mu.state is mutated both under r.raftMu and r.mu, so the access is safe.
-	return uint64(r.mu.state.TruncatedState.Index + 1)
+	return uint64(r.shMu.state.TruncatedState.Index + 1)
 }
 
 // LogSnapshot implements the raft.LogStorageSnapshot interface.

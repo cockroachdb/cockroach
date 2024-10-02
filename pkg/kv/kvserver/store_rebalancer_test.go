@@ -496,32 +496,32 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
 		repl := &Replica{store: s, RangeID: rangeID}
-		repl.mu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
+		repl.shMu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
 		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
-			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
+			repl.shMu.state.Desc.InternalReplicas = append(repl.shMu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
 				StoreID:   storeID,
 				ReplicaID: roachpb.ReplicaID(storeID),
 				Type:      roachpb.VOTER_FULL,
 			})
 		}
-		repl.mu.state.Lease = &roachpb.Lease{
+		repl.shMu.state.Lease = &roachpb.Lease{
 			Expiration: &hlc.MaxTimestamp,
-			Replica:    repl.mu.state.Desc.InternalReplicas[0],
+			Replica:    repl.shMu.state.Desc.InternalReplicas[0],
 		}
 		// NB: We set the index to 2 corresponding to the match in
 		// TestingRaftStatusFn. Matches that are 0 are considered behind.
-		repl.mu.state.TruncatedState = &kvserverpb.RaftTruncatedState{Index: 2}
+		repl.shMu.state.TruncatedState = &kvserverpb.RaftTruncatedState{Index: 2}
 		for _, storeID := range r.nonVoters {
-			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
+			repl.shMu.state.Desc.InternalReplicas = append(repl.shMu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
 				StoreID:   storeID,
 				ReplicaID: roachpb.ReplicaID(storeID),
 				Type:      roachpb.NON_VOTER,
 			})
 		}
-		repl.mu.state.Stats = &enginepb.MVCCStats{}
+		repl.shMu.state.Stats = &enginepb.MVCCStats{}
 		repl.loadStats = rload.NewReplicaLoad(s.Clock(), nil)
 		repl.loadStats.TestingSetStat(rload.Queries, r.qps)
 		repl.loadStats.TestingSetStat(rload.ReqCPUNanos, r.reqCPU)

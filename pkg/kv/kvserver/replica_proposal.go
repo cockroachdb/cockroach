@@ -86,7 +86,7 @@ import (
 // in an (identical) copy of the proposal being added to the log. (All but the
 // first copy that will be applied will not be associated with a proposal).
 // [5]: if the entry applies under an already-consumed LeaseAppliedIndex,
-// tryReproposeWithNewLeaseIndex creates a *new* proposal (which inherits the
+// tryReproposeWithNewLeaseIndexRaftMuLocked creates a *new* proposal (which inherits the
 // waiting caller, latches, etc) and the cycle begins again whereas the current
 // proposal results in an error (which nobody is listening to).
 //
@@ -146,7 +146,7 @@ type ProposalData struct {
 
 	// quotaAlloc is the allocation retrieved from the proposalQuota. The quota is
 	// released when the command comes up for application (even if it will be
-	// reproposed). See retrieveLocalProposals and tryReproposeWithNewLeaseIndex.
+	// reproposed). See retrieveLocalProposals and tryReproposeWithNewLeaseIndexRaftMuLocked.
 	quotaAlloc *quotapool.IntAlloc
 
 	// ec.done is called after command application to update the timestamp
@@ -159,7 +159,7 @@ type ProposalData struct {
 	ec endCmds
 
 	// applied is set when the a command finishes application. It is a remnant of
-	// an earlier version of tryReproposeWithNewLeaseIndex that has yet to be
+	// an earlier version of tryReproposeWithNewLeaseIndexRaftMuLocked that has yet to be
 	// phased out.
 	//
 	// TODO(repl): phase this field out.
@@ -448,14 +448,15 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp, r.mu.state.LeaseAppliedIndex)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder,
+		r.shMu.state.RaftClosedTimestamp, r.shMu.state.LeaseAppliedIndex)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
 	// ordering were reversed, it would be possible for requests to see the new
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
-	r.mu.state.Lease = newLease
+	r.shMu.state.Lease = newLease
 
 	now := r.store.Clock().NowAsClockTimestamp()
 

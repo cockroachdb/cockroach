@@ -58,7 +58,7 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var r Replica
-			r.mu.state.Desc = &c.oldDesc
+			r.shMu.state.Desc = &c.oldDesc
 			r.mu.lastReplicaAdded = c.lastReplicaAdded
 			r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration((*replicaFlowControl)(&r), nil, nil)
 			r.flowControlV2 = noopProcessor{}

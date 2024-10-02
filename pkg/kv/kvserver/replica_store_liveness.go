@@ -48,7 +48,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(
 	replicaID raftpb.PeerID,
 ) (slpb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
-	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
+	desc, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if !ok {
 		return slpb.StoreIdent{}, false
 	}

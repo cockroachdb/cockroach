@@ -115,7 +115,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 
 	replica := Replica{RangeID: 1}
 	replica.mu.Lock()
-	replica.mu.state.Stats = &enginepb.MVCCStats{
+	replica.shMu.state.Stats = &enginepb.MVCCStats{
 		KeyBytes: 2,
 		ValBytes: 4,
 	}

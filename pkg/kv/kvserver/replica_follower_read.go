@@ -148,9 +148,9 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.Batc
 func (r *Replica) getCurrentClosedTimestampLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
-	appliedLAI := r.mu.state.LeaseAppliedIndex
-	leaseholder := r.mu.state.Lease.Replica.NodeID
-	raftClosed := r.mu.state.RaftClosedTimestamp
+	appliedLAI := r.shMu.state.LeaseAppliedIndex
+	leaseholder := r.shMu.state.Lease.Replica.NodeID
+	raftClosed := r.shMu.state.RaftClosedTimestamp
 	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, sufficient)
 
 	var maxClosed hlc.Timestamp

@@ -93,7 +93,7 @@ func (r *Replica) Metrics(
 		conf:                     r.mu.conf,
 		vitalityMap:              vitalityMap,
 		clusterNodes:             clusterNodes,
-		desc:                     r.mu.state.Desc,
+		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
@@ -104,9 +104,9 @@ func (r *Replica) Metrics(
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.mu.raftLogSize,
-		raftLogSizeTrusted:       r.mu.raftLogSizeTrusted,
-		rangeSize:                r.mu.state.Stats.Total(),
+		raftLogSize:              r.shMu.raftLogSize,
+		raftLogSizeTrusted:       r.shMu.raftLogSizeTrusted,
+		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
@@ -354,7 +354,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
+	return r.shMu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -366,9 +366,10 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// of the bytes in raftLogLastCheckSize are already part of pending
 	// truncations since this comparison is looking at whether the raft log has
 	// grown sufficiently.
-	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	checkRaftLog := r.shMu.raftLogSize-r.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
-		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
+		r.raftMu.AssertHeld()
+		r.shMu.raftLogLastCheckSize = r.shMu.raftLogSize
 	}
 	return checkRaftLog
 }
@@ -384,7 +385,7 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}
-	size := r.mu.state.Stats.Total()
+	size := r.shMu.state.Stats.Total()
 	maxSize := int64(float64(maxBytes)*mult) + 1
 	if maxBytes <= 0 || size <= maxSize {
 		return false, 0

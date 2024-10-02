@@ -98,7 +98,7 @@ func TestStoreCheckpointSpans(t *testing.T) {
 	addReplica := func(rangeID roachpb.RangeID, start, end string) {
 		desc := makeDesc(rangeID, start, end)
 		r := &Replica{RangeID: rangeID, startKey: desc.StartKey}
-		r.mu.state.Desc = &desc
+		r.shMu.state.Desc = &desc
 		r.isInitialized.Store(desc.IsInitialized())
 		require.NoError(t, s.addToReplicasByRangeIDLocked(r))
 		if r.IsInitialized() {
