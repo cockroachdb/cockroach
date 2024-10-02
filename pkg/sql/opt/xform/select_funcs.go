@@ -6,6 +6,7 @@
 package xform
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -839,6 +841,47 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	scanPrivate *memo.ScanPrivate,
 	filters memo.FiltersExpr,
 ) {
+	c.generateInvertedIndexScansImpl(
+		grp,
+		nil, /* input */
+		scanPrivate,
+		filters,
+		false, /* minimizeSpans */
+	)
+}
+
+// GenerateMinimalInvertedIndexScans is similar to GenerateInvertedIndexScans.
+// It differs by trying to generate an inverted index scan that spans the fewest
+// index keys, rather than generating scans that span all index keys in the
+// expression and performing set operations on them before an index-join. It
+// currently only works on JSON and array inverted indexes.
+//
+// TODO(mgartner): It may be simpler to implement these scans with constraints
+// rather than inverted spans. It may also allow more fine-grained control over
+// the remaining filters applied after the scan.
+func (c *CustomFuncs) GenerateMinimalInvertedIndexScans(
+	grp memo.RelExpr,
+	required *physical.Required,
+	input memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
+) {
+	c.generateInvertedIndexScansImpl(grp, input, scanPrivate, filters, true /* minimizeSpans */)
+}
+
+// generateInvertedIndexScansImpl is the implementation of
+// GenerateInvertedIndexScans and GenerateMinimalInvertedIndexScans.
+func (c *CustomFuncs) generateInvertedIndexScansImpl(
+	grp memo.RelExpr,
+	input memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
+	minimizeSpans bool,
+) {
+	if input == nil && minimizeSpans {
+		panic(errors.AssertionFailedf("expected non-nil input required to reduce spans"))
+	}
+
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
 	sb.Init(c, scanPrivate.Table)
@@ -854,8 +897,17 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+		invColID := scanPrivate.Table.ColumnID(index.InvertedColumn().InvertedSourceColumnOrdinal())
+		invColTypeFamily := c.e.f.Metadata().ColumnMeta(invColID).Type.Family()
+		jsonOrArray := invColTypeFamily == types.JsonFamily || invColTypeFamily == types.ArrayFamily
+
+		// Only attempt to reduce spans for JSON and array inverted indexes.
+		if minimizeSpans && !jsonOrArray {
+			return
+		}
+
 		// Check whether the filter can constrain the index.
-		spanExpr, constraint, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
+		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
 			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 			c.checkCancellation,
 		)
@@ -863,6 +915,18 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			// A span expression to constrain the inverted index could not be
 			// generated.
 			return
+		}
+		if minimizeSpans {
+			newSpanExpr, ok := reduceInvertedSpans(c.e.ctx, input, scanPrivate.Table, index, spanExpr)
+			if !ok {
+				// The span expression could not be reduced, so skip this index.
+				// An inverted index scan may still be generated for it when
+				// minimizeSpans=false.
+				return
+			}
+			spanExpr = newSpanExpr
+			// If the span was reduced, the original filters must be applied.
+			remainingFilters = filters
 		}
 		spansToRead := spanExpr.SpansToRead
 		// Override the filters with remainingFilters. If the index is a
@@ -889,7 +953,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, constraint)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, con)
 		newScanPrivate.InvertedConstraint = spansToRead
 
 		if scanPrivate.Flags.NoIndexJoin {
@@ -933,6 +997,86 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		sb.Build(grp)
 	})
+}
+
+// reduceInvertedSpans attempts to reduce the spans-to-scan in the given span
+// expression by finding the lowest cardinality, conjunctive span. If the given
+// span expression cannot be reduced, ok=false is returned.
+func reduceInvertedSpans(
+	ctx context.Context,
+	grp memo.RelExpr,
+	tabID opt.TableID,
+	index cat.Index,
+	spanExpr *inverted.SpanExpression,
+) (newSpan *inverted.SpanExpression, ok bool) {
+	// Span expressions that are not unions or intersections cannot be reduced.
+	if spanExpr.Operator == inverted.None {
+		return nil, false
+	}
+
+	colID := tabID.ColumnID(index.InvertedColumn().Ordinal())
+	colStat, ok := grp.Memo().RequestColStat(grp, opt.MakeColSet(colID))
+	if !ok || colStat.Histogram == nil {
+		// Only attempt to reduce spans if we have histogram statistics.
+		// TODO(mgartner): We could blindly reduce the spans without a
+		// histogram, which will probably be better than doing nothing.
+		return nil, false
+	}
+	histogram := colStat.Histogram
+
+	var lowestCardinality float64
+	var findLowestCardinalitySpan func(span *inverted.SpanExpression)
+	findLowestCardinalitySpan = func(span *inverted.SpanExpression) {
+		switch span.Operator {
+		case inverted.SetIntersection:
+			// Recurse into each side looking for the lowest cardinality span.
+			if len(span.FactoredUnionSpans) > 0 {
+				// Check that FactoredUnionSpans is empty. A span expression
+				// with non-empty FactoredUnionSpans is equivalent to a UNION
+				// between the FactoredUnionSpans and the intersected children,
+				// so we can't reduce the span.
+				return
+			}
+			l, ok := span.Left.(*inverted.SpanExpression)
+			if !ok {
+				return
+			}
+			r, ok := span.Right.(*inverted.SpanExpression)
+			if !ok {
+				return
+			}
+			findLowestCardinalitySpan(l)
+			findLowestCardinalitySpan(r)
+		case inverted.SetUnion, inverted.None:
+			// We cannot recurse into unions because both sides must be scanned.
+			// So we consider a union a "leaf".
+			cardinality, ok := cardinalityEstimate(ctx, histogram, span)
+			if ok && (newSpan == nil || cardinality < lowestCardinality) {
+				newSpan = span
+				lowestCardinality = cardinality
+			}
+		}
+	}
+	findLowestCardinalitySpan(spanExpr)
+
+	return newSpan, newSpan != nil
+}
+
+// cardinalityEstimate returns an estimated number of rows that will be scanned
+// with spanExpr based on the given histogram.
+func cardinalityEstimate(
+	ctx context.Context, histogram *props.Histogram, spanExpr *inverted.SpanExpression,
+) (cardinality float64, ok bool) {
+	for i := range spanExpr.SpansToRead {
+		span := spanExpr.SpansToRead[i]
+		if !span.IsSingleVal() {
+			// We can currently only estimate the cardinality of single-valued
+			// spans.
+			return 0, false
+		}
+		cardinality += histogram.EqEstimate(ctx, tree.NewDEncodedKey(tree.DEncodedKey(span.Start)))
+	}
+	return cardinality, true
 }
 
 // GenerateTrigramSimilarityInvertedIndexScans generates scans on inverted
