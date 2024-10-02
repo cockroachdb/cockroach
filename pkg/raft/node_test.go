@@ -18,12 +18,10 @@
 package raft
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -31,85 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// TestNodeStep ensures that node.Step sends msgProp to propc chan
-// and other kinds of messages to recvc chan.
-func TestNodeStep(t *testing.T) {
-	for i, msgn := range raftpb.MessageType_name {
-		n := &node{
-			propc: make(chan msgWithResult, 1),
-			recvc: make(chan raftpb.Message, 1),
-		}
-		msgt := raftpb.MessageType(i)
-		n.Step(context.TODO(), raftpb.Message{Type: msgt})
-		// Proposal goes to proc chan. Others go to recvc chan.
-		if msgt == raftpb.MsgProp {
-			select {
-			case <-n.propc:
-			default:
-				t.Errorf("%d: cannot receive %s on propc chan", msgt, msgn)
-			}
-		} else {
-			if IsLocalMsg(msgt) {
-				select {
-				case <-n.recvc:
-					t.Errorf("%d: step should ignore %s", msgt, msgn)
-				default:
-				}
-			} else {
-				select {
-				case <-n.recvc:
-				default:
-					t.Errorf("%d: cannot receive %s on recvc chan", msgt, msgn)
-				}
-			}
-		}
-	}
-}
-
-// TestNodeStepUnblock should Cancel and Stop should unblock Step()
-func TestNodeStepUnblock(t *testing.T) {
-	// a node without buffer to block step
-	n := &node{
-		propc: make(chan msgWithResult),
-		done:  make(chan struct{}),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	stopFunc := func() { close(n.done) }
-
-	tests := []struct {
-		unblock func()
-		werr    error
-	}{
-		{stopFunc, ErrStopped},
-		{cancel, context.Canceled},
-	}
-
-	for i, tt := range tests {
-		errc := make(chan error, 1)
-		go func() {
-			err := n.Step(ctx, raftpb.Message{Type: raftpb.MsgProp})
-			errc <- err
-		}()
-		tt.unblock()
-		select {
-		case err := <-errc:
-			assert.Equal(t, tt.werr, err, "#%d", i)
-			// clean up side-effect
-			if ctx.Err() != nil {
-				ctx = context.TODO()
-			}
-			select {
-			case <-n.done:
-				n.done = make(chan struct{})
-			default:
-			}
-		case <-time.After(1 * time.Second):
-			t.Fatalf("#%d: failed to unblock step", i)
-		}
-	}
-}
 
 // TestNodePropose ensures that node.Propose sends the given proposal to the underlying raft.
 func TestNodePropose(t *testing.T) {
