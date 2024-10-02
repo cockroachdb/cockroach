@@ -121,6 +121,42 @@ func (h *Histogram) ValuesCount() float64 {
 	return count
 }
 
+// EqEstimate returns the estimated number of rows that equal the given
+// datum. If the datum is equal to a bucket's upperbound, it returns the
+// bucket's NumEq. If the datum falls in the range of a buckets upperand lower
+// bounds, it returns the bucket's NumRange divided by the bucket's
+// DistinctRange. Otherwise, if the datum does not fall into any bucket in the
+// histogram or any comparison between the datum and a bucket's upperbound
+// results in an error, then it returns the total number of values in the
+// histogram divided by the total number of distinct values.
+func (h *Histogram) EqEstimate(ctx context.Context, d tree.Datum) float64 {
+	// Find the bucket belonging to the datum. It is the first bucket where the
+	// datum is less than or equal to the upperbound.
+	bucketIdx := sort.Search(len(h.buckets), func(i int) bool {
+		cmp, err := d.Compare(ctx, h.evalCtx, h.upperBound(i))
+		if err != nil {
+			return false
+		}
+		return cmp <= 0
+	})
+	if bucketIdx < len(h.buckets) {
+		if cmp, err := d.Compare(ctx, h.evalCtx, h.upperBound(bucketIdx)); err == nil {
+			if cmp == 0 {
+				return h.numEq(bucketIdx)
+			}
+			if h.distinctRange(bucketIdx) == 0 {
+				return 0
+			}
+			return h.numRange(bucketIdx) / h.distinctRange(bucketIdx)
+		}
+	}
+	totalDistinct := h.DistinctValuesCount()
+	if totalDistinct == 0 {
+		return 0
+	}
+	return h.ValuesCount() / h.DistinctValuesCount()
+}
+
 // DistinctValuesCount returns the estimated number of distinct values in the
 // histogram.
 func (h *Histogram) DistinctValuesCount() float64 {
