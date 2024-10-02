@@ -1282,9 +1282,26 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 	// valid (i.e., part of the `allDeploymentModes` list). This stops
 	// us from having to implement a `default` branch with an error when
 	// switching on deployment mode.
+	var supportsSeparateProcess bool
 	for _, dm := range test.options.enabledDeploymentModes {
 		if !validDeploymentMode(dm) {
 			fail(fmt.Errorf("invalid test options: unknown deployment mode %q", dm))
 		}
+
+		if dm == SeparateProcessDeployment {
+			supportsSeparateProcess = true
+		}
+	}
+
+	// In separate process deployments, we need to make sure the storage
+	// cluster is still functional while a node is restarting.
+	// Otherwise, the tenant could fail to keep its sqllivenes record
+	// active, causing it to voluntarily shutdown.
+	const minSeparateProcessNodes = 3
+	if supportsSeparateProcess && len(test.crdbNodes) < minSeparateProcessNodes {
+		fail(fmt.Errorf(
+			"invalid test options: %s deployments require cluster with at least %d nodes",
+			SeparateProcessDeployment, minSeparateProcessNodes,
+		))
 	}
 }
