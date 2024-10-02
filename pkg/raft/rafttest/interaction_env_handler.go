@@ -199,6 +199,11 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// v5
 		err = env.handleProposeConfChange(t, d)
 
+	case "set-lazy-replication":
+		// Set the lazy replication mode for a node dynamically.
+		// Example: set-lazy-replication 1 true
+		err = env.handleSetLazyReplication(t, d)
+
 	case "send-msg-app":
 		// Send a MsgApp from the leader to a peer.
 		// Example: send-msg-app 1 to=2 lo=10 hi=20
