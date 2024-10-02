@@ -722,6 +722,12 @@ func (s *Store) processRACv2PiggybackedAdmitted(ctx context.Context, rangeID roa
 	}
 }
 
+func (s *Store) processRACv2RangeController(ctx context.Context, rangeID roachpb.RangeID) {
+	if r, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
+		r.processRACv2RangeController(ctx)
+	}
+}
+
 // nodeIsLiveCallback is invoked when a node transitions from non-live to live.
 // Iterate through all replicas and find any which belong to ranges containing
 // the implicated node. Unquiesce if currently quiesced and the node's replica

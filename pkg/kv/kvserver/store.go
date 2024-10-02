@@ -1541,6 +1541,7 @@ func NewStore(
 		s.cfg.KVFlowStreamTokenProvider,
 		replica_rac2.NewStreamCloseScheduler(
 			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
+		(*racV2Scheduler)(s.scheduler),
 		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 
