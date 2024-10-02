@@ -236,67 +236,58 @@ func TestNodeProposeConfig(t *testing.T) {
 func TestNodeProposeAddDuplicateNode(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
-	defer cancel()
-	n.Campaign(ctx)
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+	require.NoError(t, rn.Campaign())
+
 	allCommittedEntries := make([]raftpb.Entry, 0)
-	ticker := time.NewTicker(time.Millisecond * 100)
-	defer ticker.Stop()
-	goroutineStopped := make(chan struct{})
-	applyConfChan := make(chan struct{})
 
-	rd := readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	go func() {
-		defer close(goroutineStopped)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				n.Tick()
-			case rd := <-n.Ready():
-				t.Log(DescribeReady(rd, nil))
-				s.Append(rd.Entries)
-				applied := false
-				for _, e := range rd.CommittedEntries {
-					allCommittedEntries = append(allCommittedEntries, e)
-					switch e.Type {
-					case raftpb.EntryNormal:
-					case raftpb.EntryConfChange:
-						var cc raftpb.ConfChange
-						cc.Unmarshal(e.Data)
-						n.ApplyConfChange(cc)
-						applied = true
-					}
-				}
-				n.Advance()
-				if applied {
-					applyConfChan <- struct{}{}
-				}
+	ready := func() (appliedConfChange bool) {
+		rd := rn.Ready()
+		t.Log(DescribeReady(rd, nil))
+		require.NoError(t, s.Append(rd.Entries))
+		applied := false
+		for _, e := range rd.CommittedEntries {
+			allCommittedEntries = append(allCommittedEntries, e)
+			switch e.Type {
+			case raftpb.EntryNormal:
+			case raftpb.EntryConfChange:
+				var cc raftpb.ConfChange
+				require.NoError(t, cc.Unmarshal(e.Data))
+				rn.ApplyConfChange(cc)
+				applied = true
 			}
 		}
-	}()
+		rn.Advance(rd)
+		return applied
+	}
+	waitAppliedConfChange := func() bool {
+		for i := 0; i < 10; i++ {
+			if ready() {
+				return true
+			}
+		}
+		return false
+	}
 
 	cc1 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata1, _ := cc1.Marshal()
-	n.ProposeConfChange(ctx, cc1)
-	<-applyConfChan
+	require.NoError(t, rn.ProposeConfChange(cc1))
+	require.True(t, waitAppliedConfChange())
 
 	// try add the same node again
-	n.ProposeConfChange(ctx, cc1)
-	<-applyConfChan
+	require.NoError(t, rn.ProposeConfChange(cc1))
+	require.True(t, waitAppliedConfChange())
 
 	// the new node join should be ok
 	cc2 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 2}
 	ccdata2, _ := cc2.Marshal()
-	n.ProposeConfChange(ctx, cc2)
-	<-applyConfChan
-
-	cancel()
-	<-goroutineStopped
+	require.NoError(t, rn.ProposeConfChange(cc2))
+	require.True(t, waitAppliedConfChange())
 
 	assert.Len(t, allCommittedEntries, 4)
 	assert.Equal(t, ccdata1, allCommittedEntries[1].Data)
