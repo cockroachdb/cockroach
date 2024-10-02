@@ -252,6 +252,12 @@ type Scheduler interface {
 	ScheduleControllerEvent(rangeID roachpb.RangeID)
 }
 
+// MsgAppSender is used to send a MsgApp in pull mode.
+type MsgAppSender interface {
+	// SendMsgApp sends a MsgApp with the given lowPriorityOverride.
+	SendMsgApp(ctx context.Context, msg raftpb.Message, lowPriorityOverride bool)
+}
+
 // RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
 // given raft MsgStorageAppend message, and outboundMsgs. The replicaID is the
 // local replica. The outboundMsgs will only contain MsgApps on the leader.
@@ -364,6 +370,7 @@ type RangeControllerOptions struct {
 	// needed (keyed by (tenantID, storeID)).
 	SSTokenCounter      *StreamTokenCounterProvider
 	RaftInterface       RaftInterface
+	MsgAppSender        MsgAppSender
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
 	Scheduler           Scheduler
@@ -1074,11 +1081,15 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 		clear(rc.scheduledMu.replicas)
 	}()
 
+	updateWaiterSets := false
 	nextScheduled := scheduled[:0]
 	for _, rs := range scheduled {
-		scheduleAgain := rs.sendStream.scheduled(ctx)
+		scheduleAgain, closedVoter := rs.scheduled(ctx)
 		if scheduleAgain {
 			nextScheduled = append(nextScheduled, rs)
+		}
+		if closedVoter {
+			updateWaiterSets = true
 		}
 	}
 	if len(nextScheduled) > 0 {
@@ -1092,6 +1103,9 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 				rc.scheduledMu.replicas[rs.desc.ReplicaID] = struct{}{}
 			}
 		}()
+	}
+	if updateWaiterSets {
+		rc.updateWaiterSetsRaftMuLocked()
 	}
 	return nil
 }
@@ -1820,13 +1834,61 @@ func (rs *replicaState) handleReadyState(
 	return shouldWaitChange
 }
 
-func (rss *replicaState) closeSendStream(ctx context.Context) {
-	log.VEventf(ctx, 1, "closing send stream %v for replica %v", rss.stream, rss.desc)
-	rss.sendStream.mu.Lock()
-	defer rss.sendStream.mu.Unlock()
+// scheduled is only called when rs.sendStream != nil.
+//
+// closedVoter => !scheduleAgain.
+func (rs *replicaState) scheduled(ctx context.Context) (scheduleAgain bool, closedVoter bool) {
+	rss := rs.sendStream
+	rss.mu.Lock()
+	rss.mu.Unlock()
+	if !rss.mu.sendQueue.forceFlushScheduled {
+		return false, false
+	}
+	if rss.isEmptySendQueueLocked() {
+		panic(errors.AssertionFailedf("forceFlushScheduled is true with empty send-queue"))
+	}
+	// 4MB. Don't want to hog the scheduler thread for too long.
+	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
+	// TODO(kvoli): this same code can be extended to handle
+	// rss.mu.sendQueue.deductedForScheduler.tokens, with bytesToSend =
+	// rss.mu.sendQueue.deductedForScheduler.tokens.
+	//
+	// NB: the rss.mu.sendQueue.deductedForScheduler.tokens represent what is
+	// subject to RAC. But Raft is unaware of this linkage between admission
+	// control and flow tokens, and MakeMsgApp will use this bytesToSend to
+	// compute across all entries. This is not harmful for the following
+	// reasons. RACv2 will be configured in one of three modes (a) fully
+	// disabled, so this is irrelevant, (b) flow tokens only for elastic work,
+	// and MsgAppPush mode, so this is irrelevant, (c) flow tokens for regular
+	// and elastic work, and MsgAppPull mode, in which case the total size of
+	// entries not subject to flow control will be tiny. We of course return the
+	// unused tokens for entries not subject to flow control.
+	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
+		rss.parent.desc.ReplicaID, rss.mu.sendQueue.indexToSend, rss.mu.sendQueue.nextRaftIndex,
+		int64(MaxBytesToSend))
+	if err != nil {
+		// Transitioned to StateSnapshot, or some other error that Raft needs to
+		// deal with.
+		rs.sendStream.closeLocked(ctx)
+		rs.sendStream = nil
+		return false, rs.desc.IsAnyVoter()
+	}
+	rss.dequeueFromQueueAndSendLocked(ctx, msg)
+	isEmpty := rss.isEmptySendQueueLocked()
+	if isEmpty {
+		rss.mu.sendQueue.forceFlushScheduled = false
+		return false, false
+	}
+	return true, false
+}
 
-	rss.sendStream.closeLocked(ctx)
-	rss.sendStream = nil
+func (rs *replicaState) closeSendStream(ctx context.Context) {
+	log.VEventf(ctx, 1, "closing send stream %v for replica %v", rs.stream, rs.desc)
+	rs.sendStream.mu.Lock()
+	defer rs.sendStream.mu.Unlock()
+
+	rs.sendStream.closeLocked(ctx)
+	rs.sendStream = nil
 }
 
 func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
@@ -1969,13 +2031,13 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 	}
 
 	if n := len(event.sendingEntries); n > 0 && event.mode == MsgAppPull {
-		_, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
+		msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
 			rss.parent.desc.ReplicaID, event.sendingEntries[0].index, event.sendingEntries[n-1].index+1,
 			math.MaxInt64)
 		if err != nil {
 			return false, err
 		}
-		// TODO(sumeer): send msg
+		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
 	}
 
 	// NB: we don't special case to an empty send-queue in push mode, where Raft
@@ -2023,18 +2085,33 @@ func (rss *replicaSendStream) tryHandleModeChange(ctx context.Context, mode Raft
 }
 
 func (rss *replicaSendStream) startForceFlushLocked(ctx context.Context) {
-	// TODO(kvoli):
 	rss.mu.sendQueue.forceFlushScheduled = true
+	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+	// TODO(kvoli): cancel any watcher and return deducted tokens.
 }
 
 func (rss *replicaSendStream) stopForceFlushLocked(ctx context.Context) {
-	// TODO(kvoli):
 	rss.mu.sendQueue.forceFlushScheduled = false
 }
 
-func (rss *replicaSendStream) scheduled(ctx context.Context) bool {
-	// TODO(sumeer):
-	return false
+func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
+	ctx context.Context, msg raftpb.Message,
+) {
+	rss.mu.AssertHeld()
+	for _, entry := range msg.Entries {
+		entryState := getEntryFCStateOrFatal(ctx, entry)
+		if entryState.index != rss.mu.sendQueue.indexToSend {
+			panic("")
+		}
+		rss.mu.sendQueue.indexToSend++
+		if entryState.usesFlowControl {
+			rss.mu.sendQueue.preciseSizeSum -= entryState.tokens
+			rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entryState.pri)] -=
+				entryState.tokens
+		}
+		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, entryState.tokens)
+	}
+	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
 
 func (rss *replicaSendStream) isEmptySendQueueLocked() bool {
