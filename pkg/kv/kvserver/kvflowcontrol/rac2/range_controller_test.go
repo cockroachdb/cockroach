@@ -51,6 +51,7 @@ type testingRCState struct {
 	ts                    *timeutil.ManualTime
 	clock                 *hlc.Clock
 	ssTokenCounter        *StreamTokenCounterProvider
+	sendTokenWatcher      *SendTokenWatcher
 	probeToCloseScheduler ProbeToCloseTimerScheduler
 	evalMetrics           *EvalWaitMetrics
 	// ranges contains the controllers for each range. It is the main state being
@@ -71,6 +72,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.clock = hlc.NewClockForTesting(s.ts)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
+	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.evalMetrics = NewEvalWaitMetrics()
 	s.ranges = make(map[roachpb.RangeID]*testingRCRange)
@@ -197,12 +199,21 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		defer rss.mu.Unlock()
 
 		fmt.Fprintf(&b,
-			"state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v) precise_q_size=%v force-flush=%t\n",
+			"state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v) precise_q_size=%v",
 			rss.mu.connectedState, rss.mu.closed,
 			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.indexToSend,
-			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum,
-			rss.mu.sendQueue.forceFlushScheduled)
+			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum)
+		if rss.mu.sendQueue.forceFlushScheduled {
+			fmt.Fprintf(&b, " force-flushing")
+		}
+		if rss.mu.sendQueue.deductedForSchedulerTokens > 0 {
+			fmt.Fprintf(&b, " deducted=%v", rss.mu.sendQueue.deductedForSchedulerTokens)
+		}
+		if rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
+			fmt.Fprintf(&b, " watching-for-tokens")
+		}
+		fmt.Fprintf(&b, "\n")
 		fmt.Fprintf(&b, "eval deducted: reg=%v ela=%v\n",
 			rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass],
 			rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass])
@@ -308,6 +319,7 @@ func (s *testingRCState) getOrInitRange(
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			Scheduler:           testRC,
+			SendTokenWatcher:    s.sendTokenWatcher,
 			EvalWaitMetrics:     s.evalMetrics,
 			Knobs:               &kvflowcontrol.TestingKnobs{},
 		}
@@ -1046,7 +1058,8 @@ func TestRangeController(t *testing.T) {
 						false, /* disconnect */
 					)
 				}
-
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
 				return state.tokenCountsString()
 
 			case "cancel_context":
@@ -1157,6 +1170,8 @@ func TestRangeController(t *testing.T) {
 						state.ranges[lastRangeID].admit(ctx, roachpb.StoreID(storeID), av)
 					}
 				}
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
 				return state.tokenCountsString()
 
 			case "raft_event":
@@ -1231,6 +1246,8 @@ func TestRangeController(t *testing.T) {
 					raftEvent.ReplicasStateInfo = testRC.replicasStateInfo()
 					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, raftEvent))
 				}
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
 				return state.tokenCountsString()
 
 			case "internal_schedule_replica":
@@ -1248,6 +1265,8 @@ func TestRangeController(t *testing.T) {
 				d.ScanArgs(t, "range_id", &rangeID)
 				testRC := state.ranges[roachpb.RangeID(rangeID)]
 				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx)
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
 				return state.sendStreamString(roachpb.RangeID(rangeID))
 
 			case "stream_state":

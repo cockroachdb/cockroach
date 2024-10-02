@@ -1271,6 +1271,9 @@ type StoreConfig struct {
 	// KVFlowStreamTokenProvider is used for replication AC (flow control) v2 to
 	// provide token counters for replication streams.
 	KVFlowStreamTokenProvider *rac2.StreamTokenCounterProvider
+	// KVFlowSendTokenWatcher is used for replication AC (flow control) v2 to
+	// watch for elastic send tokens.
+	KVFlowSendTokenWatcher *rac2.SendTokenWatcher
 	// KVFlowEvalWaitMetrics is used for replication AC (flow control) v2 to
 	// track requests waiting for evaluation.
 	KVFlowEvalWaitMetrics *rac2.EvalWaitMetrics
@@ -1542,6 +1545,7 @@ func NewStore(
 		replica_rac2.NewStreamCloseScheduler(
 			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
 		(*racV2Scheduler)(s.scheduler),
+		s.cfg.KVFlowSendTokenWatcher,
 		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 
