@@ -626,28 +626,25 @@ func TestNodeAdvance(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c)
-	defer cancel()
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
 
-	n.Campaign(ctx)
+	require.NoError(t, rn.Campaign())
 	// Persist vote.
-	rd := readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
+	rd := rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 	// Append empty entry.
-	rd = readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	n.Propose(ctx, []byte("foo"))
-	rd = readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
-	select {
-	case <-n.Ready():
-	case <-time.After(100 * time.Millisecond):
-		t.Errorf("expect Ready after Advance, but there is no Ready available")
-	}
+	require.NoError(t, rn.Propose([]byte("foo")))
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+
+	require.True(t, rn.HasReady())
 }
 
 func TestSoftStateEqual(t *testing.T) {
