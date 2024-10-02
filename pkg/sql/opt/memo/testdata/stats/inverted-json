@@ -747,28 +747,13 @@ select
  │    ├── stats: [rows=4e-07]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── inverted-filter
+ │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: true
- │         │    ├── union spans: empty
- │         │    └── INTERSECTION
- │         │         ├── span expression
- │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["a"/"b"/"c", "a"/"b"/"c"]
- │         │         └── span expression
- │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["a"/"d"/"e", "a"/"d"/"e"]
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
- │              │         └── ["a"/"d"/"e", "a"/"d"/"e"]
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
+ │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
  └── filters
       └── (j:2->'a') = '{"b": "c", "d": "e"}' [type=bool, outer=(2), immutable]
 
@@ -788,44 +773,13 @@ select
  │    ├── stats: [rows=4e-07]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── inverted-filter
+ │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: true
- │         │    ├── union spans: empty
- │         │    └── INTERSECTION
- │         │         ├── span expression
- │         │         │    ├── tight: true, unique: true
- │         │         │    ├── union spans: empty
- │         │         │    └── INTERSECTION
- │         │         │         ├── span expression
- │         │         │         │    ├── tight: true, unique: true
- │         │         │         │    ├── union spans: empty
- │         │         │         │    └── INTERSECTION
- │         │         │         │         ├── span expression
- │         │         │         │         │    ├── tight: true, unique: true
- │         │         │         │         │    └── union spans: ["a"/Arr/"b", "a"/Arr/"b"]
- │         │         │         │         └── span expression
- │         │         │         │              ├── tight: true, unique: true
- │         │         │         │              └── union spans: ["a"/Arr/"c", "a"/Arr/"c"]
- │         │         │         └── span expression
- │         │         │              ├── tight: true, unique: true
- │         │         │              └── union spans: ["a"/Arr/"d", "a"/Arr/"d"]
- │         │         └── span expression
- │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["a"/Arr/"e", "a"/Arr/"e"]
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/Arr/"b", "a"/Arr/"b"]
- │              │         ├── ["a"/Arr/"c", "a"/Arr/"c"]
- │              │         ├── ["a"/Arr/"d", "a"/Arr/"d"]
- │              │         └── ["a"/Arr/"e", "a"/Arr/"e"]
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/Arr/"b", "a"/Arr/"b"]
+ │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
  └── filters
       └── (j:2->'a') = '["b", "c", "d", "e"]' [type=bool, outer=(2), immutable]
 
@@ -846,36 +800,13 @@ select
  │    ├── stats: [rows=4e-07]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── inverted-filter
+ │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: true
- │         │    ├── union spans: empty
- │         │    └── INTERSECTION
- │         │         ├── span expression
- │         │         │    ├── tight: true, unique: true
- │         │         │    ├── union spans: empty
- │         │         │    └── INTERSECTION
- │         │         │         ├── span expression
- │         │         │         │    ├── tight: true, unique: true
- │         │         │         │    └── union spans: ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
- │         │         │         └── span expression
- │         │         │              ├── tight: true, unique: true
- │         │         │              └── union spans: ["a"/"b"/Arr/"d", "a"/"b"/Arr/"d"]
- │         │         └── span expression
- │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["a"/"b"/Arr/"e", "a"/"b"/Arr/"e"]
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
- │              │         ├── ["a"/"b"/Arr/"d", "a"/"b"/Arr/"d"]
- │              │         └── ["a"/"b"/Arr/"e", "a"/"b"/Arr/"e"]
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+ │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
  └── filters
       └── (j:2->'a') = '{"b": ["c", "d", "e"]}' [type=bool, outer=(2), immutable]
 
@@ -1157,28 +1088,13 @@ select
  │    ├── stats: [rows=4e-07]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── inverted-filter
+ │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
- │         ├── inverted expression: /5
- │         │    ├── tight: false, unique: true
- │         │    ├── union spans: empty
- │         │    └── INTERSECTION
- │         │         ├── span expression
- │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
- │         │         └── span expression
- │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
- │         ├── stats: [rows=4e-07]
- │         ├── key: (1)
- │         └── scan t@j_idx,inverted
- │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["a"/Arr/1, "a"/Arr/1]
- │              │         └── ["a"/Arr/2, "a"/Arr/2]
- │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
- │                  histogram(5)=
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["a"/Arr/1, "a"/Arr/1]
+ │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
+ │         │   histogram(5)=
+ │         └── key: (1)
  └── filters
       └── (j:2->'a') @> '[1, 2]' [type=bool, outer=(2), immutable]
 

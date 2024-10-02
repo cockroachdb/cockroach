@@ -2681,58 +2681,55 @@ ALTER TABLE d INJECT STATISTICS '[
     }
 ]';
 
-# Filter with a fully-specified array. This should use a zigzag join.
+# Filter with a fully-specified array. This should use a minimal inverted index
+# scan.
 query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
 ----
 distribution: local
 vectorized: true
 ·
-• sort
+• filter
 │ estimated row count: 1,247
-│ order: +a
+│ filter: b @> '[1, 2]'
 │
-└── • lookup join
-    │ estimated row count: 1,247
+└── • index join
+    │ estimated row count: 1,020
     │ table: d@d_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
     │
-    └── • zigzag join
-          estimated row count: 1,247
-          left table: d@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: d@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+    └── • sort
+        │ estimated row count: 1,020
+        │ order: +a
+        │
+        └── • scan
+              estimated row count: 1,020 (1.0% of the table; stats collected <hidden> ago)
+              table: d@foo_inv
+              spans: 1 span
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
-# This should use a zigzag join.
+# This should use a minimal inverted index scan.
 query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
 distribution: local
 vectorized: true
 ·
-• sort
+• filter
 │ estimated row count: 1,247
-│ order: +a
+│ filter: (b @> '[1]') AND (b @> '[2]')
 │
-└── • lookup join
-    │ estimated row count: 1,247
+└── • index join
+    │ estimated row count: 1,020
     │ table: d@d_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
     │
-    └── • zigzag join
-          estimated row count: 1,247
-          left table: d@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: d@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+    └── • sort
+        │ estimated row count: 1,020
+        │ order: +a
+        │
+        └── • scan
+              estimated row count: 1,020 (1.0% of the table; stats collected <hidden> ago)
+              table: d@foo_inv
+              spans: 1 span
 
 # Filter with a nested array. This index expression is not tight.
 # This should use a zigzag join.
