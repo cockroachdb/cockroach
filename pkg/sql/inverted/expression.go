@@ -107,7 +107,7 @@ func MakeSingleValSpan(val EncVal) Span {
 
 // IsSingleVal returns true iff the span is equivalent to [val, val].
 func (s Span) IsSingleVal() bool {
-	return bytes.Equal(keysbase.PrefixEnd(s.Start), s.End)
+	return s.Start != nil && bytes.Equal(keysbase.PrefixEnd(s.Start), s.End)
 }
 
 // Equals returns true if this span has the same start and end as the given

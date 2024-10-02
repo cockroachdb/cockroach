@@ -5379,14 +5379,12 @@ project
       ├── columns: k:1!null
       ├── inverted expression: /6
       │    ├── tight: true, unique: false
-      │    └── union spans: ["", ""]
+      │    └── union spans: ["", "\xff\xff")
       ├── key: (1)
       └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
-           ├── inverted constraint: /6/1
-           │    └── spans: ["", ""]
-           ├── key: (1)
-           └── fd: (1)-->(6)
+           └── inverted constraint: /6/1
+                └── spans: ["", "\xff\xff")
 
 opt expect-not=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a IS NULL
