@@ -198,6 +198,12 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// propose-conf-change 2 v1=true
 		// v5
 		err = env.handleProposeConfChange(t, d)
+
+	case "send-msg-app":
+		// Send a MsgApp from the leader to a peer.
+		// Example: send-msg-app 1 to=2 lo=10 hi=20
+		err = env.handleSendMsgApp(t, d)
+
 	case "report-unreachable":
 		// Calls <1st>.ReportUnreachable(<2nd>).
 		//
