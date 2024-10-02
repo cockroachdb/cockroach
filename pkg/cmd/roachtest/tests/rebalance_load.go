@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -329,6 +330,7 @@ func makeStoreCPUFn(
 			name:      "cr.node.sys.cpu.combined.percent-normalized",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
+			tenantID:  roachpb.SystemTenantID,
 		}
 	}
 
