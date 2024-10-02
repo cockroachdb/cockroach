@@ -18,6 +18,7 @@ import { PageLayout } from "src/layouts";
 import { Loading } from "src/loading";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
+import { TableGrantsView } from "./tableGrantsView";
 import { TableOverview } from "./tableOverview";
 
 enum TabKeys {
@@ -63,7 +64,7 @@ export const TableDetailsPageV2 = () => {
         </Loading>
       ),
     },
-    { key: TabKeys.GRANTS, label: "Grants" },
+    { key: TabKeys.GRANTS, label: "Grants", children: <TableGrantsView /> },
     { key: TabKeys.INDEXES, label: "Indexes" },
   ];
 
