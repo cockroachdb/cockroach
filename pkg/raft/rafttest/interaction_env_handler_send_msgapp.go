@@ -13,6 +13,7 @@ package rafttest
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -20,6 +21,15 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func (env *InteractionEnv) handleSetLazyReplication(t *testing.T, d datadriven.TestData) error {
+	require.Len(t, d.CmdArgs, 2)
+	idx := firstAsNodeIdx(t, d)
+	lazy, err := strconv.ParseBool(d.CmdArgs[1].Key)
+	require.NoError(t, err)
+	env.Nodes[idx].SetLazyReplication(lazy)
+	return nil
+}
 
 func (env *InteractionEnv) handleSendMsgApp(t *testing.T, d datadriven.TestData) error {
 	require.Len(t, d.CmdArgs, 4)
