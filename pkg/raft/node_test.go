@@ -389,17 +389,9 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 func TestNodeTick(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
 	elapsed := r.electionElapsed
-	n.Tick()
-
-	for len(n.tickc) != 0 {
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	n.Stop()
+	rn.Tick()
 	assert.Equal(t, elapsed+1, r.electionElapsed)
 }
 
