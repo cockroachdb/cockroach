@@ -114,7 +114,7 @@ type Logger interface {
 // panicFataler is a Logger that panics when Fatal is called.
 type panicLogger struct{}
 
-var DefaultLogger Logger = &panicLogger{}
+var PanicLogger Logger = &panicLogger{}
 
 func (*panicLogger) Warningf(context.Context, string, ...interface{}) {}
 func (*panicLogger) Fatalf(_ context.Context, format string, args ...interface{}) {
@@ -218,7 +218,7 @@ func NewClockForTesting(wallClock WallClock) *Clock {
 	if wallClock == nil {
 		wallClock = timeutil.DefaultTimeSource{}
 	}
-	return NewClock(wallClock, 0 /* maxOffset */, 0 /* toleratedOffset */, DefaultLogger)
+	return NewClock(wallClock, 0 /* maxOffset */, 0 /* toleratedOffset */, PanicLogger)
 }
 
 // NewClock returns a Clock configured to use a specified time source. Use

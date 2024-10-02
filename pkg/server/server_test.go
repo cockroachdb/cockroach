@@ -484,7 +484,7 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 
 			const maxOffset = 500 * time.Millisecond
 			m := timeutil.NewManualTime(timeutil.Unix(0, test.clockStartTime))
-			c := hlc.NewClock(m, maxOffset, maxOffset, hlc.DefaultLogger)
+			c := hlc.NewClock(m, maxOffset, maxOffset, hlc.PanicLogger)
 
 			sleepUntilFn := func(ctx context.Context, t hlc.Timestamp) error {
 				delta := t.GoTime().Sub(c.Now().GoTime())
