@@ -773,48 +773,47 @@ func TestCommitPagination(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
 	cfg.MaxCommittedSizePerReady = 2048
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
-	defer cancel()
-	n.Campaign(ctx)
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+
+	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
-	rd := readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
-	// Append empty entry.
-	rd = readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
-	// Apply empty entry.
-	rd = readyWithTimeout(n)
-	require.Len(t, rd.CommittedEntries, 1)
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	s.Append(rd.Entries)
-	n.Advance()
+	// Append empty entry.
+	rd = rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
+	// Apply empty entry.
+	rd = rn.Ready()
+	require.Len(t, rd.CommittedEntries, 1)
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 3; i++ {
-		require.NoError(t, n.Propose(ctx, blob), "#%d", i)
+		require.NoError(t, rn.Propose(blob), "#%d", i)
 	}
 
 	// First the three proposals have to be appended.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Entries, 3)
-
-	s.Append(rd.Entries)
-	n.Advance()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
 	// The 3 proposals will commit in two batches.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 2)
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	s.Append(rd.Entries)
-	n.Advance()
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 1)
-
-	s.Append(rd.Entries)
-	n.Advance()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 }
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
