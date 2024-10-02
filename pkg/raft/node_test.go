@@ -588,9 +588,9 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	}
 
 	s := NewMemoryStorage()
-	s.SetHardState(st)
-	s.ApplySnapshot(snap)
-	s.Append(entries)
+	require.NoError(t, s.SetHardState(st))
+	require.NoError(t, s.ApplySnapshot(snap))
+	require.NoError(t, s.Append(entries))
 	c := &Config{
 		ID:              1,
 		ElectionTick:    10,
@@ -601,17 +601,14 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	n := RestartNode(c)
-	defer n.Stop()
-	if assert.Equal(t, want, <-n.Ready()) {
-		n.Advance()
-	}
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
 
-	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
-	case <-time.After(time.Millisecond):
+	rd := rn.Ready()
+	if assert.Equal(t, want, rd) {
+		rn.Advance(rd)
 	}
+	require.False(t, rn.HasReady())
 }
 
 func TestNodeAdvance(t *testing.T) {
