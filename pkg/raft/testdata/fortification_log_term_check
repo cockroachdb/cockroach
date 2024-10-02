@@ -1,0 +1,616 @@
+# Tests the following scenario:
+# - 5 node cluster. 1 is initially the fortified leader.
+# - Network partition -- (1, 5) on one side, and (2, 3, 4) on another side.
+# - 2 is able to become the new leader at term 2. Commits an entry.
+# - 2 and 3 go away. Cluster is unavailable.
+# - Network partition heals. Cluster should become available now. However,
+# because 4 is the node with the longest log, it's the only candidate that can
+# successfully become the leader.
+# - The test ensures that 4 is able to win an election, even though 1 and 5 have
+# still been supporting each other in store liveness all this while.
+
+log-level debug
+----
+ok
+
+add-nodes 5 voters=(1,2,3,4,5) index=10
+----
+INFO 1 switched to configuration voters=(1 2 3 4 5)
+INFO 1 became follower at term 0
+INFO newRaft 1 [peers: [1,2,3,4,5], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 2 switched to configuration voters=(1 2 3 4 5)
+INFO 2 became follower at term 0
+INFO newRaft 2 [peers: [1,2,3,4,5], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 3 switched to configuration voters=(1 2 3 4 5)
+INFO 3 became follower at term 0
+INFO newRaft 3 [peers: [1,2,3,4,5], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 4 switched to configuration voters=(1 2 3 4 5)
+INFO 4 became follower at term 0
+INFO newRaft 4 [peers: [1,2,3,4,5], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 5 switched to configuration voters=(1 2 3 4 5)
+INFO 5 became follower at term 0
+INFO newRaft 5 [peers: [1,2,3,4,5], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+
+campaign 1
+----
+INFO 1 is starting a new election at term 0
+INFO 1 became candidate at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 2 at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 3 at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 4 at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 5 at term 1
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  1->2 MsgVote Term:1 Log:1/10
+  1->3 MsgVote Term:1 Log:1/10
+  1->4 MsgVote Term:1 Log:1/10
+  1->5 MsgVote Term:1 Log:1/10
+  INFO 1 received MsgVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
+> 2 receiving messages
+  1->2 MsgVote Term:1 Log:1/10
+  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 2 became follower at term 1
+  INFO 2 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 3 receiving messages
+  1->3 MsgVote Term:1 Log:1/10
+  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 3 became follower at term 1
+  INFO 3 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 4 receiving messages
+  1->4 MsgVote Term:1 Log:1/10
+  INFO 4 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 4 became follower at term 1
+  INFO 4 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 5 receiving messages
+  1->5 MsgVote Term:1 Log:1/10
+  INFO 5 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 5 became follower at term 1
+  INFO 5 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  2->1 MsgVoteResp Term:1 Log:0/0
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  3->1 MsgVoteResp Term:1 Log:0/0
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  4->1 MsgVoteResp Term:1 Log:0/0
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  5->1 MsgVoteResp Term:1 Log:0/0
+> 1 receiving messages
+  2->1 MsgVoteResp Term:1 Log:0/0
+  INFO 1 received MsgVoteResp from 2 at term 1
+  INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
+  3->1 MsgVoteResp Term:1 Log:0/0
+  INFO 1 received MsgVoteResp from 3 at term 1
+  INFO 1 has received 3 MsgVoteResp votes and 0 vote rejections
+  INFO 1 became leader at term 1
+  4->1 MsgVoteResp Term:1 Log:0/0
+  5->1 MsgVoteResp Term:1 Log:0/0
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  1->4 MsgFortifyLeader Term:1 Log:0/0
+  1->5 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->4 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->5 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 2 receiving messages
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 3 receiving messages
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 4 receiving messages
+  1->4 MsgFortifyLeader Term:1 Log:0/0
+  1->4 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 5 receiving messages
+  1->5 MsgFortifyLeader Term:1 Log:0/0
+  1->5 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  4->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  5->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  5->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  4->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  5->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  5->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->3 MsgApp Term:1 Log:1/11 Commit:11
+  1->4 MsgApp Term:1 Log:1/11 Commit:11
+  1->5 MsgApp Term:1 Log:1/11 Commit:11
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/11 Commit:11
+> 4 receiving messages
+  1->4 MsgApp Term:1 Log:1/11 Commit:11
+> 5 receiving messages
+  1->5 MsgApp Term:1 Log:1/11 Commit:11
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  4->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  5->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  4->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  5->1 MsgAppResp Term:1 Log:0/11 Commit:11
+
+print-fortification-state 1
+----
+1 : 1
+2 : 1
+3 : 1
+4 : 1
+5 : 1
+
+# Simulate the case where nodes 2, 3, and 4 are partitioned away from 1 and 5.
+# The majority should then be able to elect a new leader. Note that in all this,
+# 5 continues to fortify 1.
+
+withdraw-support 2 1
+----
+  1 2 3 4 5
+1 1 1 1 1 1
+2 x 1 1 1 1
+3 1 1 1 1 1
+4 1 1 1 1 1
+5 1 1 1 1 1
+
+withdraw-support 3 1
+----
+  1 2 3 4 5
+1 1 1 1 1 1
+2 x 1 1 1 1
+3 x 1 1 1 1
+4 1 1 1 1 1
+5 1 1 1 1 1
+
+withdraw-support 4 1
+----
+  1 2 3 4 5
+1 1 1 1 1 1
+2 x 1 1 1 1
+3 x 1 1 1 1
+4 x 1 1 1 1
+5 1 1 1 1 1
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+5: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+
+campaign 2
+----
+INFO 2 is starting a new election at term 1
+INFO 2 became candidate at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 4 at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 5 at term 2
+
+stabilize 2
+----
+> 2 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  2->1 MsgVote Term:2 Log:1/11
+  2->3 MsgVote Term:2 Log:1/11
+  2->4 MsgVote Term:2 Log:1/11
+  2->5 MsgVote Term:2 Log:1/11
+  INFO 2 received MsgVoteResp from 2 at term 2
+  INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
+
+deliver-msgs drop=(1,5)
+----
+dropped: 2->1 MsgVote Term:2 Log:1/11
+dropped: 2->5 MsgVote Term:2 Log:1/11
+
+stabilize 3 4
+----
+> 3 receiving messages
+  2->3 MsgVote Term:2 Log:1/11
+  INFO 3 [term: 1] received a MsgVote message with higher term from 2 [term: 2]
+  INFO 3 became follower at term 2
+  INFO 3 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
+> 4 receiving messages
+  2->4 MsgVote Term:2 Log:1/11
+  INFO 4 [term: 1] received a MsgVote message with higher term from 2 [term: 2]
+  INFO 4 became follower at term 2
+  INFO 4 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  3->2 MsgVoteResp Term:2 Log:0/0
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  4->2 MsgVoteResp Term:2 Log:0/0
+
+stabilize 2
+----
+> 2 receiving messages
+  3->2 MsgVoteResp Term:2 Log:0/0
+  INFO 2 received MsgVoteResp from 3 at term 2
+  INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
+  4->2 MsgVoteResp Term:2 Log:0/0
+  INFO 2 received MsgVoteResp from 4 at term 2
+  INFO 2 has received 3 MsgVoteResp votes and 0 vote rejections
+  INFO 2 became leader at term 2
+> 2 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
+  Entries:
+  2/12 EntryNormal ""
+  Messages:
+  2->1 MsgFortifyLeader Term:2 Log:0/0
+  2->3 MsgFortifyLeader Term:2 Log:0/0
+  2->4 MsgFortifyLeader Term:2 Log:0/0
+  2->5 MsgFortifyLeader Term:2 Log:0/0
+  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->3 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->4 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+
+deliver-msgs drop=(1, 5)
+----
+dropped: 2->1 MsgFortifyLeader Term:2 Log:0/0
+dropped: 2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+dropped: 2->5 MsgFortifyLeader Term:2 Log:0/0
+dropped: 2->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+
+stabilize 3 4
+----
+> 3 receiving messages
+  2->3 MsgFortifyLeader Term:2 Log:0/0
+  2->3 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+> 4 receiving messages
+  2->4 MsgFortifyLeader Term:2 Log:0/0
+  2->4 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
+  Entries:
+  2/12 EntryNormal ""
+  Messages:
+  3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  3->2 MsgAppResp Term:2 Log:0/12 Commit:11
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
+  Entries:
+  2/12 EntryNormal ""
+  Messages:
+  4->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  4->2 MsgAppResp Term:2 Log:0/12 Commit:11
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateLeader (Voter) Term:2 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+4: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+5: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+
+# Now, let's say 2 and 3 go away (maybe they're partitioned, maybe they're
+# down), but the network partition heals. At this point, only 4 should be able
+# to win an election, as 4 is the only node that has the entry that node 2
+# committed when it won the election.
+
+withdraw-support 4 2
+----
+  1 2 3 4 5
+1 1 1 1 1 1
+2 x 1 1 1 1
+3 x 1 1 1 1
+4 x x 1 1 1
+5 1 1 1 1 1
+
+# Note that when we heal the network partition, 2
+
+withdraw-support 1 2
+----
+  1 2 3 4 5
+1 1 x 1 1 1
+2 x 1 1 1 1
+3 x 1 1 1 1
+4 x x 1 1 1
+5 1 1 1 1 1
+
+withdraw-support 5 2
+----
+  1 2 3 4 5
+1 1 x 1 1 1
+2 x 1 1 1 1
+3 x 1 1 1 1
+4 x x 1 1 1
+5 1 x 1 1 1
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateLeader (Voter) Term:2 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+4: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+5: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+
+campaign 4
+----
+INFO 4 is starting a new election at term 2
+INFO 4 became candidate at term 3
+INFO 4 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
+INFO 4 [logterm: 2, index: 12] sent MsgVote request to 2 at term 3
+INFO 4 [logterm: 2, index: 12] sent MsgVote request to 3 at term 3
+INFO 4 [logterm: 2, index: 12] sent MsgVote request to 5 at term 3
+
+stabilize 4
+----
+> 4 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  4->1 MsgVote Term:3 Log:2/12
+  4->2 MsgVote Term:3 Log:2/12
+  4->3 MsgVote Term:3 Log:2/12
+  4->5 MsgVote Term:3 Log:2/12
+  INFO 4 received MsgVoteResp from 4 at term 3
+  INFO 4 has received 1 MsgVoteResp votes and 0 vote rejections
+
+deliver-msgs drop=(2,3)
+----
+dropped: 3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+dropped: 3->2 MsgAppResp Term:2 Log:0/12 Commit:11
+dropped: 4->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+dropped: 4->2 MsgAppResp Term:2 Log:0/12 Commit:11
+dropped: 4->2 MsgVote Term:3 Log:2/12
+dropped: 4->3 MsgVote Term:3 Log:2/12
+
+stabilize 1 4 5
+----
+> 1 receiving messages
+  4->1 MsgVote Term:3 Log:2/12
+  INFO 1 [term: 1] received a MsgVote message with higher term from 4 [term: 3]
+  INFO 1 became follower at term 3
+  INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 2, index: 12] at term 3
+> 5 receiving messages
+  4->5 MsgVote Term:3 Log:2/12
+  INFO 5 [term: 1] received a MsgVote message with higher term from 4 [term: 3]
+  INFO 5 became follower at term 3
+  INFO 5 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 2, index: 12] at term 3
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateFollower
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  1->4 MsgVoteResp Term:3 Log:0/0
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  5->4 MsgVoteResp Term:3 Log:0/0
+> 4 receiving messages
+  1->4 MsgVoteResp Term:3 Log:0/0
+  INFO 4 received MsgVoteResp from 1 at term 3
+  INFO 4 has received 2 MsgVoteResp votes and 0 vote rejections
+  5->4 MsgVoteResp Term:3 Log:0/0
+  INFO 4 received MsgVoteResp from 5 at term 3
+  INFO 4 has received 3 MsgVoteResp votes and 0 vote rejections
+  INFO 4 became leader at term 3
+> 4 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:3 Vote:4 Commit:11 Lead:4 LeadEpoch:1
+  Entries:
+  3/13 EntryNormal ""
+  Messages:
+  4->1 MsgFortifyLeader Term:3 Log:0/0
+  4->2 MsgFortifyLeader Term:3 Log:0/0
+  4->3 MsgFortifyLeader Term:3 Log:0/0
+  4->5 MsgFortifyLeader Term:3 Log:0/0
+  4->1 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+  4->2 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+  4->3 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+  4->5 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+> 1 receiving messages
+  4->1 MsgFortifyLeader Term:3 Log:0/0
+  4->1 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+  DEBUG 1 [logterm: 0, index: 12] rejected MsgApp [logterm: 2, index: 12] from 4
+> 5 receiving messages
+  4->5 MsgFortifyLeader Term:3 Log:0/0
+  4->5 MsgApp Term:3 Log:2/12 Commit:11 Entries:[3/13 EntryNormal ""]
+  DEBUG 5 [logterm: 0, index: 12] rejected MsgApp [logterm: 2, index: 12] from 4
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:11 Lead:4 LeadEpoch:1
+  Messages:
+  1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  1->4 MsgAppResp Term:3 Log:1/12 Rejected (Hint: 11) Commit:11
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:11 Lead:4 LeadEpoch:1
+  Messages:
+  5->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  5->4 MsgAppResp Term:3 Log:1/12 Rejected (Hint: 11) Commit:11
+> 4 receiving messages
+  1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  1->4 MsgAppResp Term:3 Log:1/12 Rejected (Hint: 11) Commit:11
+  DEBUG 4 received MsgAppResp(rejected, hint: (index 11, term 1)) from 1 for index 12
+  DEBUG 4 decreased progress of 1 to [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
+  5->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  5->4 MsgAppResp Term:3 Log:1/12 Rejected (Hint: 11) Commit:11
+  DEBUG 4 received MsgAppResp(rejected, hint: (index 11, term 1)) from 5 for index 12
+  DEBUG 4 decreased progress of 5 to [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
+> 4 handling Ready
+  Ready MustSync=false:
+  Messages:
+  4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[
+    2/12 EntryNormal ""
+    3/13 EntryNormal ""
+  ]
+  4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[
+    2/12 EntryNormal ""
+    3/13 EntryNormal ""
+  ]
+> 1 receiving messages
+  4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[
+    2/12 EntryNormal ""
+    3/13 EntryNormal ""
+  ]
+> 5 receiving messages
+  4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[
+    2/12 EntryNormal ""
+    3/13 EntryNormal ""
+  ]
+> 1 handling Ready
+  Ready MustSync=true:
+  Entries:
+  2/12 EntryNormal ""
+  3/13 EntryNormal ""
+  Messages:
+  1->4 MsgAppResp Term:3 Log:0/13 Commit:11
+> 5 handling Ready
+  Ready MustSync=true:
+  Entries:
+  2/12 EntryNormal ""
+  3/13 EntryNormal ""
+  Messages:
+  5->4 MsgAppResp Term:3 Log:0/13 Commit:11
+> 4 receiving messages
+  1->4 MsgAppResp Term:3 Log:0/13 Commit:11
+  5->4 MsgAppResp Term:3 Log:0/13 Commit:11
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:13 Lead:4 LeadEpoch:1
+  CommittedEntries:
+  2/12 EntryNormal ""
+  3/13 EntryNormal ""
+  Messages:
+  4->1 MsgApp Term:3 Log:3/13 Commit:13
+  4->5 MsgApp Term:3 Log:3/13 Commit:13
+> 1 receiving messages
+  4->1 MsgApp Term:3 Log:3/13 Commit:13
+> 5 receiving messages
+  4->5 MsgApp Term:3 Log:3/13 Commit:13
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:13 Lead:4 LeadEpoch:1
+  CommittedEntries:
+  2/12 EntryNormal ""
+  3/13 EntryNormal ""
+  Messages:
+  1->4 MsgAppResp Term:3 Log:0/13 Commit:13
+> 5 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:4 Commit:13 Lead:4 LeadEpoch:1
+  CommittedEntries:
+  2/12 EntryNormal ""
+  3/13 EntryNormal ""
+  Messages:
+  5->4 MsgAppResp Term:3 Log:0/13 Commit:13
+> 4 receiving messages
+  1->4 MsgAppResp Term:3 Log:0/13 Commit:13
+  5->4 MsgAppResp Term:3 Log:0/13 Commit:13
+
+raft-state
+----
+1: StateFollower (Voter) Term:3 Lead:4 LeadEpoch:1
+2: StateLeader (Voter) Term:2 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+4: StateLeader (Voter) Term:3 Lead:4 LeadEpoch:1
+5: StateFollower (Voter) Term:3 Lead:4 LeadEpoch:1
