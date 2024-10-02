@@ -83,9 +83,9 @@ authlog 5
 9 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 10 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
-connect user=abc password=abc
+connect user=abc password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb password
 
 authlog 6
 .*client_connection_end
@@ -167,9 +167,9 @@ authlog 5
 31 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 32 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
-connect user=abc password=abc
+connect user=abc password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb scram-sha-256
 
 authlog 6
 .*client_connection_end
@@ -220,9 +220,9 @@ subtest scram_cert/cert
 
 # testuser is presenting a valid TLS client cert.
 
-connect user=testuser
+connect user=testuser show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-scram-sha-256
 
 authlog 7
 .*client_connection_end
@@ -253,9 +253,9 @@ authlog 6
 56 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 57 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
-connect user=abc password=abc
+connect user=abc password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-scram-sha-256
 
 authlog 7
 .*client_connection_end
@@ -268,9 +268,9 @@ authlog 7
 63 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 64 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
-connect user=abc2 password=abc
+connect user=abc2 password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-scram-sha-256
 
 authlog 7
 .*client_connection_end
@@ -308,9 +308,9 @@ host     all      foo  all     cert-password
 host     all      abc  all     cert-password
 
 # Foo uses a bcrypt hash.
-connect user=foo password=abc
+connect user=foo password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-password
 
 # Assert the conn used a cleartext handshake.
 authlog 8
@@ -325,9 +325,9 @@ authlog 8
 78 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 79 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
-connect user=abc password=abc
+connect user=abc password=abc show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-password
 
 # Assert the conn used a SCRAM handshake.
 authlog 6

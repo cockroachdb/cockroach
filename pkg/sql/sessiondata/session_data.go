@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -168,6 +169,9 @@ type LocalUnmigratableSessionData struct {
 
 	// IsSSL indicates whether the session is using SSL/TLS.
 	IsSSL bool
+
+	// AuthenticationMethod is the method used to authenticate this session.
+	AuthenticationMethod redact.SafeString
 
 	// ////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //

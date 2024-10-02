@@ -4,9 +4,9 @@ config secure
 subtest auth_reject
 
 # Smoke test: the test user can log in.
-connect user=testuser
+connect user=testuser show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-password
 
 # With a 'reject' rule, they can't log in anymore even though a later
 # rule lets them.
@@ -64,9 +64,9 @@ host     all      nocert all     trust
 host     all      all    all     cert
 
 
-connect user=nocert sslcert= sslmode=require
+connect user=nocert sslcert= sslmode=require show_authentication_method
 ----
-ok defaultdb
+ok defaultdb trust
 
 subtest auth_trust/inexistent_user
 
