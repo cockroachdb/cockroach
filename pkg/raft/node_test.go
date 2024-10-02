@@ -207,26 +207,23 @@ func TestNodeProposeConfig(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	n.Campaign(context.TODO())
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
-	n.ProposeConfChange(context.TODO(), cc)
-	n.Stop()
+	require.NoError(t, rn.ProposeConfChange(cc))
 
 	require.Len(t, msgs, 2)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
