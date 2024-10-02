@@ -476,50 +476,39 @@ func TestNodeStart(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	StartNode(c, []Peer{{ID: 1}})
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c, Peer{ID: 1})
-	defer cancel()
 
-	{
-		rd := <-n.Ready()
-		require.Equal(t, wants[0], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
+	require.NoError(t, rn.Bootstrap([]Peer{{ID: 1}}))
 
-	require.NoError(t, n.Campaign(ctx))
+	rd := rn.Ready()
+	require.Equal(t, wants[0], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	{
-		// Persist vote.
-		rd := <-n.Ready()
-		storage.Append(rd.Entries)
-		n.Advance()
-		// Append empty entry.
-		rd = <-n.Ready()
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	require.NoError(t, rn.Campaign())
 
-	n.Propose(ctx, []byte("foo"))
-	{
-		rd := <-n.Ready()
-		assert.Equal(t, wants[1], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	// Persist vote.
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+	// Append empty entry.
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	{
-		rd := <-n.Ready()
-		assert.Equal(t, wants[2], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	require.NoError(t, rn.Propose([]byte("foo")))
+	rd = rn.Ready()
+	assert.Equal(t, wants[1], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
-	case <-time.After(time.Millisecond):
-	}
+	rd = rn.Ready()
+	assert.Equal(t, wants[2], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+
+	require.False(t, rn.HasReady())
 }
 
 func TestNodeRestart(t *testing.T) {
