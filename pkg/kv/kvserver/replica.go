@@ -1498,8 +1498,10 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 // SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
 // not affect the on disk state and is only safe to use for testing purposes.
 func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.shMu.state.Stats = stats
 }
 
