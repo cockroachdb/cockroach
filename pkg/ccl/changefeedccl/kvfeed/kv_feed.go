@@ -318,6 +318,9 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	log.Infof(ctx, "kv feed run starting")
 
 	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
+		if log.V(2) {
+			log.Infof(ctx, "emitting resolved spans at time %s with boundary %s for spans: %s", ts, boundary, f.spans)
+		}
 		for _, sp := range f.spans {
 			if err := f.writer.Add(ctx, kvevent.NewBackfillResolvedEvent(sp, ts, boundary)); err != nil {
 				return err
@@ -412,10 +415,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Exit if the policy says we should.
 		if boundaryType == jobspb.ResolvedSpan_RESTART || boundaryType == jobspb.ResolvedSpan_EXIT {
+			log.Infof(ctx, "kv feed run loop exiting due to schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 			return schemaChangeDetectedError{ts: schemaChangeTS}
 		}
 
-		log.Infof(ctx, "kv feed run loop restarting because of schema change at %s", schemaChangeTS)
+		log.Infof(ctx, "kv feed run loop restarting because of schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 	}
 }
 
