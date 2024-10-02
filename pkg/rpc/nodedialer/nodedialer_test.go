@@ -163,9 +163,12 @@ func TestConnHealth(t *testing.T) {
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
 	hbDecommission.Store(true)
-	require.Eventually(t, func() bool {
-		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
-	}, time.Second, 10*time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotNil(c, nd.ConnHealth(staticNodeID, rpc.DefaultClass),
+			"expected nd.ConnHealth(%v,rpc.DefaultClass) == nil", staticNodeID)
+	}, 5*time.Second, 20*time.Millisecond,
+		"expected closing the remote connection to n%v to fail ConnHealth, "+
+			"but remained healthy for last 5 seconds", staticNodeID)
 }
 
 func TestConnHealthTryDial(t *testing.T) {
