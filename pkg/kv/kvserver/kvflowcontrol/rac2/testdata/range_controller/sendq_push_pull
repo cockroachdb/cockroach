@@ -98,6 +98,9 @@ NormalPri:
 eval deducted: reg=+0 B ela=+7.0 MiB
 eval original in send-q: reg=+2.0 MiB ela=+5.0 MiB
 ++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [3 4]
+++++
 
 # Switch back to push mode and pop index 1 from the send-queue of replica 3.
 raft_event

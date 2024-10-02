@@ -70,8 +70,11 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+++++
 
-# Make replica 2 transition to StateSnapshot. Now replica 2 is picked for
+# Make replica 2 transition to StateSnapshot. Now replica 3 is picked for
 # force-flush instead of replica 4, since the latter is a non-voter.
 set_replicas pull-mode
 range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=2
@@ -100,3 +103,5 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3

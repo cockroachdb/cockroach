@@ -59,6 +59,10 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+ to: 3, lowPri: false entries: [1]
+++++
 
 # Append another entry. One of the follower replicas, replica 3, is not
 # permitted to form a send-queue.
@@ -96,6 +100,9 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [2]
+++++
 
 # Replica 3 transitions to StateSnapshot.
 set_replicas pull-mode
@@ -128,6 +135,8 @@ NormalPri:
 ++++
 (n3,s3):3: closed
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
 
 # Append another entry. Since there is no quorum without a send-queue, replica
 # 3 continues to force-flush.
@@ -162,6 +171,8 @@ NormalPri:
 ++++
 (n3,s3):3: closed
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
 
 # Replica 3 returns without a send-queue.
 set_replicas pull-mode
@@ -193,3 +204,5 @@ NormalPri:
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
