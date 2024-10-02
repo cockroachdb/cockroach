@@ -146,6 +146,8 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
 
 # Another raft event. Replica 2 continues force-flushing.
 raft_event pull-mode
@@ -196,3 +198,5 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2

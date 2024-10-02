@@ -280,6 +280,7 @@ func (s *testingRCState) getOrInitRange(
 			LocalReplicaID:      r.localReplicaID,
 			SSTokenCounter:      s.ssTokenCounter,
 			RaftInterface:       testRC,
+			MsgAppSender:        testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			Scheduler:           testRC,
@@ -356,7 +357,14 @@ func (r *testingRCRange) replicasStateInfo() map[roachpb.ReplicaID]ReplicaStateI
 }
 
 func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
+	// TODO(sumeer): record this in the datadriven test output.
 	return false
+}
+
+func (r *testingRCRange) SendMsgApp(
+	ctx context.Context, msg raftpb.Message, lowPriorityOverride bool,
+) {
+	// TODO(sumeer): record this in the datadriven test output.
 }
 
 func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {

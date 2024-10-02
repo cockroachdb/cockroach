@@ -100,3 +100,5 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3

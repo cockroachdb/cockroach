@@ -119,6 +119,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 5
 
 # Replica 3 transitions back to StateReplicate. Replica 5 is no longer
 # force-flushing.
@@ -158,6 +160,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 5
 
 # Make replica 5 look more overloaded wrt the bucketed elastic send tokens
 # (bucket size is 0.8MiB).
@@ -211,6 +215,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replica 3 transitions back to StateReplicate. Replica 4 is no longer
 # force-flushing.
@@ -250,6 +256,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Make replica 4 look more overloaded wrt the elastic send tokens, but after
 # bucketing, replica 4 and 5 look the same (bucket size is 0.8MiB).
@@ -321,6 +329,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replica 2 also transitions to StateSnapshot. Replicas 4, 5 are
 # force-flushing.
@@ -354,6 +364,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replica 2 transitions back to StateReplicate. Replica 5 is no longer
 # force-flushing. Replica 4 continues to force-flush.
@@ -389,6 +401,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replica 2 transitions to StateSnapshot. Replica 5 also starts
 # force-flushing.
@@ -422,6 +436,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replicas 2, 3 transition back to StateReplicate. Replicas 4, 5 stop
 # force-flushing.
@@ -459,6 +475,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Replicas 2, 3 transition back to StateSnapshot. Replicas 4, 5 start
 # force-flushing.
@@ -492,6 +510,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
 
 # Push mode. Replicas 4, 5 stop force-flushing in push mode.
 raft_event
@@ -528,3 +548,5 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 4 5
