@@ -65,6 +65,10 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+ to: 3, lowPri: false entries: [1]
+++++
 
 # Set the leaseholder back to replica 1, which is the leader and append
 # another entry. Now replica 2 has a send-queue.
@@ -106,6 +110,9 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [2]
+++++
 
 # Make replica 2 the leaseholder again. It is told to force-flush because it
 # is the leaseholder, even though replica 1 and 3 already constitute a quorum
@@ -146,6 +153,8 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
 
 # Another raft event. Replica 2 continues force-flushing.
 raft_event pull-mode
@@ -196,3 +205,5 @@ NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2

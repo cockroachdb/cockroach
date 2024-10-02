@@ -72,6 +72,9 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [1]
+++++
 
 # Transition replica 2 to StateSnapshot. Both replica 3 and 4 need to
 # force-flush for both sets in the joint configuration to have quorum.
@@ -102,6 +105,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
 
 # Make replica 3 and 4 have no send-queue.
 set_replicas pull-mode
@@ -131,6 +136,8 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
 
 # Append an entry. Both replica 3, 4 are not allowed to have a send-queue, to
 # ensure quorum in both sets of voters.
@@ -171,6 +178,12 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=2  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [2]
+ to: 4, lowPri: false entries: [2]
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
 
 # Transition replica 2 to StateReplicate with no send-queue.
 set_replicas pull-mode
@@ -207,6 +220,8 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=2  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
 
 # Make replica 2 look more overloaded than replica 3, 4.
 adjust_tokens send
@@ -265,6 +280,12 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [3]
+ to: 4, lowPri: false entries: [3]
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
 
 # Transition replica 3 to StateSnapshot. Replica 2 needs to force-flush.
 set_replicas pull-mode
@@ -299,6 +320,8 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3 4
 
 # Transition replica 4 to StateSnapshot too. Replica 2 continues to
 # force-flush.
@@ -329,6 +352,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
 (n4,s4):4VOTER_INCOMING: closed
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3 4
 
 # Transition replica 3, 4 back to StateReplicate. Replica 2 continues to
 # force-flush since we don't stop force-flushing in a joint config.
@@ -363,6 +388,8 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3 4
 
 # Transition out of joint-config. Replica 2 stops force-flushing.
 set_replicas pull-mode
@@ -391,3 +418,5 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2 3 4
