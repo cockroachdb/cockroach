@@ -34,7 +34,7 @@ export const TableMetadataJobControl: React.FC<
   );
   const lastUpdateCompletedUnixSecs = jobStatus?.lastCompletedTime?.unix();
   const timezone = useContext(TimezoneContext);
-  const lastUpdatedText = jobStatus?.lastUpdatedTime
+  const lastUpdatedText = jobStatus?.lastCompletedTime
     ? FormatWithTimezone(
         jobStatus?.lastCompletedTime,
         DATE_WITH_SECONDS_FORMAT_24_TZ,
