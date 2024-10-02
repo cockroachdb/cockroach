@@ -144,23 +144,20 @@ func TestNodePropose(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	require.NoError(t, n.Campaign(context.TODO()))
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
-	n.Propose(context.TODO(), []byte("somedata"))
-	n.Stop()
+	require.NoError(t, rn.Propose([]byte("somedata")))
 
 	require.Len(t, msgs, 2)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
