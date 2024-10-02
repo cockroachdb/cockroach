@@ -1093,6 +1093,10 @@ message Session {
 
   // The ID of the session's goroutine.
   int64 goroutine_id = 21 [(gogoproto.customname) = "GoroutineID"];
+
+  string authentication_method = 22 [
+    (gogoproto.casttype) = "github.com/cockroachdb/redact.SafeString"
+  ];
 }
 
 // An error wrapper object for ListSessionsResponse.

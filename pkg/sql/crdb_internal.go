@@ -2859,7 +2859,8 @@ CREATE TABLE crdb_internal.%s (
   session_end        TIMESTAMPTZ,    -- the time when the session was closed
   pg_backend_pid     INT,            -- the numerical ID attached to the session which is used to mimic a Postgres backend PID
   trace_id           INT,            -- the ID of the trace of the session
-  goroutine_id       INT             -- the ID of the goroutine of the session
+  goroutine_id       INT,            -- the ID of the goroutine of the session
+  authentication_method STRING       -- the method used to authenticate the session
 )
 `
 
@@ -3002,6 +3003,7 @@ func populateSessionsTable(
 			tree.NewDInt(tree.DInt(session.PGBackendPID)),
 			tree.NewDInt(tree.DInt(session.TraceID)),
 			tree.NewDInt(tree.DInt(session.GoroutineID)),
+			tree.NewDString(string(session.AuthenticationMethod)),
 		); err != nil {
 			return err
 		}
@@ -3031,6 +3033,7 @@ func populateSessionsTable(
 				tree.DNull,                             // pg_backend_pid
 				tree.DNull,                             // trace_id
 				tree.DNull,                             // goroutine_id
+				tree.DNull,                             // authentication_method
 			); err != nil {
 				return err
 			}

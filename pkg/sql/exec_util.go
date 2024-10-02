@@ -2265,6 +2265,7 @@ type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
 	IsSSL                       bool
+	AuthenticationMethod        redact.SafeString
 	ReplicationMode             sessiondatapb.ReplicationMode
 	SystemIdentity              string
 	SessionDefaults             SessionDefaults
