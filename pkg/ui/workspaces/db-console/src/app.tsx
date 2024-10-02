@@ -53,8 +53,8 @@ import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
-import { DatabasesPage } from "src/views/databases/databasesPage";
+import { DatabaseDetailsPageLegacy } from "src/views/databases/databaseDetailsPage";
+import { DatabasesPageLegacy } from "src/views/databases/databasesPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
@@ -205,28 +205,18 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         {/* databases */}
                         <Route
                           exact
-                          path={"/v2/databases"}
+                          path={"/databases"}
                           component={DatabasesPageV2}
                         />
                         <Route
                           exact
-                          path={`/v2/databases/:${databaseIDAttr}`}
+                          path={`/databases/:${databaseIDAttr}`}
                           component={DatabaseDetailsPageV2}
                         />
                         <Route
                           exact
-                          path="/databases"
-                          component={DatabasesPage}
-                        />
-                        <Redirect
-                          exact
-                          from="/databases/tables"
-                          to="/databases"
-                        />
-                        <Redirect
-                          exact
-                          from="/databases/grants"
-                          to="/databases"
+                          path="/legacy/databases"
+                          component={DatabasesPageLegacy}
                         />
                         <Redirect
                           from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
@@ -237,7 +227,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         <Route
                           exact
                           path={`/database/:${databaseNameAttr}`}
-                          component={DatabaseDetailsPage}
+                          component={DatabaseDetailsPageLegacy}
                         />
                         <Redirect
                           exact

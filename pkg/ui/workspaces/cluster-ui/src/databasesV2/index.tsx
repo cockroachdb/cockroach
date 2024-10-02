@@ -52,7 +52,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     sorter: (a, b) => a.name.localeCompare(b.name),
     sortKey: DatabaseSortOptions.NAME,
     render: (db: DatabaseRow) => {
-      return <Link to={`/v2/databases/${db.id}`}>{db.name}</Link>;
+      return <Link to={`/databases/${db.id}`}>{db.name}</Link>;
     },
   },
   {

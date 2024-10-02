@@ -76,7 +76,7 @@ export const DbTablesBreadcrumbs = ({
   return (
     <Breadcrumbs
       items={[
-        { link: "/databases", name: "Databases" },
+        { link: "/legacy/databases", name: "Databases" },
         {
           link: isCockroachCloud
             ? `/databases/${EncodeUriName(databaseName)}`

@@ -55,7 +55,7 @@ function createManagedServiceBreadcrumbs(
   index: string,
 ): BreadcrumbItem[] {
   return [
-    { link: "/databases", name: "Databases" },
+    { link: "legacy/databases", name: "Databases" },
     {
       link: `/databases/${database}`,
       name: "Tables",

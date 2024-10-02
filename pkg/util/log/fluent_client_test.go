@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package log
 
@@ -94,7 +89,7 @@ func TestFluentClient(t *testing.T) {
 	msg, err := json.Marshal(info)
 	require.NoError(t, err)
 
-	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":77,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"logtest.ops","v":"v999.0.0"}`
+	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":72,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"logtest.ops","v":"v999.0.0"}`
 	require.Equal(t, expected, string(msg))
 }
 
