@@ -137,6 +137,14 @@ type TelemetryStatusReporter interface {
 	GetLastSuccessfulTelemetryPing() time.Time
 }
 
+// MetadataAccessor is the interface to access license metadata stored in the KV.
+type MetadataAccessor interface {
+	// GetClusterInitGracePeriodTS returns the grace period end time for clusters
+	// without a license installed. The timestamp is represented as the number of
+	// seconds since the Unix epoch.
+	GetClusterInitGracePeriodTS() int64
+}
+
 // NewEnforcer creates a new Enforcer object.
 func NewEnforcer(tk *TestingKnobs) *Enforcer {
 	e := &Enforcer{
@@ -189,7 +197,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.readClusterMetadata(ctx, options); err != nil {
+		if err := e.initClusterMetadata(ctx, options); err != nil {
 			return err
 		}
 	}
@@ -212,22 +220,27 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	return nil
 }
 
-// readClusterMetadata will read, and maybe write, cluster metadata for license
+// initClusterMetadata will read, and maybe write, cluster metadata for license
 // enforcement. The metadata is stored in the KV system keyspace.
-func (e *Enforcer) readClusterMetadata(ctx context.Context, options options) error {
+func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) error {
 	// Secondary tenants do not have access to the system keyspace where
-	// the cluster init grace period is stored. As a fallback, we apply a 7-day
-	// grace period from the tenant's start time, which is used only when no
-	// license is installed. This logic applies specifically when secondary
-	// tenants are started in a separate process from the system tenant. If they
-	// are not, a shared enforcer will have access to the system keyspace and
-	// handle the grace period.
-	// TODO(spilchen): Change to give the secondary tenant read access to the
-	// system keyspace KV.
+	// the cluster init grace period is stored. In those instances, we rely on
+	// fetching that information from the system tenant using the tenant connector.
 	if !options.isSystemTenant {
-		gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
-		end := e.getStartTime().Add(gracePeriodLength)
-		e.clusterInitGracePeriodEndTS.Store(end.Unix())
+		if options.metadataAccessor == nil {
+			return errors.AssertionFailedf("no metadata accessor for secondary tenant")
+		}
+		end := options.metadataAccessor.GetClusterInitGracePeriodTS()
+		if end != 0 {
+			e.clusterInitGracePeriodEndTS.Store(end)
+			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS().String())
+		} else {
+			// No timestamp was received, likely due to a mixed-version workload.
+			// We'll use an estimate of 7 days from this node's startup time instead.
+			gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
+			e.clusterInitGracePeriodEndTS.Store(e.getStartTime().Add(gracePeriodLength).Unix())
+			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS().String())
+		}
 		return nil
 	}
 
