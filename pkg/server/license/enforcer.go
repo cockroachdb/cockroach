@@ -87,6 +87,14 @@ type Enforcer struct {
 	// When enabled, all checks, including telemetry and expired license validation,
 	// are bypassed. This is typically used to disable enforcement for single-node deployments.
 	isDisabled atomic.Bool
+
+	// trialUsageCount keeps track of the number of times a free trial license has
+	// been used on this cluster.
+	trialUsageCount atomic.Int64
+
+	// db is a pointer to the database for use for KV read/writes. This is only
+	// set for the system tenant.
+	db isql.DB
 }
 
 type TestingKnobs struct {
@@ -181,7 +189,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.maybeWriteClusterInitGracePeriodTS(ctx, options); err != nil {
+		if err := e.readClusterMetadata(ctx, options); err != nil {
 			return err
 		}
 	}
@@ -204,9 +212,9 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	return nil
 }
 
-// maybeWriteClusterInitGracePeriodTS checks if the cluster init grace period
-// timestamp needs to be written to the KV layer and writes it if needed.
-func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(ctx context.Context, options options) error {
+// readClusterMetadata will read, and maybe write, cluster metadata for license
+// enforcement. The metadata is stored in the KV system keyspace.
+func (e *Enforcer) readClusterMetadata(ctx context.Context, options options) error {
 	// Secondary tenants do not have access to the system keyspace where
 	// the cluster init grace period is stored. As a fallback, we apply a 7-day
 	// grace period from the tenant's start time, which is used only when no
@@ -223,7 +231,26 @@ func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(ctx context.Context, optio
 		return nil
 	}
 
+	// Save a pointer to the database for future use in updating the trial license
+	// usage count. This is only set for the system tenant.
+	e.db = options.db
+
 	return options.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Cache the current trial usage count.
+		trialUsageCount, err := txn.KV().Get(ctx, keys.TrialLicenseUsageCount)
+		if err != nil {
+			return err
+		}
+		if trialUsageCount.Value == nil {
+			e.trialUsageCount.Store(0)
+		} else {
+			e.trialUsageCount.Store(trialUsageCount.ValueInt())
+		}
+		log.Infof(ctx, "trial license usage count initialized to %d", e.trialUsageCount.Load())
+
+		// Cache and maybe set the cluster init grace period timestamp. This is the
+		// grace period we will use if the cluster does not have a license installed.
+		//
 		// We could use a conditional put for this logic. However, we want to read
 		// and cache the value, and the common case is that the value will be read.
 		// Only during the initialization of the first node in the cluster will we
@@ -433,7 +460,7 @@ func (e *Enforcer) RefreshForLicenseChange(
 	}
 
 	var sb strings.Builder
-	sb.WriteString("enforcer license updated: ")
+	sb.WriteString(fmt.Sprintf("enforcer license updated: type is %s, ", licType.String()))
 	gpEnd, _ := e.GetGracePeriodEndTS()
 	if !gpEnd.IsZero() {
 		sb.WriteString(fmt.Sprintf("grace period ends at %q, ", gpEnd))
@@ -444,6 +471,65 @@ func (e *Enforcer) RefreshForLicenseChange(
 	}
 	sb.WriteString(fmt.Sprintf("telemetry required: %t", e.licenseRequiresTelemetry.Load()))
 	log.Infof(ctx, "%s", sb.String())
+}
+
+// CalculateTrialUsageCount returns the number of times a trial license has
+// been used, including the current trial license if a new one is being applied.
+// This function increments the count if the current license is changing and is a trial.
+func (e *Enforcer) CalculateTrialUsageCount(
+	ctx context.Context, currentLicense LicType, isLicenseChange bool,
+) (int64, error) {
+	// If we aren't setting a new trial license, return the cached copy. The e.db
+	// check is necessary as that's needed to read/write to the KV. This will be
+	// set for the system tenant, which is where the license can ever be set anyway.
+	if currentLicense != LicTypeTrial || !isLicenseChange || e.db == nil {
+		return e.trialUsageCount.Load(), nil
+	}
+
+	return e.SetTrialUsageCount(ctx, e.trialUsageCount.Load()+1, true)
+}
+
+// SetTrialUsageCount is an API to set the trial usage count in the enforcer and
+// in the KV. The value in the enforcer is always updated. If checkOldCount is
+// true, the update to the KV is conditional on the old value matching trialUsageCount.
+func (e *Enforcer) SetTrialUsageCount(
+	ctx context.Context, newCount int64, checkOldCount bool,
+) (cnt int64, err error) {
+	if e.db == nil {
+		return 0, errors.AssertionFailedf("no database set")
+	}
+	err = e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// If checking the old count, we only do the update in the KV if the
+		// existing value for trialUsageCount matches what's in the KV already
+		// (a missing key is treated as 0). This is necessary to ensure a license
+		// change to use the trial license will only increase the count by 1 when
+		// this function is called for each node.
+		if checkOldCount {
+			oldVal, err := txn.KV().Get(ctx, keys.TrialLicenseUsageCount)
+			if err != nil {
+				return err
+			}
+			if oldVal.Value == nil && e.trialUsageCount.Load() != 0 {
+				e.trialUsageCount.Store(0)
+				return nil
+			} else if oldVal.Value != nil && oldVal.ValueInt() != e.trialUsageCount.Load() {
+				e.trialUsageCount.Store(oldVal.ValueInt())
+				return nil
+			}
+		}
+		err = txn.KV().Put(ctx, keys.TrialLicenseUsageCount, newCount)
+		if err != nil {
+			return err
+		}
+		e.trialUsageCount.Store(newCount)
+		return nil
+	})
+	if err != nil {
+		return
+	}
+	cnt = e.trialUsageCount.Load()
+	log.Infof(ctx, "trial license usage count is %d", cnt)
+	return
 }
 
 // Disable turns off all license enforcement for the lifetime of this object.
