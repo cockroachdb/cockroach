@@ -236,13 +236,6 @@ func TestCCLLogic_subject(
 	runCCLLogicTest(t, "subject")
 }
 
-func TestCCLLogic_triggers(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "triggers")
-}
-
 func TestCCLLogic_udf_params(
 	t *testing.T,
 ) {
