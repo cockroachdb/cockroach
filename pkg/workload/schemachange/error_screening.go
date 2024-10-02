@@ -927,7 +927,7 @@ func (og *operationGenerator) columnHasSingleUniqueConstraint(
 	           AND table_name = $2
 	           AND column_name = $3
 	           AND (contype = 'u' OR contype = 'p')
-	           AND array_length(conkey, 1) = 1
+	           AND array_length(conkey, 1) >= 1 -- unique index has to have this a prefix
 					   AND conkey[1] = ordinal_position
 	       )
 	`, tableName.Schema(), tableName.Object(), columnName)
@@ -1030,15 +1030,20 @@ SELECT count(*) FROM %s
 			WHERE t2.%s IS NOT NULL
 `, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
 
-	numJoinRows, err := og.scanInt(ctx, tx, q)
+	joinTx, err := tx.Begin(ctx)
 	if err != nil {
-		// UndefinedFunction errors mean that the column type is not comparable.
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
-			return false, nil
-		}
 		return false, err
 	}
-	return numJoinRows == childRows, err
+	numJoinRows, err := og.scanInt(ctx, joinTx, q)
+	if err != nil {
+		rbkErr := joinTx.Rollback(ctx)
+		// UndefinedFunction errors mean that the column type is not comparable.
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
+			return false, rbkErr
+		}
+		return false, errors.WithSecondaryError(err, rbkErr)
+	}
+	return numJoinRows == childRows, joinTx.Commit(ctx)
 }
 
 var (
@@ -1218,8 +1223,9 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 	checkSharedParentChildRows := ""
 	if len(parentAndChildSameQueryColumns) > 0 {
-		// Ensure none of the rows being inserted satisfy the constraint, since
-		//// its referring to itself.
+		// Check if none of the rows being inserted satisfy the foreign key constraint,
+		// since the foreign key constraints refers to the same table. So, anything in
+		// the insert batch can satisfy the constraint.
 		checkSharedParentChildRows = fmt.Sprintf("NOT (true = ANY (ARRAY [%s])) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
