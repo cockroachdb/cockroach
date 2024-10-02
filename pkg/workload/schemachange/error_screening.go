@@ -1030,15 +1030,20 @@ SELECT count(*) FROM %s
 			WHERE t2.%s IS NOT NULL
 `, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
 
-	numJoinRows, err := og.scanInt(ctx, tx, q)
+	joinTx, err := tx.Begin(ctx)
 	if err != nil {
-		// UndefinedFunction errors mean that the column type is not comparable.
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
-			return false, nil
-		}
 		return false, err
 	}
-	return numJoinRows == childRows, err
+	numJoinRows, err := og.scanInt(ctx, joinTx, q)
+	if err != nil {
+		rbkErr := joinTx.Rollback(ctx)
+		// UndefinedFunction errors mean that the column type is not comparable.
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
+			return false, rbkErr
+		}
+		return false, errors.WithSecondaryError(err, rbkErr)
+	}
+	return numJoinRows == childRows, joinTx.Commit(ctx)
 }
 
 var (
