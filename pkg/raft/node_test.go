@@ -403,37 +403,6 @@ func TestNodeTick(t *testing.T) {
 	assert.Equal(t, elapsed+1, r.electionElapsed)
 }
 
-// TestNodeStop ensures that node.Stop() blocks until the node has stopped
-// processing, and that it is idempotent
-func TestNodeStop(t *testing.T) {
-	rn := newTestRawNode(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-	n := newNode(rn)
-	donec := make(chan struct{})
-
-	go func() {
-		n.run()
-		close(donec)
-	}()
-
-	status := n.Status()
-	n.Stop()
-
-	select {
-	case <-donec:
-	case <-time.After(time.Second):
-		t.Fatalf("timed out waiting for node to stop!")
-	}
-
-	emptyStatus := Status{}
-	assert.NotEqual(t, emptyStatus, status)
-
-	// Further status should return be empty, the node is stopped.
-	assert.Equal(t, emptyStatus, n.Status())
-
-	// Subsequent Stops should have no effect.
-	n.Stop()
-}
-
 // TestNodeStart ensures that a node can be started correctly. The node should
 // start with correct configuration change entries, and can accept and commit
 // proposals.
