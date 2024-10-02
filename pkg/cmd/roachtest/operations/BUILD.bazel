@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "add_column.go",
         "add_index.go",
+        "backup_online_restore.go",
         "backup_restore.go",
         "cluster_settings.go",
         "disk_stall.go",

@@ -20,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-type backupRestoreCleanup struct {
+type backupOnlineRestoreCleanup struct {
 	db string
 }
 
-func (cl *backupRestoreCleanup) Cleanup(
+func (cl *backupOnlineRestoreCleanup) Cleanup(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) {
 	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
@@ -37,7 +37,7 @@ func (cl *backupRestoreCleanup) Cleanup(
 	}
 }
 
-func runBackupRestore(
+func runbackupOnlineRestore(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) registry.OperationCleanup {
 	// This operation looks for the district table in a database named cct_tpcc or tpcc.
@@ -69,25 +69,12 @@ outer:
 		return nil
 	}
 
-	o.Status(fmt.Sprintf("backing up table district in db %s (full)", dbName))
+	backupTS := timeutil.Now().Add(-1 * time.Minute).UTC().Format(time.DateTime)
+
+	o.Status(fmt.Sprintf("backing up table district in db %s", dbName))
 	bucket := fmt.Sprintf("gs://%s/operation-backup-restore/%d/?AUTH=implicit", testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
 
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE %s.district INTO '%s' AS OF SYSTEM TIME '-10s'", dbName, bucket))
-	if err != nil {
-		o.Fatal(err)
-	}
-
-	for i := range 23 {
-		o.Status(fmt.Sprintf("backing up table district in db %s (incremental layer %d)", dbName, i))
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE %s.district INTO LATEST IN '%s' AS OF SYSTEM TIME '-10s'", dbName, bucket))
-		if err != nil {
-			o.Fatal(err)
-		}
-	}
-
-	backupTS := timeutil.Now().Add(-10 * time.Second).UTC().Format(time.DateTime)
-	o.Status(fmt.Sprintf("backing up table district in db %s (incremental layer final)", dbName))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE %s.district INTO LATEST IN '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS))
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE %s.district TO '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -99,7 +86,7 @@ outer:
 	}
 
 	o.Status(fmt.Sprintf("restoring table district into db %s", restoreDBName))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("RESTORE TABLE %s.district FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH OPTIONS (into_db = '%s', skip_missing_foreign_keys)", dbName, bucket, backupTS, restoreDBName))
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("RESTORE TABLE %s.district FROM '%s' AS OF SYSTEM TIME '%s' WITH OPTIONS (into_db = '%s', skip_missing_foreign_keys, experimental deferred copy)", dbName, bucket, backupTS, restoreDBName))
 
 	if err != nil {
 		o.Fatal(err)
@@ -129,17 +116,17 @@ outer:
 		o.Fatalf("backup and restore fingerprints do not match: %d != %d", backupFingerprint, restoreFingerprint)
 	}
 
-	return &backupRestoreCleanup{db: restoreDBName}
+	return &backupOnlineRestoreCleanup{db: restoreDBName}
 }
 
-func registerBackupRestore(r registry.Registry) {
+func registerBackupOnlineRestore(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:               "backup-restore/tpcc/district",
+		Name:               "backup-online-restore/tpcc/district",
 		Owner:              registry.OwnerDisasterRecovery,
 		Timeout:            24 * time.Hour,
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCanRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
-		Run:                runBackupRestore,
+		Run:                runbackupOnlineRestore,
 	})
 }
