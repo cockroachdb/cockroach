@@ -32,6 +32,7 @@ go_library(
         "//pkg/storage",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/hlc/logger",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
