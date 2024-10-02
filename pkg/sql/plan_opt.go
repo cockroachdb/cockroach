@@ -530,9 +530,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 //
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
-func (opc *optPlanningCtx) reuseMemo(
-	ctx context.Context, cachedMemo *memo.Memo,
-) (*memo.Memo, error) {
+func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
 	opc.incPlanTypeTelemetry(cachedMemo)
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized in
@@ -713,7 +711,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	}
 	if validMemo != nil {
 		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(ctx, validMemo)
+		return opc.reuseMemo(validMemo)
 	}
 
 	// Otherwise, we need to rebuild the memo.
@@ -754,7 +752,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	}
 
 	// Re-optimize the memo, if necessary.
-	return opc.reuseMemo(ctx, newMemo)
+	return opc.reuseMemo(newMemo)
 }
 
 // buildExecMemo creates a fully optimized memo, possibly reusing a previously
@@ -768,7 +766,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		// rollback its transaction. Use resumeProc to resume execution in a new
 		// transaction where the control statement left off.
 		opc.log(ctx, "resuming stored procedure execution in a new transaction")
-		return opc.reuseMemo(ctx, resumeProc)
+		return opc.reuseMemo(resumeProc)
 	}
 
 	// Fetch and reuse a memo if a valid one is available.
@@ -802,7 +800,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			return opc.reuseMemo(ctx, cachedData.Memo)
+			return opc.reuseMemo(cachedData.Memo)
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
