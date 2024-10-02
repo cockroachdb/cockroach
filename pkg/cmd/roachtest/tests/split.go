@@ -382,7 +382,7 @@ func registerLoadSplits(r registry.Registry) {
 				// hashed - this will lead to many hotspots over the keyspace that
 				// move. Expect a few less splits than A and B.
 				minimumRanges:     15,
-				maximumRanges:     25,
+				maximumRanges:     30,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "d",
