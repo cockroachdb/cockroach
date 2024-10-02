@@ -192,7 +192,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
 			require.NoError(t, err)
 			for urlIdx := range webConsoleURLs {
-				webConsoleURLs[urlIdx] = "http://" + webConsoleURLs[urlIdx]
+				webConsoleURLs[urlIdx] = "https://" + webConsoleURLs[urlIdx]
 			}
 			// Next startup the workload for our list of databases from earlier.
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
