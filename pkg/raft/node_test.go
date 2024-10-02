@@ -362,24 +362,21 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	n.Campaign(context.TODO())
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to dropStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = dropStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
-	assert.Equal(t, ErrProposalDropped, n.Propose(context.Background(), droppingMsg))
+	assert.Equal(t, ErrProposalDropped, rn.Propose(droppingMsg))
 
-	n.Stop()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
 }
