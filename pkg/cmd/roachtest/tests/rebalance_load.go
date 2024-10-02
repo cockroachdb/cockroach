@@ -353,6 +353,14 @@ func makeStoreCPUFn(
 			}
 			// Take the latest CPU data point only.
 			cpu := result.Datapoints[len(result.Datapoints)-1].Value
+			// The datapoint is a float representing a percentage in [0,1.0]. Assert
+			// as much to avoid any surprises.
+			if cpu < 0 || cpu > 1 {
+				return nil, errors.Newf(
+					"node %d has core count normalized CPU utilization ts datapoint "+
+						"not in [0%,100%] (impossible!): %f [resp=%+v]", node, cpu, resp)
+			}
+
 			nodeIdx := node * storesPerNode
 			for storeOffset := 0; storeOffset < storesPerNode; storeOffset++ {
 				// The values will be a normalized float in [0,1.0], scale to a
