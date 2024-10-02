@@ -39,7 +39,7 @@ const withData: IndexDetailsPageProps = {
     ],
   },
   breadcrumbItems: [
-    { link: "/databases", name: "Databases" },
+    { link: "/legacy/databases", name: "Databases" },
     {
       link: `/databases/story_db`,
       name: "Tables",

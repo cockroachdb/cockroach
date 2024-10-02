@@ -384,7 +384,7 @@ export class IndexDetailsPage extends React.Component<
     return (
       <Breadcrumbs
         items={[
-          { link: "/databases", name: "Databases" },
+          { link: "/legacy/databases", name: "Databases" },
           {
             link: EncodeDatabaseUri(this.props.databaseName),
             name: "Tables",
