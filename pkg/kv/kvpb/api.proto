@@ -258,6 +258,18 @@ message GetRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 3;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -697,6 +709,18 @@ message ScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -785,6 +809,18 @@ message ReverseScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
