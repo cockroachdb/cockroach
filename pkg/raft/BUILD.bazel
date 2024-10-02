@@ -34,7 +34,6 @@ go_test(
     name = "raft_test",
     srcs = [
         "diff_test.go",
-        "example_test.go",
         "interaction_test.go",
         "log_test.go",
         "log_unstable_test.go",
