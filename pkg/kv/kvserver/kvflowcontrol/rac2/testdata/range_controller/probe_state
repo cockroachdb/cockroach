@@ -193,3 +193,5 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2

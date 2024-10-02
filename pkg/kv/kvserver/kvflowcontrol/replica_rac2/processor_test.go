@@ -216,6 +216,15 @@ func (c *testRangeController) WaitForEval(
 	return c.waited, c.waitForEvalErr
 }
 
+type testMsgAppSender struct{}
+
+func (_ testMsgAppSender) SendMsgApp(
+	ctx context.Context, msg raftpb.Message, lowPriorityOverride bool,
+) {
+	// Do nothing, since only called by the real RangeController, which is not
+	// used in this test.
+}
+
 func raftEventString(e rac2.RaftEvent) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[")
@@ -310,6 +319,7 @@ func TestProcessorBasic(t *testing.T) {
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
+			MsgAppSender:           testMsgAppSender{},
 			RangeControllerFactory: &rcFactory,
 			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
