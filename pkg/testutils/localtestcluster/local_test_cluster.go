@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -117,7 +118,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock,
-		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
+		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */, logger.CRDBLogger)
 	var cfg kvserver.StoreConfig
 	if ltc.StoreTestingKnobs != nil && ltc.StoreTestingKnobs.InitialReplicaVersionOverride != nil {
 		cfg = kvserver.TestStoreConfigWithVersion(clock, *ltc.StoreTestingKnobs.InitialReplicaVersionOverride)
