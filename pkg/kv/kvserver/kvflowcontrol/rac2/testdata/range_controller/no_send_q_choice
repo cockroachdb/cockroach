@@ -65,6 +65,10 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 4, lowPri: false entries: [1]
+ to: 5, lowPri: false entries: [1]
+++++
 
 # Make replica 5 look more overloaded than replica 4. Note that once we have
 # picked a replica to not have a send-queue it will be picked again if needed
@@ -134,6 +138,10 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 4, lowPri: false entries: [2]
+ to: 5, lowPri: false entries: [2]
 ++++
 
 # Make replica 2 catchup (say there was a transition to StateSnapshot and back
@@ -230,4 +238,8 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: false entries: [3]
+ to: 4, lowPri: false entries: [3]
 ++++

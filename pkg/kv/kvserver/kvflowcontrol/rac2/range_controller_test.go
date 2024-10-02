@@ -215,6 +215,30 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		if len(r.mu.sendMsgAppCalls) == 0 {
+			return
+		}
+		fmt.Fprintf(&b, "MsgApps sent in pull mode:\n")
+		slices.SortStableFunc(r.mu.sendMsgAppCalls, func(a, b sendMsgAppCall) int {
+			return cmp.Compare(a.msg.To, b.msg.To)
+		})
+		for _, e := range r.mu.sendMsgAppCalls {
+			fmt.Fprintf(&b, " to: %d, lowPri: %t entries: [", e.msg.To, e.lowPriorityOverride)
+			for j := range e.msg.Entries {
+				var prefix string
+				if j > 0 {
+					prefix = " "
+				}
+				fmt.Fprintf(&b, "%s%d", prefix, e.msg.Entries[j].Index)
+			}
+			fmt.Fprintf(&b, "]\n")
+		}
+		b.WriteString("++++\n")
+		r.mu.sendMsgAppCalls = r.mu.sendMsgAppCalls[:0]
+	}()
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		if r.mu.scheduleControllerEventCount > 0 {
 			fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", r.mu.scheduleControllerEventCount)
 		}
@@ -280,6 +304,7 @@ func (s *testingRCState) getOrInitRange(
 			LocalReplicaID:      r.localReplicaID,
 			SSTokenCounter:      s.ssTokenCounter,
 			RaftInterface:       testRC,
+			MsgAppSender:        testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
 			Scheduler:           testRC,
@@ -335,7 +360,13 @@ type testingRCRange struct {
 		// WaitForEval is done in simulation tests.
 		evals                        map[string]*testingRCEval
 		scheduleControllerEventCount int
+		sendMsgAppCalls              []sendMsgAppCall
 	}
+}
+
+type sendMsgAppCall struct {
+	msg                 raftpb.Message
+	lowPriorityOverride bool
 }
 
 func (r *testingRCRange) makeRaftEventWithReplicasState() RaftEvent {
@@ -356,7 +387,19 @@ func (r *testingRCRange) replicasStateInfo() map[roachpb.ReplicaID]ReplicaStateI
 }
 
 func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
+	// TODO(sumeer): record this in the datadriven test output.
 	return false
+}
+
+func (r *testingRCRange) SendMsgApp(
+	ctx context.Context, msg raftpb.Message, lowPriorityOverride bool,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.sendMsgAppCalls = append(r.mu.sendMsgAppCalls, sendMsgAppCall{
+		msg:                 msg,
+		lowPriorityOverride: lowPriorityOverride,
+	})
 }
 
 func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
@@ -371,7 +414,10 @@ func (r *testingRCRange) MakeMsgAppRaftMuLocked(
 	if start >= end {
 		panic("start >= end")
 	}
-	msg := raftpb.Message{Type: raftpb.MsgApp}
+	msg := raftpb.Message{
+		Type: raftpb.MsgApp,
+		To:   raftpb.PeerID(replicaID),
+	}
 	var size int64
 	for _, entry := range r.entries {
 		if entry.Index >= start && entry.Index < end {
@@ -684,6 +730,7 @@ func parseRaftEvents(t *testing.T, input string) []testingRaftEvent {
 			require.True(t, strings.HasPrefix(parts[2], "pri="))
 			parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
 			pri = parsePriority(t, parts[2])
+			// TODO(sumeer/kvoli): also create entries that are not subject to AC.
 
 			parts[3] = strings.TrimSpace(parts[3])
 			require.True(t, strings.HasPrefix(parts[3], "size="))

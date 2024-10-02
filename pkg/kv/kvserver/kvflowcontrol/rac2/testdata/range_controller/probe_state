@@ -44,6 +44,9 @@ eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: false entries: [1]
+++++
 
 # Transition replica 2 to StateProbe. Since it has a send-queue, it is
 # immediately closed and does not transition to probeRecentlyNoSendQ.
@@ -193,3 +196,5 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
+schedule-controller-event-count: 1
+scheduled-replicas: 2
