@@ -958,11 +958,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	rn, err := NewRawNode(cfg)
 	require.NoError(t, err)
 
-	n := newNode(rn)
-	go n.run()
-	defer n.Stop()
-
-	rd := readyWithTimeout(&n)
+	rd := rn.Ready()
 	assert.False(t, !IsEmptyHardState(rd.HardState) && rd.HardState.Commit < persistedHardState.Commit,
 		"HardState regressed: Commit %d -> %d\nCommitting:\n%+v",
 		persistedHardState.Commit, rd.HardState.Commit,
