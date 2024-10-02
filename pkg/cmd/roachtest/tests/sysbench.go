@@ -215,11 +215,27 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 }
 
 func registerSysbench(r registry.Registry) {
-	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
-		for _, n := range []int{1, 3} {
-			const cpus = 32
-			concPerCPU := n*3 - 1
-			conc := cpus * concPerCPU
+	for _, d := range []struct {
+		n, cpus int
+		pick    func(sysbenchWorkload) bool // nil means true for all
+	}{
+		{n: 1, cpus: 32},
+		{n: 3, cpus: 32},
+		{n: 3, cpus: 8, pick: func(w sysbenchWorkload) bool {
+			switch w {
+			case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
+				return true
+			default:
+				return false
+			}
+		}},
+	} {
+		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
+			if d.pick != nil && !d.pick(w) {
+				continue
+			}
+			concPerCPU := d.n*3 - 1
+			conc := d.cpus * concPerCPU
 			opts := sysbenchOptions{
 				workload:     w,
 				duration:     10 * time.Minute,
@@ -229,10 +245,10 @@ func registerSysbench(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, d.n, d.cpus, conc),
 				Benchmark:        true,
 				Owner:            registry.OwnerTestEng,
-				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+				Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 				CompatibleClouds: registry.OnlyGCE,
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -241,14 +257,14 @@ func registerSysbench(r registry.Registry) {
 			})
 
 			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
-			if n == 1 {
+			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
 				r.Add(registry.TestSpec{
-					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, cpus, conc),
+					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc),
 					Benchmark:        true,
 					Owner:            registry.OwnerTestEng,
-					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+					Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 					CompatibleClouds: registry.OnlyGCE,
 					Suites:           registry.ManualOnly,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
