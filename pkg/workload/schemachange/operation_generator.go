@@ -2894,7 +2894,12 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	for _, col := range nonGeneratedCols {
 		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
 	}
-	numRows := og.randIntn(3) + 1
+	// Limit the upper bound if a large number of columns.
+	upperBound := 3
+	if len(allColumns) > 16 {
+		upperBound = 1
+	}
+	numRows := og.randIntn(upperBound) + 1
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range nonGeneratedCols {

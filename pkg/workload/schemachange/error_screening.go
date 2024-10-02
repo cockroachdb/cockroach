@@ -1218,7 +1218,9 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 	checkSharedParentChildRows := ""
 	if len(parentAndChildSameQueryColumns) > 0 {
-		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) AND",
+		// Ensure none of the rows being inserted satisfy the constraint, since
+		//// its referring to itself.
+		checkSharedParentChildRows = fmt.Sprintf("NOT (true = ANY (ARRAY [%s])) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
 	q := fmt.Sprintf(`
