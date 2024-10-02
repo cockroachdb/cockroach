@@ -1606,6 +1606,16 @@ func (tc *TestCluster) ToggleSplitQueues(active bool) {
 	}
 }
 
+// ToggleLeaseQueues implements TestClusterInterface.
+func (tc *TestCluster) ToggleLeaseQueues(active bool) {
+	for _, s := range tc.Servers {
+		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			store.TestingSetLeaseQueueActive(active)
+			return nil
+		})
+	}
+}
+
 // ReadIntFromStores reads the current integer value at the given key
 // from all configured engines on un-stopped servers, filling in zeros
 // when the value is not found.
