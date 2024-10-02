@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -2514,10 +2515,16 @@ func TestQuotaPool(t *testing.T) {
 
 	ctx := context.Background()
 
+	settings := cluster.MakeTestingClusterSettings()
+	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
+	// apply_to_all is set (metamorphically), the quota pool will be disabled.
+	// See getQuotaPoolEnabledRLocked.
+	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToElastic)
 	tc := testcluster.StartTestCluster(t, numReplicas,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: settings,
 				RaftConfig: base.RaftConfig{
 					// Suppress timeout-based elections to avoid leadership changes in ways
 					// this test doesn't expect.
