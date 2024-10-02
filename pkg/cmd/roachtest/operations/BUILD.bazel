@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "operations",
+    testonly = 1,
     srcs = [
         "add_column.go",
         "add_index.go",
@@ -25,7 +26,11 @@ go_library(
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestflags",
         "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/tests",
+        "//pkg/sql/catalog/catpb",
         "//pkg/testutils",
+        "//pkg/testutils/fingerprintutils",
+        "//pkg/util/hlc",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
