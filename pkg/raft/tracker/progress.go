@@ -114,7 +114,7 @@ type Progress struct {
 	// cases, we need to continue sending MsgApp once in a while to guarantee
 	// progress, but we only do so when MsgAppProbesPaused is false (it is reset on
 	// receiving a heartbeat response), to not overflow the receiver. See
-	// IsPaused() and ShouldSendMsgApp().
+	// IsPaused(), ShouldSendEntries(), and ShouldSendProbe().
 	MsgAppProbesPaused bool
 
 	// Inflights is a sliding window for the inflight messages.
@@ -306,10 +306,9 @@ func (pr *Progress) IsPaused() bool {
 	}
 }
 
-// ShouldSendMsgApp returns true if the leader should send a MsgApp to the
-// follower represented by this Progress. The given last and commit index of the
-// leader log help determining if there is outstanding workload, and contribute
-// to this decision-making.
+// ShouldSendEntries returns true if the leader should send a MsgApp with at
+// least one entry, to the follower represented by this Progress. The given last
+// index of the leader log helps to determine if there is outstanding work.
 //
 // In StateProbe, a message is sent periodically. The flow is paused after every
 // message, and un-paused on a heartbeat response. This ensures that probes are
@@ -317,36 +316,42 @@ func (pr *Progress) IsPaused() bool {
 //
 // In StateReplicate, generally a message is sent if there are log entries that
 // are not yet in-flight, and the in-flight limits are not exceeded. Otherwise,
-// we don't send a message, or send a "probe" message in a few situations.
-//
-// A probe message (containing no log entries) is sent if the follower's commit
-// index can be updated, or there hasn't been a probe message recently. We must
-// send a message periodically even if all log entries are in-flight, in order
-// to guarantee that eventually the flow is either accepted or rejected.
+// we don't send a message, or send a "probe" message in a few situations (see
+// ShouldSendPing). If lazyReplication flag is true, entries sending is disabled
+// and delegated to the application layer.
 //
 // In StateSnapshot, we do not send append messages.
+func (pr *Progress) ShouldSendEntries(last uint64, lazyReplication bool) bool {
+	switch pr.State {
+	case StateProbe:
+		return !pr.MsgAppProbesPaused && pr.CanSendEntries(last)
+	case StateReplicate:
+		return !lazyReplication && pr.CanSendEntries(last)
+	case StateSnapshot:
+		return false
+	default:
+		panic("unexpected state")
+	}
+}
+
+// ShouldSendProbe returns true if the leader should send a "probe" MsgApp to
+// this peer.
 //
-// If advanceCommit is true, it means that MsgApp owns the responsibility of
-// closing the followers' commit index gap even if some MsgApp messages gets
-// dropped. If it's false, it means that the responsibility is on MsgHeartbeat.
-func (pr *Progress) ShouldSendMsgApp(last, commit uint64, advanceCommit bool) bool {
+// A probe message (containing no log entries) is sent if the peer's Match and
+// MatchCommit indices have not converged to the leader's state, and a MsgApp
+// has not been sent recently.
+//
+// We must send a message periodically even if all updates are already in flight
+// to this peer, to guarantee that eventually the flow is either accepted or
+// rejected.
+func (pr *Progress) ShouldSendProbe(last, commit uint64, advanceCommit bool) bool {
 	switch pr.State {
 	case StateProbe:
 		return !pr.MsgAppProbesPaused
 
 	case StateReplicate:
-		// If the in-flight limits are not saturated, and there are pending entries
-		// (Next <= lastIndex), send a MsgApp with some entries.
-		if pr.CanSendEntries(last) {
-			return true
-		}
-		// We can't send any entries at this point, but we need to be sending a
-		// MsgApp periodically, to guarantee liveness of the MsgApp flow: the
-		// follower eventually will reply with an ack or reject.
-		//
 		// If the follower's log is outdated, and we haven't recently sent a MsgApp
-		// (according to the MsgAppProbesPaused flag), send one now. This is going
-		// to be an empty "probe" MsgApp.
+		// (according to the MsgAppProbesPaused flag), send one now.
 		if pr.Match < last && !pr.MsgAppProbesPaused {
 			return true
 		}
@@ -358,10 +363,10 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64, advanceCommit bool) bo
 			return true
 		}
 
-		// Send an empty MsgApp containing the latest commit index if we know that
-		// the follower's commit index is stale and we haven't recently sent a
-		// MsgApp (according to the MsgAppProbesPaused flag).
-
+		// Send the latest commit index if we know that the peer's commit index is
+		// stale, and we haven't recently sent a MsgApp (according to the
+		// MsgAppProbesPaused flag).
+		//
 		// NOTE: This is a different condition than the one above because we only
 		// send this message if pr.MsgAppProbesPaused is false. After this message,
 		// pr.MsgAppProbesPaused will be set to true until we receive a heartbeat
