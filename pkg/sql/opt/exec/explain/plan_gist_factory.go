@@ -639,7 +639,7 @@ func (u *unknownIndex) Name() tree.Name {
 }
 
 func (u *unknownIndex) Table() cat.Table {
-	panic(errors.AssertionFailedf("not implemented"))
+	return &unknownTable{}
 }
 
 func (u *unknownIndex) Ordinal() cat.IndexOrdinal {
