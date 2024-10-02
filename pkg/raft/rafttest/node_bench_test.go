@@ -18,7 +18,6 @@
 package rafttest
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -38,17 +37,13 @@ func BenchmarkProposal3Nodes(b *testing.B) {
 	}
 	// get ready and warm up
 	time.Sleep(50 * time.Millisecond)
+	l := waitLeader(nodes)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		nodes[l].propose([]byte("somedata"))
 	}
-
-	for _, n := range nodes {
-		if n.state.Commit != uint64(b.N+4) {
-			continue
-		}
-	}
+	waitCommitConverge(nodes, uint64(b.N+4))
 	b.StopTimer()
 
 	for _, n := range nodes {
