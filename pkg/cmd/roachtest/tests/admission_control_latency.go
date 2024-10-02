@@ -733,10 +733,10 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
-	duringOK := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
+	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
 	t.L().Printf("validating stats after the perturbation")
-	afterOK := isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)
-	require.True(t, duringOK && afterOK)
+	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
+	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
 }
 
 // trackedStat is a collection of the relevant values from the histogram. The
@@ -774,27 +774,30 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
 // all the differences.
+// This returns an array of strings with the reason(s) the change was too large.
 func isAcceptableChange(
 	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
-) bool {
+) []string {
 	// This can happen if we aren't measuring one of the phases.
+	var failures []string
 	if len(other) == 0 {
-		return true
+		return failures
 	}
-	allPassed := true
 	keys := sortedStringKeys(baseline)
+
 	for _, name := range keys {
 		baseStat := baseline[name]
 		otherStat := other[name]
 		increase := float64(otherStat.score) / float64(baseStat.score)
 		if increase > acceptableChange {
-			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-			allPassed = false
+			failure := fmt.Sprintf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
+			logger.Printf(failure)
+			failures = append(failures, failure)
 		} else {
 			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
 		}
 	}
-	return allPassed
+	return failures
 }
 
 // startNoBackup starts the nodes without enabling backup.
