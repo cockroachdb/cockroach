@@ -199,13 +199,6 @@ const (
 	mutationInsertAfter
 	mutationInsertConcurrent
 	mutationRemove
-
-	// spanConfigTenantLimit is the value assigned to the
-	// `spanconfig.tenant_limit` cluster setting, controling the number
-	// of spans that a separate-process tenant can create. The value of
-	// 50k chosen here matches Serverless deployments and helps tests
-	// that perform lots of schema changes.
-	spanConfigTenantLimit = 50000
 )
 
 // planMutators includes a list of all known `mutator`
@@ -621,12 +614,12 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	}
 
 	if p.deploymentMode == SeparateProcessDeployment {
-		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
-			name:               "spanconfig.tenant_limit",
-			value:              spanConfigTenantLimit,
-			virtualClusterName: p.tenantName(),
-			systemVisible:      true,
-		}))
+		steps = append(
+			steps,
+			p.newSingleStepWithContext(setupContext, disableSeparateProcessThrottlingStep{
+				virtualClusterName: p.tenantName(),
+			}),
+		)
 	}
 
 	if shouldGrantCapabilities {
