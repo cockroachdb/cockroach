@@ -32,25 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// readyWithTimeout selects from n.Ready() with a 1-second timeout. It
-// panics on timeout, which is better than the indefinite wait that
-// would occur if this channel were read without being wrapped in a
-// select.
-func readyWithTimeout(n Node) Ready {
-	select {
-	case rd := <-n.Ready():
-		if nn, ok := n.(*nodeTestHarness); ok {
-			n = nn.node
-		}
-		if nn, ok := n.(*node); ok {
-			nn.rn.raft.logger.Infof("emitted ready: %s", DescribeReady(rd, nil))
-		}
-		return rd
-	case <-time.After(time.Second):
-		panic("timed out waiting for ready")
-	}
-}
-
 // TestNodeStep ensures that node.Step sends msgProp to propc chan
 // and other kinds of messages to recvc chan.
 func TestNodeStep(t *testing.T) {
