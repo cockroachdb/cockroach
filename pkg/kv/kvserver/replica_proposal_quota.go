@@ -103,7 +103,7 @@ func (r *Replica) getQuotaPoolEnabledRLocked(ctx context.Context) bool {
 	return enableRaftProposalQuota.Get(&r.store.cfg.Settings.SV) &&
 		(kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToElastic ||
 			!kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV)) &&
-		quotaPoolEnabledForRange(r.mu.state.Desc)
+		quotaPoolEnabledForRange(r.shMu.state.Desc)
 }
 
 func (r *Replica) updateProposalQuotaRaftMuLocked(
@@ -123,7 +123,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	if r.mu.leaderID != lastLeaderID {
 		if r.replicaID == r.mu.leaderID {
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), now)
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 			// We're the new leader but we only create the quota pool if it's enabled
@@ -194,7 +194,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	minIndex := kvpb.RaftIndex(status.Applied)
 
 	r.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
-		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
+		rep, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
 			return
 		}

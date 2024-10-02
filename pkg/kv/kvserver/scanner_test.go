@@ -48,13 +48,13 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		repl := &Replica{
 			RangeID: desc.RangeID,
 		}
-		repl.mu.state.Stats = &enginepb.MVCCStats{
+		repl.shMu.state.Stats = &enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
 			KeyCount:  1,
 			LiveCount: 1,
 		}
-		repl.mu.state.Desc = desc
+		repl.shMu.state.Desc = desc
 		repl.startKey = desc.StartKey // actually used by replicasByKey
 		if exRngItem := rs.replicasByKey.ReplaceOrInsert((*btreeReplica)(repl)); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)

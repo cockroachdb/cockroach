@@ -91,7 +91,7 @@ func TestStoreReplicaBTree_LookupPrecedingAndNextReplica(t *testing.T) {
 		desc.StartKey = roachpb.RKey(start)
 		desc.EndKey = roachpb.RKey(end)
 		r := &Replica{}
-		r.mu.state.Desc = desc
+		r.shMu.state.Desc = desc
 		r.startKey = desc.StartKey // this is what's actually used in the btree
 		return r
 	}
@@ -145,7 +145,7 @@ func TestStoreReplicaBTree_ReplicaCanBeLockedDuringInsert(t *testing.T) {
 	ctx := context.Background()
 	repl := &Replica{}
 	k := roachpb.RKey("a")
-	repl.mu.state.Desc = &roachpb.RangeDescriptor{
+	repl.shMu.state.Desc = &roachpb.RangeDescriptor{
 		RangeID: 12,
 	}
 	repl.startKey = k

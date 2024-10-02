@@ -3097,7 +3097,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// is not too far behind the leaseholder. If the delegate is too far behind
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
 	r.mu.RLock()
-	replIdx := r.mu.state.RaftAppliedIndex + 1
+	replIdx := r.shMu.state.RaftAppliedIndex + 1
 	status := r.raftBasicStatusRLocked()
 	r.mu.RUnlock()
 

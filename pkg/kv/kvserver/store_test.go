@@ -699,10 +699,12 @@ func TestReplicasByKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rep.raftMu.Lock()
 	rep.mu.Lock()
-	desc := *rep.mu.state.Desc // shallow copy to replace desc wholesale
+	desc := *rep.shMu.state.Desc // shallow copy to replace desc wholesale
 	desc.EndKey = roachpb.RKey("e")
-	rep.mu.state.Desc = &desc
+	rep.shMu.state.Desc = &desc
+	rep.raftMu.Unlock()
 	rep.mu.Unlock()
 
 	// Ensure that this shrinkage is recognized by future additions to replicasByKey.
@@ -2787,7 +2789,7 @@ func TestStoreGCThreshold(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl.mu.Lock()
-		gcThreshold := *repl.mu.state.GCThreshold
+		gcThreshold := *repl.shMu.state.GCThreshold
 		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
 		repl.mu.Unlock()
 		if err != nil {
