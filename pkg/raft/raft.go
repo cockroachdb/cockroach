@@ -350,8 +350,9 @@ type raft struct {
 	//
 	// Messages in this list may target other nodes or may target this node.
 	//
-	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
-	// MsgPreVoteResp. See the comment in raft.send for details.
+	// Messages in this list have the type MsgAppResp, MsgVoteResp,
+	// MsgPreVoteResp, or MsgFortifyLeaderResp. See the comment in raft.send for
+	// details.
 	msgsAfterAppend []pb.Message
 
 	// the leader id
