@@ -44,11 +44,11 @@ simulate
 # which will now get admitted. One thing we could do is to try and observe
 # available tokens again for still-connected streams.
 plot t=[30s,40s)
-kvflowcontrol.streams.eval.regular.blocked_count            unit=streams
-kvflowcontrol.tokens.eval.regular.available                 unit=MiB
-kvflowcontrol.eval_wait.elastic.requests.bypassed           unit=reqs/s rate=true
-kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
-kvflowcontrol.tokens.{eval,send}.regular.disconnected       unit=MiB
+kvflowcontrol.streams.eval.regular.blocked_count                   unit=streams
+kvflowcontrol.tokens.eval.regular.available                        unit=MiB
+kvflowcontrol.eval_wait.elastic.requests.bypassed                  unit=reqs/s rate=true
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting}        unit=reqs/s rate=true
+kvflowcontrol.tokens.{eval,send}.regular.returned.disconnect       unit=MiB
 ----
 ----
  1.0 ┤            ╭╮
@@ -128,7 +128,7 @@ kvflowcontrol.tokens.{eval,send}.regular.disconnected       unit=MiB
   2.1 ┤                   │
   1.1 ┤                   │
   0.0 ┼───────────────────╯
-       tokens.{eval,send}.regular.disconnected (MiB)
+       tokens.{eval,send}.regular.returned.disconnect (MiB)
 ----
 ----
 
