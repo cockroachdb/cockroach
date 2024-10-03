@@ -2232,11 +2232,12 @@ func getExpectedSnapshotSizeBytes(
 
 	err = rditer.IterateReplicaKeySpans(
 		ctx, snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				switch keyType {
-				case storage.IterKeyTypePointsOnly:
+				hasPoint, hasRange := iter.HasPointAndRange()
+
+				if hasPoint {
 					unsafeKey, err := iter.UnsafeEngineKey()
 					if err != nil {
 						return err
@@ -2248,8 +2249,8 @@ func getExpectedSnapshotSizeBytes(
 					if err := b.PutEngineKey(unsafeKey, v); err != nil {
 						return err
 					}
-
-				case storage.IterKeyTypeRangesOnly:
+				}
+				if hasRange && iter.RangeKeyChanged() {
 					bounds, err := iter.EngineRangeBounds()
 					if err != nil {
 						return err
@@ -2260,9 +2261,6 @@ func getExpectedSnapshotSizeBytes(
 							return err
 						}
 					}
-
-				default:
-					return errors.Errorf("unexpected key type %v", keyType)
 				}
 			}
 			return err
