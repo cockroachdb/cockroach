@@ -323,6 +323,16 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
 		},
 	})
+	// There is a risk of unique violations if concurrent inserts
+	// happen during an ADD COLUMN UNIQUE / NOT NULL. So allow this to be
+	// a potential error on the commit.
+	if def.Unique.IsUnique {
+		og.potentialCommitErrors.add(pgcode.UniqueViolation)
+	}
+	if def.Nullable.Nullability == tree.NotNull {
+		og.potentialCommitErrors.add(pgcode.NotNullViolation)
+	}
+
 	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsString(def))
 	return op, nil
 }
@@ -2754,6 +2764,11 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
 	// error.
 	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
+	// There is a risk of unique violations if concurrent inserts
+	// happen during an ALTER PRIMARY KEY. So allow this to be
+	// a potential error on the commit.
+	og.potentialCommitErrors.add(pgcode.UniqueViolation)
+
 	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
 	})
