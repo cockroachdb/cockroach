@@ -54,6 +54,7 @@ type testingRCState struct {
 	sendTokenWatcher      *SendTokenWatcher
 	probeToCloseScheduler ProbeToCloseTimerScheduler
 	evalMetrics           *EvalWaitMetrics
+	rcMetrics             *RangeControllerMetrics
 	// ranges contains the controllers for each range. It is the main state being
 	// tested.
 	ranges map[roachpb.RangeID]*testingRCRange
@@ -75,6 +76,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.evalMetrics = NewEvalWaitMetrics()
+	s.rcMetrics = NewRangeControllerMetrics()
 	s.ranges = make(map[roachpb.RangeID]*testingRCRange)
 	s.setTokenCounters = make(map[kvflowcontrol.Stream]struct{})
 	s.initialRegularTokens = kvflowcontrol.Tokens(-1)
@@ -308,18 +310,19 @@ func (s *testingRCState) getOrInitRange(
 		testRC.mu.outstandingReturns = make(map[roachpb.ReplicaID]kvflowcontrol.Tokens)
 		testRC.mu.quorumPosition = kvflowcontrolpb.RaftLogPosition{Term: 1, Index: 0}
 		options := RangeControllerOptions{
-			RangeID:             r.rangeID,
-			TenantID:            r.tenantID,
-			LocalReplicaID:      r.localReplicaID,
-			SSTokenCounter:      s.ssTokenCounter,
-			RaftInterface:       testRC,
-			MsgAppSender:        testRC,
-			Clock:               s.clock,
-			CloseTimerScheduler: s.probeToCloseScheduler,
-			Scheduler:           testRC,
-			SendTokenWatcher:    s.sendTokenWatcher,
-			EvalWaitMetrics:     s.evalMetrics,
-			Knobs:               &kvflowcontrol.TestingKnobs{},
+			RangeID:                r.rangeID,
+			TenantID:               r.tenantID,
+			LocalReplicaID:         r.localReplicaID,
+			SSTokenCounter:         s.ssTokenCounter,
+			RaftInterface:          testRC,
+			MsgAppSender:           testRC,
+			Clock:                  s.clock,
+			CloseTimerScheduler:    s.probeToCloseScheduler,
+			Scheduler:              testRC,
+			SendTokenWatcher:       s.sendTokenWatcher,
+			EvalWaitMetrics:        s.evalMetrics,
+			RangeControllerMetrics: s.rcMetrics,
+			Knobs:                  &kvflowcontrol.TestingKnobs{},
 		}
 
 		init := RangeControllerInitState{
@@ -933,6 +936,7 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 //     range_id=<range_id>
 //
 //   - metrics: Prints the current state of the eval metrics.
+//     [type=(eval|send_queue|range_controller)] default eval.
 //
 //   - inspect: Prints the result of an Inspect() call to the RangeController
 //     for a range.
@@ -1058,7 +1062,7 @@ func TestRangeController(t *testing.T) {
 					tc.adjust(ctx,
 						admissionpb.WorkClassFromPri(pri),
 						kvflowcontrol.Tokens(tokens),
-						false, /* disconnect */
+						AdjNormal,
 					)
 				}
 				// Sleep for a bit to allow any timers to fire.
@@ -1285,23 +1289,62 @@ func TestRangeController(t *testing.T) {
 				return state.sendStreamString(roachpb.RangeID(rangeID))
 
 			case "metrics":
+				typ := "eval"
+				d.MaybeScanArgs(t, "type", &typ)
 				var buf strings.Builder
-				evalMetrics := state.evalMetrics
 
-				for _, wc := range []admissionpb.WorkClass{
-					admissionpb.RegularWorkClass,
-					admissionpb.ElasticWorkClass,
-				} {
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(), evalMetrics.Waiting[wc].Value())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(), evalMetrics.Admitted[wc].Count())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(), evalMetrics.Errored[wc].Count())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(), evalMetrics.Bypassed[wc].Count())
-					// We only print the number of recorded durations, instead of any
-					// percentiles or cumulative wait times as these are
-					// non-deterministic in the test.
-					fmt.Fprintf(&buf, "%-50v: %v\n",
-						fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName()),
-						testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
+				switch typ {
+				case "eval":
+					evalMetrics := state.evalMetrics
+					for _, wc := range []admissionpb.WorkClass{
+						admissionpb.RegularWorkClass,
+						admissionpb.ElasticWorkClass,
+					} {
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(), evalMetrics.Waiting[wc].Value())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(), evalMetrics.Admitted[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(), evalMetrics.Errored[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(), evalMetrics.Bypassed[wc].Count())
+						// We only print the number of recorded durations, instead of any
+						// percentiles or cumulative wait times as these are
+						// non-deterministic in the test.
+						fmt.Fprintf(&buf, "%-50v: %v\n",
+							fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName()),
+							testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
+					}
+				case "range_controller":
+					rcMetrics := state.rcMetrics
+					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(), rcMetrics.Count.Value())
+				case "send_queue":
+					sendQueueMetrics := state.rcMetrics.SendQueue
+					sendQueueTokenMetrics := state.ssTokenCounter.tokenMetrics.CounterMetrics[flowControlSendMetricType].SendQueue[0]
+					// We need to aggregate these ourselves, since this is normally done
+					// in kvserver.updateReplicationGauges.
+					var sizeCount, sizeBytes int64
+					for _, rcState := range state.ranges {
+						stats := RangeSendStreamStats{}
+						rcState.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+						rcState.rc.SendStreamStats(&stats)
+						count, bytes := stats.SumSendQueues()
+						sizeCount += count
+						sizeBytes += bytes
+					}
+					sendQueueMetrics.SizeBytes.Update(sizeBytes)
+					sendQueueMetrics.SizeCount.Update(sizeCount)
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeCount.GetName(), sendQueueMetrics.SizeCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeBytes.GetName(), sendQueueMetrics.SizeBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.ForceFlushedScheduledCount.GetName(), sendQueueMetrics.ForceFlushedScheduledCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.DeductedForSchedulerBytes.GetName(), sendQueueMetrics.DeductedForSchedulerBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.PreventionCount.GetName(), sendQueueMetrics.PreventionCount.Count())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.ForceFlushDeducted.GetName(), sendQueueTokenMetrics.ForceFlushDeducted.Count())
+					for _, wc := range []admissionpb.WorkClass{
+						admissionpb.RegularWorkClass,
+						admissionpb.ElasticWorkClass,
+					} {
+						fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.PreventionDeducted[wc].GetName(), sendQueueTokenMetrics.PreventionDeducted[wc].Count())
+					}
+
+				default:
+					panic(fmt.Sprintf("unknown metrics type: %s", typ))
 				}
 				return buf.String()
 
@@ -1314,16 +1357,32 @@ func TestRangeController(t *testing.T) {
 				return fmt.Sprintf("%v", marshaled)
 
 			case "send_stream_stats":
-				var rangeID int
+				var (
+					rangeID int
+					refresh = true
+				)
 				d.ScanArgs(t, "range_id", &rangeID)
+				d.MaybeScanArgs(t, "refresh", &refresh)
+
 				r := state.ranges[roachpb.RangeID(rangeID)]
-				stats := r.rc.SendStreamStats()
+				if refresh {
+					r.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+				}
+				stats := RangeSendStreamStats{}
+				r.rc.SendStreamStats(&stats)
+				log.Infof(ctx, "stats: %v", stats)
 				var buf strings.Builder
 				for _, repl := range sortReplicas(r) {
-					buf.WriteString(fmt.Sprintf("%v: is_state_replicate=%-5v has_send_queue=%-5v\n",
+					replStats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID)
+					require.True(t, ok)
+					buf.WriteString(fmt.Sprintf("%v: is_state_replicate=%-5v has_send_queue=%-5v send_queue_size=%v / %v entries\n",
 						repl,
-						stats[repl.ReplicaID].IsStateReplicate,
-						stats[repl.ReplicaID].HasSendQueue))
+						replStats.IsStateReplicate,
+						replStats.HasSendQueue,
+						// Cast for formatting.
+						kvflowcontrol.Tokens(replStats.SendQueueBytes),
+						replStats.SendQueueCount,
+					))
 				}
 				return buf.String()
 

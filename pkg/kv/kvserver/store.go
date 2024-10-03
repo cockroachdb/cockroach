@@ -1280,6 +1280,9 @@ type StoreConfig struct {
 	// KVFlowEvalWaitMetrics is used for replication AC (flow control) v2 to
 	// track requests waiting for evaluation.
 	KVFlowEvalWaitMetrics *rac2.EvalWaitMetrics
+	// KVFlowRangeControllerMetrics is used for replication AC (flow control) v2
+	// to track various range controller metrics.
+	KVFlowRangeControllerMetrics *rac2.RangeControllerMetrics
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how
@@ -1544,6 +1547,7 @@ func NewStore(
 	s.kvflowRangeControllerFactory = replica_rac2.NewRangeControllerFactoryImpl(
 		s.Clock(),
 		s.cfg.KVFlowEvalWaitMetrics,
+		s.cfg.KVFlowRangeControllerMetrics,
 		s.cfg.KVFlowStreamTokenProvider,
 		replica_rac2.NewStreamCloseScheduler(
 			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
@@ -3284,6 +3288,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		maxLockWaitDurationNanos       int64
 		maxLockWaitQueueWaitersForLock int64
 
+		kvflowSendQueueSizeCount int64
+		kvflowSendQueueSizeBytes int64
+
 		minMaxClosedTS hlc.Timestamp
 	)
 
@@ -3304,6 +3311,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// We want to avoid having to read this multiple times during the replica
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
+	kvflowSendStats := rac2.RangeSendStreamStats{}
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
@@ -3314,6 +3322,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if !metrics.LeaseValid {
 				raftLeaderInvalidLeaseCount++
 			}
+			kvflowSendStats.Clear()
+			rep.SendStreamStats(&kvflowSendStats)
+			sizeCount, sizeBytes := kvflowSendStats.SumSendQueues()
+			kvflowSendQueueSizeCount += sizeCount
+			kvflowSendQueueSizeBytes += sizeBytes
 		}
 		if metrics.Leaseholder {
 			s.metrics.RaftQuotaPoolPercentUsed.RecordValue(metrics.QuotaPoolPercentUsed)
