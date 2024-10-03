@@ -26,6 +26,9 @@ type FortificationTracker struct {
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
 	fortification map[pb.PeerID]pb.Epoch
+
+	// term is the leadership term associated with fortification tracking.
+	term uint64
 }
 
 // MakeFortificationTracker initializes a FortificationTracker.
@@ -54,9 +57,11 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 	ft.fortification[id] = max(ft.fortification[id], epoch)
 }
 
-// Reset clears out any previously tracked fortification.
-func (ft *FortificationTracker) Reset() {
+// Reset clears out any previously tracked fortification and prepares the
+// fortification tracker to be used at the supplied term.
+func (ft *FortificationTracker) Reset(term uint64) {
 	clear(ft.fortification)
+	ft.term = term
 	// TODO(arul): when we introduce ft.LeadSupportUntil we need to make sure it
 	// isn't reset here, because we don't want it to regress when a leader steps
 	// down.
@@ -113,6 +118,12 @@ func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 // not.
 func (ft *FortificationTracker) QuorumActive() bool {
 	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
+}
+
+// Term returns the leadership term for which the tracker is/was tracking
+// fortification state.
+func (ft *FortificationTracker) Term() uint64 {
+	return ft.term
 }
 
 func (ft *FortificationTracker) Empty() bool {
