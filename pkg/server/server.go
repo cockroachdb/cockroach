@@ -626,6 +626,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
 	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
+	sendTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{})
 	evalWaitMetrics := rac2.NewEvalWaitMetrics()
 	nodeRegistry.AddMetricStruct(evalWaitMetrics)
 	nodeRegistry.AddMetricStruct(streamTokenCounterProvider.Metrics())
@@ -889,6 +890,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
 		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
+		KVFlowSendTokenWatcher:       sendTokenWatcher,
 		KVFlowEvalWaitMetrics:        evalWaitMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
