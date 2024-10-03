@@ -829,10 +829,10 @@ project
  │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null transactiondetails.dealerid:24 isbuy:25 transactiondate:26 transactiondetails.cardid:27 quantity:28
  │    │    │    ├── lookup expression
  │    │    │    │    └── filters
+ │    │    │    │         ├── (transactiondate:26 >= '2020-02-28 00:00:00+00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
  │    │    │    │         ├── "lookup_join_const_col_@24":44 = transactiondetails.dealerid:24 [outer=(24,44), constraints=(/24: (/NULL - ]; /44: (/NULL - ]), fd=(24)==(44), (44)==(24)]
  │    │    │    │         ├── "lookup_join_const_col_@25":45 = isbuy:25 [outer=(25,45), constraints=(/25: (/NULL - ]; /45: (/NULL - ]), fd=(25)==(45), (45)==(25)]
- │    │    │    │         ├── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
- │    │    │    │         └── (transactiondate:26 >= '2020-02-28 00:00:00+00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
+ │    │    │    │         └── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
  │    │    │    ├── immutable
  │    │    │    ├── stats: [rows=519622.1, distinct(10)=19000, null(10)=0, distinct(27)=19000, null(27)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
  │    │    │    ├── key: (10,26-28)
@@ -1107,8 +1107,8 @@ top-k
       │    │    ├── lookup expression
       │    │    │    └── filters
       │    │    │         ├── dealerid:8 IN (1, 2, 3, 4, 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
-      │    │    │         ├── id:6 = cardid:9 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │    │    │         └── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
+      │    │    │         ├── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
+      │    │    │         └── id:6 = cardid:9 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │    │    ├── fd: (8-10)-->(11), (6)==(9), (9)==(6)
       │    │    ├── values
       │    │    │    ├── columns: id:6!null quantity:7!null

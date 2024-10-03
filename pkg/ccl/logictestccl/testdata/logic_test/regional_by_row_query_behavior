@@ -1697,7 +1697,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column4 = a)) AND (b > 0)
+│           │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (b > 0)) AND (column4 = a)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
@@ -1767,7 +1767,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@new_idx
-│           │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column4 = a)) AND (b > 0)
+│           │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (b > 0)) AND (column4 = a)
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
 │           └── • filter
