@@ -53,6 +53,10 @@ type raftLogger struct {
 	ctx context.Context
 }
 
+func (r *raftLogger) Tracef(format string, v ...any) {
+	log.Infof(r.ctx, format, v...)
+}
+
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
 		log.InfofDepth(r.ctx, 1, "", v...)

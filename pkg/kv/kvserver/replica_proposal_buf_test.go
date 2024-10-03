@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -94,6 +95,10 @@ type testProposerRaft struct {
 
 var _ proposerRaft = &testProposerRaft{}
 
+func (t *testProposerRaft) Term() uint64 {
+	return 0
+}
+
 func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	if msg.Type != raftpb.MsgProp {
 		return nil
@@ -151,6 +156,10 @@ func (t *testProposer) getStoreID() roachpb.StoreID {
 
 func (t *testProposer) getReplicaID() roachpb.ReplicaID {
 	return 1
+}
+
+func (rp *testProposer) getRaftTracer() *rafttrace.RaftTracer {
+	return nil
 }
 
 func (t *testProposer) getReplicaDesc() roachpb.ReplicaDescriptor {

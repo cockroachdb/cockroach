@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -757,6 +758,7 @@ type Replica struct {
 		//
 		// TODO(erikgrinaker): make this never be nil.
 		internalRaftGroup *raft.RawNode
+		raftTracer        *rafttrace.RaftTracer
 
 		// The ID of the leader replica within the Raft group. NB: this is updated
 		// in a separate critical section from the Raft group, and can therefore

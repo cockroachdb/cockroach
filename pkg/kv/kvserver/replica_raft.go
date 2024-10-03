@@ -600,6 +600,11 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 	r.raftMu.AssertHeld()
 	var sideChannelInfo replica_rac2.SideChannelInfoUsingRaftMessageRequest
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		if mark := req.TraceMark; mark != nil {
+			r.mu.raftTracer.MaybeRegister(raft.LogMark{Term: mark.Term, Index: mark.Index})
+		}
+		r.mu.raftTracer.MaybeTrace(req.Message)
+
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
 		// group.
@@ -1136,6 +1141,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
+			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
 			if state, err = s.StoreEntries(ctx, state, app, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1167,6 +1173,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	stats.tApplicationBegin = timeutil.Now()
 	if hasMsg(msgStorageApply) {
+		r.mu.raftTracer.MaybeTrace(msgStorageApply)
 		r.traceEntries(msgStorageApply.Entries, "committed, before applying any entries")
 
 		err := appTask.ApplyCommittedEntries(ctx)
@@ -1890,6 +1897,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 	}
 
 	for i, m := range localMsgs {
+		r.mu.raftTracer.MaybeTrace(m)
 		if err := raftGroup.Step(m); err != nil {
 			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
 				raft.DescribeMessage(m, raftEntryFormatter), err)
@@ -1913,6 +1921,8 @@ func (r *Replica) sendRaftMessage(
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
 	r.mu.RLock()
+	mark, trace := r.mu.raftTracer.MaybeTrace(msg)
+
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), lastFromReplica)
 	var startKey roachpb.RKey
@@ -1965,6 +1975,9 @@ func (r *Replica) sendRaftMessage(
 		RangeStartKey:       startKey, // usually nil
 		UsingRac2Protocol:   r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
 		LowPriorityOverride: lowPriorityOverride,
+	}
+	if trace {
+		req.TraceMark = &kvserverpb.LogMark{Term: mark.Term, Index: mark.Index}
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.
