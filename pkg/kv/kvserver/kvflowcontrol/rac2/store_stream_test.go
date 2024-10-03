@@ -60,7 +60,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 
 	numBlocked := 0
 	createStreamAndExhaustTokens := func(id uint64, checkMetric bool) {
-		p.Eval(makeStream(id)).Deduct(ctx, admissionpb.RegularWorkClass, kvflowcontrol.Tokens(numTokens))
+		p.Eval(makeStream(id)).Deduct(ctx, admissionpb.RegularWorkClass, kvflowcontrol.Tokens(numTokens), AdjNormal)
 		if checkMetric {
 			p.UpdateMetricGauges()
 			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[flowControlEvalMetricType].BlockedCount[elastic].Value())
@@ -248,28 +248,28 @@ func TestStreamTokenCounterProviderInspect(t *testing.T) {
 
 	record("No streams.")
 
-	p.Eval(stream(1)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(1)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Single stream with 1 MiB of eval regular tokens deducted.")
 
-	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Single stream with 1 MiB of elastic+regular (send+eval) tokens deducted.")
 
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Eval(stream(2)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
-	p.Eval(stream(3)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(2)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(3)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, with 1 MiB of regular tokens deducted each.")
 
-	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
-	p.Send(stream(2)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
-	p.Send(stream(3)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(2)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(3)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, with 1 MiB of elastic send tokens deducted from each.")
 
-	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
-	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, false /* disconnect */)
+	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, all tokens returned.")
 }
 
@@ -299,7 +299,7 @@ func (n *testingTokenGrantNotification) String() string {
 }
 
 func (n *testingTokenGrantNotification) Notify(ctx context.Context) {
-	n.tc.Deduct(ctx, admissionpb.ElasticWorkClass, n.deduction)
+	n.tc.Deduct(ctx, admissionpb.ElasticWorkClass, n.deduction, AdjNormal)
 	n.deducted += n.deduction
 }
 
@@ -410,7 +410,7 @@ func TestSendTokenWatcher(t *testing.T) {
 						// want all streams to start with 0 elastic tokens.
 						tc.adjust(ctx, admissionpb.ElasticWorkClass,
 							-kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Default()),
-							false /* disconnect */)
+							AdjNormal)
 						zeroedCounters[stream] = struct{}{}
 					}
 
@@ -432,7 +432,7 @@ func TestSendTokenWatcher(t *testing.T) {
 						ctx,
 						sendTokenWatcherWC,
 						kvflowcontrol.Tokens(fields[1]),
-						false /* disconnect */)
+						AdjNormal)
 					// Introduce a sleep after each token adjustment to ensure that any
 					// token channel signals are processed before proceeding. This
 					// ensures the test remains deterministic.
