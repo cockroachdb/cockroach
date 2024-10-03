@@ -100,7 +100,7 @@ type AllocatorReplica interface {
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
-	SendStreamStats() rac2.RangeSendStreamStats
+	SendStreamStats(*rac2.RangeSendStreamStats)
 }
 
 // ReplicaPlanner implements the ReplicationPlanner interface.
