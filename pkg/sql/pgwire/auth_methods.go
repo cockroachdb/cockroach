@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -984,12 +985,14 @@ func authLDAP(
 		return nil
 	})
 
-	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) ([]username.SQLUsername, error) {
+	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
 
 		// Verify that the systemIdentity is what we expect.
 		if ldapUserDN.String() != systemIdentity {
-			return nil, errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
+			err := errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+			return err
 		}
 
 		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
@@ -999,27 +1002,35 @@ func authLDAP(
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, errForLog)
-			return nil, authError
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, errForLog)
+			return authError
 		} else {
-			c.LogAuthInfof(ctx, "LDAP authorization sync succeeded; attempting to assign roles")
+			c.LogAuthInfof(ctx, redact.Sprintf("LDAP authorization sync succeeded; attempting to assign roles for LDAP groups: %s", ldapGroups))
 			// Parse and apply transformation to LDAP group DNs for roles granter.
-			sqlGroupRoles := make([]username.SQLUsername, len(ldapGroups))
-			for idx := range ldapGroups {
-				var err error
-				// TODO: instead of using the DN as the SQLUsername, we should extract
-				// the CN and use that as the SQLUsername
-				if sqlGroupRoles[idx], err = username.MakeSQLUsernameFromUserInput(
-					ldapGroups[idx].String(), username.PurposeValidation,
-				); err != nil {
-					return nil, errors.Wrapf(err, "LDAP authorization: error creating group role for DN %s", ldapGroups[idx].String())
+			sqlRoles := make([]username.SQLUsername, 0, len(ldapGroups))
+			for _, ldapGroup := range ldapGroups {
+				// Extract the CN from the LDAP group DN to use as the SQL role.
+				sqlRole, found, err := distinguishedname.ExtractCNAsSQLUsername(ldapGroup)
+				if err != nil {
+					err := errors.Wrapf(err, "LDAP authorization: error finding matching SQL role for group %s", ldapGroup.String())
+					c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+					return err
 				}
+				if !found {
+					c.LogAuthInfof(ctx, redact.Sprintf("skipping role assignment for group %s since there is no common name", ldapGroup.String()))
+					continue
+				}
+				sqlRoles = append(sqlRoles, sqlRole)
 			}
-			return sqlGroupRoles, nil
+
+			// Assign roles to the user.
+			if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, sessionUser, sqlRoles); err != nil {
+				err = errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", sessionUser)
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+				return err
+			}
+			return nil
 		}
-	})
-	b.SetRoleGranter(func(ctx context.Context, systemIdentity string, sqlGroups []username.SQLUsername) error {
-		return nil
 	})
 
 	return b, nil
