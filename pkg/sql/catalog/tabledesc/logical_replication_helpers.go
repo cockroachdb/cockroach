@@ -8,6 +8,7 @@ package tabledesc
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -37,6 +38,9 @@ func CheckLogicalReplicationCompatibility(
 	}
 
 	if err := checkExpressionEvaluation(dst); err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+	}
+	if err := checkUniqueWithoutIndex(dst); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 	if !skipTableEquivalenceCheck {
@@ -117,6 +121,21 @@ func checkCompositeTypesInPrimaryKey(dst *descpb.TableDescriptor) error {
 				)
 			}
 		}
+	}
+	return nil
+}
+
+// Logical replication does not run unique without index checks.
+func checkUniqueWithoutIndex(dst *descpb.TableDescriptor) error {
+	if len(dst.UniqueWithoutIndexConstraints) > 0 {
+		names := make([]string, 0, len(dst.UniqueWithoutIndexConstraints))
+		for _, c := range dst.UniqueWithoutIndexConstraints {
+			names = append(names, c.Name)
+		}
+		return errors.Newf(
+			"table %s has UNIQUE WITHOUT INDEX constraints: %s",
+			dst.Name, strings.Join(names, ","),
+		)
 	}
 	return nil
 }
