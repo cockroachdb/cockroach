@@ -432,6 +432,12 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.L().Printf("Failed to read %s: %s", testdata, err)
 	}
+
+	// Replace specific versions in URIs with a generic "_version_".
+	issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+	actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
+	docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+	actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
 	actual := string(actualB)
 
 	if expected != actual {
