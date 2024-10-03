@@ -459,6 +459,8 @@ func (b *ConstraintBuilder) Build(
 //  2. col is a computed column.
 //  3. Columns referenced in the computed expression are a subset of columns
 //     that already have equality constraints.
+//  4. The computed column expression is not composite-sensitive to the set of
+//     referenced columns.
 //
 // For example, consider the table and query:
 //
@@ -513,6 +515,14 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 	}
 	expr, ok := tabMeta.ComputedColExpr(col)
 	if !ok {
+		return nil, false
+	}
+	if memo.CanBeCompositeSensitive(expr) {
+		// Composite-typed values might compare equally without being exactly the
+		// same (e.g. 2.0::DECIMAL vs 2.000::DECIMAL). We must ensure that the
+		// computed column expression produces equivalent (but not necessarily
+		// identical) results if its columns are swapped out with equivalent
+		// columns.
 		return nil, false
 	}
 	var sharedProps props.Shared
