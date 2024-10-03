@@ -176,3 +176,19 @@ lookup-constraints left=(a regclass, b int) right=(x oid, v string not null as (
 x = a
 ----
 lookup join not possible
+
+# Computed columns cannot be remapped if the expression is composite-sensitive.
+lookup-constraints left=(a decimal, b int) right=(x decimal, v int not null as (x::int) stored) index=(v, x)
+x = a
+----
+lookup join not possible
+
+# Case with a composite-insensitive computed column expression.
+lookup-constraints left=(a decimal, b int) right=(x decimal, v decimal not null as (x + 2.5) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 2.5
