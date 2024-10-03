@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # Diff a failed Go example [0] against its expected output.
 #
 # By default, when an example fails, Go prints "got:", followed by the
