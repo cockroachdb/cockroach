@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 )
@@ -170,9 +171,11 @@ func (c *connector) processMetadataEvent(ctx context.Context, e *kvpb.TenantSett
 	// protobuf, which requires breaking a dependency cycle.
 	c.metadataMu.dataState = mtinfopb.TenantDataState(e.DataState)
 	c.metadataMu.serviceMode = mtinfopb.TenantServiceMode(e.ServiceMode)
+	c.metadataMu.clusterInitGracePeriodTS = e.ClusterInitGracePeriodEndTS
 
-	log.Infof(ctx, "received tenant metadata: name=%q dataState=%v serviceMode=%v\ncapabilities=%+v",
-		c.metadataMu.tenantName, c.metadataMu.dataState, c.metadataMu.serviceMode, c.metadataMu.capabilities)
+	log.Infof(ctx, "received tenant metadata: name=%q dataState=%v serviceMode=%v clusterInitGracePeriodTS=%s\ncapabilities=%+v",
+		c.metadataMu.tenantName, c.metadataMu.dataState, c.metadataMu.serviceMode,
+		timeutil.Unix(c.metadataMu.clusterInitGracePeriodTS, 0), c.metadataMu.capabilities)
 
 	// Signal watchers that there was an update.
 	close(c.metadataMu.notifyCh)
@@ -298,4 +301,10 @@ func (c *connector) Overrides() (map[settings.InternalKey]settings.EncodedValue,
 		res[key] = val
 	}
 	return res, c.settingsMu.notifyCh
+}
+
+func (c *connector) GetClusterInitGracePeriodTS() int64 {
+	c.metadataMu.Lock()
+	defer c.metadataMu.Unlock()
+	return c.metadataMu.clusterInitGracePeriodTS
 }

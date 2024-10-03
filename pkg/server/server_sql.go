@@ -1929,6 +1929,9 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 		license.WithSystemTenant(s.execCfg.Codec.ForSystemTenant()),
 		license.WithTelemetryStatusReporter(s.diagnosticsReporter),
 	}
+	if s.tenantConnect != nil {
+		opts = append(opts, license.WithMetadataAccessor(s.tenantConnect))
+	}
 	if knobs.Server != nil {
 		opts = append(opts, license.WithTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs))
 	}

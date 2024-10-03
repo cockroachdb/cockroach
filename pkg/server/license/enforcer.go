@@ -95,6 +95,17 @@ type Enforcer struct {
 	// db is a pointer to the database for use for KV read/writes. This is only
 	// set for the system tenant.
 	db isql.DB
+
+	// metadataAccessor is a pointer to a tenant connector that has the latest
+	// cluster init grace period timestamp. This is only set when this is
+	// initialized by the secondary tenant.
+	metadataAccessor MetadataAccessor
+
+	// continueToPollMetadataAccessor indicates whether requests for the cluster
+	// init grace period timestamp should continue polling for the latest value
+	// in the metadata accessor. This is set to true during initialization if the
+	// latest timestamp was not received.
+	continueToPollMetadataAccessor atomic.Bool
 }
 
 type TestingKnobs struct {
@@ -135,6 +146,14 @@ type TelemetryStatusReporter interface {
 	// GetLastSuccessfulTelemetryPing returns the time of the last time the
 	// telemetry data got back an acknowledgement from Cockroach Labs.
 	GetLastSuccessfulTelemetryPing() time.Time
+}
+
+// MetadataAccessor is the interface to access license metadata stored in the KV.
+type MetadataAccessor interface {
+	// GetClusterInitGracePeriodTS returns the grace period end time for clusters
+	// without a license installed. The timestamp is represented as the number of
+	// seconds since the Unix epoch.
+	GetClusterInitGracePeriodTS() int64
 }
 
 // NewEnforcer creates a new Enforcer object.
@@ -189,7 +208,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.readClusterMetadata(ctx, options); err != nil {
+		if err := e.initClusterMetadata(ctx, options); err != nil {
 			return err
 		}
 	}
@@ -212,22 +231,31 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	return nil
 }
 
-// readClusterMetadata will read, and maybe write, cluster metadata for license
+// initClusterMetadata will read, and maybe write, cluster metadata for license
 // enforcement. The metadata is stored in the KV system keyspace.
-func (e *Enforcer) readClusterMetadata(ctx context.Context, options options) error {
+func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) error {
 	// Secondary tenants do not have access to the system keyspace where
-	// the cluster init grace period is stored. As a fallback, we apply a 7-day
-	// grace period from the tenant's start time, which is used only when no
-	// license is installed. This logic applies specifically when secondary
-	// tenants are started in a separate process from the system tenant. If they
-	// are not, a shared enforcer will have access to the system keyspace and
-	// handle the grace period.
-	// TODO(spilchen): Change to give the secondary tenant read access to the
-	// system keyspace KV.
+	// the cluster init grace period is stored. In those instances, we rely on
+	// fetching that information from the system tenant using the tenant connector.
 	if !options.isSystemTenant {
-		gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
-		end := e.getStartTime().Add(gracePeriodLength)
-		e.clusterInitGracePeriodEndTS.Store(end.Unix())
+		if options.metadataAccessor == nil {
+			return errors.AssertionFailedf("no metadata accessor for secondary tenant")
+		}
+		e.metadataAccessor = options.metadataAccessor
+		end := e.metadataAccessor.GetClusterInitGracePeriodTS()
+		if end != 0 {
+			e.clusterInitGracePeriodEndTS.Store(end)
+			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS().String())
+		} else {
+			// No timestamp was received, likely due to a mixed-version workload.
+			// We'll use an estimate of 7 days from this node's startup time instead
+			// and set a flag to continue polling for an updated timestamp.
+			// An update should be sent once the KV starts up on the new version.
+			gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
+			e.clusterInitGracePeriodEndTS.Store(e.getStartTime().Add(gracePeriodLength).Unix())
+			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS().String())
+			e.continueToPollMetadataAccessor.Store(true)
+		}
 		return nil
 	}
 
@@ -297,6 +325,16 @@ func (e *Enforcer) GetClusterInitGracePeriodEndTS() time.Time {
 	// error or a zero value.
 	if e.clusterInitGracePeriodEndTS.Load() == 0 {
 		return e.getStartTime().Add(7 * 24 * time.Hour)
+	}
+	// If we are a secondary tenant and haven't received the timestamp stored in the KV,
+	// continue polling the tenant connector before returning.
+	if e.metadataAccessor != nil && e.continueToPollMetadataAccessor.Load() {
+		ts := e.metadataAccessor.GetClusterInitGracePeriodTS()
+		if ts != 0 {
+			// Timestamp from the KV has been received. Cache it and stop polling.
+			e.clusterInitGracePeriodEndTS.Store(ts)
+			e.continueToPollMetadataAccessor.Store(false)
+		}
 	}
 	return timeutil.Unix(e.clusterInitGracePeriodEndTS.Load(), 0)
 }
