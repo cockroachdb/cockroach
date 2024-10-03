@@ -1,3 +1,8 @@
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 if [ -z "${root:-}" ]
 then
     echo '$root is not set; please source teamcity-support.sh'

@@ -43,6 +43,11 @@ var (
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 `)
+	cslHeaderHash = regexp.MustCompile(`# Copyright 20\d\d The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+`)
 
 	apacheHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
@@ -262,12 +267,12 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestCopyrightHeaders", func(t *testing.T) {
+	t.Run("TestCopyrightHeadersWithSlash", func(t *testing.T) {
 		t.Parallel()
 
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
-			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
+			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.scss", "*.styl", "*.proto", "*.rl",
 		}
 
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{"ls-files"}, extensions...)...)
@@ -322,6 +327,53 @@ func TestLint(t *testing.T) {
 				if cslHeader.Find(data) == nil {
 					t.Errorf("did not find expected CSL license header in %s", filename)
 				}
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestCopyrightHeadersWithHash", func(t *testing.T) {
+		t.Parallel()
+
+		// These extensions identify source files that should have copyright headers.
+		extensions := []string{"GNUmakefile", "Makefile", "*.py", "*.sh"}
+
+		cmd, stderr, filter, err := dirCmd(crdbDir, "git", append([]string{"ls-files"}, extensions...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(filter,
+			stream.GrepNot(`^c-deps/.*`),
+			// These files are copied from raft upstream with its own license.
+			stream.GrepNot(`^raft/.*`),
+		), func(filename string) {
+			file, err := os.Open(filepath.Join(crdbDir, filename))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer file.Close()
+			data := make([]byte, 1024)
+			n, err := file.Read(data)
+			if err != nil {
+				t.Errorf("reading start of %s: %s", filename, err)
+			}
+			data = data[0:n]
+
+			if cslHeaderHash.Find(data) == nil {
+				t.Errorf("did not find expected CSL license header in %s", filename)
 			}
 		}); err != nil {
 			t.Fatal(err)

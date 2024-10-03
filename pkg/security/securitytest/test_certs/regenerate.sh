@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# Copyright 2020 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 set -eux
 
 dir_n="pkg/security/securitytest/test_certs"

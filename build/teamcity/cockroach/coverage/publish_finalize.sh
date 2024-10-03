@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This script is the final step of the "Publish Coverage" build.
 #
 # It moves the HTML mini-websites into archives, so that it's easy to download

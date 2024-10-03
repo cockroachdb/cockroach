@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 set -euo pipefail
 
 # This script sets up an sql proxy, test directory server and a host server to help with end to end testing.

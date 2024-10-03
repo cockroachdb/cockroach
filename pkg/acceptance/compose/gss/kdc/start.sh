@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Copyright 2018 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -e
 
 # The /keytab directory is volume mounted on both kdc and cockroach. kdc

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -448,7 +447,6 @@ func TestForwardToSameTimestamp(t *testing.T) {
 }
 
 func TestFrontierImplementationsMatch(t *testing.T) {
-	skip.WithIssue(t, 120987)
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("seed: %d", seed)
 

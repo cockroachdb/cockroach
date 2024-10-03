@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # You MUST run prepare-summarize-build.sh before running this script.
 
 set -euxo pipefail
