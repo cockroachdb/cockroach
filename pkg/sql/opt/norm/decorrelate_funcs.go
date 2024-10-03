@@ -527,14 +527,9 @@ func (c *CustomFuncs) ConstructApplyJoin(
 // input expression (perhaps augmented with a key column(s) or wrapped by
 // Ordinality).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
-	_, ok := c.CandidateKey(in)
-	if ok {
-		return in
-	}
-
 	// Try to add the preexisting primary key if the input is a Scan or Scan
 	// wrapped in a Select.
-	if res, ok := c.TryAddKeyToScan(in); ok {
+	if res, ok := c.tryFindExistingKey(in); ok {
 		return res
 	}
 
@@ -544,13 +539,22 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	return c.f.ConstructOrdinality(in, &private)
 }
 
-// TryAddKeyToScan checks whether the input expression is a non-virtual table
-// Scan, either alone or wrapped in a Select. If so, it returns a new Scan
-// (possibly wrapped in a Select) augmented with the preexisting primary key
-// for the table.
-func (c *CustomFuncs) TryAddKeyToScan(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
-	augmentScan := func(scan *memo.ScanExpr) (_ memo.RelExpr, ok bool) {
-		private := scan.ScanPrivate
+// tryFindExistingKey attempts to find an existing key for the input expression.
+// It may modify the expression in order to project the key column.
+func (c *CustomFuncs) tryFindExistingKey(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
+	_, hasKey := c.CandidateKey(in)
+	if hasKey {
+		return in, true
+	}
+	switch t := in.(type) {
+	case *memo.ProjectExpr:
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructProject(input, t.Projections, input.Relational().OutputCols), true
+		}
+
+	case *memo.ScanExpr:
+		private := t.ScanPrivate
 		tableID := private.Table
 		table := c.f.Metadata().Table(tableID)
 		if !table.IsVirtualTable() {
@@ -558,20 +562,11 @@ func (c *CustomFuncs) TryAddKeyToScan(in memo.RelExpr) (_ memo.RelExpr, ok bool)
 			private.Cols = private.Cols.Union(keyCols)
 			return c.f.ConstructScan(&private), true
 		}
-		return nil, false
-	}
-
-	switch t := in.(type) {
-	case *memo.ScanExpr:
-		if res, ok := augmentScan(t); ok {
-			return res, true
-		}
 
 	case *memo.SelectExpr:
-		if scan, ok := t.Input.(*memo.ScanExpr); ok {
-			if res, ok := augmentScan(scan); ok {
-				return c.f.ConstructSelect(res, t.Filters), true
-			}
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructSelect(input, t.Filters), true
 		}
 	}
 
@@ -1129,19 +1124,34 @@ func (r *subqueryHoister) constructConditionalExpr(scalar opt.ScalarExpr) opt.Sc
 // CONST_AGG which will need to be changed to a CONST_NOT_NULL_AGG (which is
 // defined to ignore those nulls so that its result will be unaffected).
 func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.RelExpr {
-	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
-	aggColID := r.f.Metadata().AddColumn("true_agg", types.Bool)
+	var canaryColTyp *types.T
+	var canaryColID opt.ColumnID
+	var subqueryWithCanary memo.RelExpr
+	if subquery.Relational().NotNullCols.Empty() {
+		canaryColTyp = types.Bool
+		canaryColID = r.f.Metadata().AddColumn("canary", types.Bool)
+		subqueryWithCanary = r.f.ConstructProject(
+			subquery,
+			memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, canaryColID)},
+			opt.ColSet{},
+		)
+	} else {
+		canaryColID, _ = subquery.Relational().NotNullCols.Next(0)
+		canaryColTyp = r.mem.Metadata().ColumnMeta(canaryColID).Type
+		subqueryWithCanary = r.f.ConstructProject(
+			subquery,
+			memo.ProjectionsExpr{},
+			opt.MakeColSet(canaryColID),
+		)
+	}
+	aggColID := r.f.Metadata().AddColumn("canary_agg", canaryColTyp)
 	existsColID := r.f.Metadata().AddColumn("exists", types.Bool)
 
 	return r.f.ConstructProject(
 		r.f.ConstructScalarGroupBy(
-			r.f.ConstructProject(
-				subquery,
-				memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, trueColID)},
-				opt.ColSet{},
-			),
+			subqueryWithCanary,
 			memo.AggregationsExpr{r.f.ConstructAggregationsItem(
-				r.f.ConstructConstAgg(r.f.ConstructVariable(trueColID)),
+				r.f.ConstructConstAgg(r.f.ConstructVariable(canaryColID)),
 				aggColID,
 			)},
 			memo.EmptyGroupingPrivate,
@@ -1526,4 +1536,33 @@ func getSubstituteColsSetOp(set memo.RelExpr, substituteCols opt.ColSet) opt.Col
 		}
 	}
 	return newSubstituteCols
+}
+
+// MakeCoalesceProjectionsForUnion builds a series of projections that coalesce
+// columns from the left and right inputs of a union, projecting the result
+// using the union operator's output columns.
+func (c *CustomFuncs) MakeCoalesceProjectionsForUnion(
+	setPrivate *memo.SetPrivate,
+) memo.ProjectionsExpr {
+	projections := make(memo.ProjectionsExpr, len(setPrivate.OutCols))
+	for i := range setPrivate.OutCols {
+		projections[i] = c.f.ConstructProjectionsItem(
+			c.f.ConstructCoalesce(memo.ScalarListExpr{
+				c.f.ConstructVariable(setPrivate.LeftCols[i]),
+				c.f.ConstructVariable(setPrivate.RightCols[i]),
+			}),
+			setPrivate.OutCols[i],
+		)
+	}
+	return projections
+}
+
+// MakeAnyNotNullScalarGroupBy wraps the input expression in a ScalarGroupBy
+// that aggregates the input columns with AnyNotNull functions.
+func (c *CustomFuncs) MakeAnyNotNullScalarGroupBy(input memo.RelExpr) memo.RelExpr {
+	return c.f.ConstructScalarGroupBy(
+		input,
+		c.MakeAggCols(opt.AnyNotNullAggOp, input.Relational().OutputCols),
+		memo.EmptyGroupingPrivate,
+	)
 }

@@ -4441,33 +4441,31 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:14
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 canary_agg:13
       ├── key: (1)
-      ├── fd: (1)-->(2-5,14)
+      ├── fd: (1)-->(2-5,13)
       ├── group-by (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:14
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 canary_agg:13
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,14)
+      │    ├── fd: (1)-->(2-5,13)
       │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9 true:13
-      │    │    ├── fd: (1)-->(2-5)
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
+      │    │    ├── key: (1,8)
+      │    │    ├── fd: (1)-->(2-5), (8)-->(9)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-5)
-      │    │    ├── project
-      │    │    │    ├── columns: true:13!null y:9
-      │    │    │    ├── fd: ()-->(13)
-      │    │    │    ├── scan xy
-      │    │    │    │    └── columns: y:9
-      │    │    │    └── projections
-      │    │    │         └── true [as=true:13]
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:8!null y:9
+      │    │    │    ├── key: (8)
+      │    │    │    └── fd: (8)-->(9)
       │    │    └── filters
       │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
       │    └── aggregations
-      │         ├── const-not-null-agg [as=true_agg:14, outer=(13)]
-      │         │    └── true:13
+      │         ├── const-not-null-agg [as=canary_agg:13, outer=(8)]
+      │         │    └── x:8
       │         ├── const-agg [as=i:2, outer=(2)]
       │         │    └── i:2
       │         ├── const-agg [as=f:3, outer=(3)]
@@ -4477,7 +4475,7 @@ project
       │         └── const-agg [as=j:5, outer=(5)]
       │              └── j:5
       └── filters
-           └── (i:2 = 1) OR (true_agg:14 IS NOT NULL) [outer=(2,14)]
+           └── (i:2 = 1) OR (canary_agg:13 IS NOT NULL) [outer=(2,13)]
 
 # Any with IS NULL.
 norm expect=HoistSelectSubquery
@@ -4710,14 +4708,14 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column17:17 true:19
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column17:17
       ├── key: (1)
-      ├── fd: (1)-->(2-5,12,17,19)
+      ├── fd: (1)-->(2-5,12,17)
       ├── left-join (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column17:17 true:19
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column17:17
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,12,17,19)
+      │    ├── fd: (1)-->(2-5,12,17)
       │    ├── left-join (cross)
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column17:17
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
@@ -4741,19 +4739,13 @@ project
       │    │    │    └── projections
       │    │    │         └── true [as=column17:17]
       │    │    └── filters (true)
-      │    ├── project
-      │    │    ├── columns: true:19!null x:12!null
-      │    │    ├── key: (12)
-      │    │    ├── fd: ()-->(19)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:12!null
-      │    │    │    └── key: (12)
-      │    │    └── projections
-      │    │         └── true [as=true:19]
+      │    ├── scan xy
+      │    │    ├── columns: x:12!null
+      │    │    └── key: (12)
       │    └── filters
       │         └── x:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
       └── filters
-           └── COALESCE(column17:17, false) OR (true:19 IS NOT NULL) [outer=(17,19)]
+           └── COALESCE(column17:17, false) OR (x:12 IS NOT NULL) [outer=(12,17)]
 
 # Hoist an uncorrelated equality subquery.
 norm expect=HoistSelectSubquery
@@ -5345,31 +5337,29 @@ SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 project
  ├── columns: exists:13!null
  ├── group-by (hash)
- │    ├── columns: k:1!null true_agg:15
+ │    ├── columns: k:1!null canary_agg:14
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)-->(15)
+ │    ├── fd: (1)-->(14)
  │    ├── left-join (hash)
- │    │    ├── columns: k:1!null i:2 y:9 true:14
- │    │    ├── fd: (1)-->(2)
+ │    │    ├── columns: k:1!null i:2 x:8 y:9
+ │    │    ├── key: (1,8)
+ │    │    ├── fd: (1)-->(2), (8)-->(9)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1!null i:2
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2)
- │    │    ├── project
- │    │    │    ├── columns: true:14!null y:9
- │    │    │    ├── fd: ()-->(14)
- │    │    │    ├── scan xy
- │    │    │    │    └── columns: y:9
- │    │    │    └── projections
- │    │    │         └── true [as=true:14]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
  │    │    └── filters
  │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    └── aggregations
- │         └── const-not-null-agg [as=true_agg:15, outer=(14)]
- │              └── true:14
+ │         └── const-not-null-agg [as=canary_agg:14, outer=(8)]
+ │              └── x:8
  └── projections
-      └── true_agg:15 IS NOT NULL [as=exists:13, outer=(15)]
+      └── canary_agg:14 IS NOT NULL [as=exists:13, outer=(14)]
 
 # Any in projection list.
 norm expect=HoistProjectSubquery
@@ -5417,26 +5407,25 @@ project
  ├── columns: r:13
  ├── immutable
  ├── group-by (hash)
- │    ├── columns: scalar:14!null bool_or:16 rownum:18!null
- │    ├── grouping columns: rownum:18!null
+ │    ├── columns: k:1!null scalar:14!null bool_or:16
+ │    ├── grouping columns: k:1!null
  │    ├── immutable
- │    ├── key: (18)
- │    ├── fd: ()-->(14), (18)-->(14,16)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(14), (1)-->(14,16)
  │    ├── left-join-apply
- │    │    ├── columns: i:2 column12:12 scalar:14!null notnull:15 rownum:18!null
+ │    │    ├── columns: k:1!null i:2 column12:12 scalar:14!null notnull:15
  │    │    ├── immutable
- │    │    ├── fd: ()-->(14), (18)-->(2)
- │    │    ├── ordinality
- │    │    │    ├── columns: i:2 scalar:14!null rownum:18!null
- │    │    │    ├── key: (18)
- │    │    │    ├── fd: ()-->(14), (18)-->(2,14)
- │    │    │    └── project
- │    │    │         ├── columns: scalar:14!null i:2
- │    │    │         ├── fd: ()-->(14)
- │    │    │         ├── scan a
- │    │    │         │    └── columns: i:2
- │    │    │         └── projections
- │    │    │              └── (5, 50) [as=scalar:14]
+ │    │    ├── fd: ()-->(14), (1)-->(2)
+ │    │    ├── project
+ │    │    │    ├── columns: scalar:14!null k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: ()-->(14), (1)-->(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── projections
+ │    │    │         └── (5, 50) [as=scalar:14]
  │    │    ├── project
  │    │    │    ├── columns: notnull:15!null column12:12!null
  │    │    │    ├── outer: (2)
@@ -5474,18 +5463,18 @@ norm expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
 values
- ├── columns: exists:19
+ ├── columns: exists:18
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(19)
+ ├── fd: ()-->(18)
  └── tuple
       └── coalesce
            ├── subquery
            │    └── project
-           │         ├── columns: column18:18!null
+           │         ├── columns: column17:17!null
            │         ├── cardinality: [0 - 1]
            │         ├── key: ()
-           │         ├── fd: ()-->(18)
+           │         ├── fd: ()-->(17)
            │         ├── limit
            │         │    ├── columns: i:2 y:9
            │         │    ├── cardinality: [0 - 1]
@@ -5511,7 +5500,7 @@ values
            │         │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
            │         │    └── 1
            │         └── projections
-           │              └── true [as=column18:18]
+           │              └── true [as=column17:17]
            └── false
 
 # Hoist an uncorrelated equality subquery.
@@ -5660,41 +5649,35 @@ SELECT s, x FROM a INNER JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 project
  ├── columns: s:4 x:8!null
  └── inner-join (cross)
-      ├── columns: k:1!null s:4 x:8!null exists:19!null
+      ├── columns: k:1!null s:4 x:8!null exists:18!null
       ├── key: (1,8)
-      ├── fd: (1)-->(4), (8)-->(19)
+      ├── fd: (1)-->(4), (8)-->(18)
       ├── scan a
       │    ├── columns: k:1!null s:4
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       ├── project
-      │    ├── columns: exists:19!null x:8!null
+      │    ├── columns: exists:18!null x:8!null
       │    ├── key: (8)
-      │    ├── fd: (8)-->(19)
+      │    ├── fd: (8)-->(18)
       │    ├── left-join (hash)
-      │    │    ├── columns: x:8!null y:9 u:12 true:17
+      │    │    ├── columns: x:8!null y:9 u:12
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── key: (8)
-      │    │    ├── fd: (8)-->(9,12,17)
+      │    │    ├── fd: (8)-->(9,12)
       │    │    ├── scan xy
       │    │    │    ├── columns: x:8!null y:9
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9)
-      │    │    ├── project
-      │    │    │    ├── columns: true:17!null u:12!null
-      │    │    │    ├── key: (12)
-      │    │    │    ├── fd: ()-->(17)
-      │    │    │    ├── scan uv
-      │    │    │    │    ├── columns: u:12!null
-      │    │    │    │    └── key: (12)
-      │    │    │    └── projections
-      │    │    │         └── true [as=true:17]
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:12!null
+      │    │    │    └── key: (12)
       │    │    └── filters
       │    │         └── u:12 = y:9 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
       │    └── projections
-      │         └── true:17 IS NOT NULL [as=exists:19, outer=(17)]
+      │         └── u:12 IS NOT NULL [as=exists:18, outer=(12)]
       └── filters
-           └── exists:19 OR (k:1 = x:8) [outer=(1,8,19)]
+           └── exists:18 OR (k:1 = x:8) [outer=(1,8,18)]
 
 # Any in Join filter disjunction.
 norm expect=HoistJoinSubquery
@@ -5784,19 +5767,19 @@ union
  ├── project
  │    ├── columns: exists:32!null
  │    ├── group-by (hash)
- │    │    ├── columns: a1.k:1!null true_agg:34
+ │    │    ├── columns: a1.k:1!null canary_agg:34
  │    │    ├── grouping columns: a1.k:1!null
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(34)
  │    │    ├── left-join-apply
- │    │    │    ├── columns: a1.k:1!null a1.i:2 true:33
+ │    │    │    ├── columns: a1.k:1!null a1.i:2 canary:33
  │    │    │    ├── fd: (1)-->(2)
  │    │    │    ├── scan a [as=a1]
  │    │    │    │    ├── columns: a1.k:1!null a1.i:2
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2)
  │    │    │    ├── project
- │    │    │    │    ├── columns: true:33!null
+ │    │    │    │    ├── columns: canary:33!null
  │    │    │    │    ├── outer: (2)
  │    │    │    │    ├── fd: ()-->(33)
  │    │    │    │    ├── semi-join (cross)
@@ -5814,13 +5797,13 @@ union
  │    │    │    │    │                        │    └── columns: a.i:23
  │    │    │    │    │                        └── a1.i:2
  │    │    │    │    └── projections
- │    │    │    │         └── true [as=true:33]
+ │    │    │    │         └── true [as=canary:33]
  │    │    │    └── filters (true)
  │    │    └── aggregations
- │    │         └── const-not-null-agg [as=true_agg:34, outer=(33)]
- │    │              └── true:33
+ │    │         └── const-not-null-agg [as=canary_agg:34, outer=(33)]
+ │    │              └── canary:33
  │    └── projections
- │         └── true_agg:34 IS NOT NULL [as=exists:32, outer=(34)]
+ │         └── canary_agg:34 IS NOT NULL [as=exists:32, outer=(34)]
  └── project
       ├── columns: bool:43!null
       ├── fd: ()-->(43)
@@ -5909,18 +5892,19 @@ anti-join-apply
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── project
- │    ├── columns: exists:15!null
+ │    ├── columns: exists:14!null
  │    ├── outer: (1)
  │    ├── group-by (hash)
- │    │    ├── columns: u:5!null true_agg:14
+ │    │    ├── columns: u:5!null canary_agg:13
  │    │    ├── grouping columns: u:5!null
  │    │    ├── outer: (1)
  │    │    ├── key: (5)
- │    │    ├── fd: (5)-->(14)
+ │    │    ├── fd: (5)-->(13)
  │    │    ├── left-join (cross)
- │    │    │    ├── columns: u:5!null v:6 true:13
+ │    │    │    ├── columns: u:5!null v:6 c:9 d:10
  │    │    │    ├── outer: (1)
- │    │    │    ├── fd: ()-->(6)
+ │    │    │    ├── key: (5,9)
+ │    │    │    ├── fd: ()-->(6), (9)-->(10)
  │    │    │    ├── select
  │    │    │    │    ├── columns: u:5!null v:6
  │    │    │    │    ├── key: (5)
@@ -5931,28 +5915,19 @@ anti-join-apply
  │    │    │    │    │    └── fd: (5)-->(6)
  │    │    │    │    └── filters
  │    │    │    │         └── v:6 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │    │    │    ├── project
- │    │    │    │    ├── columns: true:13!null
- │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── fd: ()-->(13)
- │    │    │    │    ├── select
- │    │    │    │    │    ├── columns: d:10!null
- │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    │    ├── scan cd
- │    │    │    │    │    │    └── columns: d:10!null
- │    │    │    │    │    └── filters
- │    │    │    │    │         └── x:1 = d:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │    │    │    │    └── projections
- │    │    │    │         └── true [as=true:13]
- │    │    │    └── filters (true)
+ │    │    │    ├── scan cd
+ │    │    │    │    ├── columns: c:9!null d:10!null
+ │    │    │    │    ├── key: (9)
+ │    │    │    │    └── fd: (9)-->(10)
+ │    │    │    └── filters
+ │    │    │         └── x:1 = d:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │    │    └── aggregations
- │    │         └── const-not-null-agg [as=true_agg:14, outer=(13)]
- │    │              └── true:13
+ │    │         └── const-not-null-agg [as=canary_agg:13, outer=(9)]
+ │    │              └── c:9
  │    └── projections
- │         └── true_agg:14 IS NOT NULL [as=exists:15, outer=(14)]
+ │         └── canary_agg:13 IS NOT NULL [as=exists:14, outer=(13)]
  └── filters
-      └── exists:15 [outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
+      └── exists:14 [outer=(14), constraints=(/14: [/true - /true]; tight), fd=()-->(14)]
 
 # --------------------------------------------------
 # HoistValuesSubquery
@@ -6012,28 +5987,22 @@ norm expect=HoistValuesSubquery
 SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
- ├── columns: column1:17!null
+ ├── columns: column1:16!null
  ├── left-join (hash)
- │    ├── columns: k:1!null x:8 true:14
+ │    ├── columns: k:1!null x:8
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(8,14)
+ │    ├── fd: (1)-->(8)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
- │    ├── project
- │    │    ├── columns: true:14!null x:8!null
- │    │    ├── key: (8)
- │    │    ├── fd: ()-->(14)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:8!null
- │    │    │    └── key: (8)
- │    │    └── projections
- │    │         └── true [as=true:14]
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null
+ │    │    └── key: (8)
  │    └── filters
  │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── projections
-      └── true:14 IS NOT NULL [as=column1:17, outer=(14)]
+      └── x:8 IS NOT NULL [as=column1:16, outer=(8)]
 
 # Any in values row.
 norm expect=HoistValuesSubquery
@@ -6365,18 +6334,18 @@ project
  ├── key: (1,12)
  ├── fd: (1)-->(2-9), (1,12)-->(2-9,13)
  └── select
-      ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 true_agg:22!null
+      ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 canary_agg:22!null
       ├── immutable
       ├── key: (1,12)
       ├── fd: (1)-->(2-9), (1,12)-->(2-9,13,22)
       ├── group-by (hash)
-      │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 true_agg:22
+      │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 canary_agg:22
       │    ├── grouping columns: id:1!null x:12!null
       │    ├── immutable
       │    ├── key: (1,12)
       │    ├── fd: (1)-->(2-9), (1,12)-->(2-9,13,22)
       │    ├── inner-join-apply
-      │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 true:21
+      │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:12!null y:13 canary:21
       │    │    ├── immutable
       │    │    ├── fd: (1)-->(2-9), (1,12)-->(13)
       │    │    ├── scan articles
@@ -6384,7 +6353,7 @@ project
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-9)
       │    │    ├── left-join-apply
-      │    │    │    ├── columns: x:12!null y:13 true:21
+      │    │    │    ├── columns: x:12!null y:13 canary:21
       │    │    │    ├── outer: (1,4,6)
       │    │    │    ├── immutable
       │    │    │    ├── fd: (12)-->(13)
@@ -6393,7 +6362,7 @@ project
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: true:21!null
+      │    │    │    │    ├── columns: canary:21!null
       │    │    │    │    ├── outer: (1,4,6,12)
       │    │    │    │    ├── immutable
       │    │    │    │    ├── fd: ()-->(21)
@@ -6411,12 +6380,12 @@ project
       │    │    │    │    │         ├── upper(title:4) [outer=(4), immutable]
       │    │    │    │    │         └── unnest(tag_list:6) [outer=(6), immutable]
       │    │    │    │    └── projections
-      │    │    │    │         └── true [as=true:21]
+      │    │    │    │         └── true [as=canary:21]
       │    │    │    └── filters (true)
       │    │    └── filters (true)
       │    └── aggregations
-      │         ├── const-not-null-agg [as=true_agg:22, outer=(21)]
-      │         │    └── true:21
+      │         ├── const-not-null-agg [as=canary_agg:22, outer=(21)]
+      │         │    └── canary:21
       │         ├── const-agg [as=y:13, outer=(13)]
       │         │    └── y:13
       │         ├── const-agg [as=body:2, outer=(2)]
@@ -6436,7 +6405,7 @@ project
       │         └── const-agg [as=updated_at:9, outer=(9)]
       │              └── updated_at:9
       └── filters
-           └── true_agg:22 IS NOT NULL [outer=(22), constraints=(/22: (/NULL - ]; tight)]
+           └── canary_agg:22 IS NOT NULL [outer=(22), constraints=(/22: (/NULL - ]; tight)]
 
 norm expect=TryDecorrelateProjectSet
 SELECT id FROM articles WHERE title = ANY(
@@ -7583,3 +7552,348 @@ semi-join (hash)
  │         └── a IS DISTINCT FROM CAST(NULL AS INT8)
  └── filters
       └── x = a
+
+# --------------------------------------------------
+# TryDecorrelateUnion
+# --------------------------------------------------
+
+# Case with UnionAll.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION ALL SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:20
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12 v:14 "?column?":17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":12 x:8
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: x:8
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":12]
+ │    │    │    └── filters
+ │    │    │         └── x:8 = k:1
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":17 v:14
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:14
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":17]
+ │    │    └── filters
+ │    │         └── v:14 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":17]
+ │         │    └── "?column?":17
+ │         ├── const-agg [as="?column?":12]
+ │         │    └── "?column?":12
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE("?column?":12, "?column?":17) IS NOT NULL THEN 1 ELSE 0 END [as=case:20]
+
+# Case with Union.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:20
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12 v:14 "?column?":17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":12 x:8
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: x:8
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":12]
+ │    │    │    └── filters
+ │    │    │         └── x:8 = k:1
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":17 v:14
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:14
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":17]
+ │    │    └── filters
+ │    │         └── v:14 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":17]
+ │         │    └── "?column?":17
+ │         ├── const-agg [as="?column?":12]
+ │         │    └── "?column?":12
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE("?column?":12, "?column?":17) IS NOT NULL THEN 1 ELSE 0 END [as=case:20]
+
+# Case with an uncorrelated Union branch.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k UNION ALL SELECT 1 FROM uv WHERE u = 1) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:20
+ ├── inner-join-apply
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
+ │    ├── scan a
+ │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    ├── inner-join (cross)
+ │    │    ├── columns: "?column?":12 "?column?":17
+ │    │    ├── scalar-group-by
+ │    │    │    ├── columns: "?column?":12
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":12
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: x:8
+ │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    └── columns: x:8
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── x:8 = k:1
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":12]
+ │    │    │    └── aggregations
+ │    │    │         └── any-not-null-agg [as="?column?":12]
+ │    │    │              └── "?column?":12
+ │    │    ├── scalar-group-by
+ │    │    │    ├── columns: "?column?":17
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":17
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: u:13
+ │    │    │    │    │    ├── scan uv
+ │    │    │    │    │    │    └── columns: u:13
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── u:13 = 1
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":17]
+ │    │    │    └── aggregations
+ │    │    │         └── any-not-null-agg [as="?column?":17]
+ │    │    │              └── "?column?":17
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── CASE WHEN COALESCE("?column?":12, "?column?":17) IS NOT NULL THEN 1 ELSE 0 END [as=case:20]
+
+# Case with more than one union operator.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (
+  SELECT 1 FROM xy WHERE x = k
+  UNION ALL SELECT 1 FROM uv WHERE v = k
+  UNION ALL SELECT 1 FROM cd WHERE d = k
+) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:26
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":18 "?column?":23
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":18 d:20 "?column?":23
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":18 k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── group-by (hash)
+ │    │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
+ │    │    │    │    ├── grouping columns: k:1
+ │    │    │    │    ├── left-join (hash)
+ │    │    │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12 v:14 "?column?":17
+ │    │    │    │    │    ├── left-join (hash)
+ │    │    │    │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12
+ │    │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── columns: "?column?":12 x:8
+ │    │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    │    └── columns: x:8
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         └── 1 [as="?column?":12]
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── x:8 = k:1
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: "?column?":17 v:14
+ │    │    │    │    │    │    ├── scan uv
+ │    │    │    │    │    │    │    └── columns: v:14
+ │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │         └── 1 [as="?column?":17]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── v:14 = k:1
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── any-not-null-agg [as="?column?":17]
+ │    │    │    │         │    └── "?column?":17
+ │    │    │    │         ├── const-agg [as="?column?":12]
+ │    │    │    │         │    └── "?column?":12
+ │    │    │    │         ├── const-agg [as=i:2]
+ │    │    │    │         │    └── i:2
+ │    │    │    │         ├── const-agg [as=f:3]
+ │    │    │    │         │    └── f:3
+ │    │    │    │         ├── const-agg [as=s:4]
+ │    │    │    │         │    └── s:4
+ │    │    │    │         └── const-agg [as=j:5]
+ │    │    │    │              └── j:5
+ │    │    │    └── projections
+ │    │    │         └── COALESCE("?column?":12, "?column?":17) [as="?column?":18]
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":23 d:20
+ │    │    │    ├── scan cd
+ │    │    │    │    └── columns: d:20
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":23]
+ │    │    └── filters
+ │    │         └── d:20 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":23]
+ │         │    └── "?column?":23
+ │         ├── const-agg [as="?column?":18]
+ │         │    └── "?column?":18
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE("?column?":18, "?column?":23) IS NOT NULL THEN 1 ELSE 0 END [as=case:26]
+
+# No-op because there is no Union.
+norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:14
+ ├── left-join (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8
+ │    ├── scan a
+ │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    ├── scan xy
+ │    │    └── columns: x:8
+ │    └── filters
+ │         └── x:8 = k:1
+ └── projections
+      └── CASE WHEN x:8 IS NOT NULL THEN 1 ELSE 0 END [as=case:14]
+
+# No-op because there's an Intersect instead of a Union.
+norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k INTERSECT SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:19
+ ├── left-join-apply
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12
+ │    ├── scan a
+ │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    ├── intersect-all
+ │    │    ├── columns: "?column?":12
+ │    │    ├── left columns: "?column?":12
+ │    │    ├── right columns: "?column?":17
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":12
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: x:8
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: x:8
+ │    │    │    │    └── filters
+ │    │    │    │         └── x:8 = k:1
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":12]
+ │    │    └── project
+ │    │         ├── columns: "?column?":17
+ │    │         ├── select
+ │    │         │    ├── columns: v:14
+ │    │         │    ├── scan uv
+ │    │         │    │    └── columns: v:14
+ │    │         │    └── filters
+ │    │         │         └── v:14 = k:1
+ │    │         └── projections
+ │    │              └── 1 [as="?column?":17]
+ │    └── filters (true)
+ └── projections
+      └── CASE WHEN "?column?":12 IS NOT NULL THEN 1 ELSE 0 END [as=case:19]
+
+# No-op case because one of the aggregations isn't any-not-null.
+norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT * FROM a INNER JOIN LATERAL (SELECT sum(x) FROM (SELECT x FROM xy WHERE x = k UNION ALL SELECT v FROM uv WHERE v = k)) ON True;
+----
+group-by (hash)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 sum:17
+ ├── grouping columns: k:1
+ ├── left-join-apply
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:16
+ │    ├── scan a
+ │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    ├── union-all
+ │    │    ├── columns: x:16
+ │    │    ├── left columns: xy.x:8
+ │    │    ├── right columns: v:13
+ │    │    ├── select
+ │    │    │    ├── columns: xy.x:8
+ │    │    │    ├── scan xy
+ │    │    │    │    └── columns: xy.x:8
+ │    │    │    └── filters
+ │    │    │         └── xy.x:8 = k:1
+ │    │    └── select
+ │    │         ├── columns: v:13
+ │    │         ├── scan uv
+ │    │         │    └── columns: v:13
+ │    │         └── filters
+ │    │              └── v:13 = k:1
+ │    └── filters (true)
+ └── aggregations
+      ├── sum [as=sum:17]
+      │    └── x:16
+      ├── const-agg [as=i:2]
+      │    └── i:2
+      ├── const-agg [as=f:3]
+      │    └── f:3
+      ├── const-agg [as=s:4]
+      │    └── s:4
+      └── const-agg [as=j:5]
+           └── j:5
+
+# No-op case because the Union isn't correlated.
+norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT * FROM a INNER JOIN LATERAL (SELECT 1 FROM xy UNION ALL SELECT 1 FROM uv) ON True;
+----
+inner-join (cross)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":18
+ ├── scan a
+ │    └── columns: k:1 i:2 f:3 s:4 j:5
+ ├── union-all
+ │    ├── columns: "?column?":18
+ │    ├── left columns: "?column?":12
+ │    ├── right columns: "?column?":17
+ │    ├── project
+ │    │    ├── columns: "?column?":12
+ │    │    ├── scan xy
+ │    │    └── projections
+ │    │         └── 1 [as="?column?":12]
+ │    └── project
+ │         ├── columns: "?column?":17
+ │         ├── scan uv
+ │         └── projections
+ │              └── 1 [as="?column?":17]
+ └── filters (true)
