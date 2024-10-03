@@ -97,6 +97,7 @@
     "@storybook/addons": "^6.3.1",
     "@storybook/react": "^6.3.1",
     "@testing-library/dom": "^8.11.1",
+    "@testing-library/jest-dom": "6.5.0",
     "@testing-library/react": "^12.1.0",
     "@testing-library/user-event": "^13.5.0",
     "@types/chai": "^4.2.11",
