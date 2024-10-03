@@ -139,7 +139,6 @@ func TestThrottlingMetadata(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					LicenseTestingKnobs: license.TestingKnobs{
-						Enable:            true,
 						OverrideStartTime: &testtime,
 					},
 				},

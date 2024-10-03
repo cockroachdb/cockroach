@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -20,67 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-func TestRemovePartitioningExpiredLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
-
-	ctx := context.Background()
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase:       "d",
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(ctx)
-
-	// Create a partitioned table and index.
-	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-		PARTITION	p1 VALUES IN (1)
-	)`)
-	sqlDB.Exec(t, `CREATE INDEX i ON t (a) PARTITION BY RANGE (a) (
-		PARTITION p34 VALUES FROM (3) TO (4)
-	)`)
-	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`)
-	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
-
-	// Remove the enterprise license.
-	defer utilccl.TestingDisableEnterprise()()
-
-	const partitionErr = "use of partitions requires an enterprise license"
-	const zoneErr = "use of replication zones on indexes or partitions requires an enterprise license"
-	expectErr := func(q string, expErr string) {
-		t.Helper()
-		sqlDB.ExpectErr(t, expErr, q)
-	}
-
-	// Partitions and zone configs cannot be modified without a valid license.
-	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
-	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
-	expectErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER PARTITION p34 OF INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
-
-	// But they can be removed.
-	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD`)
-	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
-
-	// Once removed, they cannot be added back.
-	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
-	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
-	expectErr(`ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`, zoneErr)
-	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
-}
 
 // Test that dropping an enum value fails if there's a concurrent index drop
 // for an index partitioned by that enum value. The reason is that it

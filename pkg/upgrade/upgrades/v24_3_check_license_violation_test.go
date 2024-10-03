@@ -49,7 +49,6 @@ func TestCheckLicenseViolations(t *testing.T) {
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				ClusterVersionOverride:         v1,
 				LicenseTestingKnobs: license.TestingKnobs{
-					Enable:      true,
 					SkipDisable: true,
 				},
 			},
