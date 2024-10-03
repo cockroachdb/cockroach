@@ -931,7 +931,7 @@ func (r *raft) maybeCommit() bool {
 	// replicas; once an entry from the current term has been committed in this
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
-	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
+	if !r.raftLog.matchTermCached(entryID{term: r.Term, index: index}) {
 		return false
 	}
 	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})

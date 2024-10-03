@@ -522,6 +522,11 @@ func (l *raftLog) matchTerm(id entryID) bool {
 	return t == id.term
 }
 
+func (l *raftLog) matchTermCached(id entryID) bool {
+	term, ok := l.terms.term(id.index)
+	return ok && term == id.term
+}
+
 func (l *raftLog) restore(s snapshot) bool {
 	id := s.lastEntryID()
 	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, id.index, id.term)
