@@ -99,3 +99,30 @@ export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
     refreshDatabases: mutate,
   };
 };
+
+type DatabaseMetadataByIDResponse = {
+  metadata: DatabaseMetadata;
+};
+
+const getDatabaseMetadataByID = async (
+  dbID: number,
+): Promise<DatabaseMetadataByIDResponse> => {
+  return fetchDataJSON(DATABASES_API_V2 + dbID + "/");
+};
+
+export const useDatabaseMetadataByID = (dbID: number) => {
+  const { data, error, isLoading } = useSWR<DatabaseMetadataByIDResponse>(
+    ["databaseMetadataByID", dbID],
+    () => getDatabaseMetadataByID(dbID),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+
+  return {
+    data,
+    error,
+    isLoading,
+  };
+};
