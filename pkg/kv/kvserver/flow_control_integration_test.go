@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -4798,11 +4797,7 @@ func (h *flowControlTestHelper) enableVerboseRaftMsgLoggingForRange(rangeID roac
 			&unreliableRaftHandler{
 				rangeID:                    rangeID,
 				IncomingRaftMessageHandler: si,
-				unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-					dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
-						return false
-					},
-				},
+				unreliableRaftHandlerFuncs: noopRaftHandlerFuncs(),
 			})
 	}
 }
