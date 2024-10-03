@@ -31,18 +31,10 @@ func TestNetworkConnectivity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	numNodes := 3
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110024),
-		},
-
 		ReplicationMode: base.ReplicationManual,
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-
-	// TODO(#110024): grant the appropriate capability to the test
-	// tenant before the connectivity endpoint can be accessed. See
-	// example in `TestNodeStatusResponse`.
 
 	s0 := testCluster.Server(0)
 	ts := s0.ApplicationLayer()

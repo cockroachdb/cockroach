@@ -100,6 +100,10 @@ message TenantCapabilities {
   // CanViewAllMetrics, if set to true, grants the tenant the ability
   // to query any metrics from the host.
   bool can_view_all_metrics = 12;
+
+  // CanViewNetworkInfo, if set to true, grants the tenant the ability
+  // to read cluster-level inter-node network connectivity info.
+  bool can_view_network_info = 13;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

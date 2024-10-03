@@ -87,6 +87,10 @@ type Authorizer interface {
 	// HasTSDBAllMetricsCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to query all metrics from the host.
 	HasTSDBAllMetricsCapability(ctx context.Context, tenID roachpb.TenantID) error
+
+	// HasNetworkConnectivityCapability returns an error if the tenant, referenced
+	// by its ID, is not allowed to access cluster-level inter-node network connectivity.
+	HasNetworkConnectivityCapability(ctx context.Context, tenID roachpb.TenantID) error
 }
 
 // Entry ties together a tenantID with its capabilities.

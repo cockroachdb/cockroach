@@ -87,3 +87,10 @@ func (n *AllowEverythingAuthorizer) HasTSDBAllMetricsCapability(
 ) error {
 	return nil
 }
+
+// implements the tenantcapabilities.Authorizer interface.
+func (n *AllowEverythingAuthorizer) HasNetworkConnectivityCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return nil
+}

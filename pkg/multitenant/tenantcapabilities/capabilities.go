@@ -97,6 +97,10 @@ const (
 	// metrics, but this implementation is simpler).
 	CanViewAllMetrics // can_view_all_metrics
 
+	// CanViewNetworkInfo describes the ability of a tenant to read
+	// cluster-level inter-node network connectivity info.
+	CanViewNetworkInfo // can_view_network_info
+
 	MaxCapabilityID ID = iota - 1
 )
 
@@ -129,6 +133,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
 	CanDebugProcess:        boolCapability(CanDebugProcess),
 	CanViewAllMetrics:      boolCapability(CanViewAllMetrics),
+	CanViewNetworkInfo:     boolCapability(CanViewNetworkInfo),
 }
 
 // EnableAll enables maximum access to services.

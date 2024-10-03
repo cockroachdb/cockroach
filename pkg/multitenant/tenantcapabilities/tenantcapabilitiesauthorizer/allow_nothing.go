@@ -86,3 +86,10 @@ func (n *AllowNothingAuthorizer) HasTSDBAllMetricsCapability(
 ) error {
 	return errors.New("operation blocked")
 }
+
+// HasNetworkConnectivityCapability implements the tenantcapabilities.Authorizer interface.
+func (n *AllowNothingAuthorizer) HasNetworkConnectivityCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return errors.New("operation blocked")
+}

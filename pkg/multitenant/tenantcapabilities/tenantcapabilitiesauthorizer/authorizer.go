@@ -314,6 +314,12 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewNodeInfo)
 }
 
+func (a *Authorizer) HasNetworkConnectivityCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewNetworkInfo)
+}
+
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	return a.hasCapability(ctx, tenID, tenantcapabilities.CanViewTSDBMetrics)
 }

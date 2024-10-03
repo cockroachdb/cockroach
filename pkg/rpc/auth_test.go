@@ -1124,6 +1124,12 @@ func (m mockAuthorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.Te
 	return m.hasCrossTenantRead
 }
 
+func (m mockAuthorizer) HasNetworkConnectivityCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return errors.New("tenant does not have capability")
+}
+
 var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
