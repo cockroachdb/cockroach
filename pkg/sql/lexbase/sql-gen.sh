@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This is used through bazel when generating sql.go and plpgsql.go.
 # Look at BUILD.bazel in pkg/sql/parser or pkg/plpgsql/parser for
 # usage.

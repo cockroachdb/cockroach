@@ -1,3 +1,8 @@
+# Copyright 2020 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # Common helpers for teamcity-*.sh scripts.
 
 # root is the absolute path to the root directory of the repository.

@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # This script may be used to produce a branch bumping the Pebble
 # version. The storage team bumps CockroachDB's Pebble dependency
 # frequently, and this script automates some of that work.

@@ -1,3 +1,8 @@
+# Copyright 2016 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # This is a convenience Makefile which defers all real work to
 # ../Makefile. The % rule is run for any target specified on the
 # command line. We use the builtin MAKECMDGOALS and MAKEFLAGS
