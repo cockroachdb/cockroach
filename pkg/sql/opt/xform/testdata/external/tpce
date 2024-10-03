@@ -1036,8 +1036,8 @@ project
  │    │    │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
  │    │    │    │    │    │    │    │    ├── lookup expression
  │    │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │    │         ├── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │    │    │    │    │    │    │    │         └── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │    │         ├── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │    │         └── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
  │    │    │    │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
@@ -1137,8 +1137,8 @@ project
  │    │    │    │    │    │    │    │    ├── flags: force lookup join (into right side)
  │    │    │    │    │    │    │    │    ├── lookup expression
  │    │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │    │         ├── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │    │    │    │    │    │    │    │         └── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │    │         ├── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
+ │    │    │    │    │    │    │    │    │         └── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
  │    │    │    │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
@@ -4116,10 +4116,10 @@ project
  │    │    ├── flags: force lookup join (into right side)
  │    │    ├── lookup expression
  │    │    │    └── filters
+ │    │    │         ├── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │         ├── c_tier:8 = cr_c_tier:45 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
  │    │    │         ├── "lookup_join_const_col_@46":54 = cr_tt_id:46 [outer=(46,54), constraints=(/46: (/NULL - ]; /54: (/NULL - ]), fd=(46)==(54), (54)==(46)]
- │    │    │         ├── s_ex_id:31 = cr_ex_id:47 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
- │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
+ │    │    │         └── s_ex_id:31 = cr_ex_id:47 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (8)==(45), (45)==(8), (31)==(47), (47)==(31)
  │    │    ├── limit hint: 1.00
@@ -5394,8 +5394,8 @@ project
  │    │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 s_symb:24!null s_name:27!null
  │    │    │         │    ├── lookup expression
  │    │    │         │    │    └── filters
- │    │    │         │    │         ├── s_symb:24 = t_s_symb:6 [outer=(6,24), constraints=(/6: (/NULL - ]; /24: (/NULL - ]), fd=(6)==(24), (24)==(6)]
- │    │    │         │    │         └── (t_dts:2 >= '2020-06-15 22:27:42.148484') AND (t_dts:2 <= '2020-06-20 22:27:42.148484') [outer=(2), constraints=(/2: [/'2020-06-15 22:27:42.148484' - /'2020-06-20 22:27:42.148484']; tight)]
+ │    │    │         │    │         ├── (t_dts:2 >= '2020-06-15 22:27:42.148484') AND (t_dts:2 <= '2020-06-20 22:27:42.148484') [outer=(2), constraints=(/2: [/'2020-06-15 22:27:42.148484' - /'2020-06-20 22:27:42.148484']; tight)]
+ │    │    │         │    │         └── s_symb:24 = t_s_symb:6 [outer=(6,24), constraints=(/6: (/NULL - ]; /24: (/NULL - ]), fd=(6)==(24), (24)==(6)]
  │    │    │         │    ├── key: (1)
  │    │    │         │    ├── fd: ()-->(6,24,27), (1)-->(2,4,5,7,9-11), (6)==(24), (24)==(6)
  │    │    │         │    ├── scan security
@@ -6121,8 +6121,8 @@ limit
  │    │         ├── columns: wi_wl_id:19!null wi_s_symb:20!null wl_id:23!null wl_c_id:24!null
  │    │         ├── lookup expression
  │    │         │    └── filters
- │    │         │         ├── wl_id:23 = wi_wl_id:19 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
- │    │         │         └── wi_s_symb:20 > 'GOOG' [outer=(20), constraints=(/20: [/e'GOOG\x00' - ]; tight)]
+ │    │         │         ├── wi_s_symb:20 > 'GOOG' [outer=(20), constraints=(/20: [/e'GOOG\x00' - ]; tight)]
+ │    │         │         └── wl_id:23 = wi_wl_id:19 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
  │    │         ├── key: (20,23)
  │    │         ├── fd: ()-->(24), (19)==(23), (23)==(19)
  │    │         ├── scan watch_list@watch_list_wl_c_id_idx
