@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # This script runs the Pebble Nightly YCSB A benchmark with the race flag.
 # It is used to detect data races which may have been introduced to the latest

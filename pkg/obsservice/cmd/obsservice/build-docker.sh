@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 ## This script is in support of a Dockerfile that we hacked together
 ## in the interest of prototyping speed. The obsservice binary has
 ## cgo dependencies, meaning we need to build within Docker when
