@@ -1464,6 +1464,11 @@ func (r *Replica) processRACv2RangeController(ctx context.Context) {
 	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(ctx)
 }
 
+// SendMsgApp implements rac2.MsgAppSender.
+func (r *Replica) SendMsgApp(ctx context.Context, msg raftpb.Message, lowPriorityOverride bool) {
+	r.sendRaftMessage(ctx, msg, lowPriorityOverride)
+}
+
 func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
@@ -1832,12 +1837,12 @@ func (r *Replica) sendRaftMessages(
 			}
 
 			if !drop {
-				r.sendRaftMessage(ctx, message)
+				r.sendRaftMessage(ctx, message, false)
 			}
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessage(ctx, lastAppResp, false)
 	}
 }
 
@@ -1900,8 +1905,11 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 // sendRaftMessage sends a Raft message.
 //
 // When calling this method, the raftMu may be held, but it does not need to be.
-// The Replica mu must not be held.
-func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+// lowPriorityOverride may be set for a MsgApp. The Replica mu must not be
+// held.
+func (r *Replica) sendRaftMessage(
+	ctx context.Context, msg raftpb.Message, lowPriorityOverride bool,
+) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
 	r.mu.RLock()
@@ -1950,12 +1958,13 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	req := newRaftMessageRequest()
 	*req = kvserverpb.RaftMessageRequest{
-		RangeID:           r.RangeID,
-		ToReplica:         toReplica,
-		FromReplica:       fromReplica,
-		Message:           msg,
-		RangeStartKey:     startKey, // usually nil
-		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
+		RangeID:             r.RangeID,
+		ToReplica:           toReplica,
+		FromReplica:         fromReplica,
+		Message:             msg,
+		RangeStartKey:       startKey, // usually nil
+		UsingRac2Protocol:   r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
+		LowPriorityOverride: lowPriorityOverride,
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.
