@@ -5,16 +5,16 @@
 
 import { RedoOutlined } from "@ant-design/icons";
 import { Skeleton, Tooltip } from "antd";
-import React, { useCallback, useContext, useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 
 import {
   TableMetadataJobStatus,
   triggerUpdateTableMetaJobApi,
   useTableMetaUpdateJob,
 } from "src/api/databases/tableMetaUpdateJobApi";
-import { TimezoneContext } from "src/contexts";
 import Button from "src/sharedFromCloud/button";
-import { DATE_WITH_SECONDS_FORMAT_24_TZ, FormatWithTimezone } from "src/util";
+import { Timestamp } from "src/timestamp";
+import { DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 import { usePrevious } from "src/util/hooks";
 
 import styles from "./tableMetadataJobControl.module.scss";
@@ -33,14 +33,6 @@ export const TableMetadataJobControl: React.FC<
     jobStatus?.lastCompletedTime?.unix(),
   );
   const lastUpdateCompletedUnixSecs = jobStatus?.lastCompletedTime?.unix();
-  const timezone = useContext(TimezoneContext);
-  const lastUpdatedText = jobStatus?.lastCompletedTime
-    ? FormatWithTimezone(
-        jobStatus?.lastCompletedTime,
-        DATE_WITH_SECONDS_FORMAT_24_TZ,
-        timezone,
-      )
-    : "Never";
 
   const triggerUpdateTableMetaJob = useCallback(
     async (onlyIfStale = true) => {
@@ -100,7 +92,12 @@ export const TableMetadataJobControl: React.FC<
             "Data is last refreshed automatically (per cluster setting) or manually."
           }
         >
-          Last refreshed: {lastUpdatedText}{" "}
+          Last refreshed:
+          <Timestamp
+            format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+            time={jobStatus?.lastCompletedTime}
+            fallback={"Never"}
+          />{" "}
         </Tooltip>
       </Skeleton>
       <Tooltip placement="top" title={"Refresh data"}>

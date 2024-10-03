@@ -63,12 +63,11 @@ import {
   Count,
   DATE_FORMAT_24_TZ,
   EncodeDatabaseTableIndexUri,
-  EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
   performanceTuningRecipes,
   unique,
   unset,
 } from "../util";
+import { DB_PAGE_PATH, tableDetailsPagePath } from "../util/routes";
 
 import styles from "./indexDetailsPage.module.scss";
 
@@ -384,15 +383,10 @@ export class IndexDetailsPage extends React.Component<
     return (
       <Breadcrumbs
         items={[
-          { link: "/legacy/databases", name: "Databases" },
+          { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: EncodeDatabaseUri(this.props.databaseName),
-            name: "Tables",
-          },
-          {
-            link: EncodeDatabaseTableUri(
-              this.props.databaseName,
-              this.props.tableName,
+            link: tableDetailsPagePath(
+              parseInt(this.props.details.tableID, 10),
             ),
             name: `Table: ${this.props.tableName}`,
           },
