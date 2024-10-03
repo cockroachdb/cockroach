@@ -98,10 +98,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <Tooltip
-          underline
-          title={"Regions/Nodes on which the table's data is stored."}
-        >
+        <Tooltip title={"Regions/Nodes on which the table's data is stored."}>
           {TableColName.NODE_REGIONS}
         </Tooltip>
       ),
@@ -121,7 +118,6 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     {
       title: (
         <Tooltip
-          underline
           title={
             "The percentage of total uncompressed logical data that has not been modified (updated or deleted)."
           }

@@ -81,8 +81,9 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 <Col>
                   Last updated:{" "}
                   <Timestamp
-                    time={moment.utc(metadata.last_updated)}
                     format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+                    time={moment.utc(metadata.last_updated)}
+                    fallback={"Never"}
                   />
                 </Col>
               </Row>

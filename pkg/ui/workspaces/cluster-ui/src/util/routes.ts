@@ -5,3 +5,4 @@
 
 export const DB_PAGE_PATH = "/databases";
 export const databaseDetailsPagePath = (dbId: number) => `/databases/${dbId}`;
+export const tableDetailsPagePath = (tableId: number) => `/table/${tableId}`;

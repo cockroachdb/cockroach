@@ -176,7 +176,7 @@ export const ActionCell = ({
   tableName,
   databaseName,
 }: {
-  indexStat: IndexStat;
+  indexStat: Pick<IndexStat, "indexName" | "indexRecommendations">;
   tableName: string;
   databaseName: string;
 }): JSX.Element => {
