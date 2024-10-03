@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -94,16 +96,32 @@ var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
 // met:
 //
 //  1. "kv.raft.proposal_quota.enabled" is true
-//  2. "kvadmission.flow_control.mode" is set to "apply_to_elastic" OR
-//     "kvadmission.flow_control.enabled" is set to false
+//  2. replication admission control is not using pull mode
 //  3. the range is not the NodeLiveness range
 //
 // Replica.mu must be RLocked.
 func (r *Replica) getQuotaPoolEnabledRLocked(ctx context.Context) bool {
 	return enableRaftProposalQuota.Get(&r.store.cfg.Settings.SV) &&
-		(kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToElastic ||
-			!kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV)) &&
+		!r.shouldReplicationAdmissionControlUsePullMode(ctx) &&
 		quotaPoolEnabledForRange(r.shMu.state.Desc)
+}
+
+// shouldReplicationAdmissionControlUsePullMode returns whether replication
+// admission/flow control should use pull mode, which allows for a send-queue
+// and disabled raft's own flow control.
+func (r *Replica) shouldReplicationAdmissionControlUsePullMode(ctx context.Context) bool {
+	return r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) &&
+		kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToAll &&
+		kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV)
+}
+
+func (r *Replica) replicationAdmissionControlModeToUse(ctx context.Context) rac2.RaftMsgAppMode {
+	// TODO(sumeer): remove the false.
+	usePullMode := r.shouldReplicationAdmissionControlUsePullMode(ctx) && false
+	if usePullMode {
+		return rac2.MsgAppPull
+	}
+	return rac2.MsgAppPush
 }
 
 func (r *Replica) updateProposalQuotaRaftMuLocked(
