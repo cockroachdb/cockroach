@@ -463,9 +463,9 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-// ValidateTTLExpressionDoesNotDependOnColumn verifies that the
+// ValidateTTLExpression verifies that the
 // ttl_expiration_expression, if any, does not reference the given column.
-func ValidateTTLExpressionDoesNotDependOnColumn(
+func ValidateTTLExpression(
 	tableDesc catalog.TableDescriptor,
 	rowLevelTTL *catpb.RowLevelTTL,
 	col catalog.Column,
@@ -499,6 +499,33 @@ func ValidateComputedColumnExpressionDoesNotDependOnColumn(
 			} else if hasRef {
 				return sqlerrors.NewDependentBlocksOpError(op, objType,
 					string(dependentCol.ColName()), "computed column", string(col.ColName()))
+			}
+		}
+	}
+	return nil
+}
+
+// ValidatePartialIndex verifies that we have no partial indexes
+// that reference the column through the partial index's predicate.
+func ValidatePartialIndex(
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
+) error {
+	for _, idx := range tableDesc.AllIndexes() {
+		if idx.IsPartial() {
+			expr, err := parser.ParseExpr(idx.GetPredicate())
+			if err != nil {
+				return err
+			}
+
+			colIDs, err := ExtractColumnIDs(tableDesc, expr)
+			if err != nil {
+				return err
+			}
+
+			isReferencedByPredicate := colIDs.Contains(dependentCol.GetID())
+
+			if isReferencedByPredicate {
+				return sqlerrors.ColumnReferencedByPartialIndex(op, objType, string(dependentCol.ColName()), idx.GetName())
 			}
 		}
 	}

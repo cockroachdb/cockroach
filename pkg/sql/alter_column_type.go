@@ -62,10 +62,16 @@ func AlterColumnType(
 			)
 		}
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, tableDesc.GetRowLevelTTL(), col, tn, op); err != nil {
+
+	if err := schemaexpr.ValidateTTLExpression(tableDesc, tableDesc.GetRowLevelTTL(), col, tn, op); err != nil {
 		return err
 	}
+
 	if err := schemaexpr.ValidateComputedColumnExpressionDoesNotDependOnColumn(tableDesc, col, objType, op); err != nil {
+		return err
+	}
+
+	if err := schemaexpr.ValidatePartialIndex(tableDesc, col, objType, op); err != nil {
 		return err
 	}
 
