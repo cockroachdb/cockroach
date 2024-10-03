@@ -804,9 +804,31 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.NoError(t,
 			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, nonVoterNodeIDs))
 
+		testutils.SucceedsSoon(t, func() error {
+			// Ensure that the leaseholder store notices the decommissioning nodes
+			// before we re-enable the replicate queue. This is necessary because the
+			// replicate queue might otherwise race with the gossip update, removing
+			// the non-voters without noticing they are decommissioning, failing the
+			// RemoveDecommissioningNonVoterReplicaCount assertion below. See
+			// #115750.
+			repl, err := store.GetReplica(scratchRange.RangeID)
+			if err != nil {
+				return err
+			}
+			if decomRepls := store.GetStoreConfig().StorePool.DecommissioningReplicas(
+				repl.Desc().Replicas().Descriptors()); len(decomRepls) < 2 {
+				return errors.Errorf(
+					"expected 2 decommissioning replicas, found %d [%v]",
+					len(decomRepls), decomRepls)
+			}
+			return nil
+		})
+
 		// At this point, we know that we have an over-replicated range with
-		// non-voters on nodes that are marked as decommissioning. So turn the
-		// replicateQueue on and ensure that these redundant non-voters are removed.
+		// non-voters on nodes that are marked as decommissioning, and that the
+		// leaseholder store has received the gossip update which changes the
+		// non-voter node status to decommissioning. So turn the replicateQueue on
+		// and ensure that these redundant non-voters are removed.
 		tc.ToggleReplicateQueues(true)
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
