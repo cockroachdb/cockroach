@@ -1536,6 +1536,10 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 // targeted by the changefeed, it should not stop.
 func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1634,6 +1638,10 @@ func TestChangefeedCanResumeWhenClusterIDMissing(t *testing.T) {
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
 func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1667,6 +1675,8 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1713,6 +1723,10 @@ func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 
 func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1758,6 +1772,10 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 
 func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1790,6 +1808,10 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 
 func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1882,6 +1904,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -2485,6 +2509,8 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -2679,6 +2705,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -2836,6 +2864,8 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
@@ -2898,6 +2928,8 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE after_backfill (a INT PRIMARY KEY)`)
@@ -2927,6 +2959,8 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 func TestChangefeedEachColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 
@@ -3046,6 +3080,8 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	// requireErrorSoon times out after 30 seconds
 	skip.UnderStress(t)
 	skip.UnderRace(t)
@@ -3089,6 +3125,8 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -8532,6 +8570,10 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 // Regression for #85008.
 func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
