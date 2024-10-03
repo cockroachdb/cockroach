@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # This script is run by pebble_nightly_metamorphic_crossversion.sh to build test
 # binaries of the pebble metamorphic package at different branches. This script

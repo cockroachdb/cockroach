@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2018 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This script builds a CockroachDB release binary, potentially cross compiling
 # for a different platform. It must be run in the cockroachdb/builder docker
 # image, as it depends on cross-compilation toolchains available there. Usage:

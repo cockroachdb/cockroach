@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # Downloads the _latest_ roachprod binary (on master) from GCS to the specified directory
 # or the current directory if none is specified.
 # Assumes that you have gsutil installed and authenticated; see [1] for those details.
