@@ -1215,4 +1215,21 @@ t_int  CREATE TABLE public.t_int (
 statement ok
 DROP TABLE t_int;
 
+subtest partial_index_fails_with_error
+
+statement ok
+create table roach_village ( roach_id int primary key, name text, age smallint, legs smallint );
+
+statement ok
+create index idx on roach_village(age) where name = 'papa roach';
+
+statement error pq: cannot alter type of column "name" because it is referenced by partial index "idx"
+alter table roach_village alter column name set data type char(20);
+
+statement ok
+alter table roach_village alter column age set data type bigint;
+
+statement ok
+alter table roach_village alter column legs set data type bigint;
+
 subtest end
