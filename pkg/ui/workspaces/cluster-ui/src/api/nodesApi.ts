@@ -22,6 +22,7 @@ export const getNodes =
 export const useNodeStatuses = () => {
   const { data, isLoading, error } = useSWR(NODES_PATH, getNodes, {
     revalidateOnFocus: false,
+    dedupingInterval: 10000, // 10 seconds.
   });
 
   const { storeIDToNodeID, nodeIDToRegion } = useMemo(() => {

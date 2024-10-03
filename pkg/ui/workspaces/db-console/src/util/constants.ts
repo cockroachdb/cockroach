@@ -27,6 +27,7 @@ export const {
   sessionAttr,
   tabAttr,
   tableNameAttr,
+  tableIdAttr,
   txnFingerprintIdAttr,
   unset,
   viewAttr,

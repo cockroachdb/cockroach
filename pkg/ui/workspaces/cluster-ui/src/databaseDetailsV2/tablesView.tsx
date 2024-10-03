@@ -8,10 +8,11 @@ import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
 import {
-  TableMetadataRequest,
+  ListTableMetadataRequest,
   TableSortOption,
   useTableMetadata,
 } from "src/api/databases/getTableMetadataApi";
+import { ColumnTitle } from "src/components/columnTitle";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
@@ -29,9 +30,7 @@ import {
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
-import { Bytes, EncodeDatabaseTableUri, tabAttr } from "src/util";
-
-import { ColumnTitle } from "../components/columnTitle";
+import { Bytes, tabAttr } from "src/util";
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
@@ -51,10 +50,9 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       width: "15%",
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (t: TableRow) => {
-        // This linking is just temporary. We'll need to update it to the correct path
-        // using db ID and table ID once we have the table details page.
-        const encodedDBPath = EncodeDatabaseTableUri(t.dbName, t.name);
-        return <Link to={encodedDBPath}>{t.qualifiedNameWithSchema}</Link>;
+        return (
+          <Link to={`/table/${t.tableID}`}>{t.qualifiedNameWithSchema}</Link>
+        );
       },
       sortKey: TableSortOption.NAME,
     },
@@ -167,7 +165,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
 const createTableMetadataRequestFromParams = (
   dbID: string,
   params: TableParams,
-): TableMetadataRequest => {
+): ListTableMetadataRequest => {
   return {
     pagination: {
       pageSize: params.pagination.pageSize,
