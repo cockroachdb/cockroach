@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This script produces the list of authors that are "git blame"d for lines in
 # .go files under the current directory.
 #

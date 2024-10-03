@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -euxo pipefail
 
 # Disabling hyper-v time synchronization means unbinding the device.

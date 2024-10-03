@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Copyright 2019 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -eu
 
 # This script will generate a list of error codes. It will not perform

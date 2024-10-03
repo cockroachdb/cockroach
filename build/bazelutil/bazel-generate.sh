@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -euo pipefail
 
 # files_unchanged_from_upstream takes file globs as arguments and checks

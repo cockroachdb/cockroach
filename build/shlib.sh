@@ -1,3 +1,8 @@
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # Shell support functions and variables. Bash-only.
 
 # Terminal color codes.

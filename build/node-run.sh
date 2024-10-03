@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # node-run.sh runs a command installed by NPM/Yarn. It looks for COMMAND in
 # ./node_modules/bin, where NPM/Yarn install commands by default, then invokes
 # it with the specified ARGS, if any.

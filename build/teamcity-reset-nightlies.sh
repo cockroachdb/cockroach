@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # Deletes and recreates the nightlies resource group, which contains the Azure
 # VMs, virtual networks, IPs, disks etc. that are automatically created by
 # nightly tests. This is a big hammer, but the nightlies leak resources

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # The command runs git diff between two refspecs to find all instances of TODO
 # added between them.
 
