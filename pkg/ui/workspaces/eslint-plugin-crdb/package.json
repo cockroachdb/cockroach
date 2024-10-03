@@ -6,7 +6,7 @@
   "files": [
     "dist/"
   ],
-  "license": "BSL",
+  "license": "CockroachDB Software License",
   "private": true,
   "scripts": {
     "build": "tsc",
