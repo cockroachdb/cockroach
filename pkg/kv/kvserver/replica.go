@@ -884,6 +884,11 @@ type Replica struct {
 		// existing real implementation to be destroyed and replaced with a real
 		// implementation.
 		replicaFlowControlIntegration replicaFlowControlIntegration
+
+		// The currentRACv2Mode is always in-sync with RawNode.
+		// MsgAppPull <=> LazyReplication.
+		// Updated with both raftMu and mu held.
+		currentRACv2Mode rac2.RaftMsgAppMode
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
