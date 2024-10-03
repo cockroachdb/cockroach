@@ -97,7 +97,7 @@ type RangeController interface {
 	// SendStreamStats returns the stats for the replica send streams that belong
 	// to this range controller. It is only populated on the leader. The stats
 	// may be used to inform placement decisions pertaining to the range.
-	SendStreamStats() RangeSendStreamStats
+	SendStreamStats() *RangeSendStreamStats
 }
 
 // RaftInterface implements methods needed by RangeController.
@@ -182,7 +182,42 @@ type ReplicaStateInfo struct {
 
 // ReplicaSendStreamStats contains the stats for the replica send streams that
 // belong to a range.
-type RangeSendStreamStats map[roachpb.ReplicaID]ReplicaSendStreamStats
+type RangeSendStreamStats struct {
+	// internal is not modified outside this pkg, it is safe to read via
+	// ReplicaSendStreamStats without holding a mutex.
+	internal syncutil.Map[roachpb.ReplicaID, ReplicaSendStreamStats]
+}
+
+// SendStreamStats returns the stats for the replica send stream that belong to
+// the given replicaID, if it exists, otherwise an empty stats struct is
+// returned.
+func (r *RangeSendStreamStats) ReplicaSendStreamStats(
+	replicaID roachpb.ReplicaID,
+) (ReplicaSendStreamStats, bool) {
+	if v, ok := r.internal.Load(replicaID); ok {
+		return *v, true
+	}
+	return ReplicaSendStreamStats{}, false
+}
+
+// SumSendQueues returns the sum of the send queues across all replicas,
+// returning both the aggregated number of entries and the number of bytes.
+func (r *RangeSendStreamStats) SumSendQueues() (count int64, bytes int64) {
+	r.internal.Range(func(_ roachpb.ReplicaID, stats *ReplicaSendStreamStats) bool {
+		count += stats.SendQueueCount
+		bytes += stats.SendQueueBytes
+		return true
+	})
+	return count, bytes
+}
+
+// TestingSetReplica is used in tests to set the stats for a replica send
+// stream. It should not be used outside of tests.
+func (r *RangeSendStreamStats) TestingSetReplica(
+	replicaID roachpb.ReplicaID, stats ReplicaSendStreamStats,
+) {
+	r.internal.Store(replicaID, &stats)
+}
 
 // ReplicaSendStreamStats contains the stats for a replica send stream that may
 // be used to inform placement decisions pertaining to the replica.
@@ -193,7 +228,9 @@ type ReplicaSendStreamStats struct {
 	// entries waiting on flow tokens to be sent.
 	//
 	// Ignore this value unless IsStateReplicate is true.
-	HasSendQueue bool
+	HasSendQueue   bool
+	SendQueueBytes int64
+	SendQueueCount int64
 }
 
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
@@ -363,15 +400,16 @@ type RangeControllerOptions struct {
 	LocalReplicaID roachpb.ReplicaID
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
-	SSTokenCounter      *StreamTokenCounterProvider
-	RaftInterface       RaftInterface
-	MsgAppSender        MsgAppSender
-	Clock               *hlc.Clock
-	CloseTimerScheduler ProbeToCloseTimerScheduler
-	Scheduler           Scheduler
-	SendTokenWatcher    *SendTokenWatcher
-	EvalWaitMetrics     *EvalWaitMetrics
-	Knobs               *kvflowcontrol.TestingKnobs
+	SSTokenCounter         *StreamTokenCounterProvider
+	RaftInterface          RaftInterface
+	MsgAppSender           MsgAppSender
+	Clock                  *hlc.Clock
+	CloseTimerScheduler    ProbeToCloseTimerScheduler
+	Scheduler              Scheduler
+	SendTokenWatcher       *SendTokenWatcher
+	EvalWaitMetrics        *EvalWaitMetrics
+	RangeControllerMetrics *RangeControllerMetrics
+	Knobs                  *kvflowcontrol.TestingKnobs
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -417,6 +455,11 @@ type rangeController struct {
 		// to call into the replicaSendStreams that have asked to be scheduled.
 		replicas map[roachpb.ReplicaID]struct{}
 	}
+
+  // sendStreamStats is populated holding raftMu and is returned to the caller
+  // of SendStreamStats. Concurrent r/w is safe because the type is backed by
+  // syncutil.Map.
+	sendStreamStats RangeSendStreamStats
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -466,6 +509,7 @@ func NewRangeController(
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSet(ctx, init.ReplicaSet)
 	rc.updateWaiterSetsRaftMuLocked()
+	rc.opts.RangeControllerMetrics.Count.Inc(1)
 	return rc
 }
 
@@ -897,8 +941,9 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 				ss = rs.computeReplicaStreamState(ctx, needsTokens)
 			}
 			rd = replicaDirective{
-				forceFlush:    ss.forceFlushing,
-				hasSendTokens: ss.hasSendTokens,
+				forceFlush:               ss.forceFlushing,
+				hasSendTokens:            ss.hasSendTokens,
+				preventSendQNoForceFlush: ss.preventSendQNoForceFlush,
 			}
 		}
 		shouldWaitChange = rs.handleReadyEntries(ctx, rs.scratchEvent, rd) || shouldWaitChange
@@ -909,6 +954,10 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	if shouldWaitChange {
 		rc.updateWaiterSetsRaftMuLocked()
 	}
+	// Lastly, update the send stream stats for each replica.
+	// TODO(kvoli): How expensive is this? It seems okay given we iterate heavily
+	// above. But, we are incurring an allocation on if the stats have changed.
+	rc.updateSendStreamStatsRaftMuLocked()
 	return nil
 }
 
@@ -1027,6 +1076,7 @@ func (rc *rangeController) computeVoterDirectives(
 					continue
 				}
 				rs.scratchVoterStreamState.hasSendTokens = true
+				rs.scratchVoterStreamState.preventSendQNoForceFlush = true
 				gap--
 				if i == 0 && len(voterSets) > 1 && rs.desc.IsVoterNewConfig() {
 					// By denying formation of a send-queue, we have also increased the
@@ -1050,6 +1100,7 @@ func (rc *rangeController) computeVoterDirectives(
 						continue
 					}
 					rs.scratchVoterStreamState.forceFlushing = true
+					rs.scratchVoterStreamState.preventSendQNoForceFlush = false
 					gap--
 					if i == 0 && len(voterSets) > 1 && rs.desc.IsVoterNewConfig() {
 						// By force-flushing, we have also increased the voters
@@ -1187,6 +1238,7 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 			rs.closeSendStream(ctx)
 		}
 	}
+	rc.opts.RangeControllerMetrics.Count.Dec(1)
 }
 
 // InspectRaftMuLocked returns a handle containing the state of the range
@@ -1224,27 +1276,8 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 	}
 }
 
-func (rc *rangeController) SendStreamStats() RangeSendStreamStats {
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
-
-	stats := RangeSendStreamStats{}
-	for i, vss := range rc.mu.voterSets {
-		for _, vs := range vss {
-			if i != 0 {
-				if _, ok := stats[vs.replicaID]; ok {
-					// NB: We have already seen this voter in the other set, the stats
-					// will be the same so we can skip it.
-					continue
-				}
-			}
-			stats[vs.replicaID] = ReplicaSendStreamStats{
-				IsStateReplicate: vs.isStateReplicate,
-				HasSendQueue:     vs.hasSendQ,
-			}
-		}
-	}
-	return stats
+func (rc *rangeController) SendStreamStats() *RangeSendStreamStats {
+	return &rc.sendStreamStats
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
@@ -1258,6 +1291,7 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 				rs.closeSendStream(ctx)
 			}
 			delete(rc.replicaMap, r)
+			rc.sendStreamStats.internal.Delete(r)
 		} else {
 			rs := rc.replicaMap[r]
 			rs.desc = desc
@@ -1269,7 +1303,10 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 			// Already handled above.
 			continue
 		}
-		rc.replicaMap[r] = NewReplicaState(ctx, rc, desc)
+		newRepl := NewReplicaState(ctx, rc, desc)
+		rc.replicaMap[r] = newRepl
+		mvStats := newRepl.sendStreamStats
+		rc.sendStreamStats.internal.Store(r, &mvStats)
 	}
 	rc.replicaSet = newSet
 }
@@ -1335,6 +1372,26 @@ func (rc *rangeController) updateWaiterSetsRaftMuLocked() {
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 }
 
+func (rc *rangeController) updateSendStreamStatsRaftMuLocked() {
+	for r, rs := range rc.replicaMap {
+		if oldStats, ok := rc.sendStreamStats.internal.Load(r); ok {
+			if *oldStats != rs.sendStreamStats {
+				// The replicaState local stats have changed since we last updated
+				// them. Update the range stats now.
+				//
+				// NOTE: We are not going to store a ref to the underlying replica
+				// state's stats, insetad we store a copy of the stats. This is to
+				// enable callers to read the stats without holding raftMu and to avoid
+				// allocating on every call to SendStreamStats.
+				mvStats := rs.sendStreamStats
+				rc.sendStreamStats.internal.Store(r, &mvStats)
+			}
+			// Otherwise, the stats have not changed, so we don't need to update them
+			// and incur an allocation.
+		}
+	}
+}
+
 // scheduleReplica may be called with or without raftMu held.
 func (rc *rangeController) scheduleReplica(r roachpb.ReplicaID) {
 	rc.scheduledMu.Lock()
@@ -1357,7 +1414,8 @@ type replicaState struct {
 	evalTokenCounter, sendTokenCounter *tokenCounter
 	desc                               roachpb.ReplicaDescriptor
 
-	sendStream *replicaSendStream
+	sendStream      *replicaSendStream
+	sendStreamStats ReplicaSendStreamStats
 
 	// Scratch space used in constructRaftEventForReplica.
 	scratchSendingEntries []entryFCState
@@ -1388,6 +1446,13 @@ type replicaStreamState struct {
 	// input, it may have been changed from false to true to prevent formation
 	// of a send-queue.
 	hasSendTokens bool
+	// preventSendQNoForceFlush is true only if noSendQ and hasSendTokens is
+	// true. When interpreted as a directive in subsequent input, it may have
+	// been changed from false to true to prevent formation of a send-queue.
+	//
+	// NB: preventSendQNoForceFlush is only relevant to observability and
+	// debugging, no entry sending logic is based on it.
+	preventSendQNoForceFlush bool
 }
 
 // replicaDirective is passed to a replica when we have already decided
@@ -1396,6 +1461,8 @@ type replicaStreamState struct {
 type replicaDirective struct {
 	forceFlush    bool
 	hasSendTokens bool
+	// preventSendQNoForceFlush is only used for observability and debugging.
+	preventSendQNoForceFlush bool
 }
 
 func NewReplicaState(
@@ -1409,6 +1476,7 @@ func NewReplicaState(
 		sendTokenCounter: parent.opts.SSTokenCounter.Send(stream),
 		desc:             desc,
 	}
+	rs.refreshSendStreamStats()
 	// Don't bother creating the replicaSendStream here. We will do this in
 	// the next Ready which will be called immediately after. This centralizes
 	// the logic of replicaSendStream creation.
@@ -1627,6 +1695,25 @@ func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ b
 	return isStateReplicate, hasSendQ
 }
 
+func (rs *replicaState) refreshSendStreamStats() {
+	// NB: Like other functions on the replicaState, raftMu is held.
+	if rs.sendStream == nil {
+		rs.sendStreamStats = ReplicaSendStreamStats{
+			IsStateReplicate: false,
+			// Pretend. We maintain the invariant !isStateReplicate => hasSendQ.
+			HasSendQueue: true,
+		}
+		return
+	}
+	rs.sendStream.mu.Lock()
+	defer rs.sendStream.mu.Unlock()
+
+	rs.sendStreamStats.IsStateReplicate = rs.sendStream.mu.connectedState == replicate
+	rs.sendStreamStats.HasSendQueue = !rs.sendStream.isEmptySendQueueLocked()
+	rs.sendStreamStats.SendQueueBytes = int64(rs.sendStream.approxQueueSizeLocked())
+	rs.sendStreamStats.SendQueueCount = rs.sendStream.queueLengthLocked()
+}
+
 type entryFCState struct {
 	term, index     uint64
 	usesFlowControl bool
@@ -1672,6 +1759,7 @@ func (rs *replicaState) computeReplicaStreamState(
 			forceFlushing:                   false,
 			forceFlushingBecauseLeaseholder: false,
 			hasSendTokens:                   false,
+			preventSendQNoForceFlush:        false,
 		}
 	}
 	rss := rs.sendStream
@@ -1694,12 +1782,14 @@ func (rs *replicaState) computeReplicaStreamState(
 			forceFlushing:                   false,
 			forceFlushingBecauseLeaseholder: false,
 			hasSendTokens:                   true,
+			preventSendQNoForceFlush:        false,
 		}
 	}
 	vss := replicaStreamState{
-		isReplicate:   true,
-		noSendQ:       rss.isEmptySendQueueLocked(),
-		forceFlushing: rss.mu.sendQueue.forceFlushScheduled,
+		isReplicate:              true,
+		noSendQ:                  rss.isEmptySendQueueLocked(),
+		forceFlushing:            rss.mu.sendQueue.forceFlushScheduled,
+		preventSendQNoForceFlush: false,
 	}
 	if rs.desc.ReplicaID == rs.parent.leaseholder {
 		if vss.noSendQ {
@@ -1756,6 +1846,7 @@ func (rs *replicaState) computeReplicaStreamState(
 func (rs *replicaState) handleReadyEntries(
 	ctx context.Context, eventForReplica raftEventForReplica, directive replicaDirective,
 ) (transitionedSendQStateAsVoter bool) {
+	defer rs.refreshSendStreamStats()
 	if rs.sendStream == nil {
 		return false
 	}
@@ -1927,6 +2018,10 @@ func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	rss.returnSendTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
 	rss.returnAllEvalTokensLocked(ctx)
 	rss.stopAttemptingToEmptySendQueueLocked(ctx, true)
+	if rss.mu.sendQueue.forceFlushScheduled {
+		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+		log.Infof(ctx, "r%v:%v stream %v force-flushing -1", rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
+	}
 	rss.mu.closed = true
 }
 
@@ -1953,6 +2048,8 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				// Must have a send-queue, so sendingEntries should stay empty (these
 				// will be queued).
 				rss.mu.sendQueue.forceFlushScheduled = false
+				rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+				log.Infof(ctx, "r%v:%v stream %v force-flushing -1", rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
 				rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
 				if directive.hasSendTokens {
 					panic(errors.AssertionFailedf("hasSendTokens true despite send-queue"))
@@ -1998,8 +2095,16 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] -= tokens
 				rss.mu.sendQueue.preciseSizeSum -= tokens
 			}
-			rss.parent.sendTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), tokens)
+			flags := AdjNormal
+			if directive.preventSendQNoForceFlush {
+				flags = flags.Set(AdjPreventionSendQueue)
+			}
+			rss.parent.sendTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), tokens, flags)
 			rss.mu.tracker.Track(ctx, entry.term, entry.index, pri, tokens)
+		}
+		if directive.preventSendQNoForceFlush {
+			log.Infof(ctx, "r%v:%v stream %v preventing send-queue without force-flush +1", rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
+			rss.parent.parent.opts.RangeControllerMetrics.SendQueue.PreventionCount.Inc(1)
 		}
 	}
 	if n := len(event.newEntries); n > 0 {
@@ -2041,7 +2146,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] += tokens
 			}
 			wc := WorkClassFromRaftPriority(pri)
-			rss.parent.evalTokenCounter.Deduct(ctx, wc, tokens)
+			rss.parent.evalTokenCounter.Deduct(ctx, wc, tokens, AdjNormal)
 			rss.mu.eval.tokensDeducted[wc] += tokens
 		}
 	}
@@ -2083,12 +2188,13 @@ func (rss *replicaSendStream) tryHandleModeChangeLocked(
 		// Switching from pull to push. Everything was counted as elastic, but now
 		// we want regular to count as regular. So return tokens to elastic and
 		// deduct from regular.
+		// TODO(kvoli): Should we have a metric for this? It should be rare.
 		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
-			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
+			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
 		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
-			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
+			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
 		rss.stopAttemptingToEmptySendQueueLocked(ctx, false)
@@ -2096,11 +2202,11 @@ func (rss *replicaSendStream) tryHandleModeChangeLocked(
 		// Switching from push to pull. Regular needs to be counted as elastic, so
 		// return to regular and deduct from elastic.
 		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
-			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
+			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
 		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
-			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass])
+			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
 		if !isEmptySendQ && !toldToForceFlush {
@@ -2110,6 +2216,8 @@ func (rss *replicaSendStream) tryHandleModeChangeLocked(
 }
 
 func (rss *replicaSendStream) startForceFlushLocked(ctx context.Context) {
+	log.Infof(ctx, "r%v:%v stream %v force-flushing +1", rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
+	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Inc(1)
 	rss.mu.sendQueue.forceFlushScheduled = true
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	rss.stopAttemptingToEmptySendQueueViaWatcherLocked(ctx, false)
@@ -2147,6 +2255,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	}
 	if !rss.mu.sendQueue.forceFlushScheduled {
 		// Subtract from already deducted tokens.
+		beforeDeductedTokens := rss.mu.sendQueue.deductedForSchedulerTokens
 		rss.mu.sendQueue.deductedForSchedulerTokens -= tokensNeeded
 		if rss.mu.sendQueue.deductedForSchedulerTokens < 0 {
 			// Used more than what we had already deducted. Will need to subtract
@@ -2156,9 +2265,18 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 		} else {
 			tokensNeeded = 0
 		}
+		sendQueueMetrics := rss.parent.parent.opts.RangeControllerMetrics.SendQueue
+		afterDeductedTokens := rss.mu.sendQueue.deductedForSchedulerTokens
+		if beforeDeductedTokens > afterDeductedTokens {
+			sendQueueMetrics.DeductedForSchedulerBytes.Dec(int64(afterDeductedTokens - beforeDeductedTokens))
+		}
 	}
 	if tokensNeeded > 0 {
-		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, tokensNeeded)
+		flags := AdjNormal
+		if rss.mu.sendQueue.forceFlushScheduled {
+			flags = flags.Set(AdjForceFlush)
+		}
+		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, tokensNeeded, flags)
 	}
 	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
@@ -2203,6 +2321,7 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueLocked(
 	ctx context.Context, disconnect bool,
 ) {
 	rss.mu.sendQueue.forceFlushScheduled = false
+	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
 	rss.stopAttemptingToEmptySendQueueViaWatcherLocked(ctx, disconnect)
 }
 
@@ -2210,8 +2329,17 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherLocked(
 	ctx context.Context, disconnect bool,
 ) {
 	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+		// Update metrics.
+		flags := AdjNormal
+		if disconnect {
+			flags = flags.Set(AdjDisconnect)
+		}
+		rss.parent.parent.opts.RangeControllerMetrics.
+			SendQueue.DeductedForSchedulerBytes.Dec(
+			int64(rss.mu.sendQueue.deductedForSchedulerTokens))
+
 		rss.parent.sendTokenCounter.Return(
-			ctx, admissionpb.ElasticWorkClass, rss.mu.sendQueue.deductedForSchedulerTokens, disconnect)
+			ctx, admissionpb.ElasticWorkClass, rss.mu.sendQueue.deductedForSchedulerTokens, flags)
 		rss.mu.sendQueue.deductedForSchedulerTokens = 0
 	}
 	if handle := rss.mu.sendQueue.tokenWatcherHandle; handle != (SendTokenWatcherHandle{}) {
@@ -2255,13 +2383,18 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	if queueSize < 2048 {
 		queueSize = 4096
 	}
-	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize)
+	flags := AdjNormal
+	if rss.mu.sendQueue.forceFlushScheduled {
+		flags = flags.Set(AdjForceFlush)
+	}
+	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize, flags)
 	if tokens == 0 {
 		// Rare case: no tokens available despite notification. Register again.
 		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
 		return
 	}
 	rss.mu.sendQueue.deductedForSchedulerTokens = tokens
+	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.DeductedForSchedulerBytes.Inc(int64(tokens))
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 }
 
@@ -2275,6 +2408,11 @@ func (rss *replicaSendStream) approxQueueSizeLocked() kvflowcontrol.Tokens {
 	return size
 }
 
+func (rss *replicaSendStream) queueLengthLocked() int64 {
+	// NB: INVARIANT nextRaftIndex >= indexToSend, no underflow possible.
+	return int64(rss.mu.sendQueue.nextRaftIndex - rss.mu.sendQueue.indexToSend)
+}
+
 // returnSendTokens takes the tokens untracked by the tracker and returns them
 // to the send token counters.
 func (rss *replicaSendStream) returnSendTokens(
@@ -2283,7 +2421,7 @@ func (rss *replicaSendStream) returnSendTokens(
 	for pri, tokens := range returned {
 		if tokens > 0 {
 			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
-			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, disconnect)
+			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, AdjDisconnect)
 		}
 	}
 }
@@ -2296,7 +2434,7 @@ func (rss *replicaSendStream) returnEvalTokensLocked(
 		rpri := raftpb.Priority(pri)
 		wc := WorkClassFromRaftPriority(rpri)
 		if tokens > 0 {
-			rss.parent.evalTokenCounter.Return(ctx, wc, tokens, false /* disconnect */)
+			rss.parent.evalTokenCounter.Return(ctx, wc, tokens, AdjNormal)
 			rss.mu.eval.tokensDeducted[wc] -= tokens
 			if rss.mu.eval.tokensDeducted[wc] < 0 {
 				if buildutil.CrdbTestBuild {
@@ -2314,7 +2452,7 @@ func (rss *replicaSendStream) returnEvalTokensLocked(
 func (rss *replicaSendStream) returnAllEvalTokensLocked(ctx context.Context) {
 	for wc, tokens := range rss.mu.eval.tokensDeducted {
 		if tokens > 0 {
-			rss.parent.evalTokenCounter.Return(ctx, admissionpb.WorkClass(wc), tokens, true /* disconnect */)
+			rss.parent.evalTokenCounter.Return(ctx, admissionpb.WorkClass(wc), tokens, AdjDisconnect)
 		}
 		rss.mu.eval.tokensDeducted[wc] = 0
 	}

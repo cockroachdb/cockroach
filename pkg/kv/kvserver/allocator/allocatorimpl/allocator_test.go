@@ -1943,7 +1943,7 @@ func (r *mockRepl) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(0)
 }
 
-func (r *mockRepl) SendStreamStats() rac2.RangeSendStreamStats {
+func (r *mockRepl) SendStreamStats() *rac2.RangeSendStreamStats {
 	rangeStats := rac2.RangeSendStreamStats{}
 	for i := int32(1); i <= r.replicationFactor; i++ {
 		replStats := rac2.ReplicaSendStreamStats{}
@@ -1953,9 +1953,9 @@ func (r *mockRepl) SendStreamStats() rac2.RangeSendStreamStats {
 		if _, ok := r.replsNotInStateReplicate[roachpb.ReplicaID(i)]; !ok {
 			replStats.IsStateReplicate = true
 		}
-		rangeStats[roachpb.ReplicaID(i)] = replStats
+		rangeStats.TestingSetReplica(roachpb.ReplicaID(i), replStats)
 	}
-	return rangeStats
+	return &rangeStats
 }
 
 func (r *mockRepl) markReplAsNeedingSnapshot(id roachpb.ReplicaID) {

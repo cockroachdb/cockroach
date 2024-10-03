@@ -2015,7 +2015,7 @@ func (a *Allocator) ValidLeaseTargets(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats() *rac2.RangeSendStreamStats
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2189,7 +2189,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats() *rac2.RangeSendStreamStats
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
@@ -2282,7 +2282,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats() *rac2.RangeSendStreamStats
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2651,7 +2651,7 @@ func (a *Allocator) ShouldTransferLease(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats() *rac2.RangeSendStreamStats
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
@@ -3059,7 +3059,7 @@ func excludeReplicasInNeedOfSnapshots(
 // provided RangeSendStreamStats.
 func excludeReplicasInNeedOfCatchup(
 	ctx context.Context,
-	sendStreamStats rac2.RangeSendStreamStats,
+	sendStreamStats *rac2.RangeSendStreamStats,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if sendStreamStats == nil {
@@ -3071,7 +3071,7 @@ func excludeReplicasInNeedOfCatchup(
 	}
 	filled := 0
 	for _, repl := range replicas {
-		if stats, ok := sendStreamStats[repl.ReplicaID]; ok &&
+		if stats, ok := sendStreamStats.ReplicaSendStreamStats(repl.ReplicaID); ok &&
 			(!stats.IsStateReplicate || stats.HasSendQueue) {
 			log.KvDistribution.VEventf(ctx, 5,
 				"not considering %s as a potential candidate for a lease transfer "+
