@@ -804,7 +804,7 @@ func TestIntentResolutionTimeout(t *testing.T) {
 	}()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */, base.DefaultMaxClockOffset, hlc.PanicLogger)
 	cfg := Config{
 		Stopper: stopper,
 		Clock:   clock,

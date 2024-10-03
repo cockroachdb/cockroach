@@ -7,13 +7,13 @@ package hlc
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -49,6 +49,10 @@ type Clock struct {
 	// toleratedOffset is the tolerated clock skew with other cluster nodes,
 	// beyond which the node will self-terminate. See ToleratedOffset().
 	toleratedOffset time.Duration
+
+	// logger is used when forward or backwards jumps are
+	// detected.
+	logger Logger
 
 	// lastPhysicalTime reports the last measured physical time. This
 	// is used to detect clock jumps. The field is accessed atomically.
@@ -92,6 +96,29 @@ type Clock struct {
 type WallClock interface {
 	// Now returns the current time.
 	Now() time.Time
+}
+
+// Logger is used by Clock when clock anamolies are detected.
+type Logger interface {
+	// Warningf is used when the Clock detects non-fatal
+	// conditions.
+	Warningf(ctx context.Context, format string, args ...interface{})
+	// Fatalf is used when forwardClockJump detection is enabled
+	// and the Clock detects a fatal forward clock jump.
+	//
+	// Production implementations of Fatalf should halt the
+	// process in manner appropriate to the caller.
+	Fatalf(ctx context.Context, format string, args ...interface{})
+}
+
+// panicFataler is a Logger that panics when Fatal is called.
+type panicLogger struct{}
+
+var PanicLogger Logger = &panicLogger{}
+
+func (*panicLogger) Warningf(context.Context, string, ...interface{}) {}
+func (*panicLogger) Fatalf(_ context.Context, format string, args ...interface{}) {
+	panic(fmt.Sprintf(format, args...))
 }
 
 // HybridManualClock is a convenience type to facilitate
@@ -181,8 +208,8 @@ func (m *HybridManualClock) Resume() {
 
 // NewClockWithSystemTimeSource creates a Clock that reads the system time. This
 // is equivalent to NewClock(timeutil.SystemTimeSource, maxOffset, toleratedOffset).
-func NewClockWithSystemTimeSource(maxOffset, toleratedOffset time.Duration) *Clock {
-	return NewClock(timeutil.DefaultTimeSource{}, maxOffset, toleratedOffset)
+func NewClockWithSystemTimeSource(maxOffset, toleratedOffset time.Duration, logger Logger) *Clock {
+	return NewClock(timeutil.DefaultTimeSource{}, maxOffset, toleratedOffset, logger)
 }
 
 // NewClockForTesting creates a new Clock for tests that don't care about clock
@@ -191,7 +218,7 @@ func NewClockForTesting(wallClock WallClock) *Clock {
 	if wallClock == nil {
 		wallClock = timeutil.DefaultTimeSource{}
 	}
-	return NewClock(wallClock, 0 /* maxOffset */, 0 /* toleratedOffset */)
+	return NewClock(wallClock, 0 /* maxOffset */, 0 /* toleratedOffset */, PanicLogger)
 }
 
 // NewClock returns a Clock configured to use a specified time source. Use
@@ -203,11 +230,12 @@ func NewClockForTesting(wallClock WallClock) *Clock {
 // the node via RemoteClockMonitor if violated. A value of 0 will disable the
 // corresponding check. See Clock.MaxOffset() and Clock.ToleratedOffset() for
 // details.
-func NewClock(wallClock WallClock, maxOffset, toleratedOffset time.Duration) *Clock {
+func NewClock(wallClock WallClock, maxOffset, toleratedOffset time.Duration, logger Logger) *Clock {
 	return &Clock{
 		wallClock:       wallClock,
 		maxOffset:       maxOffset,
 		toleratedOffset: toleratedOffset,
+		logger:          logger,
 	}
 }
 
@@ -362,13 +390,13 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 	interval := oldTime - newTime
 	if interval > int64(c.maxOffset/10) {
 		atomic.AddInt32(&c.monotonicityErrorsCount, 1)
-		log.Warningf(ctx, "backward time jump detected (%f seconds)", float64(-interval)/1e9)
+		c.logger.Warningf(ctx, "backward time jump detected (%f seconds)", float64(-interval)/1e9)
 	}
 
 	if atomic.LoadInt32(&c.forwardClockJumpCheckEnabled) != 0 {
 		toleratedForwardClockJump := c.toleratedForwardClockJump()
 		if int64(toleratedForwardClockJump) <= -interval {
-			log.Fatalf(
+			c.logger.Fatalf(
 				ctx,
 				"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
 				redact.Safe(float64(-interval)/1e9),
@@ -413,7 +441,7 @@ func (c *Clock) NowAsClockTimestamp() ClockTimestamp {
 func (c *Clock) enforceWallTimeWithinBoundLocked() {
 	// WallTime should not cross the upper bound (if WallTimeUpperBound is set)
 	if c.mu.wallTimeUpperBound != 0 && c.mu.timestamp.WallTime > c.mu.wallTimeUpperBound {
-		log.Fatalf(
+		c.logger.Fatalf(
 			context.TODO(),
 			"wall time %d is not allowed to be greater than upper bound of %d.",
 			redact.Safe(c.mu.timestamp.WallTime),

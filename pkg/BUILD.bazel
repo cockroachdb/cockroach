@@ -2504,6 +2504,7 @@ GO_TARGETS = [
     "//pkg/util/grpcutil:grpcutil_test",
     "//pkg/util/grunning:grunning",
     "//pkg/util/grunning:grunning_test",
+    "//pkg/util/hlc/logger:logger",
     "//pkg/util/hlc:hlc",
     "//pkg/util/hlc:hlc_test",
     "//pkg/util/httputil:httputil",

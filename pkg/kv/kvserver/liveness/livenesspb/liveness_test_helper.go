@@ -36,7 +36,7 @@ type TestNodeVitality struct {
 // nodes down or publish anything through gossip.  This method takes an optional
 // list of ides which are all marked as healthy when created.
 func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 0)), time.Millisecond, time.Millisecond)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 0)), time.Millisecond, time.Millisecond, hlc.PanicLogger)
 	m := TestNodeVitality{
 		Clock: clock,
 		Entry: make(map[roachpb.NodeID]testNodeVitalityEntry),
