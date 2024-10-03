@@ -673,15 +673,22 @@ export const dataFromServerAlertSelector = createSelector(
   },
 );
 
-const licenseTypeNames = new Map<
-  string,
-  "Trial" | "Enterprise" | "Non-Commercial" | "None"
->([
-  ["Evaluation", "Trial"],
+export type LicenseType =
+  | "Evaluation"
+  | "Trial"
+  | "Enterprise"
+  | "Non-Commercial"
+  | "None"
+  | "Free";
+
+const licenseTypeNames = new Map<string, LicenseType>([
+  ["Evaluation", "Evaluation"],
   ["Enterprise", "Enterprise"],
   ["NonCommercial", "Non-Commercial"],
   ["OSS", "None"],
   ["BSD", "None"],
+  ["Free", "Free"],
+  ["Trial", "Trial"],
 ]);
 
 // licenseTypeSelector returns user-friendly names of license types.

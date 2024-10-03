@@ -61,6 +61,10 @@ stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
   "default",
 );
+stubComponentInModule(
+  "src/views/shared/components/alertBar/alertBar",
+  "ThrottleNotificationBar",
+);
 
 // NOTE: All imports should go after `stubComponentInModule` functions calls.
 import { screen, render } from "@testing-library/react";

@@ -181,6 +181,7 @@ type rangeControllerInitState struct {
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
 	raftInterface  rac2.RaftInterface
+	msgAppSender   rac2.MsgAppSender
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
@@ -205,6 +206,7 @@ type ProcessorOptions struct {
 	RaftScheduler          RaftScheduler
 	AdmittedPiggybacker    AdmittedPiggybacker
 	ACWorkQueue            ACWorkQueue
+	MsgAppSender           rac2.MsgAppSender
 	RangeControllerFactory RangeControllerFactory
 	Settings               *cluster.Settings
 	EvalWaitMetrics        *rac2.EvalWaitMetrics
@@ -768,6 +770,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 		tenantID:       p.desc.tenantID,
 		localReplicaID: p.opts.ReplicaID,
 		raftInterface:  p.replMu.raftNode,
+		msgAppSender:   p.opts.MsgAppSender,
 	})
 
 	func() {
@@ -1250,6 +1253,7 @@ func (f RangeControllerFactoryImpl) New(
 			LocalReplicaID:      state.localReplicaID,
 			SSTokenCounter:      f.streamTokenCounterProvider,
 			RaftInterface:       state.raftInterface,
+			MsgAppSender:        state.msgAppSender,
 			Clock:               f.clock,
 			CloseTimerScheduler: f.closeTimerScheduler,
 			Scheduler:           f.scheduler,
