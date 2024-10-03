@@ -128,7 +128,6 @@ go_library(
         "multitenant_shared_process.go",
         "multitenant_tpch.go",
         "multitenant_upgrade.go",
-        "multitenant_utils.go",
         "mvcc_gc.go",
         "network.go",
         "nodejs_postgres.go",
