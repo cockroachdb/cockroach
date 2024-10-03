@@ -2597,11 +2597,32 @@ func (r *Replica) maybeEnqueueProblemRange(
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 }
 
+// BasicSendStreamStats returns the range's flow control send stream stats iff the
+// replica is the raft leader and RACv2 is enabled, otherwise nil. This method
+// is cheaper than SendStreamStats, as such it is suitable for use in more
+// frequently called code paths, such as the allocator.
+//
+// raftMu should not be held.
+func (r *Replica) BasicSendStreamStats() rac2.RangeSendStreamStats {
+	if r.flowControlV2 == nil {
+		return nil
+	}
+
+	return r.flowControlV2.BasicSendStreamStats()
+}
+
 // SendStreamStats returns the range's flow control send stream stats iff the
-// replica is the raft leader and RACv2 is enabled, otherwise nil.
+// replica is the raft leader and RACv2 is enabled, otherwise nil. This method
+// is more expensive than BasicSendStreamStats, as such it is suitable for use
+// in less frequently called code paths, such as metrics.
+//
+// raftMu should not be held.
 func (r *Replica) SendStreamStats() rac2.RangeSendStreamStats {
 	if r.flowControlV2 == nil {
 		return nil
 	}
-	return r.flowControlV2.SendStreamStats()
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	return r.flowControlV2.SendStreamStatsRaftMuLocked()
 }

@@ -52,13 +52,20 @@ eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+3.0 MiB ela=+0 B
 ++++
 
-# TODO(kvoli): When we introduce the send queue fully, this should change to
-# send_queue_bytes=2 MiB for s3.
+# Print out the send stream stats, when basic isn't specified (basic=true), we
+# default to printing out the basic stats. Otherwise, printing out the
+# up-to-date stats which are recalculated on calling the function.
 send_stream_stats range_id=1
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false
-(n2,s2):2: is_state_replicate=false has_send_queue=true 
-(n3,s3):3: is_state_replicate=true  has_send_queue=true 
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+0 B / 0 entries
+
+send_stream_stats range_id=1 basic=false
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+3.0 MiB / 3 entries
 
 close_rcs
 ----

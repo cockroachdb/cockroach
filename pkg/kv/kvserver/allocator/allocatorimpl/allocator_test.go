@@ -1943,17 +1943,20 @@ func (r *mockRepl) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(0)
 }
 
-func (r *mockRepl) SendStreamStats() rac2.RangeSendStreamStats {
-	rangeStats := rac2.RangeSendStreamStats{}
+func (r *mockRepl) BasicSendStreamStats() rac2.RangeSendStreamStats {
+	rangeStats := rac2.BasicSendStreamStats{}
 	for i := int32(1); i <= r.replicationFactor; i++ {
-		replStats := rac2.ReplicaSendStreamStats{}
-		if _, ok := r.replsWithSendQueue[roachpb.ReplicaID(i)]; ok {
+		replicaID := roachpb.ReplicaID(i)
+		replStats := rac2.ReplicaSendStreamStats{
+			ReplicaID: replicaID,
+		}
+		if _, ok := r.replsWithSendQueue[replicaID]; ok {
 			replStats.HasSendQueue = true
 		}
-		if _, ok := r.replsNotInStateReplicate[roachpb.ReplicaID(i)]; !ok {
+		if _, ok := r.replsNotInStateReplicate[replicaID]; !ok {
 			replStats.IsStateReplicate = true
 		}
-		rangeStats[roachpb.ReplicaID(i)] = replStats
+		rangeStats = append(rangeStats, replStats)
 	}
 	return rangeStats
 }
