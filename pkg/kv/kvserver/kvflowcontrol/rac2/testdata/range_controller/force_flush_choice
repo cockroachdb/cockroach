@@ -86,6 +86,7 @@ MsgApps sent in pull mode:
  to: 3, lowPri: false entries: [1]
 ++++
 
+
 # Replica 3 transitions to StateSnapshot. Replica 5 is picked to force-flush
 # because of the replicaID tiebreaker (both 4 and 5 have the same send and
 # eval tokens).
@@ -125,6 +126,22 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
 schedule-controller-event-count: 1
 scheduled-replicas: 5
+
+metrics type=send_queue
+----
+kvflowcontrol.send_queue.count                                    : 2
+kvflowcontrol.send_queue.bytes                                    : 2097152
+kvflowcontrol.send_queue.scheduled.force_flush                    : 0
+kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
+kvflowcontrol.send_queue.prevent.count                            : 0
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     : 0
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
+
+metrics type=range_controller
+----
+kvflowcontrol.range_controller.count: 1
+
 
 # Replica 3 transitions back to StateReplicate. Replica 5 is no longer
 # force-flushing.

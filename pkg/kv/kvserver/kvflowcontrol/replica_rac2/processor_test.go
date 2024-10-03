@@ -239,9 +239,8 @@ func (c *testRangeController) InspectRaftMuLocked(ctx context.Context) kvflowins
 	return kvflowinspectpb.Handle{}
 }
 
-func (c *testRangeController) SendStreamStats() rac2.RangeSendStreamStats {
+func (c *testRangeController) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 	fmt.Fprintf(c.b, " RangeController.SendStreamStats\n")
-	return rac2.RangeSendStreamStats{}
 }
 
 func TestProcessorBasic(t *testing.T) {
@@ -515,7 +514,8 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "send-stream-stats":
-				p.SendStreamStats()
+				stats := rac2.RangeSendStreamStats{}
+				p.SendStreamStats(&stats)
 				return builderStr()
 
 			default:

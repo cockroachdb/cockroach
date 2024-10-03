@@ -70,6 +70,17 @@ MsgApps sent in pull mode:
  to: 3, lowPri: false entries: [1]
 ++++
 
+metrics type=send_queue
+----
+kvflowcontrol.send_queue.count                                    : 0
+kvflowcontrol.send_queue.bytes                                    : 0
+kvflowcontrol.send_queue.scheduled.force_flush                    : 0
+kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
+kvflowcontrol.send_queue.prevent.count                            : 0
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     : 0
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
+
 # Set the leaseholder back to replica 1, which is the leader and append
 # another entry. Now replica 2 has a send-queue.
 set_leaseholder range_id=1 replica_id=1
@@ -130,6 +141,17 @@ t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
        send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
 t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
        send reg=+2.0 MiB/+16 MiB ela=+2.0 MiB/+8.0 MiB
+
+metrics type=send_queue
+----
+kvflowcontrol.send_queue.count                                    : 1
+kvflowcontrol.send_queue.bytes                                    : 1048576
+kvflowcontrol.send_queue.scheduled.force_flush                    : 1
+kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
+kvflowcontrol.send_queue.prevent.count                            : 0
+kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
+kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     : 0
+kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
 
 stream_state range_id=1
 ----

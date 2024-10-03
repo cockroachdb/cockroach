@@ -49,9 +49,10 @@ type CandidateReplica interface {
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by
 	// the allocator to make rebalancing decisions for a given range.
 	RangeUsageInfo() allocator.RangeUsageInfo
-	// SendStreamStats returns the range's flow control send stream stats iff the
-	// replica is the raft leader and RACv2 is enabled, otherwise nil.
-	SendStreamStats() rac2.RangeSendStreamStats
+	// BasicSendStreamStats populates the range's flow control send stream stats
+	// into the provided struct, iff the replica is the raft leader and RACv2 is
+	// enabled, otherwise nil.
+	SendStreamStats(stats *rac2.RangeSendStreamStats)
 	// AdminTransferLease transfers the LeaderLease to another replica.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	// Repl returns the underlying replica for this CandidateReplica. It is
