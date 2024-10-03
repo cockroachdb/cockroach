@@ -583,18 +583,23 @@ func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfr
 	post := p.GetLastStagePost()
 
 	if post.RenderExprs != nil {
-		// Check whether each render expression is projected at least once, if
-		// that's not the case, then we must add another processor in order for
-		// each render expression to be evaluated (this is needed for edge cases
-		// like the render expressions resulting in errors).
+		// Check whether each render expression is projected exactly once. If that's
+		// not the case, then we must add another processor in order for each render
+		// expression to be evaluated once (this is needed for edge cases like the
+		// render expressions resulting in errors or other side effects).
 		var addNewProcessor bool
 		if len(columns) < len(post.RenderExprs) {
 			// We're definitely not projecting some render expressions, so we'll
 			// need a new processor.
 			addNewProcessor = true
 		} else {
+			var seenCols intsets.Fast
 			renderUsed := make([]bool, len(post.RenderExprs))
 			for _, c := range columns {
+				if seenCols.Contains(int(c)) {
+					addNewProcessor = true
+				}
+				seenCols.Add(int(c))
 				renderUsed[c] = true
 			}
 			for _, used := range renderUsed {

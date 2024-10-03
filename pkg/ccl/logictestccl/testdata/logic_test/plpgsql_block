@@ -490,7 +490,7 @@ query T noticetrace
 CALL p();
 ----
 NOTICE: outer handler
-NOTICE: inner block 100
+NOTICE: inner block x=100
 
 # A block nested in an exception handler can have its own exception handler.
 statement ok
@@ -519,7 +519,7 @@ CALL p();
 ----
 NOTICE: outer handler
 NOTICE: inner block
-NOTICE: inner handler 100
+NOTICE: inner handler x=100
 
 # A block can be nested inside another block that has an exception handler.
 statement ok

@@ -266,11 +266,9 @@ func (ef *execFactory) ConstructSimpleProject(
 func constructSimpleProjectForPlanNode(
 	n planNode, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// If the top node is already a renderNode, just rearrange the columns. But
-	// we don't want to duplicate a rendering expression (in case it is expensive
-	// to compute or has side-effects); so if we have duplicates we avoid this
-	// optimization (and add a new renderNode).
-	if r, ok := n.(*renderNode); ok && !hasDuplicates(cols) {
+	// If the top node is already a renderNode, we can just rearrange the columns
+	// as an optimization if each render expression is projected exactly once.
+	if r, ok := n.(*renderNode); ok && canRearrangeRenders(cols, r.render) {
 		oldCols, oldRenders := r.columns, r.render
 		r.columns = make(colinfo.ResultColumns, len(cols))
 		r.render = make([]tree.TypedExpr, len(cols))
@@ -310,15 +308,40 @@ func constructSimpleProjectForPlanNode(
 	return rb.res, nil
 }
 
-func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
-	var set intsets.Fast
-	for _, c := range cols {
-		if set.Contains(int(c)) {
-			return true
-		}
-		set.Add(int(c))
+// canRearrangeRenders returns true if the renderNode with the given columns and
+// render expressions can be combined with a parent renderNode. This is possible
+// if there are no duplicates in the columns, and every render expression is
+// referenced at least once. In other words, it is possible when every render
+// expression is projected exactly once. This ensures that no side effects are
+// lost or duplicated, even if the result of an expression isn't needed (or is
+// needed more than once).
+func canRearrangeRenders(cols []exec.NodeColumnOrdinal, render tree.TypedExprs) bool {
+	// Check whether each render expression is projected at least once, if
+	// that's not the case, then we must add another processor in order for
+	// each render expression to be evaluated (this is needed for edge cases
+	// like the render expressions resulting in errors).
+	//
+	// See also PhysicalPlan.AddProjection for a similar case.
+	if len(cols) < len(render) {
+		// There is no way for each of the render expressions to be referenced.
+		return false
 	}
-	return false
+	var colsSeen intsets.Fast
+	renderUsed := make([]bool, len(render))
+	for _, c := range cols {
+		if colsSeen.Contains(int(c)) {
+			return false
+		}
+		colsSeen.Add(int(c))
+		renderUsed[c] = true
+	}
+	for _, used := range renderUsed {
+		// Need to add a new renderNode if at least one render is not projected.
+		if !used {
+			return false
+		}
+	}
+	return true
 }
 
 // ConstructSerializingProject is part of the exec.Factory interface.
