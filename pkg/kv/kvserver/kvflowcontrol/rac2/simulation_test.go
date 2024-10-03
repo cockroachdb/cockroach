@@ -463,8 +463,10 @@ func (s *simulator) init(t *testing.T, ctx context.Context) {
 	s.tsdb = asciitsdb.New(t, s.registry)
 	s.registry.AddMetricStruct(s.state.evalMetrics)
 	s.registry.AddMetricStruct(s.state.ssTokenCounter.Metrics())
+	s.registry.AddMetricStruct(s.state.rcMetrics)
 	s.tsdb.Register(s.state.evalMetrics)
 	s.tsdb.Register(s.state.ssTokenCounter.Metrics())
+	s.tsdb.Register(s.state.rcMetrics)
 }
 
 func (s *simulator) timeline(tl timeline) {
@@ -679,13 +681,13 @@ func (st *streamsTicker) tick(ctx context.Context, t time.Time) {
 		if waitingRequest.admit() {
 			// Request admitted; proceed with token deductions.
 			if st.deductionDelay == 0 {
-				st.evalTC.adjust(ctx, wc, st.delta, false /* disconnect */)
-				st.sendTC.adjust(ctx, wc, st.delta, false /* disconnect */)
+				st.evalTC.adjust(ctx, wc, st.delta, AdjNormal)
+				st.sendTC.adjust(ctx, wc, st.delta, AdjNormal)
 			} else {
 				future := t.Add(testingTick * time.Duration(st.deductionDelay))
 				st.deduct[future] = append(st.deduct[future], func() {
-					st.evalTC.adjust(ctx, wc, st.delta, false /* disconnect */)
-					st.sendTC.adjust(ctx, wc, st.delta, false /* disconnect */)
+					st.evalTC.adjust(ctx, wc, st.delta, AdjNormal)
+					st.sendTC.adjust(ctx, wc, st.delta, AdjNormal)
 				})
 			}
 			delete(st.waitingRequests, key)
@@ -706,8 +708,8 @@ func (st *streamsTicker) tick(ctx context.Context, t time.Time) {
 
 	if st.delta >= 0 {
 		// This timeline is just returning tokens.
-		st.evalTC.adjust(ctx, wc, st.delta, false /* disconnect */)
-		st.sendTC.adjust(ctx, wc, st.delta, false /* disconnect */)
+		st.evalTC.adjust(ctx, wc, st.delta, AdjNormal)
+		st.sendTC.adjust(ctx, wc, st.delta, AdjNormal)
 		return
 	}
 
@@ -719,13 +721,13 @@ func (st *streamsTicker) tick(ctx context.Context, t time.Time) {
 			// are deducted immediately regardless of their availability. When the
 			// send queue is added, we should extend this test to accurately exercise
 			// the send queue.
-			st.evalTC.adjust(ctx, wc, st.delta, false /* disconnect */)
-			st.sendTC.adjust(ctx, wc, st.delta, false /* disconnect */)
+			st.evalTC.adjust(ctx, wc, st.delta, AdjNormal)
+			st.sendTC.adjust(ctx, wc, st.delta, AdjNormal)
 		} else {
 			future := t.Add(testingTick * time.Duration(st.deductionDelay))
 			st.deduct[future] = append(st.deduct[future], func() {
-				st.evalTC.adjust(ctx, wc, st.delta, false /* disconnect */)
-				st.sendTC.adjust(ctx, wc, st.delta, false /* disconnect */)
+				st.evalTC.adjust(ctx, wc, st.delta, AdjNormal)
+				st.sendTC.adjust(ctx, wc, st.delta, AdjNormal)
 			})
 		}
 		return

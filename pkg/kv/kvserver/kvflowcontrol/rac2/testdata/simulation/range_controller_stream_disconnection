@@ -44,11 +44,11 @@ simulate
 # which will now get admitted. One thing we could do is to try and observe
 # available tokens again for still-connected streams.
 plot t=[30s,40s)
-kvflowcontrol.streams.eval.regular.blocked_count            unit=streams
-kvflowcontrol.tokens.eval.regular.available                 unit=MiB
-kvflowcontrol.eval_wait.elastic.requests.bypassed           unit=reqs/s rate=true
-kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
-kvflowcontrol.tokens.{eval,send}.regular.disconnected       unit=MiB
+kvflowcontrol.streams.eval.regular.blocked_count                   unit=streams
+kvflowcontrol.tokens.eval.regular.available                        unit=MiB
+kvflowcontrol.eval_wait.elastic.requests.bypassed                  unit=reqs/s rate=true
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting}        unit=reqs/s rate=true
+kvflowcontrol.tokens.{eval,send}.regular.returned.disconnect       unit=MiB
 ----
 ----
  1.0 ┤            ╭╮
@@ -112,23 +112,23 @@ kvflowcontrol.tokens.{eval,send}.regular.disconnected       unit=MiB
         rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
 
 
- 16.1 ┤                   ╭───────────────────
- 15.0 ┤                   │
- 14.0 ┤                   │
- 12.9 ┤                   │
- 11.8 ┤                   │
- 10.7 ┤                   │
-  9.7 ┤                   │
-  8.6 ┤                   │
-  7.5 ┤                   │
-  6.4 ┤                   │
-  5.4 ┤                   │
-  4.3 ┤                   │
-  3.2 ┤                   │
-  2.1 ┤                   │
-  1.1 ┤                   │
-  0.0 ┼───────────────────╯
-       tokens.{eval,send}.regular.disconnected (MiB)
+ 113 ┤                               ╭───────
+ 106 ┤                   ╭───────────╯
+  98 ┤                   │
+  91 ┤                   │
+  83 ┤      ╭────────────╯
+  76 ┼──────╯
+  68 ┤
+  61 ┤
+  53 ┤
+  45 ┤
+  38 ┤
+  30 ┤
+  23 ┤
+  15 ┤                   ╭───────────────────
+   8 ┤                   │
+   0 ┼───────────────────╯
+      tokens.{eval,send}.regular.returned.disconnect (MiB)
 ----
 ----
 
