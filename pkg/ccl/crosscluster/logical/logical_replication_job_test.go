@@ -1973,6 +1973,17 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
 
+	// UniqueWithoutIndex constraints are not allowed.
+	for _, db := range []*sqlutils.SQLRunner{dbA, dbB} {
+		db.Exec(t, "SET experimental_enable_unique_without_index_constraints = true")
+		db.Exec(t, "CREATE TABLE tab_with_uwi (pk INT PRIMARY KEY, v INT UNIQUE WITHOUT INDEX)")
+		db.Exec(t, fmt.Sprintf("ALTER TABLE %s %s", "tab_with_uwi", lwwColumnAdd))
+	}
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: table tab_with_uwi has UNIQUE WITHOUT INDEX constraints: unique_v",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_uwi ON $1 INTO TABLE tab_with_uwi", dbBURL.String(),
+	)
+
 	// Check for mismatched numbers of columns.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
 	dbA.ExpectErr(t,
