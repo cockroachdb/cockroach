@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -26,20 +27,25 @@ func TestNetworkConnectivity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	numNodes := 3
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110024),
-		},
-
 		ReplicationMode: base.ReplicationManual,
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	// TODO(#110024): grant the appropriate capability to the test
-	// tenant before the connectivity endpoint can be accessed. See
-	// example in `TestNodeStatusResponse`.
-
 	s0 := testCluster.Server(0)
+
+	if s0.TenantController().StartedDefaultTestTenant() {
+		_, err := s0.SystemLayer().SQLConn(t).Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_debug_process=true`,
+			serverutils.TestTenantID().ToUint64(),
+		)
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, s0, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanDebugProcess: "true",
+		}, "")
+	}
+
 	ts := s0.ApplicationLayer()
 
 	var resp serverpb.NetworkConnectivityResponse
