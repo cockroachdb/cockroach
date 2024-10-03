@@ -815,9 +815,14 @@ inspect
  Replica.RaftMuAssertHeld
  RangeController.InspectRaftMuLocked
 
-send-stream-stats
+send-stream-stats basic=true
 ----
- RangeController.SendStreamStats
+ RangeController.BasicSendStreamStats
+
+send-stream-stats basic=false
+----
+ Replica.RaftMuAssertHeld
+ RangeController.SendStreamStatsRaftMuLocked
 
 # Transition to follower. In this case, the leader is not even known.
 set-raft-state term=51 leader=0

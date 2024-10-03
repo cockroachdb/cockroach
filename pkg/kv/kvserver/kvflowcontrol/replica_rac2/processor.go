@@ -402,11 +402,23 @@ type Processor interface {
 	// underlying range controller. It is used to power /inspectz-style debugging
 	// pages.
 	InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool)
-
-	// SendStreamStats returns the stats for the replica send streams It is only
-	// populated on the leader. The stats may be used to inform placement
-	// decisions pertaining to the range.
-	SendStreamStats() rac2.RangeSendStreamStats
+	// BasicSendStreamStats returns the stats for the replica send streams that
+	// belong to the range controller. It is only populated on the leader. The
+	// stats may be used to inform placement decisions pertaining to the range.
+	//
+	// NOTE: The send queue size and count are populated but may be stale. To get
+	// an up-to-date version, use SendStreamStatsRaftMuLocked, which is more
+	// expensive. The last SendStreamStatsRaftMuLocked call send queue stats are
+	// used here in conjunction with fresh stats for IsStateReplicate and
+	// HasSendQueue.
+	BasicSendStreamStats() rac2.RangeSendStreamStats
+	// SendStreamStatsRaftMuLocked returns the stats for the replica send streams
+	// that belong to the range controller. It is only populated on the leader.
+	// This method is more expensive than BasicSendStreamStats, as it requires
+	// acquiring the raftMu. Suitable for metrics.
+	//
+	// Requires replica.raftMu to be held.
+	SendStreamStatsRaftMuLocked() rac2.RangeSendStreamStats
 }
 
 // processorImpl implements Processor.
@@ -1198,14 +1210,25 @@ func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectp
 	return p.leader.rc.InspectRaftMuLocked(ctx), true
 }
 
-// SendStreamStats implements Processor.
-func (p *processorImpl) SendStreamStats() rac2.RangeSendStreamStats {
+// SendStreamStatsRaftMuLocked implements Processor.
+func (p *processorImpl) SendStreamStatsRaftMuLocked() rac2.RangeSendStreamStats {
+	p.opts.Replica.RaftMuAssertHeld()
 	p.leader.rcReferenceUpdateMu.RLock()
 	defer p.leader.rcReferenceUpdateMu.RUnlock()
 	if p.leader.rc == nil {
 		return nil
 	}
-	return p.leader.rc.SendStreamStats()
+	return p.leader.rc.SendStreamStatsRaftMuLocked()
+}
+
+// SendStreamStats implements Processor.
+func (p *processorImpl) BasicSendStreamStats() rac2.RangeSendStreamStats {
+	p.leader.rcReferenceUpdateMu.RLock()
+	defer p.leader.rcReferenceUpdateMu.RUnlock()
+	if p.leader.rc == nil {
+		return nil
+	}
+	return p.leader.rc.BasicSendStreamStats()
 }
 
 // RangeControllerFactoryImpl implements the RangeControllerFactory interface.
@@ -1217,6 +1240,7 @@ var _ RangeControllerFactory = RangeControllerFactoryImpl{}
 type RangeControllerFactoryImpl struct {
 	clock                      *hlc.Clock
 	evalWaitMetrics            *rac2.EvalWaitMetrics
+	rangeControllerMetrics     *rac2.RangeControllerMetrics
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
 	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 	scheduler                  rac2.Scheduler
@@ -1227,6 +1251,7 @@ type RangeControllerFactoryImpl struct {
 func NewRangeControllerFactoryImpl(
 	clock *hlc.Clock,
 	evalWaitMetrics *rac2.EvalWaitMetrics,
+	rangeControllerMetrics *rac2.RangeControllerMetrics,
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
 	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
 	scheduler rac2.Scheduler,
@@ -1236,6 +1261,7 @@ func NewRangeControllerFactoryImpl(
 	return RangeControllerFactoryImpl{
 		clock:                      clock,
 		evalWaitMetrics:            evalWaitMetrics,
+		rangeControllerMetrics:     rangeControllerMetrics,
 		streamTokenCounterProvider: streamTokenCounterProvider,
 		closeTimerScheduler:        closeTimerScheduler,
 		scheduler:                  scheduler,
@@ -1251,18 +1277,19 @@ func (f RangeControllerFactoryImpl) New(
 	return rac2.NewRangeController(
 		ctx,
 		rac2.RangeControllerOptions{
-			RangeID:             state.rangeID,
-			TenantID:            state.tenantID,
-			LocalReplicaID:      state.localReplicaID,
-			SSTokenCounter:      f.streamTokenCounterProvider,
-			RaftInterface:       state.raftInterface,
-			MsgAppSender:        state.msgAppSender,
-			Clock:               f.clock,
-			CloseTimerScheduler: f.closeTimerScheduler,
-			Scheduler:           f.scheduler,
-			SendTokenWatcher:    f.sendTokenWatcher,
-			EvalWaitMetrics:     f.evalWaitMetrics,
-			Knobs:               f.knobs,
+			RangeID:                state.rangeID,
+			TenantID:               state.tenantID,
+			LocalReplicaID:         state.localReplicaID,
+			SSTokenCounter:         f.streamTokenCounterProvider,
+			RaftInterface:          state.raftInterface,
+			MsgAppSender:           state.msgAppSender,
+			Clock:                  f.clock,
+			CloseTimerScheduler:    f.closeTimerScheduler,
+			Scheduler:              f.scheduler,
+			SendTokenWatcher:       f.sendTokenWatcher,
+			EvalWaitMetrics:        f.evalWaitMetrics,
+			RangeControllerMetrics: f.rangeControllerMetrics,
+			Knobs:                  f.knobs,
 		},
 		rac2.RangeControllerInitState{
 			ReplicaSet:    state.replicaSet,
