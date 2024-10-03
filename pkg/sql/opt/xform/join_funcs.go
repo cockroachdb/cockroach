@@ -480,6 +480,18 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols().Difference(projectionCols)
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
+		//var requiredCols opt.ColSet
+		//requiredCols.UnionWith(t.Relational().OutputCols)
+		//requiredCols.UnionWith(t.AllLookupFilters.OuterCols())
+		//requiredCols.UnionWith(t.On.OuterCols())
+		//requiredCols.UnionWith(t.KeyCols.ToSet())
+		//requiredCols.UnionWith(t.LookupExpr.OuterCols())
+		//requiredCols.UnionWith(t.RemoteLookupExpr.OuterCols())
+		//idx := m.Metadata().Table(t.Table).Index(t.Index)
+		//for i := range t.KeyCols {
+		//	requiredCols.Add(t.Table.ColumnID(idx.Column(i).Ordinal()))
+		//}
+
 		// At this point the filter may have been reduced by partial index
 		// predicate implication and by removing parts of the filter that are
 		// represented by the key columns. If there are any outer columns of the
