@@ -52,22 +52,17 @@ type PreparedStatement struct {
 
 	// BaseMemo is the memoized data structure constructed by the cost-based
 	// optimizer during prepare of a SQL statement.
-	//
-	// It may be a fully-optimized memo if it contains an "ideal generic plan"
-	// that is guaranteed to be optimal across all executions of the prepared
-	// statement. Ideal generic plans are generated when the statement has no
-	// placeholders nor fold-able stable expressions, or when the placeholder
-	// fast-path is utilized.
-	//
-	// If it is not an ideal generic plan, it is an unoptimized, normalized
-	// memo that is used as a starting point for optimization of custom plans.
 	BaseMemo *memo.Memo
 
 	// GenericMemo, if present, is a fully-optimized memo that can be executed
 	// as-is.
-	// TODO(mgartner): Put all fully-optimized plans in the GenericMemo field to
-	// reduce confusion.
 	GenericMemo *memo.Memo
+
+	// IdealGenericPlan is true if GenericMemo is guaranteed to be optimal
+	// across all executions of the prepared statement. Ideal generic plans are
+	// generated when the statement has no placeholders nor fold-able stable
+	// expressions, or when the placeholder fast-path is utilized.
+	IdealGenericPlan bool
 
 	// Costs tracks the costs of previously optimized custom and generic plans.
 	Costs planCosts
