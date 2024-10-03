@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 CLUSTER_NAME=cct-232
 PG_URL_N1=$(./roachprod pgurl $CLUSTER_NAME:1 --secure --cluster=application --external | sed s/\'//g)
 PGURLS=$(./roachprod pgurl cct-232 --external --secure --cluster application | sed s/\'//g)

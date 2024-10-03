@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2020 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 CERTS_DIR=${CERTS_DIR:-/certs}
 crdb=$1
 trap "set -x; cat /tmp/server_pid | xargs kill -9 || true" EXIT HUP
