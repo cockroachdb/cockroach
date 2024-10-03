@@ -1209,53 +1209,24 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 		return nil
 	}
 
-	l.Printf("fetching logs")
 	c.status("fetching logs")
 
-	// Don't hang forever if we can't fetch the logs.
-	return timeutil.RunWithTimeout(ctx, "fetch logs", 5*time.Minute, func(ctx context.Context) error {
-		// Find all log directories, which might include logs for
-		// external-process virtual clusters.
-		listLogDirsCmd := "find logs* -maxdepth 0 -type d"
-		results, err := c.RunWithDetails(ctx, l, option.WithNodes(c.All()), listLogDirsCmd)
-		if err != nil {
-			return err
+	err := roachprod.FetchLogs(ctx, l, c.name, c.t.ArtifactsDir(), 5*time.Minute)
+
+	var logFileFull string
+	if l.File != nil {
+		logFileFull = l.File.Name()
+	}
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			l.Printf("(note: incoming context was canceled: %s)", err)
+			return ctxErr
 		}
 
-		logDirs := make(map[string]struct{})
-		for _, r := range results {
-			if r.Err != nil {
-				l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
-			}
-
-			for _, logDir := range strings.Fields(r.Stdout) {
-				logDirs[logDir] = struct{}{}
-			}
-		}
-
-		for logDir := range logDirs {
-			path := filepath.Join(c.t.ArtifactsDir(), logDir, "unredacted")
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-				return err
-			}
-
-			if err := c.Get(ctx, c.l, logDir /* src */, path /* dest */); err != nil {
-				l.Printf("failed to fetch log directory %s: %v", logDir, err)
-				if ctx.Err() != nil {
-					return errors.Wrap(err, "cluster.FetchLogs")
-				}
-			}
-		}
-
-		if err := c.RunE(ctx, option.WithNodes(c.All()), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
-			l.Printf("failed to redact logs: %v", err)
-			if ctx.Err() != nil {
-				return err
-			}
-		}
-		dest := filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log")
-		return errors.Wrap(c.Get(ctx, c.l, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
-	})
+		l.Printf("> result: %s", err)
+		createFailedFile(logFileFull)
+	}
+	return err
 }
 
 // saveDiskUsageToLogsDir collects a summary of the disk usage to logs/diskusage.txt on each node.
