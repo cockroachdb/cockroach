@@ -38,24 +38,6 @@ import (
 
 // Various copyright file headers we lint on.
 var (
-	bslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-`)
-	cclHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License \(the "License"\); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-`)
 	cslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
@@ -330,20 +312,15 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isCCL := strings.Contains(filename, "ccl/")
 			isApache := strings.HasPrefix(filename, "obsservice")
 			switch {
-			case isCCL:
-				if cclHeader.Find(data) == nil && cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected CCL or CSL license header in %s", filename)
-				}
 			case isApache:
 				if apacheHeader.Find(data) == nil {
 					t.Errorf("did not find expected Apache license header in %s", filename)
 				}
 			default:
-				if bslHeader.Find(data) == nil && cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected BSL or CSL license header in %s", filename)
+				if cslHeader.Find(data) == nil {
+					t.Errorf("did not find expected CSL license header in %s", filename)
 				}
 			}
 		}); err != nil {
@@ -422,11 +399,11 @@ func TestLint(t *testing.T) {
 				// new code, and is moved from an existing etcd forked file, the
 				// author may consider it as modified; the linter is liberal enough
 				// to allow either of these.
-				assert.True(t, (bslHeader.Find(data) != nil || cslHeader.Find(data) != nil) ||
+				assert.True(t, (cslHeader.Find(data) != nil) ||
 					(etcdApacheHeader.Find(data) != nil && cockroachModifiedCopyright.Find(data) != nil),
-					"did not find expected a) Cockroach BSL license header, b) CockroachDB "+
-						"Software License header or c) Apache license header and Cockroach "+
-						"copyright header in %s", filename)
+					"did not find expected a) CockroachDB Software License header or b) "+
+						"Apache license header and Cockroach copyright header in %s",
+					filename)
 			} else {
 				assert.NotNilf(t, etcdApacheHeader.Find(data),
 					"did not find expected Apache license header in %s", filename)
