@@ -2592,7 +2592,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 
 // SendStreamStats returns the range's flow control send stream stats iff the
 // replica is the raft leader and RACv2 is enabled, otherwise nil.
-func (r *Replica) SendStreamStats() rac2.RangeSendStreamStats {
+func (r *Replica) SendStreamStats() *rac2.RangeSendStreamStats {
 	if r.flowControlV2 == nil {
 		return nil
 	}

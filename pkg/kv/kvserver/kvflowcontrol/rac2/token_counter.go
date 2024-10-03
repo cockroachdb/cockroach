@@ -284,7 +284,10 @@ func (t *tokenCounter) TokensAvailable(
 // token count is available, partial tokens are returned corresponding to this
 // partial amount.
 func (t *tokenCounter) TryDeduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context,
+	wc admissionpb.WorkClass,
+	tokens kvflowcontrol.Tokens,
+	flags TokenAdjustFlags,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
 	t.mu.Lock()
@@ -296,7 +299,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, false /* disconnect */)
+	t.adjustLocked(ctx, wc, -adjust, now, flags)
 	return adjust
 }
 
@@ -304,9 +307,12 @@ func (t *tokenCounter) TryDeduct(
 // there are not enough available tokens, the token counter will go into debt
 // (negative available count) and still issue the requested number of tokens.
 func (t *tokenCounter) Deduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context,
+	wc admissionpb.WorkClass,
+	tokens kvflowcontrol.Tokens,
+	flags TokenAdjustFlags,
 ) {
-	t.adjust(ctx, wc, -tokens, false /* disconnect */)
+	t.adjust(ctx, wc, -tokens, flags)
 }
 
 // Return returns flow tokens for the given work class. When disconnect is
@@ -314,9 +320,12 @@ func (t *tokenCounter) Deduct(
 // specific request, rather the leader returning tracked tokens for a replica
 // it doesn't expect to hear from again.
 func (t *tokenCounter) Return(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, disconnect bool,
+	ctx context.Context,
+	wc admissionpb.WorkClass,
+	tokens kvflowcontrol.Tokens,
+	flags TokenAdjustFlags,
 ) {
-	t.adjust(ctx, wc, tokens, disconnect)
+	t.adjust(ctx, wc, tokens, flags)
 }
 
 // waitHandle is a handle for waiting for tokens to become available from a
@@ -486,16 +495,46 @@ func WaitForEval(
 	return WaitSuccess, scratch
 }
 
+// TokenAdjustFlags are used to inform token adjustments about the context in
+// which they are being made. Currently used for observability.
+type TokenAdjustFlags int
+
+const (
+	AdjNormal TokenAdjustFlags = 0
+	// AdjDisconnect is set when (regular|elastic) tokens are being returned without
+	// corresponding admission. This is used to track tokens that are being
+	// returned for a replica that is not expected to reply anymore.
+	AdjDisconnect = 1 << (iota - 1) // 1 << 0: 0000 0001
+	// AdjForceFlush is set when elastic send tokens are being deducted without
+	// waiting for them to be available.
+	AdjForceFlush
+	// AdjPrevention is set when not enough (regular|elastic) send tokens are
+	// available but being deducted anyway (negative balance) to prevent a delay
+	// in quorum.
+	AdjPrevention
+)
+
+func (a TokenAdjustFlags) Set(f TokenAdjustFlags) TokenAdjustFlags {
+	return a | f
+}
+
+func (a TokenAdjustFlags) Has(f TokenAdjustFlags) bool {
+	return a&f != 0
+}
+
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
 func (t *tokenCounter) adjust(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, disconnect bool,
+	ctx context.Context,
+	class admissionpb.WorkClass,
+	delta kvflowcontrol.Tokens,
+	flags TokenAdjustFlags,
 ) {
 	now := t.clock.PhysicalTime()
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, disconnect)
+		t.adjustLocked(ctx, class, delta, now, flags)
 	}()
 
 	if log.V(2) {
@@ -514,7 +553,7 @@ func (t *tokenCounter) adjustLocked(
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
 	now time.Time,
-	disconnect bool,
+	flags TokenAdjustFlags,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -534,7 +573,7 @@ func (t *tokenCounter) adjustLocked(
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
 	if adjustment.regular != 0 || adjustment.elastic != 0 {
-		t.metrics.onTokenAdjustment(adjustment, disconnect)
+		t.metrics.onTokenAdjustment(adjustment, flags)
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
