@@ -2178,82 +2178,100 @@ func TestLeaderIncreaseNext(t *testing.T) {
 	}
 }
 
-func TestSendAppendForProgressProbe(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testOptions := emptyTestConfigModifierOpt()
-			if !storeLivenessEnabled {
-				// TODO(ibrahim): allow the test option to take a boolean to
-				// enable/disable fortification. This way we can refactor the tests and
-				// make them less verbose.
-				testOptions = withFortificationDisabled()
-			}
+func TestSendAppendForProgressProbeStoreLivenessDisabled(t *testing.T) {
+	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+		withFortificationDisabled())
 
-			r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-				testOptions)
+	r.becomeCandidate()
+	r.becomeLeader()
 
-			r.becomeCandidate()
-			r.becomeLeader()
+	r.readMessages()
+	r.trk.Progress(2).BecomeProbe()
 
-			r.readMessages()
-			r.trk.Progress(2).BecomeProbe()
-
-			// each round is a heartbeat
-			for i := 0; i < 3; i++ {
-				if i == 0 {
-					// we expect that raft will only send out one msgAPP on the first
-					// loop. After that, the follower is paused until a heartbeat response
-					// is received.
-					mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
-					r.maybeSendAppend(2)
-					msg := r.readMessages()
-					assert.Len(t, msg, 1)
-					assert.Zero(t, msg[0].Index)
-				}
-
-				assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
-				for j := 0; j < 10; j++ {
-					mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
-					r.maybeSendAppend(2)
-					assert.Empty(t, r.readMessages())
-				}
-
-				// do a heartbeat
-				for j := 0; j < r.heartbeatTimeout; j++ {
-					r.tick()
-				}
-				assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
-
-				// consume the heartbeat, and the MsgApp if storeliveness is enabled
-				msg := r.readMessages()
-				if storeLivenessEnabled {
-					assert.Len(t, msg, 3)
-					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-					assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
-					assert.Equal(t, pb.MsgApp, msg[2].Type)
-				} else {
-					assert.Len(t, msg, 1)
-					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-				}
-			}
-
-			// The next heartbeat timeout will allow another message to be sent.
-			for ticks := r.heartbeatTimeout; ticks > 0; ticks-- {
-				r.tick()
-			}
+	// each round is a heartbeat
+	for i := 0; i < 3; i++ {
+		if i == 0 {
+			// we expect that raft will only send out one msgAPP on the first
+			// loop. After that, the follower is paused until a heartbeat response
+			// is received.
+			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			r.maybeSendAppend(2)
 			msg := r.readMessages()
-			if storeLivenessEnabled {
-				assert.Len(t, msg, 3)
-				assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-				assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
-				assert.Equal(t, pb.MsgApp, msg[2].Type)
-				assert.Zero(t, msg[1].Index)
-			} else {
-				assert.Len(t, msg, 1)
-				assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-			}
-			assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
-		})
+			assert.Len(t, msg, 1)
+			assert.Zero(t, msg[0].Index)
+		}
+
+		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+		for j := 0; j < 10; j++ {
+			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			r.maybeSendAppend(2)
+			assert.Empty(t, r.readMessages())
+		}
+
+		// do a heartbeat
+		for j := 0; j < r.heartbeatTimeout; j++ {
+			r.tick()
+		}
+		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+
+		// No MsgApp gets sent since we haven't received a MsgHeartbeatResp.
+		msg := r.readMessages()
+		assert.Len(t, msg, 1)
+		assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+	}
+
+	// a MsgHeartbeatResp will allow another message to be sent
+	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+	msg := r.readMessages()
+	assert.Len(t, msg, 1)
+	assert.Equal(t, msg[0].Type, pb.MsgApp)
+	assert.Zero(t, msg[0].Index)
+	assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+}
+
+func TestSendAppendForProgressProbeStoreLivenessEnabled(t *testing.T) {
+	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
+
+	r.becomeCandidate()
+	r.becomeLeader()
+
+	r.readMessages()
+	r.trk.Progress(2).BecomeProbe()
+
+	// each round is a heartbeat
+	for i := 0; i < 3; i++ {
+		if i == 0 {
+			// we expect that raft will only send out one msgAPP on the first
+			// loop. After that, the follower is paused until the next heartbeat
+			// timeout.
+			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			r.maybeSendAppend(2)
+			msg := r.readMessages()
+			assert.Len(t, msg, 1)
+			assert.Zero(t, msg[0].Index)
+		}
+
+		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+		for j := 0; j < 10; j++ {
+			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
+			r.maybeSendAppend(2)
+			assert.Empty(t, r.readMessages())
+		}
+
+		// The next heartbeat timeout will allow another message to be sent.
+		for j := 0; j < r.heartbeatTimeout; j++ {
+			r.tick()
+		}
+		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+
+		msg := r.readMessages()
+		assert.Len(t, msg, 3)
+		assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
+		assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
+		assert.Equal(t, pb.MsgApp, msg[2].Type)
+		assert.Zero(t, msg[2].Index)
+		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
+	}
 }
 
 func TestSendAppendForProgressReplicate(t *testing.T) {
