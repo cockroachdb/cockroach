@@ -42,10 +42,6 @@ const (
 	// without wrapping quotes.
 	EncBareIdentifiers
 
-	// EncNoDoubleEscapeQuotes indicates that backslashes will not be
-	// escaped when they are used as escape quotes.
-	EncNoDoubleEscapeQuotes
-
 	// EncFirstFreeFlagBit needs to remain unused; it is used as base
 	// bit offset for tree.FmtFlags.
 	EncFirstFreeFlagBit
@@ -144,7 +140,6 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	start := 0
 	escapedString := false
 	bareStrings := flags.HasFlags(EncBareStrings)
-	noDoubleEscapeQuotes := flags.HasFlags(EncNoDoubleEscapeQuotes)
 	// Loop through each unicode code point.
 	for i, r := range in {
 		if i < start {
@@ -164,9 +159,6 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 		if !escapedString {
 			buf.WriteString("e'") // begin e'xxx' string
 			escapedString = true
-		}
-		if noDoubleEscapeQuotes && i+1 < len(in) && in[i:i+2] == "\\\"" {
-			continue
 		}
 		buf.WriteString(in[start:i])
 
