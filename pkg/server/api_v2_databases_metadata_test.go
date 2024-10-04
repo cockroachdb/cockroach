@@ -19,14 +19,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
 	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +49,16 @@ func descendingComparator[T any](comparator func(first, second T) int) func(firs
 func TestGetTableMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				TableMetadata: &tablemetadatacache_util.TestingKnobs{
+					// This test populates system.table_metadata directly.
+					TableMetadataUpdater: &noopTableMetadataUpdater{},
+				},
+			},
+		},
+	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 	conn := testCluster.ServerConn(0)
@@ -73,7 +86,7 @@ func TestGetTableMetadata(t *testing.T) {
 		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
 	})
 	t.Run("unknown db id", func(t *testing.T) {
-		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/?dbId=1000").String(), http.MethodGet)
+		mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/?dbId=1000").String(), http.MethodGet)
 		require.Len(t, mdResp.Results, 0)
 		require.Equal(t, int64(0), mdResp.PaginationInfo.TotalResults)
 	})
@@ -84,14 +97,14 @@ func TestGetTableMetadata(t *testing.T) {
 
 		// Assert that the test user gets an empty response for db 1
 		uri1 := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d", db1Id)
-		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		mdResp := makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
 
 		require.Empty(t, mdResp.Results)
 		require.Zero(t, mdResp.PaginationInfo.TotalResults)
 
 		// Assert that the test user gets an empty response for db 2
 		uri2 := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d", db2Id)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
 
 		require.Empty(t, mdResp.Results)
 		require.Zero(t, mdResp.PaginationInfo.TotalResults)
@@ -99,13 +112,13 @@ func TestGetTableMetadata(t *testing.T) {
 		// Grant connect access to DB 1
 		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
 
 		// Assert that user now see results for db1
 		require.NotEmpty(t, mdResp.Results)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
 		// Assert that the test user gets an empty response for db 2
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
 
 		require.Empty(t, mdResp.Results)
 		require.Zero(t, mdResp.PaginationInfo.TotalResults)
@@ -113,7 +126,7 @@ func TestGetTableMetadata(t *testing.T) {
 		// Revoke connect access from db1
 		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
 
 		// Assert that user no longer sees results from db1
 		require.Empty(t, mdResp.Results)
@@ -122,13 +135,13 @@ func TestGetTableMetadata(t *testing.T) {
 		// Revoke connect access from db1
 		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
 
 		// Assert that user now see results for db1
 		require.NotEmpty(t, mdResp.Results)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
 		// Assert that user now see results for db1
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
+		mdResp = makeApiRequest[tableMetadataResponse](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
 
 		require.NotEmpty(t, mdResp.Results)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
@@ -211,7 +224,7 @@ func TestGetTableMetadata(t *testing.T) {
 		for _, tt := range sortTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/table_metadata/%s&dbId=%d", tt.queryString, tt.dbId)
-				mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 				require.NotEmpty(t, mdResp.Results)
 				require.True(t, slices.IsSortedFunc(mdResp.Results, tt.comparator))
 				for _, tbmd := range mdResp.Results {
@@ -242,7 +255,7 @@ func TestGetTableMetadata(t *testing.T) {
 		for _, tt := range tableNameTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&name=%s", tt.dbId, tt.nameFilter)
-				mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 				require.Equal(t, int64(tt.expectedCount), mdResp.PaginationInfo.TotalResults)
 			})
@@ -263,7 +276,7 @@ func TestGetTableMetadata(t *testing.T) {
 		for _, tt := range pageTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/table_metadata/%s&dbId=%d", tt.queryString, db1Id)
-				mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 				require.NotEmpty(t, mdResp.Results)
 				require.LessOrEqual(t, len(mdResp.Results), tt.expectedPageSize)
 				require.Equal(t, tt.expectedPageSize, mdResp.PaginationInfo.PageSize)
@@ -273,14 +286,14 @@ func TestGetTableMetadata(t *testing.T) {
 
 		t.Run("large page num", func(t *testing.T) {
 			uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&pageSize=1&pageNum=100", db1Id)
-			mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+			mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 			require.Empty(t, mdResp.Results)
 		})
 	})
 	t.Run("filter store id", func(t *testing.T) {
 		storeIds := []int64{1, 2}
 		uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&storeId=%d&storeId=%d", db1Id, storeIds[0], storeIds[1])
-		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.NotEmpty(t, mdResp.Results)
 		for _, tmdr := range mdResp.Results {
 			require.Condition(t, func() (success bool) {
@@ -314,7 +327,7 @@ func TestGetTableMetadata(t *testing.T) {
 	})
 	t.Run("no views", func(t *testing.T) {
 		uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&name=%s", db1Id, "view")
-		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp := makeApiRequest[tableMetadataResponse](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		require.Equal(t, int64(0), mdResp.PaginationInfo.TotalResults)
 	})
@@ -402,13 +415,100 @@ func TestGetTableMetadataForId(t *testing.T) {
 	})
 }
 
+// TestReadTableMetadataAPIsJobTrigger tests that APIs that read
+// system.table_metadata trigger the update job when the data is stale,
+// returning the job status. APIs that can trigger the job are:
+// - /api/v2/table_metadata/
+// - /api/v2/database_metadata/
+func TestReadTableMetadataAPIsJobTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type testCase struct {
+		name              string
+		getJobTriggerResp func(serverutils.TestServerInterface) tmJobTriggeredResponse
+	}
+	routes := []testCase{
+		{
+			name: "GET /api/v2/database_metadata/",
+			getJobTriggerResp: func(ts serverutils.TestServerInterface) tmJobTriggeredResponse {
+				client, err := ts.GetAdminHTTPClient()
+				require.NoError(t, err)
+				resp := makeApiRequest[dbMetadataResponse](t, client, ts.AdminURL().WithPath("/api/v2/database_metadata/").String(), http.MethodGet)
+				return resp.JobTriggerResponse.JobDetails
+			},
+		},
+	}
+
+	mockJobTime := timeutil.NewManualTime(timeutil.FromUnixMicros(0))
+	tablemetadatacache.JobTimeSource = mockJobTime
+	jobReadyChan := make(chan struct{}, 1)
+	jobCompleteNotifyChan := make(chan struct{}, 1)
+	defer close(jobReadyChan)
+	defer close(jobCompleteNotifyChan)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableMetadata: &tablemetadatacache_util.TestingKnobs{
+				// This test populates system.table_metadata directly.
+				TableMetadataUpdater: &noopTableMetadataUpdater{},
+				OnJobComplete: func() {
+					jobCompleteNotifyChan <- struct{}{}
+				},
+				OnJobReady: func() {
+					jobReadyChan <- struct{}{}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	<-jobReadyChan
+
+	testutils.RunValues(t, "test routes triggering cache update", routes, func(t *testing.T, tc testCase) {
+		// Reset the job's last completed time and other details for each subtest.
+		j, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobs.UpdateTableMetadataCacheJobID)
+		require.NoError(t, err)
+		err = j.NoTxn().SetProgress(ctx, jobspb.UpdateTableMetadataCacheProgress{})
+		require.NoError(t, err)
+
+		mockLastCompletedTime := timeutil.Now()
+		mockJobTime.AdvanceTo(mockLastCompletedTime)
+		// The first request should trigger the job because it's never completed.
+		resp := tc.getJobTriggerResp(s)
+		t.Logf("job status: %v", resp)
+		require.True(t, resp.JobTriggered)
+		// Verify that the job was triggered and completed.
+		<-jobCompleteNotifyChan
+
+		// Issue another GET request to read the cache. No job should be triggered
+		// since the cache is up-to-date.
+		resp = tc.getJobTriggerResp(s)
+		t.Logf("job status: %v", resp)
+		require.False(t, resp.JobTriggered)
+		require.NotNil(t, resp.JobStatus.LastCompletedTime)
+		require.True(t, mockLastCompletedTime.Equal(*resp.JobStatus.LastCompletedTime))
+		require.Contains(t, resp.Message, MetadataNotStale)
+
+	})
+}
+
 func TestGetDbMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableMetadata: &tablemetadatacache_util.TestingKnobs{
+				// This test populates system.table_metadata directly.
+				TableMetadataUpdater: &noopTableMetadataUpdater{},
+			},
+		},
+	})
 	ctx := context.Background()
-	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
+	defer s.Stopper().Stop(ctx)
+	conn := s.ApplicationLayer().SQLConn(t)
 	defer conn.Close()
 	var (
 		db1Name = "new_test_db_1"
@@ -416,10 +516,23 @@ func TestGetDbMetadata(t *testing.T) {
 	)
 	db1Id, _ := setupTest(t, conn, db1Name, db2Name)
 
-	ts := testCluster.Server(0)
-	client, err := ts.GetAdminHTTPClient()
+	client, err := s.GetAdminHTTPClient()
 	require.NoError(t, err)
-	t.Run("non GET method 405 error", func(t *testing.T) {})
+
+	t.Run("non GET method 405 error", func(t *testing.T) {
+		req, err := http.NewRequest("POST", s.AdminURL().WithPath("/api/v2/database_metadata/").String(), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, 405, resp.StatusCode)
+		respBytes, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
+	})
+
 	t.Run("sorting", func(t *testing.T) {
 
 		nameComparator := func(first, second dbMetadata) int {
@@ -467,7 +580,7 @@ func TestGetDbMetadata(t *testing.T) {
 		for _, tt := range sortTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/database_metadata/%s", tt.queryString)
-				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[dbMetadataResponse](t, client, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 				require.NotEmpty(t, mdResp.Results)
 				isSorted := slices.IsSortedFunc(mdResp.Results, tt.comparator)
 				require.True(t, isSorted)
@@ -477,12 +590,12 @@ func TestGetDbMetadata(t *testing.T) {
 
 	t.Run("authorization", func(t *testing.T) {
 		sessionUsername := username.TestUserName()
-		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		userClient, _, err := s.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
 		// Assert that the test user gets an empty response for db 1
 		uri := "/api/v2/database_metadata/"
-		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp := makeApiRequest[dbMetadataResponse](t, userClient, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		require.Empty(t, mdResp.Results)
 		require.Zero(t, mdResp.PaginationInfo.TotalResults)
@@ -490,7 +603,7 @@ func TestGetDbMetadata(t *testing.T) {
 		// Grant connect access to DB 1
 		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp = makeApiRequest[dbMetadataResponse](t, userClient, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		// Assert that user now see results for db1
 		require.Len(t, mdResp.Results, 1)
@@ -500,7 +613,7 @@ func TestGetDbMetadata(t *testing.T) {
 		// Revoke connect access from db1
 		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp = makeApiRequest[dbMetadataResponse](t, userClient, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		// Assert that user no longer sees results from db1
 		require.Empty(t, mdResp.Results)
@@ -508,13 +621,14 @@ func TestGetDbMetadata(t *testing.T) {
 		// Make user admin
 		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp = makeApiRequest[dbMetadataResponse](t, userClient, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		// Assert that user now see results for all dbs (new_test_db_1, new_test_db_2, system, postgres, and defaultdb)
 		require.Len(t, mdResp.Results, 5)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
 
 	})
+
 	t.Run("pagination", func(t *testing.T) {
 		var pageTests = []struct {
 			name             string
@@ -530,7 +644,7 @@ func TestGetDbMetadata(t *testing.T) {
 		for _, tt := range pageTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/database_metadata/%s", tt.queryString)
-				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[dbMetadataResponse](t, client, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 				require.NotEmpty(t, mdResp.Results)
 				require.LessOrEqual(t, len(mdResp.Results), tt.expectedPageSize)
 				require.Equal(t, tt.expectedPageSize, mdResp.PaginationInfo.PageSize)
@@ -538,6 +652,7 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("db name filter", func(t *testing.T) {
 		var dbtableNameTests = []struct {
 			name          string
@@ -555,22 +670,24 @@ func TestGetDbMetadata(t *testing.T) {
 		for _, tt := range dbtableNameTests {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/database_metadata/?name=%s", tt.nameFilter)
-				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+				mdResp := makeApiRequest[dbMetadataResponse](t, client, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 				require.Equal(t, int64(tt.expectedCount), mdResp.PaginationInfo.TotalResults)
 			})
 		}
 	})
+
 	t.Run("filter store id", func(t *testing.T) {
 		storeIds := []int64{8, 9}
 		uri := fmt.Sprintf("/api/v2/database_metadata/?storeId=%d&storeId=%d", storeIds[0], storeIds[1])
-		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp := makeApiRequest[dbMetadataResponse](t, client, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 		for _, dmdr := range mdResp.Results {
 			require.Condition(t, func() (success bool) {
 				return slices.Contains(dmdr.StoreIds, storeIds[0]) || slices.Contains(dmdr.StoreIds, storeIds[1])
 			})
 		}
 	})
+
 	t.Run("400 bad request", func(t *testing.T) {
 		var unprocessableTest = []struct {
 			name        string
@@ -585,7 +702,7 @@ func TestGetDbMetadata(t *testing.T) {
 		for _, tt := range unprocessableTest {
 			t.Run(tt.name, func(t *testing.T) {
 				uri := fmt.Sprintf("/api/v2/database_metadata/%s", tt.queryString)
-				req, err := http.NewRequest("GET", ts.AdminURL().WithPath(uri).String(), nil)
+				req, err := http.NewRequest("GET", s.AdminURL().WithPath(uri).String(), nil)
 				require.NoError(t, err)
 				resp, err := client.Do(req)
 				require.NoError(t, err)
@@ -594,9 +711,10 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("table count only includes tables", func(t *testing.T) {
 		uri := fmt.Sprintf("/api/v2/database_metadata/?name=%s", db1Name)
-		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		mdResp := makeApiRequest[dbMetadataResponse](t, client, s.AdminURL().WithPath(uri).String(), http.MethodGet)
 
 		require.Equal(t, int64(1), mdResp.PaginationInfo.TotalResults)
 		// This count should not include views, materialized views, or sequences
@@ -604,8 +722,8 @@ func TestGetDbMetadata(t *testing.T) {
 	})
 
 	t.Run("empty database", func(t *testing.T) {
-		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client,
-			ts.AdminURL().WithPath("/api/v2/database_metadata/?name=defaultdb").String(), http.MethodGet)
+		mdResp := makeApiRequest[dbMetadataResponse](t, client,
+			s.AdminURL().WithPath("/api/v2/database_metadata/?name=defaultdb").String(), http.MethodGet)
 
 		require.Equal(t, int64(1), mdResp.PaginationInfo.TotalResults)
 	})
@@ -743,7 +861,7 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t, "too slow under stress")
 	jobCompletedChan := make(chan interface{})
-	jobReadyChan := make(chan interface{})
+	jobReadyChan := make(chan interface{}, 1)
 	defer close(jobCompletedChan)
 	defer close(jobReadyChan)
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
@@ -904,3 +1022,12 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 
 	return dbId1, dbId2
 }
+
+type noopTableMetadataUpdater struct{}
+
+// RunUpdater implements the tablemetadatacacheutil.ITableMetadataUpdater interface.
+func (t *noopTableMetadataUpdater) RunUpdater(ctx context.Context) error {
+	return nil
+}
+
+var _ tablemetadatacache_util.ITableMetadataUpdater = &noopTableMetadataUpdater{}

@@ -218,16 +218,25 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := PaginatedResponse[[]tableMetadata]{
-		Results: tmd,
-		PaginationInfo: paginationInfo{
-			TotalResults: totalRowCount,
-			PageSize:     pageSize,
-			PageNum:      pageNum,
+	// Trigger a metadata update with onlyIfStale.
+	jobResp, jobTriggerErr := a.triggerTableMetadataUpdateJob(ctx, true)
+
+	resp := tableMetadataResponse{
+		PaginatedResponse: PaginatedResponse[[]tableMetadata]{
+			Results: tmd,
+			PaginationInfo: paginationInfo{
+				TotalResults: totalRowCount,
+				PageSize:     pageSize,
+				PageNum:      pageNum,
+			},
+		},
+		JobTriggerResponse: tmJobTriggerSideEffect{
+			JobDetails: jobResp,
+			Error:      jobTriggerErr,
 		},
 	}
-	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 
+	apiutil.WriteJSONResponse(ctx, w, http.StatusMultiStatus, resp)
 }
 
 // GetTableMetadataWithDetails fetches table metadata for a specific table id.
@@ -663,12 +672,21 @@ func (a *apiV2Server) GetDbMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := PaginatedResponse[[]dbMetadata]{
-		Results: dbm,
-		PaginationInfo: paginationInfo{
-			TotalResults: totalRowCount,
-			PageSize:     pageSize,
-			PageNum:      pageNum,
+	// Trigger a metadata update with onlyIfStale.
+	jobResp, jobTriggerErr := a.triggerTableMetadataUpdateJob(ctx, true)
+
+	resp := dbMetadataResponse{
+		PaginatedResponse: PaginatedResponse[[]dbMetadata]{
+			Results: dbm,
+			PaginationInfo: paginationInfo{
+				TotalResults: totalRowCount,
+				PageSize:     pageSize,
+				PageNum:      pageNum,
+			},
+		},
+		JobTriggerResponse: tmJobTriggerSideEffect{
+			JobDetails: jobResp,
+			Error:      jobTriggerErr,
 		},
 	}
 	apiutil.WriteJSONResponse(ctx, w, 200, resp)
@@ -722,6 +740,7 @@ func (a *apiV2Server) GetDbMetadataForId(w http.ResponseWriter, r *http.Request)
 		http.Error(w, DatabaseNotFound, http.StatusNotFound)
 		return
 	}
+
 	resp := dbMetadataWithDetailsResponse{
 		Metadata: dbm,
 	}
@@ -1002,18 +1021,32 @@ func (a *apiV2Server) getTableMetadataUpdateJobStatus(
 // is stale, if onlyIfStale is true.
 func (a *apiV2Server) triggerTableMetadataUpdateJob(
 	ctx context.Context, onlyIfStale bool,
-) (tmJobTriggeredResponse, error) {
-	jobStatus, err := a.getTableMetadataUpdateJobStatus(ctx)
-	if err != nil {
-		return tmJobTriggeredResponse{}, err
+) (resp tmJobTriggeredResponse, _ error) {
+	if onlyIfStale {
+		jobStatus, err := a.getTableMetadataUpdateJobStatus(ctx)
+		if err != nil {
+			return tmJobTriggeredResponse{}, err
+		}
+
+		stalenessDuration := tablemetadatacache.DataValidDurationSetting.Get(&a.sqlServer.execCfg.Settings.SV)
+		if jobStatus.LastCompletedTime != nil && timeutil.Since(*jobStatus.LastCompletedTime) <= stalenessDuration {
+			return tmJobTriggeredResponse{
+				JobStatus:    jobStatus,
+				JobTriggered: false,
+				Message:      MetadataNotStale}, nil
+		}
 	}
 
-	stalenessDuration := tablemetadatacache.DataValidDurationSetting.Get(&a.sqlServer.execCfg.Settings.SV)
-	if onlyIfStale && jobStatus.LastCompletedTime != nil && timeutil.Since(*jobStatus.LastCompletedTime) < stalenessDuration {
-		return tmJobTriggeredResponse{JobTriggered: false, Message: MetadataNotStale}, nil
-	}
+	defer func() {
+		// Get the job status after triggering the job to return the most up-to-date information.
+		jobStatus, err := a.getTableMetadataUpdateJobStatus(ctx)
+		if err != nil {
+			return
+		}
+		resp.JobStatus = jobStatus
+	}()
 
-	_, err = a.status.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	_, err := a.status.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{Local: false})
 	if err != nil {
 		st, ok := status.FromError(err)
 		if ok {
@@ -1114,8 +1147,28 @@ type tmUpdateJobStatusResponse struct {
 }
 
 type tmJobTriggeredResponse struct {
-	JobTriggered bool             `json:"job_triggered"`
-	Message      JobStatusMessage `json:"message"`
+	JobStatus    tmUpdateJobStatusResponse `json:"job_status"`
+	JobTriggered bool                      `json:"job_triggered"`
+	Message      JobStatusMessage          `json:"message"`
+}
+
+// tmJobTriggerSideEffect is used to return the job status and any
+// error in triggering the job. This is used by GET apis that
+// want to trigger the job but don't want to fail if the request
+// to trigger the job fails.
+type tmJobTriggerSideEffect struct {
+	JobDetails tmJobTriggeredResponse `json:"job_details"`
+	Error      error                  `json:"error,omitempty"`
+}
+
+type tableMetadataResponse struct {
+	PaginatedResponse[[]tableMetadata]
+	JobTriggerResponse tmJobTriggerSideEffect `json:"job_trigger_response"`
+}
+
+type dbMetadataResponse struct {
+	PaginatedResponse[[]dbMetadata]
+	JobTriggerResponse tmJobTriggerSideEffect `json:"job_trigger_response"`
 }
 
 type tableMetadataWithDetailsResponse struct {
