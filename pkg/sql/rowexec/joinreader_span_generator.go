@@ -82,6 +82,8 @@ type spanIDHelper struct {
 	// mapping.
 	spanIDToInputRowIndices [][]int
 
+	// scratchSpanIDs is a slice of span IDs where the ith span ID corresponds
+	// to the ith span in scratchSpans.
 	scratchSpanIDs []int
 }
 
@@ -126,6 +128,12 @@ func (h *spanIDHelper) addedSpans(spanID int, count int) {
 	for i := 0; i < count; i++ {
 		h.scratchSpanIDs = append(h.scratchSpanIDs, spanID)
 	}
+}
+
+// spanIDs returns a slice of span IDs where the i-th span ID corresponds to the
+// i-th span in scratchSpans.
+func (h *spanIDHelper) spanIDs() []int {
+	return h.scratchSpanIDs
 }
 
 func (h *spanIDHelper) getMatchingRowIndices(spanID int) []int {
@@ -267,7 +275,7 @@ func (g *defaultSpanGenerator) generateSpans(
 		return nil, nil, err
 	}
 
-	return g.scratchSpans, g.scratchSpanIDs, nil
+	return g.scratchSpans, g.spanIDs(), nil
 }
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
@@ -716,7 +724,7 @@ func (g *multiSpanGenerator) generateSpans(
 		return nil, nil, addWorkmemHint(err)
 	}
 
-	return g.scratchSpans, g.scratchSpanIDs, nil
+	return g.scratchSpans, g.spanIDs(), nil
 }
 
 // getInequalityBounds returns the start and end bounds for the index column
