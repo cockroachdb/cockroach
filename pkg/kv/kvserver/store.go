@@ -379,6 +379,7 @@ func newRaftConfig(
 	id raftpb.PeerID,
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
+	lazyReplication bool,
 	logger raft.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
 ) *raft.Config {
@@ -391,6 +392,7 @@ func newRaftConfig(
 		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
 		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
 		DisableConfChangeValidation: true, // see https://github.com/cockroachdb/cockroach/issues/105797
+		LazyReplication:             lazyReplication,
 		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,

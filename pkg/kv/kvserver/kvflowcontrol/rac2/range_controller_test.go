@@ -1264,7 +1264,11 @@ func TestRangeController(t *testing.T) {
 				var rangeID int
 				d.ScanArgs(t, "range_id", &rangeID)
 				testRC := state.ranges[roachpb.RangeID(rangeID)]
-				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx)
+				mode := MsgAppPull
+				if d.HasArg("push-mode") {
+					mode = MsgAppPush
+				}
+				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx, mode)
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
 				return state.sendStreamString(roachpb.RangeID(rangeID))
