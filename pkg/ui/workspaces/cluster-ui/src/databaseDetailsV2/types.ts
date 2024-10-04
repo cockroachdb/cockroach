@@ -21,5 +21,6 @@ export type TableRow = {
   liveDataBytes: number;
   totalDataBytes: number;
   statsLastUpdated: Moment;
+  autoStatsEnabled: boolean;
   key: string;
 };

@@ -18,7 +18,6 @@ import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegi
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { PageLayout, PageSection } from "src/layouts";
-import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
@@ -220,30 +219,30 @@ export const DatabasesPageV2 = () => {
         </PageConfig>
       </PageSection>
       <PageSection>
-        <Loading page="Databases overview" loading={isLoading} error={error}>
-          <PageCount
-            page={params.pagination.page}
-            pageSize={params.pagination.pageSize}
-            total={paginationState?.total_results}
-            entity="databases"
-          />
-          <Table
-            actionButton={
-              <TableMetadataJobControl onDataUpdated={refreshDatabases} />
-            }
-            columns={colsWithSort}
-            dataSource={tableData}
-            pagination={{
-              size: "small",
-              current: params.pagination.page,
-              pageSize: params.pagination.pageSize,
-              showSizeChanger: false,
-              position: ["bottomCenter"],
-              total: paginationState?.total_results,
-            }}
-            onChange={onTableChange}
-          />
-        </Loading>
+        <PageCount
+          page={params.pagination.page ?? 0}
+          pageSize={params.pagination.pageSize ?? 0}
+          total={paginationState?.total_results ?? 0}
+          entity="databases"
+        />
+        <Table
+          loading={isLoading}
+          error={error}
+          actionButton={
+            <TableMetadataJobControl onDataUpdated={refreshDatabases} />
+          }
+          columns={colsWithSort}
+          dataSource={tableData}
+          pagination={{
+            size: "small",
+            current: params.pagination.page,
+            pageSize: params.pagination.pageSize,
+            showSizeChanger: false,
+            position: ["bottomCenter"],
+            total: paginationState?.total_results,
+          }}
+          onChange={onTableChange}
+        />
       </PageSection>
     </PageLayout>
   );
