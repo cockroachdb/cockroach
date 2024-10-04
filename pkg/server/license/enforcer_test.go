@@ -42,7 +42,6 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	// This will be set when bringing up the server.
 	ts1 := timeutil.Unix(1724329716, 0)
 	ts1_30d := ts1.Add(30 * 24 * time.Hour)
-	ts1_7d := ts1.Add(7 * 24 * time.Hour)
 
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -79,13 +78,7 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	// Access the enforcer that is cached in the executor config to make sure they
 	// work for the system tenant and secondary tenant.
 	require.Equal(t, ts1_30d, srv.SystemLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.GetClusterInitGracePeriodEndTS())
-	// TODO(spilchen): Until the secondary tenant can read from the KV, it will
-	// guess the ending grace period to be 7-days after start. This will be fixed
-	// in CRDB-42309. Depending on how the test was initialized, it will be either
-	// the shared process secondary tenant (ts1_30d) or the separate process
-	// secondary tenant (ts1_7d).
-	require.Contains(t, []time.Time{ts1_30d, ts1_7d},
-		srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.GetClusterInitGracePeriodEndTS())
+	require.Equal(t, ts1_30d, srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.GetClusterInitGracePeriodEndTS())
 }
 
 func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
@@ -149,6 +142,72 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 			require.Equal(t, tc.expGracePeriodEndTS, enforcer.GetClusterInitGracePeriodEndTS())
 		})
 	}
+}
+
+type mockMetadataAccessor struct {
+	ts *int64
+}
+
+func (m *mockMetadataAccessor) GetClusterInitGracePeriodTS() int64 {
+	return *m.ts
+}
+
+func TestClusterInitGracePeriod_DelayedTenantConnector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts0 := timeutil.Unix(1667764800, 0) // 2022-11-6 8pm
+	ts1d := ts0.Add(24 * time.Hour)
+	ts8d := ts0.Add(8 * 24 * time.Hour)
+	ts9d := ts0.Add(9 * 24 * time.Hour)
+	ts30d := ts0.Add(30 * 24 * time.Hour)
+
+	// Start the system tenant
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			LicenseTestingKnobs: &license.TestingKnobs{
+				Enable:            true,
+				OverrideStartTime: &ts0,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// This is a timestamp that we'll change to mock receiving the cluster
+	// init timestamp from tenant connector.
+	var connectTS int64
+
+	// Start up the enforcer for the secondary tenant using a metadata accessor
+	// that has not yet received the cluster init grace period timestamp.
+	enforcer := license.NewEnforcer(&license.TestingKnobs{
+		Enable:                    true,
+		OverrideStartTime:         &ts1d,
+		OverrideThrottleCheckTime: &ts9d,
+	})
+	err := enforcer.Start(ctx, srv.ClusterSettings(),
+		license.WithSystemTenant(false),
+		license.WithMetadataAccessor(&mockMetadataAccessor{ts: &connectTS}),
+	)
+	require.NoError(t, err)
+
+	// The cluster init grace period timestamp hasn't been received yet.
+	// Default to 7 days from the enforcer's start time.
+	require.Equal(t, ts8d, enforcer.GetClusterInitGracePeriodEndTS())
+
+	// We will be throttled because the check time is 9-days after start,
+	// which is beyond the grace period.
+	const beyondThreshold = 10
+	_, err = enforcer.MaybeFailIfThrottled(ctx, beyondThreshold)
+	require.Error(t, err)
+
+	// Now mock receiving the timestamp from the system tenant. It should now
+	// be 30-days after the start time of the system tenant.
+	connectTS = ts30d.Unix()
+	// The check for throttling will refresh the value.
+	_, err = enforcer.MaybeFailIfThrottled(ctx, beyondThreshold)
+	require.NoError(t, err)
+	require.Equal(t, ts30d, enforcer.GetClusterInitGracePeriodEndTS())
 }
 
 func TestThrottle(t *testing.T) {
