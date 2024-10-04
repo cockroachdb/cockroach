@@ -529,22 +529,15 @@ func (s *ClusterSpec) SetRoachprodOptsZones(
 		providerOpts.(*gce.ProviderOpts).Zones = zones
 		workloadProviderOpts.(*gce.ProviderOpts).Zones = zones
 	case Azure:
-		// Azure splits up the availability zone from the region and roachprod
-		// assumes that only one zone is ever used. So we're not actually changing
-		// the zone here, just the region.
-		// TODO(darrylwong): we should support multiple zones. To keep things
-		// consistent amongst clouds, we could keep the zone=region+az convention
-		// and parse it at the provider level.
 		if len(zones) == 0 {
 			if !s.Geo {
-				zones = azure.DefaultLocations[:1]
+				zones = azure.DefaultZones[:1]
 			} else {
-				zones = azure.DefaultLocations
+				zones = azure.DefaultZones
 			}
 		}
-		// Azure accepts
-		providerOpts.(*azure.ProviderOpts).Locations = zones
-		workloadProviderOpts.(*azure.ProviderOpts).Locations = zones
+		providerOpts.(*azure.ProviderOpts).Zones = zones
+		workloadProviderOpts.(*azure.ProviderOpts).Zones = zones
 	}
 	return providerOpts, workloadProviderOpts
 }

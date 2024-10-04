@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { Tag } from "antd";
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -18,7 +19,6 @@ import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
-import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
@@ -29,8 +29,9 @@ import {
   TableColumnProps,
 } from "src/sharedFromCloud/table";
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
+import { Timestamp } from "src/timestamp";
 import { StoreID } from "src/types/clusterTypes";
-import { Bytes, tabAttr } from "src/util";
+import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
@@ -148,6 +149,23 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     {
       title: (
         <ColumnTitle
+          title={TableColName.AUTO_STATS_ENABLED}
+          withToolTip={{
+            tooltipText:
+              "Automatic collection of table statistics used by the SQL optimizer.",
+          }}
+        />
+      ),
+      sorter: true,
+      render: (t: TableRow) => {
+        const type = t.autoStatsEnabled ? "success" : "error";
+        const text = t.autoStatsEnabled ? "ENABLED" : "DISABLED";
+        return <Tag color={type}>{text}</Tag>;
+      },
+    },
+    {
+      title: (
+        <ColumnTitle
           title={TableColName.STATS_LAST_UPDATED}
           withToolTip={{
             tooltipText:
@@ -156,9 +174,13 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
         />
       ),
       sorter: true,
-      render: (t: TableRow) => {
-        return t.statsLastUpdated.format("YYYY-MM-DD HH:mm:ss");
-      },
+      render: (t: TableRow) => (
+        <Timestamp
+          time={t.statsLastUpdated}
+          format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+          fallback={"Never"}
+        />
+      ),
     },
   ];
 
@@ -214,14 +236,21 @@ export const TablesPageV2 = () => {
     });
   };
 
+  const tableList = data?.results;
+
   const tableData = useMemo(
     () =>
-      rawTableMetadataToRows(data?.results ?? [], {
+      rawTableMetadataToRows(tableList ?? [], {
         nodeIDToRegion: nodesResp.nodeIDToRegion,
         storeIDToNodeID: nodesResp.storeIDToNodeID,
         isLoading: nodesResp.isLoading,
       }),
-    [data, nodesResp],
+    [
+      tableList,
+      nodesResp.isLoading,
+      nodesResp.nodeIDToRegion,
+      nodesResp.storeIDToNodeID,
+    ],
   );
 
   const onTableChange: TableChangeFn<TableRow> = (pagination, sorter) => {
@@ -278,30 +307,30 @@ export const TablesPageV2 = () => {
         </PageConfig>
       </PageSection>
       <PageSection>
-        <Loading page="TablesV2" loading={isLoading} error={error}>
-          <PageCount
-            page={params.pagination.page}
-            pageSize={params.pagination.pageSize}
-            total={data?.pagination_info?.total_results ?? 0}
-            entity="tables"
-          />
-          <Table
-            actionButton={
-              <TableMetadataJobControl onDataUpdated={refreshTables} />
-            }
-            columns={colsWithSort}
-            dataSource={tableData}
-            pagination={{
-              size: "small",
-              current: params.pagination.page,
-              pageSize: params.pagination.pageSize,
-              showSizeChanger: false,
-              position: ["bottomCenter"],
-              total: paginationState?.total_results,
-            }}
-            onChange={onTableChange}
-          />
-        </Loading>
+        <PageCount
+          page={params.pagination.page}
+          pageSize={params.pagination.pageSize}
+          total={data?.pagination_info?.total_results ?? 0}
+          entity="tables"
+        />
+        <Table
+          loading={isLoading}
+          error={error}
+          actionButton={
+            <TableMetadataJobControl onDataUpdated={refreshTables} />
+          }
+          columns={colsWithSort}
+          dataSource={tableData}
+          pagination={{
+            size: "small",
+            current: params.pagination.page,
+            pageSize: params.pagination.pageSize,
+            showSizeChanger: false,
+            position: ["bottomCenter"],
+            total: paginationState?.total_results,
+          }}
+          onChange={onTableChange}
+        />
       </PageSection>
     </>
   );

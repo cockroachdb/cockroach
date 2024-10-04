@@ -30,6 +30,7 @@ go_library(
         "@com_github_azure_go_autorest_autorest_to//:to",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
     ],
 )

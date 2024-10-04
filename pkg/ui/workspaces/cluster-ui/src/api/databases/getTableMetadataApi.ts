@@ -40,6 +40,9 @@ export type TableMetadata = {
   store_ids: number[];
   last_updated: string;
   last_update_error: string | null;
+  auto_stats_enabled: boolean;
+  // Optimizer stats.
+  stats_last_updated: string | null;
 };
 
 type TableMetadataResponse = APIV2ResponseWithPaginationState<TableMetadata[]>;

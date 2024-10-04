@@ -16,10 +16,12 @@ import (
 
 // ProviderOpts provides user-configurable, azure-specific create options.
 type ProviderOpts struct {
-	Locations       []string
+	// N.B. Azure splits up the region (location) and availability zone, but
+	// to keep things consistent with other providers, we treat zone to mean
+	// both and split it up later.
+	Zones           []string
 	MachineType     string
 	VnetName        string
-	Zone            string
 	NetworkDiskType string
 	NetworkDiskSize int32
 	UltraDiskIOPS   int64
@@ -29,21 +31,18 @@ type ProviderOpts struct {
 // These default locations support availability zones. At the time of
 // this comment, `westus` did not and `westus2` is consistently out of
 // capacity.
-var DefaultLocations = []string{
-	"eastus",
-	"canadacentral",
-	"westus3",
+var DefaultZones = []string{
+	"eastus-1",
+	"canadacentral-1",
+	"westus3-1",
 }
-
-var defaultZone = "1"
 
 // DefaultProviderOpts returns a new azure.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		Locations:       nil,
+		Zones:           nil,
 		MachineType:     string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		VnetName:        "common",
-		Zone:            "",
 		NetworkDiskType: "premium-disk",
 		NetworkDiskSize: 500,
 		UltraDiskIOPS:   5000,
@@ -65,12 +64,14 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type",
 		string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")
-	flags.StringSliceVar(&o.Locations, ProviderName+"-locations", nil,
-		fmt.Sprintf("Locations for cluster (see `az account list-locations`) (default\n[%s])",
-			strings.Join(DefaultLocations, ",")))
+	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
+		fmt.Sprintf("Zones for cluster, where a zone is a location (see `az account list-locations`)\n"+
+			"and availability zone seperated by a dash. If zones are formatted as Location-AZ:N where N is an integer,\n"+
+			"the zone will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
+			"regardless of geo (default [%s])",
+			strings.Join(DefaultZones, ",")))
 	flags.StringVar(&o.VnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
-	flags.StringVar(&o.Zone, ProviderName+"-availability-zone", "", "Availability Zone to create VMs in")
 	flags.StringVar(&o.NetworkDiskType, ProviderName+"-network-disk-type", "premium-disk",
 		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
 	flags.Int32Var(&o.NetworkDiskSize, ProviderName+"-volume-size", 500,
