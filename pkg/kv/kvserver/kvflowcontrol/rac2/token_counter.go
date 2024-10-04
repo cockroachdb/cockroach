@@ -24,6 +24,8 @@ import (
 
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
+//
+// TODO(sumeer): remove this interface since there is only one implementation.
 type TokenWaitingHandle interface {
 	// WaitChannel is the channel that will be signaled if tokens are possibly
 	// available. If signaled, the caller must call
@@ -49,6 +51,9 @@ type TokenWaitingHandle interface {
 	// available. True is returned if tokens are available, false otherwise. If
 	// no tokens are available, the caller can resume waiting using WaitChannel.
 	ConfirmHaveTokensAndUnblockNextWaiter() bool
+	// StreamString returns a string representation of the stream. Used for
+	// tracing.
+	StreamString() string
 }
 
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
@@ -363,6 +368,11 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	return haveTokens
 }
 
+// StreamString implements TokenWaitingHandle.
+func (wh waitHandle) StreamString() string {
+	return wh.b.stream.String()
+}
+
 type tokenWaitingHandleInfo struct {
 	// Can be nil, in which case the wait on this can never succeed.
 	handle TokenWaitingHandle
@@ -417,6 +427,7 @@ func WaitForEval(
 	refreshWaitCh <-chan struct{},
 	handles []tokenWaitingHandleInfo,
 	requiredQuorum int,
+	traceIndividualWaits bool,
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
@@ -459,8 +470,14 @@ func WaitForEval(
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
 		case 0:
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until context cancellation")
+			}
 			return ContextCanceled, scratch
 		case 1:
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until channel refreshed")
+			}
 			return RefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-2]
@@ -470,6 +487,10 @@ func WaitForEval(
 				continue
 			}
 
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until %s tokens available",
+					handleInfo.handle.StreamString())
+			}
 			if handleInfo.partOfQuorum {
 				signaledQuorumCount++
 			}
