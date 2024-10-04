@@ -18,7 +18,6 @@ import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
-import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
@@ -278,30 +277,30 @@ export const TablesPageV2 = () => {
         </PageConfig>
       </PageSection>
       <PageSection>
-        <Loading page="TablesV2" loading={isLoading} error={error}>
-          <PageCount
-            page={params.pagination.page}
-            pageSize={params.pagination.pageSize}
-            total={data?.pagination_info?.total_results ?? 0}
-            entity="tables"
-          />
-          <Table
-            actionButton={
-              <TableMetadataJobControl onDataUpdated={refreshTables} />
-            }
-            columns={colsWithSort}
-            dataSource={tableData}
-            pagination={{
-              size: "small",
-              current: params.pagination.page,
-              pageSize: params.pagination.pageSize,
-              showSizeChanger: false,
-              position: ["bottomCenter"],
-              total: paginationState?.total_results,
-            }}
-            onChange={onTableChange}
-          />
-        </Loading>
+        <PageCount
+          page={params.pagination.page}
+          pageSize={params.pagination.pageSize}
+          total={data?.pagination_info?.total_results ?? 0}
+          entity="tables"
+        />
+        <Table
+          loading={isLoading}
+          error={error}
+          actionButton={
+            <TableMetadataJobControl onDataUpdated={refreshTables} />
+          }
+          columns={colsWithSort}
+          dataSource={tableData}
+          pagination={{
+            size: "small",
+            current: params.pagination.page,
+            pageSize: params.pagination.pageSize,
+            showSizeChanger: false,
+            position: ["bottomCenter"],
+            total: paginationState?.total_results,
+          }}
+          onChange={onTableChange}
+        />
       </PageSection>
     </>
   );
