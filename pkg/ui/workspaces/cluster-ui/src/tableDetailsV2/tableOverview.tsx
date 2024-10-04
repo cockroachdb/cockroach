@@ -6,21 +6,16 @@
 import { Icon } from "@cockroachlabs/ui-components";
 import { Col, Row, Skeleton, Tooltip } from "antd";
 import moment from "moment-timezone";
-import React, { useContext } from "react";
+import React from "react";
 
+import { useNodeStatuses } from "src/api";
 import { TableDetailsResponse } from "src/api/databases/getTableMetadataApi";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
-
-import { useNodeStatuses } from "../api";
-import { TimezoneContext } from "../contexts";
-import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import { StoreID } from "../types/clusterTypes";
-import {
-  Bytes,
-  DATE_WITH_SECONDS_FORMAT_24_TZ,
-  FormatWithTimezone,
-} from "../util";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import { Timestamp } from "src/timestamp";
+import { StoreID } from "src/types/clusterTypes";
+import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 
 type TableOverviewProps = {
   tableDetails: TableDetailsResponse;
@@ -63,12 +58,6 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
     metadata.percent_live_data * 100
   ).toFixed(2);
 
-  const timezone = useContext(TimezoneContext);
-  const lastUpdatedText = FormatWithTimezone(
-    moment.utc(metadata.last_updated),
-    DATE_WITH_SECONDS_FORMAT_24_TZ,
-    timezone,
-  );
   const formattedErrorText = metadata.last_update_error
     ? "Update error: " + metadata.last_update_error
     : "";
@@ -89,7 +78,13 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 {metadata.last_update_error && (
                   <Icon fill="warning" iconName={"Caution"} />
                 )}
-                <Col>Last updated: {lastUpdatedText}</Col>
+                <Col>
+                  Last updated:{" "}
+                  <Timestamp
+                    time={moment.utc(metadata.last_updated)}
+                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+                  />
+                </Col>
               </Row>
             </Tooltip>
           </Col>
@@ -124,6 +119,20 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                       {Bytes(metadata.total_live_data_bytes)}
                     </div>
                   </div>
+                }
+              />
+              <SummaryCardItem
+                label="Auto stats collections"
+                value={metadata.auto_stats_enabled ? "Enabled" : "Disabled"}
+              />
+              <SummaryCardItem
+                label="Stats last updated"
+                value={
+                  <Timestamp
+                    time={moment.utc(metadata.stats_last_updated)}
+                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+                    fallback={"Never"}
+                  />
                 }
               />
             </SummaryCard>
