@@ -11,6 +11,7 @@ go_library(
         "interaction_env_handler_compact.go",
         "interaction_env_handler_deliver_msgs.go",
         "interaction_env_handler_forget_leader.go",
+        "interaction_env_handler_fortification.go",
         "interaction_env_handler_log_level.go",
         "interaction_env_handler_process_append_thread.go",
         "interaction_env_handler_process_apply_thread.go",
@@ -37,6 +38,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/raft",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
