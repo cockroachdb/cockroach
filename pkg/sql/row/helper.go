@@ -257,17 +257,7 @@ func (rh *RowHelper) SkipColumnNotInPrimaryIndexValue(
 		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
 		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
 	}
-	if !rh.primaryIndexKeyCols.Contains(colID) {
-		return !rh.primaryIndexValueCols.Contains(colID), false
-	}
-	if cdatum, ok := value.(tree.CompositeDatum); ok {
-		// Composite columns are encoded in both the key and the value.
-		return !cdatum.IsComposite(), true
-	}
-	// Skip primary key columns as their values are encoded in the key of
-	// each family. Family 0 is guaranteed to exist and acts as a
-	// sentinel.
-	return true, false
+	return rowenc.SkipColumnNotInPrimaryIndexValue(colID, value, rh.primaryIndexKeyCols, rh.primaryIndexValueCols)
 }
 
 func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
