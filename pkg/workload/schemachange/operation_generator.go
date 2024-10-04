@@ -318,6 +318,16 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
 		},
 	})
+	// There is a risk of unique violations if concurrent inserts
+	// happen during an ADD COLUMN UNIQUE / NOT NULL. So allow this to be
+	// a potential error on the commit.
+	if def.Unique.IsUnique {
+		og.potentialCommitErrors.add(pgcode.UniqueViolation)
+	}
+	if def.Nullable.Nullability == tree.NotNull {
+		og.potentialCommitErrors.add(pgcode.NotNullViolation)
+	}
+
 	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsString(def))
 	return op, nil
 }
@@ -1655,11 +1665,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
-	// TODO(#126967): We need to add a check for the column being in an expression
-	// to an index. In the case where the expression does not already exist for
-	// us to use, we add an internal crdb_internal_idx_expr prefixed column to
-	// the table.
-	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
 	// For legacy schema changer its possible for create index operations to interfere if they
 	// are in progress.
 	if !og.useDeclarativeSchemaChanger {
@@ -2445,6 +2450,8 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 		if colContainsNull {
 			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
+			// If executed within the same txn as CREATE TABLE.
+			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
 		}
 	}
 
@@ -2754,6 +2761,11 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
 	// error.
 	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
+	// There is a risk of unique violations if concurrent inserts
+	// happen during an ALTER PRIMARY KEY. So allow this to be
+	// a potential error on the commit.
+	og.potentialCommitErrors.add(pgcode.UniqueViolation)
+
 	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
 	})

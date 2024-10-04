@@ -796,7 +796,6 @@ func init() {
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
 	sqlCmds = append(sqlCmds, importCmds...)
 	sqlCmds = append(sqlCmds, userFileCmds...)
-	sqlCmds = append(sqlCmds, genHAProxyCmd)
 	for _, cmd := range sqlCmds {
 		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx,
 			cmd == sqlShellCmd, /* isShell */
@@ -814,6 +813,12 @@ func init() {
 		}
 
 		f := cmd.PersistentFlags()
+
+		// The strict TLS validation below fails if the client cert names don't match
+		// the username. But if the user flag isn't hooked up, it will always expect
+		// 'root'.
+		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
+
 		cliflagcfg.VarFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, true /* strictTLS */, func(format string, args ...interface{}) {
 			fmt.Fprintf(stderr, format, args...)
 		}), cliflags.URL)
