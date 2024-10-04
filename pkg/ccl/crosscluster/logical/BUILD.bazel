@@ -50,6 +50,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/exprutil",
+        "//pkg/sql/importer",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
