@@ -753,10 +753,8 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
 }
 
-// CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
-// have a conflicting latch, lock.
-func (g *Guard) CheckOptimisticNoConflicts(
-	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
+func (g *Guard) CheckOptimisticNoConflictsCtx(
+	ctx context.Context, latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
 ) (ok bool) {
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
@@ -770,9 +768,24 @@ func (g *Guard) CheckOptimisticNoConflicts(
 	// First check the latches, since a conflict there could mean that racing
 	// requests in the lock table caused a conflicting lock to not be noticed.
 	if g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead) {
-		return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
+		if g.ltg.CheckOptimisticNoConflicts(lockSpansRead) {
+			log.Event(ctx, "no latch/lock conflicts after optimistic eval")
+			return true
+		} else {
+			log.Event(ctx, "lock conflict after optimistic eval")
+			return false
+		}
 	}
+	log.Event(ctx, "latch conflict after optimistic eval")
 	return false
+}
+
+// CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
+// have a conflicting latch, lock.
+func (g *Guard) CheckOptimisticNoConflicts(
+	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
+) (ok bool) {
+	return g.CheckOptimisticNoConflictsCtx(context.TODO(), latchSpansRead, lockSpansRead)
 }
 
 // CheckOptimisticNoLatchConflicts checks that the declared latch spans for
