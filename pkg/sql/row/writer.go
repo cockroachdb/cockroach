@@ -98,6 +98,15 @@ func prepareInsertOrUpdateBatch(
 	overwrite, traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
+	// TODO(ssd): We don't currently support multiple column
+	// families on the LDR write path. As a result, we don't have
+	// good end-to-end testing of multi-column family writes with
+	// the origin timestamp helper set. Until we write such tests,
+	// we error if we ever see such writes.
+	if oth.IsSet() && len(families) > 1 {
+		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
+	}
+
 	for i := range families {
 		family := &families[i]
 		update := false
@@ -213,6 +222,9 @@ func prepareInsertOrUpdateBatch(
 
 		// TODO(ssd): Here and below investigate reducing the number of
 		// allocations required to marshal the old value.
+		//
+		// If we are using OriginTimestamp ConditionalPuts, calculate the expected
+		// value.
 		var expBytes []byte
 		if oth.IsSet() && len(oldValues) > 0 {
 			var oldBytes []byte
@@ -230,14 +242,14 @@ func prepareInsertOrUpdateBatch(
 		}
 
 		if family.ID != 0 && len(rawValueBuf) == 0 {
-			if overwrite {
+			if oth.IsSet() {
+				// If using OriginTimestamp'd CPuts, we _always_ want to issue a Delete
+				// so that we can confirm our expected bytes were correct.
+				oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
+			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				if oth.IsSet() {
-					oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
-				} else {
-					insertDelFn(ctx, batch, kvKey, traceKV)
-				}
+				insertDelFn(ctx, batch, kvKey, traceKV)
 			}
 		} else {
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is
