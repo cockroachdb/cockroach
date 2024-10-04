@@ -4001,3 +4001,26 @@ statement error pq: \*tree.ColumnTableDef not implemented in the new schema chan
 alter table roach add column serial_id2 SERIAL
 
 subtest end
+
+statement ok
+set use_declarative_schema_changer = on
+
+# Tests for #131948 where we incorrectly backfilled empty column
+# families for composite datums.
+subtest composite_type_131948
+
+statement ok
+CREATE TABLE t1_with_composite(i int, j STRING COLLATE de_DE NOT NULL, FAMILY(i), FAMILY(j));
+INSERT INTO t1_with_composite VALUES(1, 'a');
+INSERT INTO t1_with_composite VALUES(2, 'b');
+
+statement ok
+ALTER TABLE t1_with_composite DROP COLUMN j;
+
+query I
+SELECT * FROM t1_with_composite ORDER BY i ASC;
+----
+1
+2
+
+subtest end
