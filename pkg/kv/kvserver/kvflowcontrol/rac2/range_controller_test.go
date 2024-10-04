@@ -84,7 +84,11 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 func sortReplicas(r *testingRCRange) []roachpb.ReplicaDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return sortReplicasLocked(r)
+}
 
+func sortReplicasLocked(r *testingRCRange) []roachpb.ReplicaDescriptor {
+	r.mu.AssertHeld()
 	sorted := make([]roachpb.ReplicaDescriptor, 0, len(r.mu.r.replicaSet))
 	for _, replica := range r.mu.r.replicaSet {
 		sorted = append(sorted, replica.desc)
@@ -184,8 +188,15 @@ func (s *testingRCState) evalStateString() string {
 func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	var b strings.Builder
 
+	// NB: r.mu is locked before rss.mu and rc.scheduledMu.
 	r := s.ranges[rangeID]
-	for _, desc := range sortReplicas(r) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rc := r.rc
+	rc.scheduledMu.Lock()
+	defer rc.scheduledMu.Unlock()
+
+	for _, desc := range sortReplicasLocked(r) {
 		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
 		rs := r.rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
@@ -223,12 +234,8 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		b.WriteString(formatTrackerState(&rss.mu.tracker))
 		b.WriteString("++++\n")
 	}
-	func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if len(r.mu.sendMsgAppCalls) == 0 {
-			return
-		}
+
+	if len(r.mu.sendMsgAppCalls) != 0 {
 		fmt.Fprintf(&b, "MsgApps sent in pull mode:\n")
 		slices.SortStableFunc(r.mu.sendMsgAppCalls, func(a, b sendMsgAppCall) int {
 			return cmp.Compare(a.msg.To, b.msg.To)
@@ -246,21 +253,12 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		}
 		b.WriteString("++++\n")
 		r.mu.sendMsgAppCalls = r.mu.sendMsgAppCalls[:0]
-	}()
-	func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if r.mu.scheduleControllerEventCount > 0 {
-			fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", r.mu.scheduleControllerEventCount)
-		}
-	}()
-	func() {
-		rc := r.rc
-		rc.scheduledMu.Lock()
-		defer rc.scheduledMu.Unlock()
-		if len(rc.scheduledMu.replicas) == 0 {
-			return
-		}
+	}
+	if r.mu.scheduleControllerEventCount > 0 {
+		fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", r.mu.scheduleControllerEventCount)
+	}
+
+	if len(rc.scheduledMu.replicas) != 0 {
 		var scheduledReplicas []roachpb.ReplicaID
 		for r := range rc.scheduledMu.replicas {
 			scheduledReplicas = append(scheduledReplicas, r)
@@ -271,7 +269,7 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 			fmt.Fprintf(&b, " %d", r)
 		}
 		fmt.Fprintf(&b, "\n")
-	}()
+	}
 	return b.String()
 }
 
