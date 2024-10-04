@@ -55,6 +55,7 @@ func AddSQLFlags(
 	sqlCfg *clisqlcfg.Context,
 	isShell bool,
 	isDemo bool,
+	strictTLS bool,
 ) {
 	f := cmd.PersistentFlags()
 
@@ -72,7 +73,7 @@ func AddSQLFlags(
 	warnFn := func(format string, args ...interface{}) {
 		fmt.Fprintf(os.Stderr, format, args...)
 	}
-	cliflagcfg.VarFlagDepth(1, f, clienturl.NewURLParser(cmd, clientOpts, false /* strictTLS */, warnFn), cliflags.URL)
+	cliflagcfg.VarFlagDepth(1, f, clienturl.NewURLParser(cmd, clientOpts, strictTLS, warnFn), cliflags.URL)
 
 	// --user/-u
 	cliflagcfg.StringFlagDepth(1, f, &clientOpts.User, cliflags.User)

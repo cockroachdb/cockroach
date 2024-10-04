@@ -801,6 +801,7 @@ func init() {
 		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx,
 			cmd == sqlShellCmd, /* isShell */
 			cmd == demoCmd || cmd == statementBundleRecreateCmd, /* isDemo */
+			cmd == genHAProxyCmd, /* strictTLS */
 		)
 	}
 

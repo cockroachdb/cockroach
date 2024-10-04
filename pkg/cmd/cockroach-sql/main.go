@@ -81,7 +81,7 @@ func runMain() error {
 
 	// Configure the command-line flags.
 	clientflags.AddBaseFlags(sqlCmd, &copts, &copts.Insecure, &copts.CertsDir)
-	clientflags.AddSQLFlags(sqlCmd, &copts, cfg, true /* isShell */, false /* isDemo */)
+	clientflags.AddSQLFlags(sqlCmd, &copts, cfg, true /* isShell */, false /* isDemo */, false /* strictTLS */)
 	// Configure the format flag
 	cliflagcfg.VarFlagDepth(1, sqlCmd.PersistentFlags(), &cfg.ExecCtx.TableDisplayFormat, cliflags.TableDisplayFormat)
 
