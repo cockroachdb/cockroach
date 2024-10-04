@@ -134,15 +134,25 @@ func prepareInsertOrUpdateBatch(
 			if !ok {
 				continue
 			}
+
+			var marshaled roachpb.Value
+			var err error
+			typ := fetchedCols[idx].GetType()
+
 			// Skip any values with a default ID not stored in the primary index,
 			// which can happen if we are adding new columns.
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
-				continue
-			}
-			typ := fetchedCols[idx].GetType()
-			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
-			if err != nil {
-				return nil, err
+			skip, couldBeComposite := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx])
+			if skip {
+				// If the column could be composite, there could be a previous KV, so we
+				// still need to issue a Delete.
+				if !couldBeComposite {
+					continue
+				}
+			} else {
+				marshaled, err = valueside.MarshalLegacy(typ, values[idx])
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			if marshaled.RawBytes == nil {
@@ -178,7 +188,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
+			if skip, _ := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
 				continue
 			}
 
