@@ -30,7 +30,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹
 	RETURNS INT8
 	VOLATILE
 	LANGUAGE SQL
-	AS $$SELECT public.f2(‹a›) + public.f(‹a›);$$;
+	AS $$SELECT ‹public›.‹f2›(‹a›) + ‹public›.‹f›(‹a›);$$;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 9 elements transitioning toward PUBLIC

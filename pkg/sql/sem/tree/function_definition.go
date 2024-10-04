@@ -209,19 +209,22 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // Format implements the NodeFormatter interface.
-// ResolvedFunctionDefinitions should always be builtin functions, so we do not
-// need to anonymize them, even if the flag is set.
+//
+// ResolvedFunctionDefinitions can be builtin or user-defined, so we must
+// respect formatting flags.
 func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
 	// This is necessary when deserializing function expressions for SHOW CREATE
 	// statements. When deserializing a function expression with function OID
 	// references, it's guaranteed that there'll be always one overload resolved.
-	// There is no need to show prefix for builtin functions since we don't
-	// serialize them.
+	// There is no need to show prefix or use formatting flags for builtin
+	// functions since we don't serialize them.
 	if len(fd.Overloads) == 1 && catid.IsOIDUserDefined(fd.Overloads[0].Oid) {
-		ctx.WriteString(fd.Overloads[0].Schema)
+		ctx.FormatName(fd.Overloads[0].Schema)
 		ctx.WriteString(".")
+		ctx.FormatName(fd.Name)
+	} else {
+		ctx.WriteString(fd.Name)
 	}
-	ctx.WriteString(fd.Name)
 }
 
 // String implements the Stringer interface.
