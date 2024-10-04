@@ -521,3 +521,53 @@ CREATE INDEX IF NOT EXISTS idx ON tbl_ifne (b) STORING (a)
 
 statement ok
 DROP TABLE tbl_ifne CASCADE
+
+# Sanity testing for single table column families with composite types.
+statement ok
+CREATE TABLE tbl_with_dft_column_family(f float, d decimal, j json, s STRING COLLATE de_DE NOT NULL, family(f), family(d), family(j), family(s))
+
+statement ok
+INSERT INTO tbl_with_dft_column_family VALUES(1.0, 1.0, '{"cat": "mouse"}', 'abc');
+INSERT INTO tbl_with_dft_column_family VALUES(2.0, 2.0, '{"lion": "gazelle"}', 'def');
+INSERT INTO tbl_with_dft_column_family VALUES(3.0, 3.0, '{"wolf": "sheep"}', 'ghi');
+
+query FFTT
+SELECT f, d, j, s FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+CREATE INDEX f_i ON tbl_with_dft_column_family(f);
+CREATE INDEX d_i ON tbl_with_dft_column_family(d);
+CREATE INDEX j_i ON tbl_with_dft_column_family(j);
+CREATE INDEX s_i ON tbl_with_dft_column_family(s);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family@f_i ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family@d_i ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family@j_i ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family@s_i ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi

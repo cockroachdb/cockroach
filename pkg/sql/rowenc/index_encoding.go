@@ -1170,10 +1170,7 @@ func EncodePrimaryIndex(
 			// Single column value families which are not stored can be skipped, these
 			// may exist temporarily while adding a column.
 			if !storedColumns.Contains(family.DefaultColumnID) {
-				if cdatum, ok := values[colMap.GetDefault(family.DefaultColumnID)].(tree.CompositeDatum); !ok ||
-					!cdatum.IsComposite() {
-					return nil
-				}
+				return nil
 			}
 			datum := findColumnValue(family.DefaultColumnID, colMap, values)
 			// We want to include this column if its value is non-null or
