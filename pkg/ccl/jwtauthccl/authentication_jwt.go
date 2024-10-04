@@ -194,69 +194,18 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"unable to parse token: %v", err)
 	}
 
-	// Extract all requested principals from the token. By default, we take it from the subject unless they specify
-	// an alternate claim to pull from.
-	var tokenPrincipals []string
-	if authenticator.mu.conf.claim == "" || authenticator.mu.conf.claim == "sub" {
-		tokenPrincipals = []string{parsedToken.Subject()}
-	} else {
-		claimValue, ok := parsedToken.Get(authenticator.mu.conf.claim)
-		if !ok {
-			return "", errors.WithDetailf(
-				errors.Newf("JWT authentication: missing claim"),
-				"token does not contain a claim for %s", authenticator.mu.conf.claim)
-		}
-		switch castClaimValue := claimValue.(type) {
-		case string:
-			// Accept a single string value.
-			tokenPrincipals = []string{castClaimValue}
-		case []interface{}:
-			// Iterate over the slice and add all string values to the tokenPrincipals.
-			for _, maybePrincipal := range castClaimValue {
-				tokenPrincipals = append(tokenPrincipals, fmt.Sprint(maybePrincipal))
-			}
-		case []string:
-			// This case never seems to happen but is included in case an implementation detail changes in the library.
-			tokenPrincipals = castClaimValue
-		default:
-			tokenPrincipals = []string{fmt.Sprint(castClaimValue)}
-		}
+	// Match the input user identity against the user identities mapped within the JWT.
+	user, authError = authenticator.RetrieveIdentity(ctx, user, tokenBytes, identMap)
+	if authError != nil {
+		return
 	}
 
-	// Take the principals from the token and send each of them through the identity map to generate the
-	// list of usernames that this token is valid authentication for.
-	var acceptedUsernames []username.SQLUsername
-	for _, tokenPrincipal := range tokenPrincipals {
-		mappedUsernames, err := authenticator.mapUsername(tokenPrincipal, parsedToken.Issuer(), identMap)
-		if err != nil {
-			return "", errors.WithDetailf(
-				errors.Newf("JWT authentication: invalid claim value"),
-				"the value %s for the issuer %s is invalid", tokenPrincipal, parsedToken.Issuer())
-		}
-		acceptedUsernames = append(acceptedUsernames, mappedUsernames...)
-	}
-	if len(acceptedUsernames) == 0 {
-		return "", errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid principal"),
-			"the value %s for the issuer %s is invalid", tokenPrincipals, parsedToken.Issuer())
-	}
-	principalMatch := false
-	for _, username := range acceptedUsernames {
-		if username.Normalized() == user.Normalized() {
-			principalMatch = true
-			break
-		}
-	}
-	if !principalMatch {
-		return "", errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid principal"),
-			"token issued for %s and login was for %s", tokenPrincipals, user.Normalized())
-	}
 	if user.IsRootUser() || user.IsReserved() {
 		return "", errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid identity"),
 			"cannot use JWT auth to login to a reserved user %s", user.Normalized())
 	}
+
 	audienceMatch := false
 	for _, tokenAudience := range parsedToken.Audience() {
 		for _, crdbAudience := range authenticator.mu.conf.audience {
@@ -278,6 +227,88 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 
 	telemetry.Inc(loginSuccessUseCounter)
 	return "", nil
+}
+
+// RetrieveIdentity is part of the JWTVerifier interface in pgwire.
+func (authenticator *jwtAuthenticator) RetrieveIdentity(
+	ctx context.Context, user username.SQLUsername, tokenBytes []byte, identMap *identmap.Conf,
+) (retrievedUser username.SQLUsername, authError error) {
+	unverifiedToken, err := jwt.ParseInsecure(tokenBytes)
+	if err != nil {
+		return user, errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid token"),
+			"token parsing failed: %v", err)
+	}
+
+	// Extract all requested principals from the token. By default, we take it
+	// from the subject unless they specify an alternate claim to pull from.
+	var tokenPrincipals []string
+	if authenticator.mu.conf.claim == "" || authenticator.mu.conf.claim == "sub" {
+		tokenPrincipals = []string{unverifiedToken.Subject()}
+	} else {
+		claimValue, ok := unverifiedToken.Get(authenticator.mu.conf.claim)
+		if !ok {
+			return user, errors.WithDetailf(
+				errors.Newf("JWT authentication: missing claim"),
+				"token does not contain a claim for %s", authenticator.mu.conf.claim)
+		}
+		switch castClaimValue := claimValue.(type) {
+		case string:
+			// Accept a single string value.
+			tokenPrincipals = []string{castClaimValue}
+		case []interface{}:
+			// Iterate over the slice and add all string values to the tokenPrincipals.
+			for _, maybePrincipal := range castClaimValue {
+				tokenPrincipals = append(tokenPrincipals, fmt.Sprint(maybePrincipal))
+			}
+		case []string:
+			// This case never seems to happen but is included in case an
+			// implementation detail changes in the library.
+			tokenPrincipals = castClaimValue
+		default:
+			tokenPrincipals = []string{fmt.Sprint(castClaimValue)}
+		}
+	}
+
+	// Take the principals from the token and send each of them through the
+	// identity map to generate the list of usernames that this token is valid
+	// authentication for.
+	issuer := unverifiedToken.Issuer()
+	var acceptedUsernames []username.SQLUsername
+	for _, tokenPrincipal := range tokenPrincipals {
+		mappedUsernames, err := authenticator.mapUsername(tokenPrincipal, issuer, identMap)
+		if err != nil {
+			return user, errors.WithDetailf(
+				errors.Newf("JWT authentication: invalid claim value"),
+				"the value %s for the issuer %s is invalid", tokenPrincipal, issuer)
+		}
+		acceptedUsernames = append(acceptedUsernames, mappedUsernames...)
+	}
+	if len(acceptedUsernames) == 0 {
+		return user, errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid principal"),
+			"the value %s for the issuer %s is invalid", tokenPrincipals, issuer)
+	}
+
+	principalMatch := false
+	for _, userName := range acceptedUsernames {
+		if userName.Normalized() == user.Normalized() {
+			principalMatch = true
+			break
+		}
+	}
+	if !principalMatch {
+		// If the username is not provided, and we match it to a single user,
+		// then use that user identity.
+		if user.IsEmptyRole() && len(acceptedUsernames) == 1 {
+			return acceptedUsernames[0], nil
+		}
+		return user, errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid principal"),
+			"token issued for %s and login was for %s", tokenPrincipals, user.Normalized())
+	}
+
+	return user, nil
 }
 
 // remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
