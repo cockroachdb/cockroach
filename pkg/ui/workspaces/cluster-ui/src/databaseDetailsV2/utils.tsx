@@ -6,8 +6,7 @@
 import moment from "moment-timezone";
 
 import { TableMetadata } from "src/api/databases/getTableMetadataApi";
-
-import { NodeID, StoreID } from "../types/clusterTypes";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 
 import { TableRow } from "./types";
 
@@ -43,7 +42,8 @@ export const rawTableMetadataToRows = (
       liveDataPercentage: table.percent_live_data,
       liveDataBytes: table.total_live_data_bytes,
       totalDataBytes: table.total_data_bytes,
-      statsLastUpdated: moment.utc(table.last_updated), // TODO (xinhaoz): populate this
+      statsLastUpdated: moment.utc(table.stats_last_updated),
+      autoStatsEnabled: table.auto_stats_enabled,
       key: table.table_id.toString(),
       qualifiedNameWithSchema: `${table.schema_name}.${table.table_name}`,
     };

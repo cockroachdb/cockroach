@@ -11,4 +11,5 @@ export enum TableColName {
   NODE_REGIONS = "Regions / Nodes",
   LIVE_DATA_PERCENTAGE = "% of Live data",
   STATS_LAST_UPDATED = "Stats last updated",
+  AUTO_STATS_ENABLED = "Table auto stats enabled",
 }
