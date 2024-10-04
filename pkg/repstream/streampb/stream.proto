@@ -204,6 +204,7 @@ message ReplicationStreamSpec {
   // this is in response to a LogicalReplicationPlanRequest.
   repeated roachpb.Span table_spans = 4 [(gogoproto.nullable) = false];
   repeated cockroach.sql.sqlbase.TableDescriptor table_descriptors = 5 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 6 [(gogoproto.nullable) = false];
 }
 
 // StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
