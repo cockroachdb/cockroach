@@ -262,7 +262,12 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 func (g *defaultSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, []int, error) {
-	g.spanIDHelper.reset(g.uniqueRows)
+	// The spans are guaranteed to be unique if this is an index join where all
+	// input rows are unique, or if there is only a single input row in the
+	// batch. The latter case is common in generic query plans which usually
+	// contain lookup-joins with a single row values operator as input.
+	unique := g.uniqueRows || len(rows) == 1
+	g.spanIDHelper.reset(unique)
 	g.scratchSpans = g.scratchSpans[:0]
 	for i, inputRow := range rows {
 		if g.hasNullLookupColumn(inputRow) {
