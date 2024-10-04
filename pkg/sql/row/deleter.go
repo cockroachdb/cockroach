@@ -91,7 +91,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               NewRowHelper(codec, tableDesc, indexes, sv, internal, metrics),
+		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
