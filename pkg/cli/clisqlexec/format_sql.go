@@ -43,7 +43,7 @@ func (p *sqlReporter) iter(w, _ io.Writer, _ int, row []string) error {
 	fmt.Fprint(w, "INSERT INTO results VALUES (")
 	for i, r := range row {
 		var buf bytes.Buffer
-		lexbase.EncodeSQLStringWithFlags(&buf, r, lexbase.EncNoDoubleEscapeQuotes)
+		lexbase.EncodeSQLStringWithFlags(&buf, r, lexbase.EncNoFlags)
 		fmt.Fprint(w, buf.String())
 		if i < len(row)-1 {
 			fmt.Fprint(w, ", ")
