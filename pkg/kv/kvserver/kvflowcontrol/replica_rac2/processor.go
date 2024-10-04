@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -120,6 +121,8 @@ type RaftNode interface {
 	// infoMap is an in-out parameter. It is expected to be empty, and is
 	// populated with the ReplicaStateInfos for all replicas.
 	ReplicasStateLocked(infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo)
+
+	LogSnapshotLocked() raft.LogSnapshot
 }
 
 // AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
@@ -1185,7 +1188,10 @@ func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
 		return
 	}
 	if rc := p.leader.rc; rc != nil {
-		rc.HandleSchedulerEventRaftMuLocked(ctx, mode)
+		p.opts.Replica.MuRLock()
+		logSnap := p.replMu.raftNode.LogSnapshotLocked()
+		p.opts.Replica.MuRUnlock()
+		rc.HandleSchedulerEventRaftMuLocked(ctx, mode, logSnap)
 	}
 }
 

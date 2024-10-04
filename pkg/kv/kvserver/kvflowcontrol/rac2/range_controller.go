@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,7 +66,7 @@ type RangeController interface {
 	// controller.
 	//
 	// Requires replica.raftMu to be held.
-	HandleSchedulerEventRaftMuLocked(ctx context.Context, mode RaftMsgAppMode)
+	HandleSchedulerEventRaftMuLocked(ctx context.Context, mode RaftMsgAppMode, snap raft.LogSnapshot)
 	// AdmitRaftMuLocked handles the notification about the given replica's
 	// admitted vector change. No-op if the replica is not known, or the admitted
 	// vector is stale (either in Term, or the indices).
@@ -146,8 +147,7 @@ type RaftInterface interface {
 	// method with the LogSlice, and the callee will make the MsgApp and behave
 	// as if it was sent (i.e., update Next). Since we are not holding
 	// Replica.mu, the callee will need to acquire Replica.mu.
-	MakeMsgAppRaftMuLocked(
-		replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
+	MakeMsgAppRaftMuLocked(roachpb.ReplicaID, raft.LogSlice) (raftpb.Message, bool)
 }
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In
@@ -238,6 +238,9 @@ type RaftEvent struct {
 	// flow control state. It also informs the RangeController of a replica's
 	// Match and Next.
 	ReplicasStateInfo map[roachpb.ReplicaID]ReplicaStateInfo
+	// LogSnapshot contains the raftMu-protected snapshot of the raft log.
+	// Populated only if MsgAppMode == MsgAppPull.
+	LogSnapshot raft.LogSnapshot
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
@@ -264,8 +267,12 @@ func RaftEventFromMsgStorageAppendAndMsgApps(
 	appendMsg raftpb.Message,
 	outboundMsgs []raftpb.Message,
 	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
+	logSnap raft.LogSnapshot,
 ) RaftEvent {
 	event := RaftEvent{MsgAppMode: mode}
+	if mode == MsgAppPull {
+		event.LogSnapshot = logSnap
+	}
 	if appendMsg.Type == raftpb.MsgStorageAppend {
 		event = RaftEvent{
 			MsgAppMode: event.MsgAppMode,
@@ -605,6 +612,8 @@ type raftEventForReplica struct {
 	newEntries         []entryFCState
 	sendingEntries     []entryFCState
 	recreateSendStream bool
+
+	logSnap raft.LogSnapshot
 }
 
 // raftEventAppendState is the general state computed from RaftEvent that is
@@ -639,6 +648,7 @@ func constructRaftEventForReplica(
 	existingSendStreamState existingSendStreamState,
 	msgApps []raftpb.Message,
 	scratchSendingEntries []entryFCState,
+	logSnap raft.LogSnapshot,
 ) (_ raftEventForReplica, scratch []entryFCState) {
 	firstNewEntryIndex, lastNewEntryIndex := uint64(math.MaxUint64), uint64(math.MaxUint64)
 	if n := len(raftEventAppendState.newEntries); n > 0 {
@@ -766,6 +776,7 @@ func constructRaftEventForReplica(
 		newEntries:         raftEventAppendState.newEntries,
 		sendingEntries:     sendingEntries,
 		recreateSendStream: createSendStream,
+		logSnap:            logSnap,
 	}
 	return refr, scratch
 }
@@ -825,7 +836,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 			}
 			existingSSState := rs.getExistingSendStreamState()
 			rs.scratchEvent, rs.scratchSendingEntries = constructRaftEventForReplica(
-				ctx, mode, appendState, info, existingSSState, msgApps, rs.scratchSendingEntries)
+				ctx, mode, appendState, info, existingSSState, msgApps, rs.scratchSendingEntries, e.LogSnapshot)
 			info = rs.scratchEvent.replicaStateInfo
 		}
 		shouldWaitChange = rs.handleReadyState(
@@ -1067,7 +1078,7 @@ func (rc *rangeController) computeVoterDirectives(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
-	ctx context.Context, mode RaftMsgAppMode,
+	ctx context.Context, mode RaftMsgAppMode, snap raft.LogSnapshot,
 ) {
 	var scheduledScratch [5]*replicaState
 	// scheduled will contain all the replicas in scheduledMu.replicas, filtered
@@ -1090,7 +1101,7 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
 	nextScheduled := scheduled[:0]
 	updateWaiterSets := false
 	for _, rs := range scheduled {
-		scheduleAgain, closedVoter := rs.scheduled(ctx, mode)
+		scheduleAgain, closedVoter := rs.scheduled(ctx, mode, snap)
 		if scheduleAgain {
 			nextScheduled = append(nextScheduled, rs)
 		}
@@ -1857,7 +1868,7 @@ func (rs *replicaState) handleReadyState(
 //
 // closedVoter => !scheduleAgain.
 func (rs *replicaState) scheduled(
-	ctx context.Context, mode RaftMsgAppMode,
+	ctx context.Context, mode RaftMsgAppMode, snap raft.LogSnapshot,
 ) (scheduleAgain bool, closedVoter bool) {
 	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID {
 		panic("scheduled called on the leader replica")
@@ -1899,16 +1910,28 @@ func (rs *replicaState) scheduled(
 	// and elastic work, and MsgAppPull mode, in which case the total size of
 	// entries not subject to flow control will be tiny. We of course return the
 	// unused tokens for entries not subject to flow control.
-	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
-		rss.parent.desc.ReplicaID, rss.mu.sendQueue.indexToSend, rss.mu.sendQueue.nextRaftIndex,
-		int64(bytesToSend))
+	ls, err := snap.LogSlice(
+		rss.mu.sendQueue.indexToSend-1,
+		rss.mu.sendQueue.nextRaftIndex-1,
+		uint64(bytesToSend),
+	)
 	if err != nil {
-		// Transitioned to StateSnapshot, or some other error that Raft needs to
-		// deal with.
+		// Probably the log is truncated at >= indexToSend.
 		rs.sendStream.closeLocked(ctx)
 		rs.sendStream = nil
 		return false, rs.desc.IsAnyVoter()
 	}
+	// FIXME: need to lock Replica.mu here.
+	msg, ok := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
+		rss.parent.desc.ReplicaID, ls)
+	if !ok {
+		// The leader changed, or the log slice is misaligned with the current
+		// replication state in RawNode.
+		rs.sendStream.closeLocked(ctx)
+		rs.sendStream = nil
+		return false, rs.desc.IsAnyVoter()
+	}
+
 	rss.dequeueFromQueueAndSendLocked(ctx, msg)
 	isEmpty := rss.isEmptySendQueueLocked()
 	if isEmpty {
@@ -2065,11 +2088,20 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 	}
 
 	if n := len(event.sendingEntries); n > 0 && event.mode == MsgAppPull {
-		msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
-			rss.parent.desc.ReplicaID, event.sendingEntries[0].index, event.sendingEntries[n-1].index+1,
-			math.MaxInt64)
+		ls, err := event.logSnap.LogSlice(
+			event.sendingEntries[0].index-1,
+			event.sendingEntries[n-1].index,
+			math.MaxUint64,
+		)
 		if err != nil {
 			return false, err
+		}
+		// FIXME: need to acquire Replica.mu, but RangeController doesn't know about
+		// it. The layering is not great.
+		msg, ok := rss.parent.parent.opts.RaftInterface.MakeMsgAppRaftMuLocked(
+			rss.parent.desc.ReplicaID, ls)
+		if !ok {
+			return false, nil
 		}
 		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
 	}
