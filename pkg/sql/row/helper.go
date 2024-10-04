@@ -210,25 +210,26 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 // SkipColumnNotInPrimaryIndexValue returns true if the value at column colID
 // does not need to be encoded, either because it is already part of the primary
 // key, or because it is not part of the primary index altogether. Composite
-// datums are considered too, so a composite datum in a PK will return false.
+// datums are considered too, so a composite datum in a PK will return false
+// (but will return true for couldBeComposite).
 func (rh *RowHelper) SkipColumnNotInPrimaryIndexValue(
 	colID descpb.ColumnID, value tree.Datum,
-) bool {
+) (skip, couldBeComposite bool) {
 	if rh.primaryIndexKeyCols.Empty() {
 		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
 		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
 	}
 	if !rh.primaryIndexKeyCols.Contains(colID) {
-		return !rh.primaryIndexValueCols.Contains(colID)
+		return !rh.primaryIndexValueCols.Contains(colID), false
 	}
 	if cdatum, ok := value.(tree.CompositeDatum); ok {
 		// Composite columns are encoded in both the key and the value.
-		return !cdatum.IsComposite()
+		return !cdatum.IsComposite(), true
 	}
 	// Skip primary key columns as their values are encoded in the key of
 	// each family. Family 0 is guaranteed to exist and acts as a
 	// sentinel.
-	return true
+	return true, false
 }
 
 func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {

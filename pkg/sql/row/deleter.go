@@ -194,7 +194,7 @@ func (rd *Deleter) encodeValueForPrimaryIndexFamily(
 		if !ok {
 			return roachpb.Value{}, nil
 		}
-		if rd.Helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]) {
+		if skip, _ := rd.Helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
 			return roachpb.Value{}, nil
 		}
 		typ := rd.FetchCols[idx].GetType()
@@ -218,7 +218,7 @@ func (rd *Deleter) encodeValueForPrimaryIndexFamily(
 			continue
 		}
 
-		if skip := rd.Helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
+		if skip, _ := rd.Helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
 			continue
 		}
 
