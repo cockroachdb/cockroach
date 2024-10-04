@@ -15,13 +15,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.
-const maxRaftMsgType = raftpb.MsgFortifyLeaderResp
+const maxRaftMsgType = raftpb.MsgDeFortifyLeader
 
 func init() {
 	for v := range raftpb.MessageType_name {
@@ -35,7 +36,7 @@ func init() {
 // init installs an adapter to use clog for log messages from raft which
 // don't belong to any range.
 func init() {
-	raft.SetLogger(&raftLogger{ctx: context.Background()})
+	raftlogger.SetLogger(&raftLogger{ctx: context.Background()})
 }
 
 // *clogLogger implements the raft.Logger interface. Note that all methods

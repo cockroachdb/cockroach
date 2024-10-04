@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
@@ -53,11 +54,12 @@ var isResponseMsg = [...]bool{
 }
 
 var isMsgFromLeader = [...]bool{
-	pb.MsgApp:           true,
-	pb.MsgSnap:          true,
-	pb.MsgHeartbeat:     true,
-	pb.MsgFortifyLeader: true,
-	pb.MsgTimeoutNow:    true,
+	pb.MsgApp:             true,
+	pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
 }
 
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
@@ -313,7 +315,7 @@ func payloadsSize(ents []pb.Entry) entryPayloadSize {
 	return s
 }
 
-func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
+func assertConfStatesEquivalent(l raftlogger.Logger, cs1, cs2 pb.ConfState) {
 	err := cs1.Equivalent(cs2)
 	if err == nil {
 		return

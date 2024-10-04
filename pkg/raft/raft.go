@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -238,7 +239,7 @@ type Config struct {
 
 	// Logger is the logger used for raft log. For multinode which can host
 	// multiple raft group, each raft group can have its own logger
-	Logger Logger
+	Logger raftlogger.Logger
 
 	// DisableProposalForwarding set to true means that followers will drop
 	// proposals, rather than forwarding them to the leader. One use case for
@@ -320,7 +321,7 @@ func (c *Config) validate() error {
 	}
 
 	if c.Logger == nil {
-		c.Logger = getLogger()
+		c.Logger = raftlogger.GetLogger()
 	}
 
 	return nil
@@ -439,7 +440,7 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger        Logger
+	logger        raftlogger.Logger
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
 }
@@ -541,10 +542,10 @@ func (r *raft) send(m pb.Message) {
 		m.From = r.id
 	}
 	switch m.Type {
-	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp:
+	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp, pb.MsgDeFortifyLeader:
 		if m.Term == 0 {
-			// All {pre-,}campaign messages need to have the term set when
-			// sending.
+			// All {pre-,}campaign messages and MsgDeFortifyLeader need to have the
+			// term set when sending.
 			// - MsgVote: m.Term is the term the node is campaigning for,
 			//   non-zero as we increment the term when campaigning.
 			// - MsgVoteResp: m.Term is the new r.Term if the MsgVote was
@@ -555,6 +556,8 @@ func (r *raft) send(m pb.Message) {
 			// - MsgPreVoteResp: m.Term is the term received in the original
 			//   MsgPreVote if the pre-vote was granted, non-zero for the
 			//   same reasons MsgPreVote is
+			// - MsgDeFortifyLeader: m.Term is the term corresponding to the
+			// leadership term that's being de-fortified.
 			r.logger.Panicf("term should be set when sending %s", m.Type)
 		}
 	case pb.MsgApp:
@@ -845,6 +848,20 @@ func (r *raft) sendFortify(to pb.PeerID) {
 	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
 }
 
+// sendDeFortify sends a de-fortification RPC to the given peer.
+func (r *raft) sendDeFortify(to pb.PeerID) {
+	if to == r.id {
+		// We handle the case where the leader is trying to de-fortify itself
+		// specially. Doing so avoids a self-addressed message.
+		// TODO(arul): Same comment as below. This r.Term is incorrect.
+		r.deFortify(r.id, r.Term)
+		return
+	}
+	// TODO(arul): instead of the current term, we need to freeze it when the
+	// leader steps down and copy that over here instead.
+	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.Term})
+}
+
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
 // according to the progress recorded in r.trk.
 func (r *raft) bcastAppend() {
@@ -989,6 +1006,12 @@ func (r *raft) reset(term uint64) {
 		r.Vote = None
 		r.lead = None
 		r.leadEpoch = 0
+		// TODO(arul): We'll only want to reset the fortification tracker when we're
+		// stepping up to become the leader again. This allows us to de-fortify any
+		// followers that may still be providing us support once we've stepped down,
+		// as the state of who to de-fortify, when to de-fortify, and which term to
+		// de-fortify for will be stored in the fortificationTracker.
+		r.fortificationTracker.Reset()
 	}
 
 	r.electionElapsed = 0
@@ -998,7 +1021,6 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.electionTracker.ResetVotes()
-	r.fortificationTracker.Reset()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:       0,
@@ -1427,9 +1449,9 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
 			if IsMsgFromLeader(m.Type) {
-				// We've just received a message from the new leader which was elected
+				// We've just received a message from a leader which was elected
 				// at a higher term. The old leader is no longer fortified, so it's
-				// safe to defortify at this point.
+				// safe to de-fortify at this point.
 				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
 			} else {
@@ -2032,6 +2054,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.electionElapsed = 0
 		r.lead = m.From
 		r.handleFortify(m)
+	case pb.MsgDeFortifyLeader:
+		r.handleDeFortify(m)
 	case pb.MsgTransferLeader:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
@@ -2265,12 +2289,29 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
 }
 
-// deFortify (conceptually) revokes previously provided fortification to a
-// leader.
+func (r *raft) handleDeFortify(m pb.Message) {
+	assertTrue(r.state != StateLeader, "leaders should locally de-fortify without sending a message")
+	assertTrue(r.lead == m.From, "only the leader should send de-fortification requests")
+
+	if r.leadEpoch == 0 {
+		r.logger.Debugf("%d is not fortifying %d; de-fortification is a no-op", r.id, m.From)
+	}
+
+	r.deFortify(m.From, m.Term)
+}
+
+// deFortify revokes previously provided fortification to a leader.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
-	assertTrue(term > r.Term ||
-		(term == r.Term && from == r.lead) ||
-		(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
+	assertTrue(
+		// We're not currently fortified, so de-fortification is a no-op...
+		r.leadEpoch == 0 ||
+			// ...OR we were fortified at a lower term that has since advanced...
+			term > r.Term ||
+			// ...OR the current term is being explicitly de-fortified by the leader...
+			(term == r.Term && from == r.lead) ||
+			// ...OR we've unilaterally decided to de-fortify because we are no longer
+			// supporting the fortified leader (in StoreLiveness).
+			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
 		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
 	r.leadEpoch = 0
@@ -2530,14 +2571,6 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	}
 }
 
-func (r *raft) testingStepDown() error {
-	if r.lead != r.id {
-		return errors.New("cannot step down if not the leader")
-	}
-	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
-	return nil
-}
-
 // markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
 // mark them as recently active if they are supporting the leader.
 func (r *raft) markFortifyingFollowersAsRecentlyActive() {
@@ -2563,4 +2596,17 @@ func (r *raft) markFortifyingFollowersAsRecentlyActive() {
 func (r *raft) advanceCommitViaMsgAppOnly() bool {
 	return r.crdbVersion.IsActive(context.Background(),
 		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps)
+}
+
+func (r *raft) testingStepDown() error {
+	if r.lead != r.id {
+		return errors.New("cannot step down if not the leader")
+	}
+	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	return nil
+}
+
+func (r *raft) testingSendDeFortify(to pb.PeerID) error {
+	r.sendDeFortify(to)
+	return nil
 }

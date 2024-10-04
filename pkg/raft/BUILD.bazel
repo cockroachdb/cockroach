@@ -7,7 +7,6 @@ go_library(
         "doc.go",
         "log.go",
         "log_unstable.go",
-        "logger.go",
         "node.go",
         "raft.go",
         "rawnode.go",
@@ -22,6 +21,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
@@ -54,6 +54,7 @@ go_test(
     embed = [":raft"],
     deps = [
         "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/rafttest",

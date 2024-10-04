@@ -20,6 +20,7 @@ package raft
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func newUnstableForTesting(ls logSlice, snap *pb.Snapshot) unstable {
 		snapshot:        snap,
 		logSlice:        ls,
 		entryInProgress: ls.prev.index,
-		logger:          discardLogger,
+		logger:          raftlogger.DiscardLogger,
 	}
 }
 
