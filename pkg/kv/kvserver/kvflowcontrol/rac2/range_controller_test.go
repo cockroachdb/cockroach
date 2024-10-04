@@ -418,26 +418,31 @@ func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 	r.mu.scheduleControllerEventCount++
 }
 
-func (r *testingRCRange) MakeMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
+func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error) {
 	if start >= end {
 		panic("start >= end")
 	}
 	msg := raftpb.Message{
 		Type: raftpb.MsgApp,
-		To:   raftpb.PeerID(replicaID),
 	}
-	var size int64
+	var size uint64
 	for _, entry := range r.entries {
 		if entry.Index >= start && entry.Index < end {
 			msg.Entries = append(msg.Entries, entry)
-			size += int64(len(entry.Data))
+			size += uint64(len(entry.Data))
 			if size > maxSize {
 				break
 			}
 		}
 	}
+	return msg, nil
+}
+
+func (r *testingRCRange) SendMsgAppRaftMuLocked(
+	replicaID roachpb.ReplicaID, slice RaftLogSlice,
+) (raftpb.Message, bool) {
+	msg := slice.(raftpb.Message)
+	msg.To = raftpb.PeerID(replicaID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	testR, ok := r.mu.r.replicaSet[replicaID]
@@ -447,7 +452,7 @@ func (r *testingRCRange) MakeMsgAppRaftMuLocked(
 	testR.info.Match = max(msg.Entries[0].Index-1, testR.info.Match)
 	testR.info.Next = msg.Entries[len(msg.Entries)-1].Index + 1
 	r.mu.r.replicaSet[replicaID] = testR
-	return msg, nil
+	return msg, true
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -1178,10 +1183,12 @@ func TestRangeController(t *testing.T) {
 					mode = MsgAppPull
 				}
 				for _, event := range parseRaftEvents(t, d.Input) {
+					testRC := state.ranges[event.rangeID]
 					raftEvent := RaftEvent{
 						MsgAppMode:        mode,
 						Entries:           make([]raftpb.Entry, len(event.entries)),
 						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
+						LogSnapshot:       testRC,
 						ReplicasStateInfo: state.ranges[event.rangeID].replicasStateInfo(),
 					}
 					for i, entry := range event.entries {
@@ -1194,7 +1201,6 @@ func TestRangeController(t *testing.T) {
 						// suffix of entries that were previously appended, down below.
 						Entries: nil,
 					}
-					testRC := state.ranges[event.rangeID]
 					testRC.entries = append(testRC.entries, raftEvent.Entries...)
 					func() {
 						testRC.mu.Lock()
@@ -1266,7 +1272,7 @@ func TestRangeController(t *testing.T) {
 				if d.HasArg("push-mode") {
 					mode = MsgAppPush
 				}
-				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx, mode)
+				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx, mode, testRC)
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
 				return state.sendStreamString(roachpb.RangeID(rangeID))
@@ -1486,19 +1492,19 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 
 	// No outbound msgs.
 	event := RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, nil, msgAppScratch)
+		MsgAppPush, 20, appendMsg, nil, nil, msgAppScratch)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
 	require.Nil(t, event.MsgApps)
 	// Zero value.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raftpb.Message{}, nil, msgAppScratch)
+		MsgAppPush, 20, raftpb.Message{}, nil, nil, msgAppScratch)
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
 	// is for the leader.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, outboundMsgs[:2], msgAppScratch)
+		MsgAppPush, 20, appendMsg, outboundMsgs[:2], nil, msgAppScratch)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
@@ -1507,7 +1513,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// ensure msgAppScratch is cleared before reuse.
 	for i := 0; i < 2; i++ {
 		event = RaftEventFromMsgStorageAppendAndMsgApps(
-			MsgAppPush, 19, appendMsg, outboundMsgs, msgAppScratch)
+			MsgAppPush, 19, appendMsg, outboundMsgs, nil, msgAppScratch)
 		require.Equal(t, uint64(10), event.Term)
 		require.Equal(t, appendMsg.Snapshot, event.Snap)
 		require.Equal(t, appendMsg.Entries, event.Entries)
@@ -2143,6 +2149,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 						tc.latestReplicaStateInfo,
 						tc.existingSendStreamState,
 						tc.msgApps,
+						nil,
 						tc.scratchSendingEntries,
 					)
 				})
@@ -2154,6 +2161,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 					tc.latestReplicaStateInfo,
 					tc.existingSendStreamState,
 					tc.msgApps,
+					nil,
 					tc.scratchSendingEntries,
 				)
 				require.Equal(t, tc.expectedRaftEventReplica, gotRaftEventReplica)

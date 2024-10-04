@@ -393,10 +393,11 @@ type Processor interface {
 		ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) (admitted bool, err error)
 
 	// ProcessSchedulerEventRaftMuLocked is called to process events scheduled
-	// by the RangeController.
+	// by the RangeController. logSnapshot is only used if mode is MsgAppPull.
 	//
 	// raftMu is held.
-	ProcessSchedulerEventRaftMuLocked(ctx context.Context, mode rac2.RaftMsgAppMode)
+	ProcessSchedulerEventRaftMuLocked(
+		ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot)
 
 	// InspectRaftMuLocked returns a handle to inspect the state of the
 	// underlying range controller. It is used to power /inspectz-style debugging
@@ -1178,14 +1179,14 @@ func (p *processorImpl) AdmitForEval(
 
 // ProcessSchedulerEventRaftMuLocked implements Processor.
 func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
-	ctx context.Context, mode rac2.RaftMsgAppMode,
+	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if p.destroyed {
 		return
 	}
 	if rc := p.leader.rc; rc != nil {
-		rc.HandleSchedulerEventRaftMuLocked(ctx, mode)
+		rc.HandleSchedulerEventRaftMuLocked(ctx, mode, logSnapshot)
 	}
 }
 

@@ -138,9 +138,9 @@ func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
 	return true
 }
 
-func (rn *testRaftNode) MakeMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
+func (rn *testRaftNode) SendMsgAppRaftMuLocked(
+	replicaID roachpb.ReplicaID, slice rac2.RaftLogSlice,
+) (raftpb.Message, bool) {
 	panic("unimplemented")
 }
 
@@ -247,7 +247,7 @@ func (c *testRangeController) HandleRaftEventRaftMuLocked(
 }
 
 func (c *testRangeController) HandleSchedulerEventRaftMuLocked(
-	ctx context.Context, mode rac2.RaftMsgAppMode,
+	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot,
 ) {
 	panic("HandleSchedulerEventRaftMuLocked is unimplemented")
 }
