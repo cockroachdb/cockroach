@@ -748,7 +748,6 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 	defer close(jobReadyChan)
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-
 			Knobs: base.TestingKnobs{
 				TableMetadata: &tablemetadatacache_util.TestingKnobs{
 					OnJobReady: func() {
