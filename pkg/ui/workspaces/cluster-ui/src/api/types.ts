@@ -26,18 +26,18 @@ export function createInitialState<T>(
   };
 }
 
-export type SimplePaginationState = {
+export type PaginationRequest = {
   pageSize: number;
   pageNum: number;
 };
 
-export type APIV2PaginationResponse = {
-  total_results: number;
-  page_size: number;
-  page_num: number;
+export type PaginationState = {
+  pageSize: number;
+  pageNum: number;
+  totalResults: number;
 };
 
-export type APIV2ResponseWithPaginationState<T> = {
+export type ResultsWithPagination<T> = {
   results: T;
-  pagination_info: APIV2PaginationResponse;
+  pagination: PaginationState;
 };
