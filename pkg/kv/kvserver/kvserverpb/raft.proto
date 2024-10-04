@@ -109,6 +109,13 @@ message RaftMessageRequest {
   // TODO(pav-kv): remove.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 15 [(gogoproto.nullable) = false];
   reserved 10;
+
+  LogMark trace_mark = 16;
+}
+
+message LogMark {
+  uint64 term = 1;
+  uint64 index = 2;
 }
 
 message RaftMessageRequestBatch {

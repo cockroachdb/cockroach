@@ -132,6 +132,42 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 }
 
+func TestRaftTracerDemo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RangeLeaseDuration:       24 * time.Hour, // disable lease moves
+				RaftElectionTimeoutTicks: 1 << 30,        // disable elections
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Write a single value to ensure we have a leader on n1.
+	key := tc.ScratchRange(t)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(key, []byte("value")))
+	require.NoError(t, pErr.GoError())
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	// Set to have 3 voters.
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	for i := 0; i < 100; i++ {
+		value := fmt.Sprintf("value-%d", i)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(key, []byte(value)))
+		require.NoError(t, pErr.GoError())
+	}
+
+	time.Sleep(3 * time.Second)
+	t.FailNow()
+}
+
 // TestCrashWhileTruncatingSideloadedEntries emulates a process crash in the
 // middle of applying a raft log truncation command that removes some entries
 // from the sideloaded storage. The test expects that storage remains in a

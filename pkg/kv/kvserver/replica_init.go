@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -308,19 +309,21 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 // replica, replacing the existing Raft group if any.
 func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	ctx := r.AnnotateCtx(context.Background())
+	logger := &raftLogger{ctx: ctx}
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
 		(*replicaRaftStorage)(r),
 		raftpb.PeerID(r.replicaID),
 		r.shMu.state.RaftAppliedIndex,
 		r.store.cfg,
-		&raftLogger{ctx: ctx},
+		logger,
 		(*replicaRLockedStoreLiveness)(r),
 	))
 	if err != nil {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
+	r.mu.raftTracer = rafttrace.New(logger)
 	r.flowControlV2.InitRaftLocked(ctx, replica_rac2.NewRaftNode(rg, (*replicaForRACv2)(r)))
 	return nil
 }

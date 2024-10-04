@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -126,6 +127,7 @@ type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	getRaftTracer() *rafttrace.RaftTracer
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -164,6 +166,7 @@ type proposer interface {
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
 // testing.
 type proposerRaft interface {
+	Term() uint64
 	Step(raftpb.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
@@ -887,6 +890,15 @@ func proposeBatch(
 		//      API where it populates the index and term for the passed in
 		//      slice of entries. See etcd-io/raft#57.
 		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+
+		const index = uint64(50)
+		if ents[0].Index <= index && ents[len(ents)-1].Index >= index {
+			offset := index - ents[0].Index
+			p.getRaftTracer().MaybeRegisterProposal(raft.LogMark{
+				Term:  raftGroup.Term(),
+				Index: index,
+			}, string(props[offset].idKey))
+		}
 	}
 	return err
 }
@@ -1192,6 +1204,10 @@ func (rp *replicaProposer) onErrProposalDropped(
 	if stateType == raft.StateLeader {
 		rp.store.metrics.RaftProposalsDroppedLeader.Inc(n)
 	}
+}
+
+func (rp *replicaProposer) getRaftTracer() *rafttrace.RaftTracer {
+	return rp.mu.raftTracer
 }
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
