@@ -501,6 +501,7 @@ retry:
 		rc.opts.EvalWaitMetrics.OnBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return false, nil
 	}
+	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	for _, vs := range vss {
 		quorumCount := (len(vs) + 2) / 2
 		votersHaveEvalTokensCount := 0
@@ -565,7 +566,13 @@ retry:
 			// happen when not enough replicas are in StateReplicate, or not enough
 			// have no send-queue. This is acceptable in that the callee will end up
 			// waiting on the refreshCh.
-			state, scratch = WaitForEval(ctx, refreshCh, handles, remainingForQuorum, scratch)
+			//
+			// NB: we are using expensiveLoggingEnabled for the traceIndividualWaits
+			// parameter, to output trace statements, since expensiveLoggingEnabled
+			// is a superset of when tracing is enabled (and in a production setting
+			// is likely to be identical, so there isn't much waste).
+			state, scratch = WaitForEval(
+				ctx, refreshCh, handles, remainingForQuorum, expensiveLoggingEnabled, scratch)
 			switch state {
 			case WaitSuccess:
 				continue
@@ -578,7 +585,7 @@ retry:
 		}
 	}
 	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
-	if log.ExpensiveLogEnabled(ctx, 2) {
+	if expensiveLoggingEnabled {
 		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%s wait-for-all=%v)",
 			rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
 	}

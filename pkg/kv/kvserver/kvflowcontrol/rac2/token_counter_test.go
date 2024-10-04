@@ -406,7 +406,7 @@ func (ts *evalTestState) startWaitForEval(
 	}
 
 	go func() {
-		state, _ := WaitForEval(ctx, refreshCh, handles, quorum, nil)
+		state, _ := WaitForEval(ctx, refreshCh, handles, quorum, false, nil)
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
 

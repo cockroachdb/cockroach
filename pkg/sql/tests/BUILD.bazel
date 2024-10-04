@@ -119,6 +119,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/ts",
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
         "//pkg/util/ioctx",
