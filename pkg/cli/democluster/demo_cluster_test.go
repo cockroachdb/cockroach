@@ -406,7 +406,7 @@ func TestTenantCapabilities(t *testing.T) {
 		if cap == tenantcapabilities.TenantSpanConfigBounds {
 			capValue = `{}`
 		}
-		expectedRows = append(expectedRows, []string{`2`, demoTenantName, `ready`, `shared`, cap.String(), capValue})
+		expectedRows = append(expectedRows, []string{`3`, demoTenantName, `ready`, `shared`, cap.String(), capValue})
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
