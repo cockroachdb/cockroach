@@ -85,14 +85,8 @@ func NewWithAdditionalProvider(
 	c.additionalKVsSource = additional
 
 	spans := []roachpb.Span{
-		{
-			Key:    append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.Key...),
-			EndKey: append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.EndKey...),
-		},
-		{
-			Key:    append(codec.TenantPrefix(), keys.SystemZonesTableSpan.Key...),
-			EndKey: append(codec.TenantPrefix(), keys.SystemZonesTableSpan.EndKey...),
-		},
+		codec.TableSpan(keys.DescriptorTableID),
+		codec.TableSpan(keys.ZonesTableID),
 	}
 	c.w = rangefeedcache.NewWatcher(
 		"system-config-cache", clock, f,
