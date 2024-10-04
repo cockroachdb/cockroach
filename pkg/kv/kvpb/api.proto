@@ -3567,7 +3567,15 @@ message TenantSettingsEvent {
   // can't do that yet due to a dependency cycle. We should break the cycle.
   uint32 service_mode = 9;
 
-  // NEXT ID: 10
+  // ClusterInitGracePeriodEndTS is the timestamp (in seconds since the Unix epoch)
+  // marking the end of the grace period for clusters without a license. After this
+  // timestamp, if no license is installed, the cluster will be subject to throttling.
+  // Since secondary tenants cannot access the KV store where this is saved, the value
+  // is propagated through the tenant settings. This is only set when the event type is
+  // METADATA_EVENT.
+  int64 ClusterInitGracePeriodEndTS = 10;
+
+  // NEXT ID: 11
 }
 
 // TenantSetting contains the setting key and value of a tenant setting.
