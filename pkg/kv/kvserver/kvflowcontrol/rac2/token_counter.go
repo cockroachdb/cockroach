@@ -24,6 +24,8 @@ import (
 
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
+//
+// TODO(sumeer): remove this interface since there is only one implementation.
 type TokenWaitingHandle interface {
 	// WaitChannel is the channel that will be signaled if tokens are possibly
 	// available. If signaled, the caller must call
@@ -49,6 +51,9 @@ type TokenWaitingHandle interface {
 	// available. True is returned if tokens are available, false otherwise. If
 	// no tokens are available, the caller can resume waiting using WaitChannel.
 	ConfirmHaveTokensAndUnblockNextWaiter() bool
+	// StreamString returns a string representation of the stream. Used for
+	// tracing.
+	StreamString() string
 }
 
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
@@ -363,6 +368,11 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	return haveTokens
 }
 
+// StreamString implements TokenWaitingHandle.
+func (wh waitHandle) StreamString() string {
+	return wh.b.stream.String()
+}
+
 type tokenWaitingHandleInfo struct {
 	// Can be nil, in which case the wait on this can never succeed.
 	handle TokenWaitingHandle
@@ -411,12 +421,14 @@ func (s WaitEndState) SafeFormat(w redact.SafePrinter, _ rune) {
 // available, including all the required wait handles. The caller can provide a
 // refresh channel, which when signaled will cause the function to return
 // RefreshWaitSignaled, allowing the caller to retry waiting with updated
-// handles.
+// handles. clock must be non-nil if traceIndividualDelays is true.
 func WaitForEval(
 	ctx context.Context,
 	refreshWaitCh <-chan struct{},
 	handles []tokenWaitingHandleInfo,
 	requiredQuorum int,
+	traceIndividualDelays bool,
+	clock *hlc.Clock,
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
@@ -452,6 +464,16 @@ func WaitForEval(
 	m := len(scratch)
 	signaledQuorumCount := 0
 
+	var startWait time.Time
+	if traceIndividualDelays {
+		startWait = clock.PhysicalTime()
+	}
+	traceDelayWithReason := func(reason string) {
+		nextStartWait := clock.PhysicalTime()
+		waitDur := nextStartWait.Sub(startWait)
+		startWait = nextStartWait
+		log.Eventf(ctx, "wait-for-eval waited %s for %s", waitDur, reason)
+	}
 	// Wait for (1) at least a quorumCount of partOfQuorum handles to be signaled
 	// and have available tokens; as well as (2) all of the required wait handles
 	// to be signaled and have tokens available.
@@ -459,8 +481,14 @@ func WaitForEval(
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
 		case 0:
+			if traceIndividualDelays {
+				traceDelayWithReason("context cancellation")
+			}
 			return ContextCanceled, scratch
 		case 1:
+			if traceIndividualDelays {
+				traceDelayWithReason("refresh channel")
+			}
 			return RefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-2]
@@ -469,7 +497,9 @@ func WaitForEval(
 				// available. Continue waiting on this handle.
 				continue
 			}
-
+			if traceIndividualDelays {
+				traceDelayWithReason(handleInfo.handle.StreamString())
+			}
 			if handleInfo.partOfQuorum {
 				signaledQuorumCount++
 			}
