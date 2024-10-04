@@ -3,13 +3,16 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import moment from "moment-timezone";
 import useSWR from "swr";
 
 import { StoreID } from "../../types/clusterTypes";
 import { fetchDataJSON } from "../fetchData";
+import { convertServerPaginationToClientPagination } from "../serverTypeConversionUtils";
 import {
   APIV2ResponseWithPaginationState,
-  SimplePaginationState,
+  ResultsWithPagination,
+  PaginationRequest,
 } from "../types";
 
 const TABLE_METADATA_API_PATH = "api/v2/table_metadata/";
@@ -24,7 +27,8 @@ export enum TableSortOption {
   LAST_UPDATED = "lastUpdated",
 }
 
-export type TableMetadata = {
+// TableMetadataFromServer is the shape of the data returned from the server.
+type TableMetadataServer = {
   db_id: number;
   db_name: string;
   table_id: number;
@@ -45,15 +49,63 @@ export type TableMetadata = {
   stats_last_updated: string | null;
 };
 
-type TableMetadataResponse = APIV2ResponseWithPaginationState<TableMetadata[]>;
+// Client type.
+export type TableMetadata = {
+  dbId: number;
+  dbName: string;
+  tableId: number;
+  schemaName: string;
+  tableName: string;
+  replicationSizeBytes: number;
+  rangeCount: number;
+  columnCount: number;
+  indexCount: number;
+  percentLiveData: number;
+  totalLiveDataBytes: number;
+  totalDataBytes: number;
+  storeIds: StoreID[];
+  lastUpdated: moment.Moment;
+  lastUpdateError: string | null;
+  autoStatsEnabled: boolean;
+  // Optimizer stats.
+  statsLastUpdated: moment.Moment | null;
+};
 
 export type ListTableMetadataRequest = {
   dbId?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   storeIds?: StoreID[];
-  pagination: SimplePaginationState;
+  pagination: PaginationRequest;
   name?: string;
+};
+
+type TableMetadataResponse = ResultsWithPagination<TableMetadata[]>;
+
+const convertTableMetadataFromServer = (
+  resp: TableMetadataServer,
+): TableMetadata => {
+  return {
+    dbId: resp.db_id ?? 0,
+    dbName: resp.db_name ?? "",
+    tableId: resp.table_id ?? 0,
+    schemaName: resp.schema_name ?? "",
+    tableName: resp.table_name ?? "",
+    replicationSizeBytes: resp.replication_size_bytes ?? 0,
+    rangeCount: resp.range_count ?? 0,
+    columnCount: resp.column_count ?? 0,
+    indexCount: resp.index_count ?? 0,
+    percentLiveData: resp.percent_live_data ?? 0,
+    totalLiveDataBytes: resp.total_live_data_bytes ?? 0,
+    totalDataBytes: resp.total_data_bytes ?? 0,
+    storeIds: resp.store_ids?.map(storeID => storeID as StoreID) ?? [],
+    lastUpdated: moment(resp.last_updated ?? ""),
+    lastUpdateError: resp.last_update_error,
+    autoStatsEnabled: resp.auto_stats_enabled,
+    statsLastUpdated: resp.stats_last_updated
+      ? moment(resp.stats_last_updated)
+      : null,
+  };
 };
 
 async function getTableMetadata(
@@ -83,7 +135,19 @@ async function getTableMetadata(
   if (req.name) {
     urlParams.append("name", req.name);
   }
-  return fetchDataJSON(TABLE_METADATA_API_PATH + "?" + urlParams.toString());
+  return fetchDataJSON<
+    APIV2ResponseWithPaginationState<TableMetadataServer[]>,
+    null
+  >(TABLE_METADATA_API_PATH + "?" + urlParams.toString()).then(
+    (resp: APIV2ResponseWithPaginationState<TableMetadataServer[]>) => {
+      return {
+        results: resp.results?.map(convertTableMetadataFromServer) ?? [],
+        pagination: convertServerPaginationToClientPagination(
+          resp.pagination_info,
+        ),
+      };
+    },
+  );
 }
 
 const createKey = (req: ListTableMetadataRequest) => {
@@ -110,25 +174,40 @@ export const useTableMetadata = (req: ListTableMetadataRequest) => {
   return { data, error, isLoading, refreshTables: mutate };
 };
 
+// Point lookup - table details.
+
 type TableDetailsRequest = {
   tableId: number;
 };
 
-export type TableDetailsResponse = {
-  metadata: TableMetadata;
+type TableDetailsResponseServer = {
+  metadata: TableMetadataServer;
   create_statement: string;
 };
+
+export type TableDetails = {
+  metadata: TableMetadata;
+  createStatement: string;
+};
+
 async function getTableDetails(
   req: TableDetailsRequest,
-): Promise<TableDetailsResponse> {
+): Promise<TableDetails> {
   if (!req.tableId || Number.isNaN(req.tableId)) {
     throw new Error("Table ID is required");
   }
-  return fetchDataJSON(`${TABLE_METADATA_API_PATH}${req.tableId}/`);
+  return fetchDataJSON<TableDetailsResponseServer, null>(
+    `${TABLE_METADATA_API_PATH}${req.tableId}/`,
+  ).then((resp: TableDetailsResponseServer) => {
+    return {
+      metadata: convertTableMetadataFromServer(resp.metadata),
+      createStatement: resp.create_statement,
+    };
+  });
 }
 
 export const useTableDetails = (req: TableDetailsRequest) => {
-  const { data, error, isLoading } = useSWR<TableDetailsResponse>(
+  const { data, error, isLoading } = useSWR<TableDetails>(
     req.tableId.toString(),
     () => getTableDetails(req),
   );

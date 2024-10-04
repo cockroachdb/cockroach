@@ -142,8 +142,6 @@ export const DatabasesPageV2 = () => {
   );
   const nodesResp = useNodeStatuses();
 
-  const paginationState = data?.pagination_info;
-
   const onNodeRegionsChange = (storeIDs: StoreID[]) => {
     setFilters({
       storeIDs: storeIDs.map(sid => sid.toString()),
@@ -212,9 +210,9 @@ export const DatabasesPageV2 = () => {
       </PageSection>
       <PageSection>
         <PageCount
-          page={params.pagination.page ?? 0}
-          pageSize={params.pagination.pageSize ?? 0}
-          total={paginationState?.total_results ?? 0}
+          page={params.pagination.page}
+          pageSize={params.pagination.pageSize}
+          total={data?.pagination.totalResults ?? 0}
           entity="databases"
         />
         <Table
@@ -231,7 +229,7 @@ export const DatabasesPageV2 = () => {
             pageSize: params.pagination.pageSize,
             showSizeChanger: false,
             position: ["bottomCenter"],
-            total: paginationState?.total_results,
+            total: data?.pagination.totalResults,
           }}
           onChange={onTableChange}
         />

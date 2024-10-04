@@ -26,7 +26,7 @@ export function createInitialState<T>(
   };
 }
 
-export type SimplePaginationState = {
+export type PaginationRequest = {
   pageSize: number;
   pageNum: number;
 };
@@ -40,4 +40,15 @@ export type APIV2PaginationResponse = {
 export type APIV2ResponseWithPaginationState<T> = {
   results: T;
   pagination_info: APIV2PaginationResponse;
+};
+
+export type PaginationState = {
+  pageSize: number;
+  pageNum: number;
+  totalResults: number;
+};
+
+export type ResultsWithPagination<T> = {
+  results: T;
+  pagination: PaginationState;
 };

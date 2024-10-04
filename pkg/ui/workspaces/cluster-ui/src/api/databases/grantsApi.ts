@@ -8,7 +8,8 @@ import useSWRImmutable from "swr/immutable";
 import { fetchDataJSON } from "../fetchData";
 import {
   APIV2ResponseWithPaginationState,
-  SimplePaginationState,
+  ResultsWithPagination,
+  PaginationRequest,
 } from "../types";
 
 export type DatabaseGrant = {
@@ -25,7 +26,7 @@ type DatabaseGrantsRequest = {
   dbId: number;
   sortBy?: GrantsSortOptions;
   sortOrder?: "asc" | "desc";
-  pagination?: SimplePaginationState;
+  pagination?: PaginationRequest;
 };
 
 export type DatabaseGrantsResponse = APIV2ResponseWithPaginationState<
@@ -75,12 +76,10 @@ type TableGrantsRequest = {
   tableId: number;
   sortBy?: GrantsSortOptions;
   sortOrder?: "asc" | "desc";
-  pagination?: SimplePaginationState;
+  pagination?: PaginationRequest;
 };
 
-export type TableGrantsResponse = APIV2ResponseWithPaginationState<
-  DatabaseGrant[]
->;
+export type TableGrantsResponse = ResultsWithPagination<DatabaseGrant[]>;
 
 const createTableGrantsPath = (req: TableGrantsRequest): string => {
   const { tableId, pagination, sortBy, sortOrder } = req;
@@ -100,11 +99,22 @@ const createTableGrantsPath = (req: TableGrantsRequest): string => {
   return `api/v2/grants/tables/${tableId}/?` + urlParams.toString();
 };
 
-const fetchTableGrants = (
+const fetchTableGrants = async (
   req: TableGrantsRequest,
 ): Promise<TableGrantsResponse> => {
   const path = createTableGrantsPath(req);
-  return fetchDataJSON(path);
+  const resp = await fetchDataJSON<
+    APIV2ResponseWithPaginationState<DatabaseGrant[]>,
+    null
+  >(path);
+  return {
+    results: resp.results,
+    pagination: {
+      pageSize: resp.pagination_info?.page_size ?? 0,
+      pageNum: resp.pagination_info?.page_num ?? 0,
+      totalResults: resp.pagination_info?.total_results ?? 0,
+    },
+  };
 };
 
 export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
@@ -115,7 +125,6 @@ export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
 
   return {
     tableGrants: data?.results,
-    pagination: data?.pagination_info,
     isLoading,
     error: error,
   };

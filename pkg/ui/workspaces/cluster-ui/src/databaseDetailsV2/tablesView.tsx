@@ -40,7 +40,7 @@ import {
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
-import { rawTableMetadataToRows } from "./utils";
+import { tableMetadataToRows } from "./utils";
 
 const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
   [
@@ -49,10 +49,10 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
         <Tooltip title={"The name of the table."}>{TableColName.NAME}</Tooltip>
       ),
       width: "15%",
-      sorter: (a, b) => a.name.localeCompare(b.name),
+      sorter: (a, b) => a.tableName.localeCompare(b.tableName),
       render: (t: TableRow) => {
         return (
-          <Link to={`/table/${t.tableID}`}>{t.qualifiedNameWithSchema}</Link>
+          <Link to={`/table/${t.tableId}`}>{t.qualifiedNameWithSchema}</Link>
         );
       },
       sortKey: TableSortOption.NAME,
@@ -131,9 +131,9 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       render: (t: TableRow) => {
         return (
           <div>
-            <div>{t.liveDataPercentage * 100}%</div>
+            <div>{t.percentLiveData * 100}%</div>
             <div>
-              {Bytes(t.liveDataBytes)} / {Bytes(t.totalDataBytes)}
+              {Bytes(t.totalLiveDataBytes)} / {Bytes(t.totalDataBytes)}
             </div>
           </div>
         );
@@ -227,7 +227,6 @@ export const TablesPageV2 = () => {
     createTableMetadataRequestFromParams(dbID, params),
   );
   const nodesResp = useNodeStatuses();
-  const paginationState = data?.pagination_info;
 
   const onNodeRegionsChange = (storeIDs: StoreID[]) => {
     setFilters({
@@ -236,19 +235,18 @@ export const TablesPageV2 = () => {
   };
 
   const tableList = data?.results;
-
   const tableData = useMemo(
     () =>
-      rawTableMetadataToRows(tableList ?? [], {
+      tableMetadataToRows(tableList ?? [], {
         nodeIDToRegion: nodesResp.nodeIDToRegion,
         storeIDToNodeID: nodesResp.storeIDToNodeID,
         isLoading: nodesResp.isLoading,
       }),
     [
       tableList,
-      nodesResp.isLoading,
       nodesResp.nodeIDToRegion,
       nodesResp.storeIDToNodeID,
+      nodesResp.isLoading,
     ],
   );
 
@@ -309,7 +307,7 @@ export const TablesPageV2 = () => {
         <PageCount
           page={params.pagination.page}
           pageSize={params.pagination.pageSize}
-          total={data?.pagination_info?.total_results ?? 0}
+          total={data?.pagination.totalResults ?? 0}
           entity="tables"
         />
         <Table
@@ -326,7 +324,7 @@ export const TablesPageV2 = () => {
             pageSize: params.pagination.pageSize,
             showSizeChanger: false,
             position: ["bottomCenter"],
-            total: paginationState?.total_results,
+            total: data?.pagination.totalResults,
           }}
           onChange={onTableChange}
         />

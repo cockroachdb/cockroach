@@ -3,13 +3,17 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import moment from "moment-timezone";
 import useSWR from "swr";
 
 import { fetchDataJSON } from "src/api/fetchData";
 
+import { StoreID } from "../../types/clusterTypes";
+import { convertServerPaginationToClientPagination } from "../serverTypeConversionUtils";
 import {
   APIV2ResponseWithPaginationState,
-  SimplePaginationState,
+  ResultsWithPagination,
+  PaginationRequest,
 } from "../types";
 
 const DATABASES_API_V2 = "api/v2/database_metadata/";
@@ -22,7 +26,7 @@ export enum DatabaseSortOptions {
   LAST_UPDATED = "lastUpdated",
 }
 
-export type DatabaseMetadata = {
+type DatabaseMetadataServer = {
   db_id: number;
   db_name: string;
   size_bytes: number;
@@ -31,19 +35,41 @@ export type DatabaseMetadata = {
   last_updated: string;
 };
 
+export type DatabaseMetadata = {
+  dbId: number;
+  dbName: string;
+  sizeBytes: number;
+  tableCount: number;
+  storeIds: StoreID[];
+  lastUpdated: moment.Moment | null;
+};
+
 export type DatabaseMetadataRequest = {
   name?: string;
   sortBy?: string;
   sortOrder?: string;
-  pagination: SimplePaginationState;
+  pagination: PaginationRequest;
   storeIds?: number[];
 };
 
-export type DatabaseMetadataResponse = APIV2ResponseWithPaginationState<
-  DatabaseMetadata[]
->;
+type DatabaseMetadataResponse = ResultsWithPagination<DatabaseMetadata[]>;
 
-export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
+const convertDatabaseMetadataFromServer = (
+  d: DatabaseMetadataServer,
+): DatabaseMetadata => {
+  return {
+    dbId: d.db_id,
+    dbName: d.db_name,
+    sizeBytes: d.size_bytes,
+    tableCount: d.table_count,
+    storeIds: d.store_ids?.map(sid => sid as StoreID) ?? [],
+    lastUpdated: d.last_updated ? moment(d.last_updated) : null,
+  };
+};
+
+export const getDatabaseMetadata = async (
+  req: DatabaseMetadataRequest,
+): Promise<DatabaseMetadataResponse> => {
   const urlParams = new URLSearchParams();
   if (req.name) {
     urlParams.append("name", req.name);
@@ -64,9 +90,13 @@ export const getDatabaseMetadata = async (req: DatabaseMetadataRequest) => {
     req.storeIds.forEach(id => urlParams.append("storeId", id.toString()));
   }
 
-  return fetchDataJSON<DatabaseMetadataResponse, DatabaseMetadataRequest>(
-    DATABASES_API_V2 + "?" + urlParams.toString(),
-  );
+  return fetchDataJSON<
+    APIV2ResponseWithPaginationState<DatabaseMetadataServer[]>,
+    null
+  >(DATABASES_API_V2 + "?" + urlParams.toString()).then(resp => ({
+    results: resp.results?.map(convertDatabaseMetadataFromServer) ?? [],
+    pagination: convertServerPaginationToClientPagination(resp.pagination_info),
+  }));
 };
 
 const createKey = (req: DatabaseMetadataRequest) => {
@@ -83,14 +113,12 @@ const createKey = (req: DatabaseMetadataRequest) => {
 };
 
 export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
-  const { data, error, isLoading, mutate } = useSWR<DatabaseMetadataResponse>(
-    createKey(req),
-    () => getDatabaseMetadata(req),
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
+  const { data, error, isLoading, mutate } = useSWR<
+    ResultsWithPagination<DatabaseMetadata[]>
+  >(createKey(req), () => getDatabaseMetadata(req), {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
 
   return {
     data,
@@ -100,6 +128,10 @@ export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
   };
 };
 
+type DatabaseMetadataByIDResponseServer = {
+  metadata: DatabaseMetadataServer;
+};
+
 type DatabaseMetadataByIDResponse = {
   metadata: DatabaseMetadata;
 };
@@ -107,7 +139,11 @@ type DatabaseMetadataByIDResponse = {
 const getDatabaseMetadataByID = async (
   dbID: number,
 ): Promise<DatabaseMetadataByIDResponse> => {
-  return fetchDataJSON(DATABASES_API_V2 + dbID + "/");
+  return fetchDataJSON<DatabaseMetadataByIDResponseServer, null>(
+    DATABASES_API_V2 + dbID + "/",
+  ).then(resp => ({
+    metadata: convertDatabaseMetadataFromServer(resp.metadata),
+  }));
 };
 
 export const useDatabaseMetadataByID = (dbID: number) => {
