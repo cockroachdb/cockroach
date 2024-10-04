@@ -1167,13 +1167,15 @@ func EncodePrimaryIndex(
 		// The decoders expect that column family 0 is encoded with a TUPLE value tag, so we
 		// don't want to use the untagged value encoding.
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-			// Single column value families which are not stored can be skipped, these
-			// may exist temporarily while adding a column.
-			if !storedColumns.Contains(family.DefaultColumnID) {
-				if cdatum, ok := values[colMap.GetDefault(family.DefaultColumnID)].(tree.CompositeDatum); !ok ||
-					!cdatum.IsComposite() {
-					return nil
-				}
+			// Single column value families which are not stored or key columns can be skipped,
+			// these may exist temporarily while adding a column. For key columns composite keys may
+			// be stored at the same time.
+			storeCompositeKey := false
+			if cdatum, ok := values[colMap.GetDefault(family.DefaultColumnID)].(tree.CompositeDatum); ok && cdatum.IsComposite() {
+				storeCompositeKey = index.CollectKeyColumnIDs().Contains(family.DefaultColumnID)
+			}
+			if !storedColumns.Contains(family.DefaultColumnID) || storeCompositeKey {
+				return nil
 			}
 			datum := findColumnValue(family.DefaultColumnID, colMap, values)
 			// We want to include this column if its value is non-null or
