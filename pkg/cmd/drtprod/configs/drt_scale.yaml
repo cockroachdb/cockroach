@@ -1,14 +1,15 @@
-# Yaml for creating and configuring the drt-large and workload-large clusters. This also configures the datadog.
+# Yaml for creating and configuring the drt-scale cluster. This also configures the datadog.
 environment:
   ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
   ROACHPROD_DNS: drt.crdb.io
   ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
   ROACHPROD_GCE_DNS_ZONE: drt
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
-  CLUSTER: drt-large
-  WORKLOAD_CLUSTER: workload-large
+  CLUSTER: drt-scale
+  WORKLOAD_CLUSTER: workload-scale
 
 targets:
+  # crdb cluster specs
   - target_name: $CLUSTER
     steps:
       - command: create
@@ -18,14 +19,15 @@ targets:
           clouds: gce
           gce-managed: true
           gce-enable-multiple-stores: true
-          gce-zones: "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1"
-          nodes: 15
+          gce-zones: "us-central1-a"
+          nodes: 150
           gce-machine-type: n2-standard-16
           local-ssd: true
           gce-local-ssd-count: 4
           os-volume-size: 100
           username: drt
           lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20240319"
         on_rollback:
           - command: destroy
             args:
@@ -44,6 +46,7 @@ targets:
           - "--binary"
           - "./cockroach"
         flags:
+          # add flag to set provisioned throughput on each store according to their cloud provider limits
           enable-fluent-sink: true
           store-count: 4
           args: --wal-failover=among-stores
@@ -58,28 +61,15 @@ targets:
           - $CLUSTER
           - --
           - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
-      - command: sql
-        args:
-          - $CLUSTER:1
-          - --
-          - -e
-          - "ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=5,num_voters=5"
-      - command: sql
-        args:
-          - $CLUSTER:1
-          - --
-          - -e
-          - "ALTER RANGE default CONFIGURE ZONE USING num_replicas=5,num_voters=5"
-  - target_name: $WORKLOAD_CLUSTER
-    steps:
+  # workload cluster specs
       - command: create
         args:
           - $WORKLOAD_CLUSTER
         flags:
           clouds: gce
-          gce-zones: "northamerica-northeast2-a,us-east5-a,us-east1-b"
-          nodes: 3
-          gce-machine-type: n2d-standard-4
+          gce-zones: "us-central1-a"
+          nodes: 9
+          gce-machine-type: n2-standard-8
           os-volume-size: 100
           username: workload
           lifetime: 8760h
@@ -99,3 +89,20 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/configs/setup_datadog_workload"
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - ./certs/*
