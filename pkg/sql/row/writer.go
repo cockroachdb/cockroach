@@ -136,15 +136,25 @@ func prepareInsertOrUpdateBatch(
 			if !ok {
 				continue
 			}
+
+			var marshaled roachpb.Value
+			var err error
+			typ := fetchedCols[idx].GetType()
+
 			// Skip any values with a default ID not stored in the primary index,
 			// which can happen if we are adding new columns.
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
-				continue
-			}
-			typ := fetchedCols[idx].GetType()
-			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
-			if err != nil {
-				return nil, err
+			skip, couldBeComposite := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx])
+			if skip {
+				// If the column could be composite, there could be a previous KV, so we
+				// still need to issue a Delete.
+				if !couldBeComposite {
+					continue
+				}
+			} else {
+				marshaled, err = valueside.MarshalLegacy(typ, values[idx])
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			// TODO(ssd): Here and below investigate reducing the
@@ -152,22 +162,28 @@ func prepareInsertOrUpdateBatch(
 			// value.
 			var oldVal []byte
 			if oth.IsSet() && len(oldValues) > 0 {
-				old, err := valueside.MarshalLegacy(typ, oldValues[idx])
-				if err != nil {
-					return nil, err
+				// If the column could be composite, we only encode the old value if it
+				// was a composite value.
+				if !couldBeComposite || oldValues[idx].(tree.CompositeDatum).IsComposite() {
+					old, err := valueside.MarshalLegacy(typ, oldValues[idx])
+					if err != nil {
+						return nil, err
+					}
+					if old.IsPresent() {
+						oldVal = old.TagAndDataBytes()
+					}
 				}
-				oldVal = old.TagAndDataBytes()
 			}
 
-			if marshaled.RawBytes == nil {
-				if overwrite {
+			if !marshaled.IsPresent() {
+				if oth.IsSet() {
+					// If using OriginTimestamp'd CPuts, we _always_ want to issue a Delete
+					// so that we can confirm our expected bytes were correct.
+					oth.DelWithCPut(ctx, batch, kvKey, oldVal, traceKV)
+				} else if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
-					if oth.IsSet() {
-						oth.DelWithCPut(ctx, batch, kvKey, oldVal, traceKV)
-					} else {
-						insertDelFn(ctx, batch, kvKey, traceKV)
-					}
+					insertDelFn(ctx, batch, kvKey, traceKV)
 				}
 			} else {
 				// We only output non-NULL values. Non-existent column keys are
@@ -203,7 +219,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
+			if skip, _ := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
 				continue
 			}
 
