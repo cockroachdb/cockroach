@@ -472,6 +472,12 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 	}
 
 	if fn.Body != "" {
+		// This expression evaluator cannot run functions defined with a SQL body.
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function in this context")
+	}
+	if fn.Fn == nil {
+		// This expression evaluator cannot run functions that are not "normal"
+		// builtins; that is, not aggregate or window functions.
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function in this context")
 	}
 

@@ -547,3 +547,12 @@ def
 # Regression test for the special "tracing" variable.
 query error parameter \"tracing\" cannot be changed
 SET LOCAL tracing = 'off'
+
+# Regression test for using builtin functions as the value for SET.
+# Normal functions work, but aggregate functions are not allowed.
+# See https://github.com/cockroachdb/cockroach/issues/131158.
+statement ok
+SET LOCAL search_path = concat('1', 'a')
+
+statement error cannot evaluate function in this context
+SET LOCAL search_path = string_agg('1', ',')
