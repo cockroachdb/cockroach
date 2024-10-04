@@ -2234,8 +2234,8 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	// user customized the storage cluster in the `StartOpts`, we use
 	// that.
 	storageCluster := c.All()
-	if len(startOpts.SeparateProcessStorageNodes) > 0 {
-		storageCluster = startOpts.SeparateProcessStorageNodes
+	if len(startOpts.StorageNodes) > 0 {
+		storageCluster = startOpts.StorageNodes
 	}
 
 	// If the user indicated nodes where the virtual cluster should be

@@ -520,8 +520,7 @@ func (rd *replicationDriver) setupC2C(
 	workloadNode := c.WorkloadNode()
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	srcStartOps := option.NewStartOpts(option.NoBackupSchedule)
-	srcStartOps.RoachprodOpts.InitTarget = 1
+	srcStartOps := option.NewStartOpts(option.NoBackupSchedule, option.WithInitTarget(1))
 
 	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
 	srcClusterSetting := install.MakeClusterSettings()
@@ -553,14 +552,12 @@ func (rd *replicationDriver) setupC2C(
 
 	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
-	deprecatedCreateTenantAdminRole(t, "src-system", srcSQL)
-	deprecatedCreateTenantAdminRole(t, "dst-system", destSQL)
-
 	srcTenantID, destTenantID := 3, 3
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	deprecatedCreateInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
+	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster))
+	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -943,7 +940,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.t.Status("starting replication stream")
 	rd.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
 	ingestionJobID := rd.startReplicationStream(ctx)
-	removeTenantRateLimiters(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
+	rd.setup.dst.sysSQL.Exec(
+		rd.t,
+		`ALTER TENANT $1 GRANT CAPABILITY exempt_from_rate_limiting=true`,
+		rd.setup.dst.name,
+	)
 
 	// latency verifier queries may error during a node shutdown event; therefore
 	// tolerate errors if we anticipate node deaths.
@@ -1014,8 +1015,12 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	conn := deprecatedStartInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
-	conn.Close()
+	startOpts := option.StartSharedVirtualClusterOpts(
+		rd.setup.dst.name,
+		option.StorageCluster(rd.setup.dst.gatewayNodes),
+		option.WithInitTarget(rd.setup.dst.gatewayNodes[0]),
+	)
+	rd.c.StartServiceForVirtualCluster(ctx, rd.t.L(), startOpts, install.MakeClusterSettings())
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
 
