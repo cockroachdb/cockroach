@@ -63,6 +63,8 @@ targets:
           - --
           - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
   # workload cluster specs
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
       - command: create
         args:
           - $WORKLOAD_CLUSTER
@@ -90,6 +92,11 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/configs/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
       - command: get
         args:
           - $CLUSTER:1
@@ -106,7 +113,7 @@ targets:
           - --
           - chmod
           - 600
-          - certs/*
+          - './certs/*'
       - command: put
         args:
           - $WORKLOAD_CLUSTER

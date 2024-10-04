@@ -99,3 +99,33 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/configs/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - sudo
+          - rm
+          - -rf
+          - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'
