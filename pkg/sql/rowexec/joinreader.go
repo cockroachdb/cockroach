@@ -917,6 +917,7 @@ func (jr *joinReader) readInput() (
 		// did the reset for this batch.
 	}
 
+	hadPreviousBatches := jr.resetScratchWhenReadingInput
 	if jr.resetScratchWhenReadingInput {
 		// Deeply reset the rows from the previous input batch.
 		for i := range jr.scratchInputRows {
@@ -940,6 +941,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	// Read the next batch of input rows.
+	var inputExhausted bool
 	for {
 		var encDatumRow rowenc.EncDatumRow
 		var rowSize int64
@@ -962,6 +964,7 @@ func (jr *joinReader) readInput() (
 				return jrReadingInput, nil, meta
 			}
 			if encDatumRow == nil {
+				inputExhausted = true
 				break
 			}
 			rowSize = int64(encDatumRow.Size())
@@ -1039,7 +1042,8 @@ func (jr *joinReader) readInput() (
 	}
 
 	// Figure out what key spans we need to lookup.
-	spans, spanIDs, err := jr.strategy.processLookupRows(jr.scratchInputRows)
+	singleRowInput := !hadPreviousBatches && inputExhausted && len(jr.scratchInputRows) == 1
+	spans, spanIDs, err := jr.strategy.processLookupRows(jr.scratchInputRows, singleRowInput)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
