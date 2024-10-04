@@ -16,7 +16,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -664,7 +662,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// Wait for the first 3/4 of the duration and then measure the QPS in
 		// the last 1/4.
 		waitDuration(ctx, v.fillDuration*3/4)
-		clusterMaxRate <- v.measureQPS(ctx, t, v.fillDuration*1/4)
+		clusterMaxRate <- int(measureQPS(ctx, t, c, v.fillDuration*1/4, v.stableNodes()))
 		return nil
 	})
 	// Start filling the system without a rate.
@@ -881,54 +879,6 @@ func (v variations) stableNodes() option.NodeListOption {
 // require multiple targets we could add multi-target support.
 func (v variations) targetNodes() option.NodeListOption {
 	return v.Node(v.numNodes)
-}
-
-// measureQPS will measure the approx QPS at the time this command is run. The
-// duration is the interval to measure over. Setting too short of an interval
-// can mean inaccuracy in results. Setting too long of an interval may mean the
-// impact is blurred out.
-func (v variations) measureQPS(ctx context.Context, t test.Test, duration time.Duration) int {
-	stableNodes := v.stableNodes()
-
-	totalOpsCompleted := func() int {
-		// NB: We can't hold the connection open during the full duration.
-		var dbs []*gosql.DB
-		for _, nodeId := range stableNodes {
-			db := v.Conn(ctx, t.L(), nodeId)
-			defer db.Close()
-			dbs = append(dbs, db)
-		}
-		// Count the inserts before sleeping.
-		var total int64
-		group := ctxgroup.WithContext(ctx)
-		for _, db := range dbs {
-			group.Go(func() error {
-				var v float64
-				if err := db.QueryRowContext(
-					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
-				).Scan(&v); err != nil {
-					return err
-				}
-				atomic.AddInt64(&total, int64(v))
-				return nil
-			})
-		}
-
-		require.NoError(t, group.Wait())
-		return int(total)
-	}
-
-	// Measure the current time and the QPS now.
-	startTime := timeutil.Now()
-	beforeOps := totalOpsCompleted()
-	// Wait for the duration minus the first query time.
-	select {
-	case <-ctx.Done():
-		return 0
-	case <-time.After(duration - timeutil.Since(startTime)):
-		afterOps := totalOpsCompleted()
-		return int(float64(afterOps-beforeOps) / duration.Seconds())
-	}
 }
 
 type workloadType interface {
