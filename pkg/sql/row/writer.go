@@ -136,15 +136,25 @@ func prepareInsertOrUpdateBatch(
 			if !ok {
 				continue
 			}
+
+			var marshaled roachpb.Value
+			var err error
+			typ := fetchedCols[idx].GetType()
+
 			// Skip any values with a default ID not stored in the primary index,
 			// which can happen if we are adding new columns.
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
-				continue
-			}
-			typ := fetchedCols[idx].GetType()
-			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
-			if err != nil {
-				return nil, err
+			skip, couldBeComposite := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx])
+			if skip {
+				// If the value could be composite, there could be a previous KV, so we
+				// still need to issue a delete.
+				if !couldBeComposite {
+					continue
+				}
+			} else {
+				marshaled, err = valueside.MarshalLegacy(typ, values[idx])
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			// TODO(ssd): Here and below investigate reducing the
@@ -152,15 +162,17 @@ func prepareInsertOrUpdateBatch(
 			// value.
 			var oldVal []byte
 			if oth.IsSet() && len(oldValues) > 0 {
-				old, err := valueside.MarshalLegacy(typ, oldValues[idx])
-				if err != nil {
-					return nil, err
+				if !couldBeComposite || oldValues[idx].(tree.CompositeDatum).IsComposite() {
+					old, err := valueside.MarshalLegacy(typ, oldValues[idx])
+					if err != nil {
+						return nil, err
+					}
+					oldVal = old.TagAndDataBytes()
 				}
-				oldVal = old.TagAndDataBytes()
 			}
 
-			if marshaled.RawBytes == nil {
-				if overwrite {
+			if len(marshaled.RawBytes) == 0 {
+				if overwrite || oth.IsSet() {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
 					if oth.IsSet() {
@@ -203,7 +215,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
+			if skip, _ := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
 				continue
 			}
 
