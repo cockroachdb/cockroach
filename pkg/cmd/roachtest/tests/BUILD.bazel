@@ -288,6 +288,7 @@ go_library(
         "//pkg/workload/cli",
         "//pkg/workload/debug",
         "//pkg/workload/histogram",
+        "//pkg/workload/histogram/exporter",
         "//pkg/workload/querybench",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpcds",

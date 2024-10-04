@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
+        "//pkg/workload/histogram/exporter",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_golang//prometheus/collectors",
