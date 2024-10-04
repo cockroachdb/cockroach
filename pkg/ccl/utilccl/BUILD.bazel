@@ -45,6 +45,7 @@ go_test(
         "//pkg/server/license",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/envutil",
