@@ -61,6 +61,7 @@ go_library(
         "//pkg/sql/tablemetadatacache",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",

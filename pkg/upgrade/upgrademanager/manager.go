@@ -852,6 +852,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			LeaseManager:       m.lm,
 			InternalExecutor:   m.ie,
 			JobRegistry:        m.jr,
+			TestingKnobs:       &m.knobs,
 			ClusterID:          m.clusterID.Get(),
 			LicenseEnforcer:    m.le,
 			TenantInfoAccessor: m.deps.TenantInfoAccessor,
