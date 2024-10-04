@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -142,7 +144,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
 
-	url := r.buildReportingURL(report)
+	license, err := utilccl.GetLicense(r.Settings)
+	if err != nil {
+		if log.V(2) {
+			log.Warningf(ctx, "failed to retrieve license while reporting diagnostics: %v", err)
+		}
+	}
+	url := r.buildReportingURL(report, license)
 	if url == nil {
 		return
 	}
@@ -377,13 +385,20 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 
 // buildReportingURL creates a URL to report diagnostics.
 // If an empty updates URL is set (via empty environment variable), returns nil.
-func (r *Reporter) buildReportingURL(report *diagnosticspb.DiagnosticReport) *url.URL {
+func (r *Reporter) buildReportingURL(
+	report *diagnosticspb.DiagnosticReport, license *licenseccl.License,
+) *url.URL {
+	if license == nil {
+		license = &licenseccl.License{}
+	}
+
 	clusterInfo := ClusterInfo{
 		StorageClusterID: r.StorageClusterID(),
 		LogicalClusterID: r.LogicalClusterID(),
 		TenantID:         r.TenantID,
 		IsInsecure:       r.Config.Insecure,
 		IsInternal:       sql.ClusterIsInternal(&r.Settings.SV),
+		License:          license,
 	}
 
 	url := reportingURL
