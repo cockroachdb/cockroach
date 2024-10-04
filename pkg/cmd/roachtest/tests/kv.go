@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -602,7 +602,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			}()
 
 			verifyQPS := func(ctx context.Context) error {
-				if qps := measureQPS(ctx, t, time.Second, dbs...); qps < expectedQPS {
+				if qps := measureQPS(ctx, t, c, time.Second, c.Range(1, nodes-1)); qps < expectedQPS {
 					return errors.Newf(
 						"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",
 						qps, timeutil.Now(), expectedQPS)
@@ -942,41 +942,50 @@ func registerKVRangeLookups(r registry.Registry) {
 // can mean inaccuracy in results. Setting too long of an interval may mean the
 // impact is blurred out.
 func measureQPS(
-	ctx context.Context, t test.Test, duration time.Duration, dbs ...*gosql.DB,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	duration time.Duration,
+	nodes option.NodeListOption,
 ) float64 {
-
-	currentQPS := func() uint64 {
-		var value uint64
-		var wg sync.WaitGroup
-		wg.Add(len(dbs))
-
+	totalOpsCompleted := func() int {
+		// NB: We mgight not be able to hold the connection open during the full duration.
+		var dbs []*gosql.DB
+		for _, nodeId := range nodes {
+			db := c.Conn(ctx, t.L(), nodeId)
+			defer db.Close()
+			dbs = append(dbs, db)
+		}
 		// Count the inserts before sleeping.
+		var total atomic.Int64
+		group := ctxgroup.WithContext(ctx)
 		for _, db := range dbs {
-			db := db
-			go func() {
-				defer wg.Done()
+			group.Go(func() error {
 				var v float64
 				if err := db.QueryRowContext(
 					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
 				).Scan(&v); err != nil {
-					t.Fatal(err)
+					return err
 				}
-				atomic.AddUint64(&value, uint64(v))
-			}()
+				total.Add(int64(v))
+				return nil
+			})
 		}
-		wg.Wait()
-		return value
+
+		require.NoError(t, group.Wait())
+		return int(total.Load())
 	}
 
 	// Measure the current time and the QPS now.
 	startTime := timeutil.Now()
-	beforeQPS := currentQPS()
+	beforeOps := totalOpsCompleted()
 	// Wait for the duration minus the first query time.
 	select {
 	case <-ctx.Done():
 		return 0
 	case <-time.After(duration - timeutil.Since(startTime)):
-		return float64(currentQPS()-beforeQPS) / duration.Seconds()
+		afterOps := totalOpsCompleted()
+		return float64(afterOps-beforeOps) / duration.Seconds()
 	}
 }
 
@@ -1029,15 +1038,6 @@ func registerKVRestartImpact(r registry.Registry) {
 			downtimeDuration := testDuration / 18 // 10 minutes for non-local, 20 sec for local.
 			printInterval := testDuration / 72    // Show 72 point results during the run.
 
-			var dbs []*gosql.DB
-			// Don't include the node we plan to shut down in the pool of nodes used
-			// to measure SQL QPS.
-			for i := 1; i <= nodes-1; i++ {
-				db := c.Conn(ctx, t.L(), i)
-				dbs = append(dbs, db)
-				defer db.Close()
-			}
-
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach workload init kv --splits=%d {pgurl:1}", splits))
 
 			workloadStartTime := timeutil.Now()
@@ -1074,7 +1074,7 @@ func registerKVRestartImpact(r registry.Registry) {
 				for {
 					// Measure QPS every few seconds throughout the test. measureQPS takes time
 					// to run, so we don't sleep between invocations.
-					qps := measureQPS(ctx, t, 5*time.Second, dbs...)
+					qps := measureQPS(ctx, t, c, 5*time.Second, c.Range(1, nodes-1))
 					if qps < passingQPS {
 						return errors.Newf(
 							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",
