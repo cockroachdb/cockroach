@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
+const appTenantName = "app"
+
 func registerMultiTenantSharedProcess(r registry.Registry) {
 	crdbNodeCount := 4
 

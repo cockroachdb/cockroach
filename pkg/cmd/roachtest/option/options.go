@@ -14,11 +14,10 @@ import (
 
 // StartOpts is a type that combines the start options needed by roachprod and roachtest.
 type StartOpts struct {
-	// SeparateProcessStorageNodes is used when starting a virtual
-	// cluster, indicating the nodes that should be used as storage
-	// nodes. When not set, all nodes should be considered part of the
-	// storage cluster.
-	SeparateProcessStorageNodes NodeListOption
+	// StorageNodes is used when starting a virtual cluster, indicating
+	// the nodes that should be used as storage nodes. When not set, all
+	// nodes should be considered part of the storage cluster.
+	StorageNodes NodeListOption
 	// SeparateProcessNode is used when starting a virtual cluster,
 	// indicating the nodes in which the virtual cluster should be
 	// started.
@@ -230,7 +229,7 @@ func StorageCluster(nodes NodeListOption) StartStopOption {
 	return func(opts interface{}) {
 		switch opts := opts.(type) {
 		case *StartOpts:
-			opts.SeparateProcessStorageNodes = nodes
+			opts.StorageNodes = nodes
 		}
 	}
 }
