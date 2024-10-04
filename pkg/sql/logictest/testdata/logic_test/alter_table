@@ -4001,3 +4001,86 @@ statement error pq: \*tree.ColumnTableDef not implemented in the new schema chan
 alter table roach add column serial_id2 SERIAL
 
 subtest end
+
+statement ok
+set use_declarative_schema_changer = on
+
+# Tests for #131948 where we incorrectly backfilled empty column
+# families for composite datums.
+subtest composite_type_131948
+
+statement ok
+CREATE TABLE t1_with_composite(i int, j STRING COLLATE de_DE NOT NULL, family(i), family(j));
+INSERT INTO t1_with_composite VALUES(1, 'a');
+INSERT INTO t1_with_composite VALUES(2, 'b');
+
+statement ok
+ALTER TABLE t1_with_composite DROP COLUMN j;
+
+query I
+SELECT * FROM t1_with_composite ORDER BY i ASC;
+----
+1
+2
+
+subtest end
+
+subtest sanity_test_pk_with_composite_columns
+
+# Sanity testing for single table column families with composite types.
+statement ok
+CREATE TABLE tbl_with_dft_column_family(f float NOT NULL, d decimal NOT NULL, j json NOT NULL, s STRING COLLATE de_DE NOT NULL, family(f), family(d), family(j), family(s))
+
+statement ok
+INSERT INTO tbl_with_dft_column_family VALUES(1.0, 1.0, '{"cat": "mouse"}', 'abc');
+INSERT INTO tbl_with_dft_column_family VALUES(2.0, 2.0, '{"lion": "gazelle"}', 'def');
+INSERT INTO tbl_with_dft_column_family VALUES(3.0, 3.0, '{"wolf": "sheep"}', 'ghi');
+
+query FFTT
+SELECT f, d, j, s FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (f);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (d);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (j);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (s);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+subtest end
