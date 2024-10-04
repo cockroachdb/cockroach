@@ -345,7 +345,7 @@ func startConnExecutor(
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
-		LicenseEnforcer:         license.GetEnforcerInstance(),
+		LicenseEnforcer:         license.NewEnforcer(nil),
 	}
 
 	s := NewServer(cfg, pool)
