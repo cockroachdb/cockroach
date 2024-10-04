@@ -183,13 +183,17 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 
 		if rewrite {
+			writeablePathArg := func(dir string) string {
+				return fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir))
+			}
+
 			dir := filepath.Join(filepath.Dir(baseTestsDir), "testdata")
-			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+			args = append(args, writeablePathArg(dir))
 			if choice == "ccl" {
 				// The ccl logictest target shares the testdata directory with the base
 				// logictest target -- make an allowance explicitly for that.
-				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s",
-					filepath.Join(workspace, "pkg/sql/logictest")))
+				args = append(args, writeablePathArg("pkg/sql/logictest"))
+				args = append(args, writeablePathArg("pkg/sql/opt/exec/execbuilder/testdata/"))
 			}
 		}
 	}

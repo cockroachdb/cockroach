@@ -396,7 +396,7 @@ type Processor interface {
 	// by the RangeController.
 	//
 	// raftMu is held.
-	ProcessSchedulerEventRaftMuLocked(ctx context.Context)
+	ProcessSchedulerEventRaftMuLocked(ctx context.Context, mode rac2.RaftMsgAppMode)
 
 	// InspectRaftMuLocked returns a handle to inspect the state of the
 	// underlying range controller. It is used to power /inspectz-style debugging
@@ -1177,13 +1177,15 @@ func (p *processorImpl) AdmitForEval(
 }
 
 // ProcessSchedulerEventRaftMuLocked implements Processor.
-func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(ctx context.Context) {
+func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
+	ctx context.Context, mode rac2.RaftMsgAppMode,
+) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if p.destroyed {
 		return
 	}
 	if rc := p.leader.rc; rc != nil {
-		rc.HandleSchedulerEventRaftMuLocked(ctx)
+		rc.HandleSchedulerEventRaftMuLocked(ctx, mode)
 	}
 }
 

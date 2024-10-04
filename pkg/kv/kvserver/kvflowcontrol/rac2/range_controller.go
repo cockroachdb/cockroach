@@ -65,7 +65,7 @@ type RangeController interface {
 	// controller.
 	//
 	// Requires replica.raftMu to be held.
-	HandleSchedulerEventRaftMuLocked(ctx context.Context)
+	HandleSchedulerEventRaftMuLocked(ctx context.Context, mode RaftMsgAppMode)
 	// AdmitRaftMuLocked handles the notification about the given replica's
 	// admitted vector change. No-op if the replica is not known, or the admitted
 	// vector is stale (either in Term, or the indices).
@@ -1066,7 +1066,9 @@ func (rc *rangeController) computeVoterDirectives(
 // controller.
 //
 // Requires replica.raftMu to be held.
-func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) {
+func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
+	ctx context.Context, mode RaftMsgAppMode,
+) {
 	var scheduledScratch [5]*replicaState
 	// scheduled will contain all the replicas in scheduledMu.replicas, filtered
 	// by whether they have a replicaSendStream.
@@ -1088,7 +1090,7 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 	nextScheduled := scheduled[:0]
 	updateWaiterSets := false
 	for _, rs := range scheduled {
-		scheduleAgain, closedVoter := rs.scheduled(ctx)
+		scheduleAgain, closedVoter := rs.scheduled(ctx, mode)
 		if scheduleAgain {
 			nextScheduled = append(nextScheduled, rs)
 		}
@@ -1851,18 +1853,34 @@ func (rs *replicaState) handleReadyState(
 	return shouldWaitChange
 }
 
-// scheduled is only called when rs.sendStream != nil.
+// scheduled is only called when rs.sendStream != nil, and on followers.
 //
 // closedVoter => !scheduleAgain.
-func (rs *replicaState) scheduled(ctx context.Context) (scheduleAgain bool, closedVoter bool) {
+func (rs *replicaState) scheduled(
+	ctx context.Context, mode RaftMsgAppMode,
+) (scheduleAgain bool, closedVoter bool) {
+	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID {
+		panic("scheduled called on the leader replica")
+	}
 	rss := rs.sendStream
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 	if !rss.mu.sendQueue.forceFlushScheduled && rss.mu.sendQueue.deductedForSchedulerTokens == 0 {
+		// NB: it is possible mode != rss.mu.mode, and we will ignore the change
+		// here. This is fine in that we will pick up the change in the next
+		// RaftEvent.
 		return false, false
 	}
 	if rss.isEmptySendQueueLocked() {
 		panic(errors.AssertionFailedf("scheduled with empty send-queue"))
+	}
+	if rss.mu.mode != MsgAppPull {
+		panic(errors.AssertionFailedf("force-flushing or deducted tokens in push mode"))
+	}
+	if mode != rss.mu.mode {
+		// Must be switching from MsgAppPull => MsgAppPush.
+		rss.tryHandleModeChangeLocked(ctx, mode, false, false)
+		return
 	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
 	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
