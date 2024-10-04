@@ -55,7 +55,7 @@ func runImport(
 
 	// Install type metadata in all of the import tables.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
-	importResolver := makeImportTypeResolver(spec.Types)
+	importResolver := MakeImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
 		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
 		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
