@@ -297,6 +297,7 @@ type LogicalReplicationPlan struct {
 	Topology      Topology
 	SourceSpans   []roachpb.Span
 	DescriptorMap map[int32]descpb.TableDescriptor
+	SourceTypes   []*descpb.TypeDescriptor
 }
 
 func (p *partitionedStreamClient) PlanLogicalReplication(
@@ -341,10 +342,17 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 		descMap[int32(desc.ID)] = desc
 	}
 
+	// TODO(msbutler): unclear if we should persist the types as pointers in the protos.
+	sourceTypes := make([]*descpb.TypeDescriptor, len(streamSpec.TypeDescriptors))
+	for _, desc := range streamSpec.TypeDescriptors {
+		sourceTypes = append(sourceTypes, &desc)
+	}
+
 	return LogicalReplicationPlan{
 		Topology:      topology,
 		SourceSpans:   streamSpec.TableSpans,
 		DescriptorMap: descMap,
+		SourceTypes:   sourceTypes,
 	}, nil
 }
 
