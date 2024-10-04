@@ -760,6 +760,16 @@ fully utilized.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaStorageWriteAmplification = metric.Metadata{
+		Name: "storage.write-amplification",
+		Help: `Running measure of write-amplification.
+
+Write amplification is measured as the ratio of bytes written to disk relative to the logical
+bytes present in sstables, over the life of a store. This metric is a running average
+of the write amplification as tracked by Pebble.`,
+		Measurement: "Ratio of bytes written to logical bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaStorageCompactionsKeysPinnedCount = metric.Metadata{
 		Name: "storage.compactions.keys.pinned.count",
 		Help: `Cumulative count of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
@@ -2644,6 +2654,7 @@ type StoreMetrics struct {
 	StorageCompactionsPinnedKeys      *metric.Counter
 	StorageCompactionsPinnedBytes     *metric.Counter
 	StorageCompactionsDuration        *metric.Counter
+	StorageWriteAmplification         *metric.GaugeFloat64
 	IterBlockBytes                    *metric.Counter
 	IterBlockBytesInCache             *metric.Counter
 	IterBlockReadDuration             *metric.Counter
@@ -3365,6 +3376,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		StorageCompactionsPinnedKeys:      metric.NewCounter(metaStorageCompactionsKeysPinnedCount),
 		StorageCompactionsPinnedBytes:     metric.NewCounter(metaStorageCompactionsKeysPinnedBytes),
 		StorageCompactionsDuration:        metric.NewCounter(metaStorageCompactionsDuration),
+		StorageWriteAmplification:         metric.NewGaugeFloat64(metaStorageWriteAmplification),
 		FlushableIngestCount:              metric.NewCounter(metaFlushableIngestCount),
 		FlushableIngestTableCount:         metric.NewCounter(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:          metric.NewCounter(metaFlushableIngestTableBytes),
@@ -3825,11 +3837,14 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SSTableCompressionNone.Update(m.Table.CompressedCountNone)
 	sm.categoryIterMetrics.update(m.CategoryStats)
 
+	totalWriteAmp := float64(0)
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
 		sm.RdbLevelSize[level].Update(stats.Size)
 		sm.RdbLevelScore[level].Update(stats.Score)
+		totalWriteAmp += stats.WriteAmp()
 	}
+	sm.StorageWriteAmplification.Update(totalWriteAmp)
 }
 
 // updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
