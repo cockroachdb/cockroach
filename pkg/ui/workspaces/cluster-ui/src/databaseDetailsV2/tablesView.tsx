@@ -12,10 +12,10 @@ import {
   TableSortOption,
   useTableMetadata,
 } from "src/api/databases/getTableMetadataApi";
-import { ColumnTitle } from "src/components/columnTitle";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
+import { Tooltip } from "src/components/tooltip";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
 import { Loading } from "src/loading";
@@ -40,12 +40,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
   [
     {
       title: (
-        <ColumnTitle
-          title={TableColName.NAME}
-          withToolTip={{
-            tooltipText: "The name of the table.",
-          }}
-        />
+        <Tooltip title={"The name of the table."}>{TableColName.NAME}</Tooltip>
       ),
       width: "15%",
       sorter: (a, b) => a.name.localeCompare(b.name),
@@ -58,13 +53,13 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <ColumnTitle
-          title={TableColName.REPLICATION_SIZE}
-          withToolTip={{
-            tooltipText:
-              "The approximate compressed total disk size across all replicas of the table.",
-          }}
-        />
+        <Tooltip
+          title={
+            "The approximate compressed total disk size across all replicas of the table."
+          }
+        >
+          {TableColName.REPLICATION_SIZE}
+        </Tooltip>
       ),
       width: "fit-content",
       sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
@@ -75,12 +70,9 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <ColumnTitle
-          title={TableColName.RANGE_COUNT}
-          withToolTip={{
-            tooltipText: "The number of ranges the table.",
-          }}
-        />
+        <Tooltip title={"The number of ranges the table."}>
+          {TableColName.RANGE_COUNT}
+        </Tooltip>
       ),
       width: "fit-content",
       sorter: true,
@@ -100,12 +92,12 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <ColumnTitle
-          title={TableColName.NODE_REGIONS}
-          withToolTip={{
-            tooltipText: "Regions/Nodes on which the table's data is stored.",
-          }}
-        />
+        <Tooltip
+          underline
+          title={"Regions/Nodes on which the table's data is stored."}
+        >
+          {TableColName.NODE_REGIONS}
+        </Tooltip>
       ),
       width: "20%",
       render: (t: TableRow) => (
@@ -122,14 +114,14 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <ColumnTitle
-          title={TableColName.LIVE_DATA_PERCENTAGE}
-          withToolTip={{
-            tooltipText: `
-            % of total uncompressed logical data that has not been modified (updated or deleted).
-            A low percentage can cause statements to scan more data`,
-          }}
-        />
+        <Tooltip
+          underline
+          title={
+            "The percentage of total uncompressed logical data that has not been modified (updated or deleted)."
+          }
+        >
+          {TableColName.LIVE_DATA_PERCENTAGE}
+        </Tooltip>
       ),
       sorter: true,
       width: "fit-content",
@@ -147,13 +139,13 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <ColumnTitle
-          title={TableColName.STATS_LAST_UPDATED}
-          withToolTip={{
-            tooltipText:
-              "The last time table statistics used by the SQL optimizer were updated.",
-          }}
-        />
+        <Tooltip
+          title={
+            "The last time table statistics used by the SQL optimizer were updated."
+          }
+        >
+          {TableColName.STATS_LAST_UPDATED}
+        </Tooltip>
       ),
       sorter: true,
       render: (t: TableRow) => {
