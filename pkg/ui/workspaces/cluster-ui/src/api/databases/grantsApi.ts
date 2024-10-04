@@ -70,3 +70,53 @@ export const useDatabaseGrantsImmutable = (req: DatabaseGrantsRequest) => {
     error: error,
   };
 };
+
+type TableGrantsRequest = {
+  tableId: number;
+  sortBy?: GrantsSortOptions;
+  sortOrder?: "asc" | "desc";
+  pagination?: SimplePaginationState;
+};
+
+export type TableGrantsResponse = APIV2ResponseWithPaginationState<
+  DatabaseGrant[]
+>;
+
+const createTableGrantsPath = (req: TableGrantsRequest): string => {
+  const { tableId, pagination, sortBy, sortOrder } = req;
+  const urlParams = new URLSearchParams();
+  if (pagination?.pageNum) {
+    urlParams.append("pageNum", pagination.pageNum.toString());
+  }
+  if (pagination?.pageSize) {
+    urlParams.append("pageSize", pagination.pageSize.toString());
+  }
+  if (sortBy) {
+    urlParams.append("sortBy", sortBy);
+  }
+  if (sortOrder) {
+    urlParams.append("sortOrder", sortOrder);
+  }
+  return `api/v2/grants/tables/${tableId}/?` + urlParams.toString();
+};
+
+const fetchTableGrants = (
+  req: TableGrantsRequest,
+): Promise<TableGrantsResponse> => {
+  const path = createTableGrantsPath(req);
+  return fetchDataJSON(path);
+};
+
+export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
+  const { data, isLoading, error } = useSWRImmutable(
+    createTableGrantsPath(req),
+    () => fetchTableGrants(req),
+  );
+
+  return {
+    tableGrants: data?.results,
+    pagination: data?.pagination_info,
+    isLoading,
+    error: error,
+  };
+};
