@@ -133,6 +133,11 @@ type Connector interface {
 	// mixed version 21.2->22.1 state where the tenant has not yet configured
 	// its own zones.
 	config.SystemConfigProvider
+
+	// GetClusterInitGracePeriodTS will return the timestamp used to signal the
+	// end of the grace period for clusters with a license. The timestamp is
+	// represented as the number of seconds since the Unix epoch.
+	GetClusterInitGracePeriodTS() int64
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -212,10 +217,11 @@ type connector struct {
 		// metadata bits has been received.
 		receivedFirstMetadata bool
 
-		tenantName   roachpb.TenantName
-		dataState    mtinfopb.TenantDataState
-		serviceMode  mtinfopb.TenantServiceMode
-		capabilities *tenantcapabilitiespb.TenantCapabilities
+		tenantName               roachpb.TenantName
+		dataState                mtinfopb.TenantDataState
+		serviceMode              mtinfopb.TenantServiceMode
+		capabilities             *tenantcapabilitiespb.TenantCapabilities
+		clusterInitGracePeriodTS int64
 
 		// notifyCh is closed when there are changes to the metadata.
 		notifyCh chan struct{}

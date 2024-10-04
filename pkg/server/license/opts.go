@@ -12,6 +12,7 @@ type options struct {
 	isSystemTenant          bool
 	testingKnobs            *TestingKnobs
 	telemetryStatusReporter TelemetryStatusReporter
+	metadataAccessor        MetadataAccessor
 }
 
 type Option interface {
@@ -47,5 +48,11 @@ func WithTestingKnobs(tk *TestingKnobs) Option {
 func WithTelemetryStatusReporter(r TelemetryStatusReporter) Option {
 	return optionFunc(func(o *options) {
 		o.telemetryStatusReporter = r
+	})
+}
+
+func WithMetadataAccessor(m MetadataAccessor) Option {
+	return optionFunc(func(o *options) {
+		o.metadataAccessor = m
 	})
 }
