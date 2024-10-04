@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -90,6 +91,9 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs[name] = td.TableDescriptor
+
+		// TODO (msbutler): get all udts across target tables to conduct
+		// verification during planning.
 	}
 
 	registry := execConfig.JobRegistry
@@ -137,13 +141,44 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 
 	spans := make([]roachpb.Span, 0, len(req.TableIDs))
 	tableDescs := make([]descpb.TableDescriptor, 0, len(req.TableIDs))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
+	descriptors := r.txn.Descriptors()
 	for _, requestedTableID := range req.TableIDs {
-		td, err := r.txn.Descriptors().MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
+
+		td, err := descriptors.MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
 		if err != nil {
 			return nil, err
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs = append(tableDescs, td.TableDescriptor)
+
+		// fetch Type Descriptors, if any.
+		dbDesc, err := descriptors.MutableByID(r.txn.KV()).Database(ctx, td.GetParentID())
+		if err != nil {
+			return nil, err
+		}
+		typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
+			func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				if id > 0 {
+					panic("this isn't called")
+				}
+				if _, ok := foundTypeDescriptors[id]; ok {
+					return nil, nil
+				}
+				foundTypeDescriptors[id] = struct{}{}
+				return descriptors.ByIDWithoutLeased(r.txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+			})
+		if err != nil {
+			return nil, errors.Wrap(err, "resolving type descriptors")
+		}
+		for _, typeID := range typeIDs {
+			typeDesc, err := descriptors.MutableByID(r.txn.KV()).Type(ctx, typeID)
+			if err != nil {
+				return nil, err
+			}
+			typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
+		}
 	}
 	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
 	if err != nil {
@@ -151,6 +186,7 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	}
 	spec.TableDescriptors = tableDescs
 	spec.TableSpans = spans
+	spec.TypeDescriptors = typeDescriptors
 	return spec, nil
 }
 
