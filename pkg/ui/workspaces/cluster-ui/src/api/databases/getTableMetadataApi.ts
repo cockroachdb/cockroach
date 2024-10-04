@@ -3,14 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import moment from "moment-timezone";
 import useSWR from "swr";
 
 import { StoreID } from "../../types/clusterTypes";
 import { fetchDataJSON } from "../fetchData";
+import { PaginationRequest, ResultsWithPagination } from "../types";
+
 import {
-  APIV2ResponseWithPaginationState,
-  SimplePaginationState,
-} from "../types";
+  convertServerPaginationToClientPagination,
+  TableDetailsResponseServer,
+  TableMetadataResponseServer,
+  TableMetadataServer,
+} from "./serverTypes";
 
 const TABLE_METADATA_API_PATH = "api/v2/table_metadata/";
 
@@ -24,36 +29,63 @@ export enum TableSortOption {
   LAST_UPDATED = "lastUpdated",
 }
 
+// Client type.
 export type TableMetadata = {
-  db_id: number;
-  db_name: string;
-  table_id: number;
-  schema_name: string;
-  table_name: string;
-  replication_size_bytes: number;
-  range_count: number;
-  column_count: number;
-  index_count: number;
-  percent_live_data: number;
-  total_live_data_bytes: number;
-  total_data_bytes: number;
-  store_ids: number[];
-  last_updated: string;
-  last_update_error: string | null;
-  auto_stats_enabled: boolean;
+  dbId: number;
+  dbName: string;
+  tableId: number;
+  schemaName: string;
+  tableName: string;
+  replicationSizeBytes: number;
+  rangeCount: number;
+  columnCount: number;
+  indexCount: number;
+  percentLiveData: number;
+  totalLiveDataBytes: number;
+  totalDataBytes: number;
+  storeIds: StoreID[];
+  lastUpdated: moment.Moment;
+  lastUpdateError: string | null;
+  autoStatsEnabled: boolean;
   // Optimizer stats.
-  stats_last_updated: string | null;
+  statsLastUpdated: moment.Moment | null;
 };
-
-type TableMetadataResponse = APIV2ResponseWithPaginationState<TableMetadata[]>;
 
 export type ListTableMetadataRequest = {
   dbId?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   storeIds?: StoreID[];
-  pagination: SimplePaginationState;
+  pagination: PaginationRequest;
   name?: string;
+};
+
+type TableMetadataResponse = ResultsWithPagination<TableMetadata[]>;
+
+const convertTableMetadataFromServer = (
+  resp: TableMetadataServer,
+): TableMetadata => {
+  return {
+    dbId: resp.db_id ?? 0,
+    dbName: resp.db_name ?? "",
+    tableId: resp.table_id ?? 0,
+    schemaName: resp.schema_name ?? "",
+    tableName: resp.table_name ?? "",
+    replicationSizeBytes: resp.replication_size_bytes ?? 0,
+    rangeCount: resp.range_count ?? 0,
+    columnCount: resp.column_count ?? 0,
+    indexCount: resp.index_count ?? 0,
+    percentLiveData: resp.percent_live_data ?? 0,
+    totalLiveDataBytes: resp.total_live_data_bytes ?? 0,
+    totalDataBytes: resp.total_data_bytes ?? 0,
+    storeIds: resp.store_ids?.map(storeID => storeID as StoreID) ?? [],
+    lastUpdated: moment(resp.last_updated ?? ""),
+    lastUpdateError: resp.last_update_error,
+    autoStatsEnabled: resp.auto_stats_enabled,
+    statsLastUpdated: resp.stats_last_updated
+      ? moment(resp.stats_last_updated)
+      : null,
+  };
 };
 
 async function getTableMetadata(
@@ -83,7 +115,16 @@ async function getTableMetadata(
   if (req.name) {
     urlParams.append("name", req.name);
   }
-  return fetchDataJSON(TABLE_METADATA_API_PATH + "?" + urlParams.toString());
+  return fetchDataJSON<TableMetadataResponseServer, null>(
+    TABLE_METADATA_API_PATH + "?" + urlParams.toString(),
+  ).then(resp => {
+    return {
+      results: resp.results?.map(convertTableMetadataFromServer) ?? [],
+      pagination: convertServerPaginationToClientPagination(
+        resp.pagination_info,
+      ),
+    };
+  });
 }
 
 const createKey = (req: ListTableMetadataRequest) => {
@@ -110,25 +151,35 @@ export const useTableMetadata = (req: ListTableMetadataRequest) => {
   return { data, error, isLoading, refreshTables: mutate };
 };
 
+// Point lookup - table details.
+
 type TableDetailsRequest = {
   tableId: number;
 };
 
-export type TableDetailsResponse = {
+export type TableDetails = {
   metadata: TableMetadata;
-  create_statement: string;
+  createStatement: string;
 };
+
 async function getTableDetails(
   req: TableDetailsRequest,
-): Promise<TableDetailsResponse> {
+): Promise<TableDetails> {
   if (!req.tableId || Number.isNaN(req.tableId)) {
     throw new Error("Table ID is required");
   }
-  return fetchDataJSON(`${TABLE_METADATA_API_PATH}${req.tableId}/`);
+  return fetchDataJSON<TableDetailsResponseServer, null>(
+    `${TABLE_METADATA_API_PATH}${req.tableId}/`,
+  ).then((resp: TableDetailsResponseServer) => {
+    return {
+      metadata: convertTableMetadataFromServer(resp.metadata),
+      createStatement: resp.create_statement,
+    };
+  });
 }
 
 export const useTableDetails = (req: TableDetailsRequest) => {
-  const { data, error, isLoading } = useSWR<TableDetailsResponse>(
+  const { data, error, isLoading } = useSWR<TableDetails>(
     req.tableId.toString(),
     () => getTableDetails(req),
   );
