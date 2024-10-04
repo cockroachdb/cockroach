@@ -701,7 +701,7 @@ func (b *BatchEncoder) skipColumnNotInPrimaryIndexValue(
 	colID catid.ColumnID, vec *coldata.Vec, row int,
 ) bool {
 	// Reuse this function but fake out the value and handle composites here.
-	if skip := b.rh.SkipColumnNotInPrimaryIndexValue(colID, tree.DNull); skip {
+	if skip, _ := b.rh.SkipColumnNotInPrimaryIndexValue(colID, tree.DNull); skip {
 		if !b.compositeColumnIDs.Contains(int(colID)) {
 			return true
 		}
