@@ -145,11 +145,6 @@ func TestMsgAppFlowControl(t *testing.T) {
 							r.tick()
 						}
 						ms := r.readMessages()
-						if len(ms) != 3 || ms[0].Type != pb.MsgHeartbeat || ms[1].Type != pb.MsgFortifyLeader ||
-							ms[2].Type != pb.MsgApp || len(ms[2].Entries) != 0 {
-							t.Fatalf("#%d.%d: len(ms) == %d, want 3 messages including one empty MsgApp",
-								tt, i, len(ms))
-						}
 						require.Len(t, ms, 3)
 						require.Equal(t, ms[0].Type, pb.MsgHeartbeat)
 						require.Equal(t, ms[1].Type, pb.MsgFortifyLeader)
