@@ -154,7 +154,8 @@ func MakeSpanFromEncDatums(
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
-	return roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}, containsNull, nil
+	// The span is always a single-key span, so EndKey is empty.
+	return roachpb.Span{Key: startKey, EndKey: nil}, containsNull, nil
 }
 
 // NeededColumnFamilyIDs returns the minimal set of column families required to
