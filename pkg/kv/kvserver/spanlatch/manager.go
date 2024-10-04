@@ -289,7 +289,11 @@ func (m *Manager) WaitFor(
 	return m.wait(ctx, lg, snap)
 }
 
-// CheckOptimisticNoConflicts returns true iff the spans in the provided
+func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) bool {
+	return m.CheckOptimisticNoConflictsCtx(context.Background(), lg, spans)
+}
+
+// CheckOptimisticNoConflictsCtx returns true iff the spans in the provided
 // spanset do not conflict with any existing latches (in the snapshot created
 // in AcquireOptimistic). It must only be called after AcquireOptimistic, and
 // if it returns true, the caller can skip calling WaitUntilAcquired and it is
@@ -297,7 +301,9 @@ func (m *Manager) WaitFor(
 // typically call WaitUntilAcquired to wait for latch acquisition. It is also
 // acceptable for the caller to skip WaitUntilAcquired and directly call
 // Release, in which case it never held the latches.
-func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) bool {
+func (m *Manager) CheckOptimisticNoConflictsCtx(
+	ctx context.Context, lg *Guard, spans *spanset.SpanSet,
+) bool {
 	if lg.snap == nil {
 		panic(errors.AssertionFailedf("snap must not be nil"))
 	}
@@ -314,18 +320,18 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 				case spanset.SpanReadOnly:
 					// Search for writes at equal or lower timestamps.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if overlaps(&it, &search, ignoreLater) {
+					if overlaps(ctx, &it, &search, ignoreLater) {
 						return false
 					}
 				case spanset.SpanReadWrite:
 					// Search for all other writes.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if overlaps(&it, &search, ignoreNothing) {
+					if overlaps(ctx, &it, &search, ignoreNothing) {
 						return false
 					}
 					// Search for reads at equal or higher timestamps.
 					it = tr[spanset.SpanReadOnly].MakeIter()
-					if overlaps(&it, &search, ignoreEarlier) {
+					if overlaps(ctx, &it, &search, ignoreEarlier) {
 						return false
 					}
 				default:
@@ -339,7 +345,7 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 	return true
 }
 
-func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
+func overlaps(ctx context.Context, it *iterator, search *latch, ignore ignoreFn) bool {
 	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
 		// The held latch may have already been signaled, but that doesn't allow
 		// us to ignore it, since it could have been held while we were
@@ -347,6 +353,7 @@ func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
 		// evaluation of that conflicting latch holder.
 		held := it.Cur()
 		if !ignore(search.ts, held.ts) {
+			log.Eventf(ctx, "%s overlaps at %s", search, held)
 			return true
 		}
 	}

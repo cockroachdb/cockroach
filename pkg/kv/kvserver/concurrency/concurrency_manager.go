@@ -767,14 +767,13 @@ func (g *Guard) CheckOptimisticNoConflictsCtx(
 	}
 	// First check the latches, since a conflict there could mean that racing
 	// requests in the lock table caused a conflicting lock to not be noticed.
-	if g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead) {
+	if g.lm.CheckOptimisticNoConflictsCtx(ctx, g.lg, latchSpansRead) {
 		if g.ltg.CheckOptimisticNoConflicts(lockSpansRead) {
 			log.Event(ctx, "no latch/lock conflicts after optimistic eval")
 			return true
-		} else {
-			log.Event(ctx, "lock conflict after optimistic eval")
-			return false
 		}
+		log.Event(ctx, "lock conflict after optimistic eval")
+		return false
 	}
 	log.Event(ctx, "latch conflict after optimistic eval")
 	return false
