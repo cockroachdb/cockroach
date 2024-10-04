@@ -532,14 +532,14 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 		},
 		targets: CreateChangefeedTargets(tableID),
 	}
-	setFrontier := func(ts hlc.Timestamp) error {
+	setHighWater := func(t hlc.Timestamp) {
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
-		return sf.mu.ts.advanceFrontier(ts)
+		sf.mu.highWater = t
 	}
 
 	// Set the initial frontier to 10.
-	require.NoError(b, setFrontier(hlc.Timestamp{WallTime: 10}))
+	setHighWater(hlc.Timestamp{WallTime: 10})
 	// Initially, polling should not be paused.
 	require.False(b, sf.pollingPaused())
 
@@ -554,7 +554,7 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	})
 	b.Run("not schema locked", func(b *testing.B) {
 		// We bump the highwater up to reflect a descriptor being read at time 30.
-		require.NoError(b, setFrontier(hlc.Timestamp{WallTime: 30}))
+		setHighWater(hlc.Timestamp{WallTime: 30})
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// We do not expect polling to be paused for time 30 since the descriptor
@@ -565,7 +565,7 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	})
 	b.Run("schema locked", func(b *testing.B) {
 		// We bump the highwater up to reflect a descriptor being read at time 50.
-		require.NoError(b, setFrontier(hlc.Timestamp{WallTime: 50}))
+		setHighWater(hlc.Timestamp{WallTime: 50})
 		for i := 0; i < b.N; i++ {
 			// We expect polling to be paused for time 50 now that the highwater on a
 			// schema-locked version.
