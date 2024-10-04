@@ -216,7 +216,7 @@ func (og *operationGenerator) randOp(
 			if errors.Is(err, ErrSchemaChangesDisallowedDueToPkSwap) {
 				continue
 			}
-			return nil, err
+			return nil, errors.Wrapf(err, "failed generating operation: %s", op)
 		}
 
 		// Screen for schema change after write in the same transaction.
