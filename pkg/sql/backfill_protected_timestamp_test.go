@@ -56,6 +56,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
 			},
+			Store: &kvserver.StoreTestingKnobs{
+				DisableSplitQueue: true,
+			},
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {
 					if indexScanQuery.MatchString(sql) {
