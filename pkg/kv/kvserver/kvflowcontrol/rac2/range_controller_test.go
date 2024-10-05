@@ -1447,6 +1447,12 @@ func testingFirst(args ...interface{}) interface{} {
 	return nil
 }
 
+type testLogSnapshot struct{}
+
+func (testLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error) {
+	return nil, nil
+}
+
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// raftpb.Entry and raftpb.Message are only partially populated below, which
 	// could be improved in the future.
@@ -1489,31 +1495,42 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		},
 	}
 	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
+	var logSnap testLogSnapshot
+	infoMap := map[roachpb.ReplicaID]ReplicaStateInfo{}
+	checkSnapAndMap := func(event RaftEvent) {
+		require.Equal(t, logSnap, event.LogSnapshot.(testLogSnapshot))
+		require.Equal(t, infoMap, event.ReplicasStateInfo)
+	}
 
 	// No outbound msgs.
 	event := RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, nil, nil, msgAppScratch)
+		MsgAppPush, 20, appendMsg, nil, logSnap, msgAppScratch, infoMap)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
 	require.Nil(t, event.MsgApps)
-	// Zero value.
+	checkSnapAndMap(event)
+	// Only LogSnapshot and ReplicasStateInfo set.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raftpb.Message{}, nil, nil, msgAppScratch)
+		MsgAppPush, 20, raftpb.Message{}, nil, logSnap, msgAppScratch, infoMap)
+	checkSnapAndMap(event)
+	event.LogSnapshot = nil
+	event.ReplicasStateInfo = nil
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
 	// is for the leader.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, outboundMsgs[:2], nil, msgAppScratch)
+		MsgAppPush, 20, appendMsg, outboundMsgs[:2], logSnap, msgAppScratch, infoMap)
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
 	require.Nil(t, event.MsgApps)
+	checkSnapAndMap(event)
 	// Outbound msgs contains MsgApps for followers. We call this twice to
 	// ensure msgAppScratch is cleared before reuse.
 	for i := 0; i < 2; i++ {
 		event = RaftEventFromMsgStorageAppendAndMsgApps(
-			MsgAppPush, 19, appendMsg, outboundMsgs, nil, msgAppScratch)
+			MsgAppPush, 19, appendMsg, outboundMsgs, logSnap, msgAppScratch, infoMap)
 		require.Equal(t, uint64(10), event.Term)
 		require.Equal(t, appendMsg.Snapshot, event.Snap)
 		require.Equal(t, appendMsg.Entries, event.Entries)
@@ -1525,6 +1542,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 			return cmp.Compare(a.To, b.To)
 		})
 		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
+		checkSnapAndMap(event)
 	}
 }
 

@@ -65,22 +65,6 @@ func (r *testReplica) MuAssertHeld() {
 	fmt.Fprintf(r.b, " Replica.MuAssertHeld\n")
 }
 
-func (r *testReplica) MuRLock() {
-	fmt.Fprintf(r.b, " Replica.MuRLock\n")
-	r.mu.RLock()
-}
-
-func (r *testReplica) MuRUnlock() {
-	fmt.Fprintf(r.b, " Replica.MuRUnlock\n")
-	r.mu.RUnlock()
-}
-
-func (r *testReplica) LeaseholderMuRLocked() roachpb.ReplicaID {
-	fmt.Fprintf(r.b, " Replica.LeaseholderMuRLocked\n")
-	r.mu.AssertRHeld()
-	return r.leaseholder
-}
-
 func (r *testReplica) IsScratchRange() bool {
 	return true
 }
@@ -102,35 +86,6 @@ type testRaftNode struct {
 
 	mark              rac2.LogMark
 	nextUnstableIndex uint64
-}
-
-func (rn *testRaftNode) TermLocked() uint64 {
-	rn.r.mu.AssertRHeld()
-	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
-	return rn.term
-}
-
-func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
-	rn.r.mu.AssertRHeld()
-	fmt.Fprintf(rn.b, " RaftNode.LeaderLocked() = %s\n", rn.leader)
-	return rn.leader
-}
-
-func (rn *testRaftNode) LogMarkLocked() rac2.LogMark {
-	rn.r.mu.AssertRHeld()
-	fmt.Fprintf(rn.b, " RaftNode.LogMarkLocked() = %+v\n", rn.mark)
-	return rn.mark
-}
-
-func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
-	rn.r.mu.AssertRHeld()
-	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
-	return rn.nextUnstableIndex
-}
-
-func (rn *testRaftNode) ReplicasStateLocked(_ map[roachpb.ReplicaID]rac2.ReplicaStateInfo) {
-	rn.r.mu.AssertRHeld()
-	fmt.Fprint(rn.b, " RaftNode.ReplicasStateLocked\n")
 }
 
 func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
@@ -355,7 +310,7 @@ func TestProcessorBasic(t *testing.T) {
 				d.ScanArgs(t, "log-index", &mark.Index)
 				r.mu.Lock()
 				r.initRaft(mark)
-				p.InitRaftLocked(ctx, r.raftNode)
+				p.InitRaftLocked(ctx, r.raftNode, r.raftNode.mark)
 				r.mu.Unlock()
 				return builderStr()
 
@@ -403,7 +358,16 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "set-enabled-level":
 				enabledLevel := parseEnabledLevel(t, d)
-				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel)
+				var state RaftNodeBasicState
+				if r.raftNode != nil {
+					state = RaftNodeBasicState{
+						Term:              r.raftNode.term,
+						Leader:            r.raftNode.leader,
+						NextUnstableIndex: r.raftNode.nextUnstableIndex,
+						Leaseholder:       r.leaseholder,
+					}
+				}
+				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel, state)
 				return builderStr()
 
 			case "get-enabled-level":
@@ -417,6 +381,9 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "handle-raft-ready-and-admit":
+				// We don't bother setting RaftEvent.ReplicasStateInfo since it is
+				// unused by processorImpl, and simply passed down to RangeController
+				// (which we've mocked out in this test).
 				var event rac2.RaftEvent
 				if d.HasArg("entries") {
 					var arg string
@@ -427,7 +394,16 @@ func TestProcessorBasic(t *testing.T) {
 					d.ScanArgs(t, "leader-term", &event.Term)
 				}
 				fmt.Fprintf(&b, "HandleRaftReady:\n")
-				p.HandleRaftReadyRaftMuLocked(ctx, event)
+				var state RaftNodeBasicState
+				if r.raftNode != nil {
+					state = RaftNodeBasicState{
+						Term:              r.raftNode.term,
+						Leader:            r.raftNode.leader,
+						NextUnstableIndex: r.raftNode.nextUnstableIndex,
+						Leaseholder:       r.leaseholder,
+					}
+				}
+				p.HandleRaftReadyRaftMuLocked(ctx, state, event)
 				fmt.Fprintf(&b, ".....\n")
 				if len(event.Entries) > 0 {
 					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
