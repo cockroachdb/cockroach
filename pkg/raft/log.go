@@ -54,8 +54,28 @@ type raftLog struct {
 	// they will be saved into storage.
 	unstable unstable
 
-	// committed is the highest log position that is known to be in
-	// stable storage on a quorum of nodes.
+	// committed is the highest index in this log known to be committed. This
+	// index logically corresponds to the CommitMark in the coordinate system of
+	// the current raft term: CommitMark{Term: raft.Term, Index: committed}.
+	//
+	// Note that the log's accTerm can be below raft.Term. This means that there
+	// is a "time travel" effect possible when an entry in this log's accTerm
+	// coordinate system is known to be committed before the actual Term at which
+	// it got committed. There is no guarantee that in other logs at terms between
+	// accTerm and raft.Term this entry is the same. It would be unsafe to declare
+	// this entry committed in our accTerm log, because it would have a chance to
+	// be overwritten. But the guarantee below allows it.
+	//
+	// The invariant we rely on is: accTerm <= raft.Term. Raft has given a promise
+	// to never accept log writes from terms < raft.Term. Since the committed
+	// index is in raft.Term commit mark coordinate system, we have the guarantee
+	// that at terms >= raft.Term all entries up to this index match our log, so
+	// they will never be attempted to be overwritten. It is thus safe to consider
+	// them committed proactively, and proceed to apply.
+	//
+	// TODO(pav-kv): this observation warrants adding the Term field to this
+	// raftLog, and adding acceptor safety checks into it, in addition to relying
+	// on the raft struct layer.
 	committed uint64
 	// applying is the highest log position that the application has
 	// been instructed to apply to its state machine. Some of these
