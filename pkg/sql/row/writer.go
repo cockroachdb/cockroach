@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -99,6 +98,15 @@ func prepareInsertOrUpdateBatch(
 	overwrite, traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
+	// TODO(ssd): We don't currently support multiple column
+	// families on the LDR write path. As a result, we don't have
+	// good end-to-end testing of multi-column family writes with
+	// the origin timestamp helper set. Until we write such tests,
+	// we error if we ever see such writes.
+	if oth.IsSet() && len(families) > 1 {
+		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
+	}
+
 	for i := range families {
 		family := &families[i]
 		update := false
@@ -157,9 +165,6 @@ func prepareInsertOrUpdateBatch(
 				}
 			}
 
-			// TODO(ssd): Here and below investigate reducing the
-			// number of allocations required to marshal the old
-			// value.
 			var oldVal []byte
 			if oth.IsSet() && len(oldValues) > 0 {
 				// If the column could be composite, we only encode the old value if it
@@ -203,62 +208,48 @@ func prepareInsertOrUpdateBatch(
 			continue
 		}
 
-		rawValueBuf = rawValueBuf[:0]
-
-		var lastColID descpb.ColumnID
-		var oldBytes []byte
-
 		familySortedColumnIDs, ok := helper.SortedColumnFamily(family.ID)
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
-		for _, colID := range familySortedColumnIDs {
-			idx, ok := valColIDMapping.Get(colID)
-			if !ok || values[idx] == tree.DNull {
-				// Column not being updated or inserted.
-				continue
-			}
 
-			if skip, _ := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
-				continue
-			}
+		rawValueBuf = rawValueBuf[:0]
+		var err error
+		rawValueBuf, err = helper.encodePrimaryIndexValuesToBuf(values, valColIDMapping, familySortedColumnIDs, fetchedCols, rawValueBuf)
+		if err != nil {
+			return nil, err
+		}
 
-			col := fetchedCols[idx]
-			if lastColID > col.GetID() {
-				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-			}
-			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-			lastColID = col.GetID()
-			var err error
-			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
+		// TODO(ssd): Here and below investigate reducing the number of
+		// allocations required to marshal the old value.
+		//
+		// If we are using OriginTimestamp ConditionalPuts, calculate the expected
+		// value.
+		var expBytes []byte
+		if oth.IsSet() && len(oldValues) > 0 {
+			var oldBytes []byte
+			oldBytes, err = helper.encodePrimaryIndexValuesToBuf(oldValues, valColIDMapping, familySortedColumnIDs, fetchedCols, oldBytes)
 			if err != nil {
 				return nil, err
 			}
-			if oth.IsSet() && len(oldValues) > 0 {
-				var err error
-				oldBytes, err = valueside.Encode(oldBytes, colIDDelta, oldValues[idx], nil)
-				if err != nil {
-					return nil, err
-				}
+			// For family 0, we expect a value even when
+			// no columns have been encoded to oldBytes.
+			if family.ID == 0 || len(oldBytes) > 0 {
+				old := &roachpb.Value{}
+				old.SetTuple(oldBytes)
+				expBytes = old.TagAndDataBytes()
 			}
 		}
 
-		var expBytes []byte
-		if oth.IsSet() && len(oldBytes) > 0 {
-			old := &roachpb.Value{}
-			old.SetTuple(oldBytes)
-			expBytes = old.TagAndDataBytes()
-		}
-
 		if family.ID != 0 && len(rawValueBuf) == 0 {
-			if overwrite {
+			if oth.IsSet() {
+				// If using OriginTimestamp'd CPuts, we _always_ want to issue a Delete
+				// so that we can confirm our expected bytes were correct.
+				oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
+			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				if oth.IsSet() {
-					oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
-				} else {
-					insertDelFn(ctx, batch, kvKey, traceKV)
-				}
+				insertDelFn(ctx, batch, kvKey, traceKV)
 			}
 		} else {
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is

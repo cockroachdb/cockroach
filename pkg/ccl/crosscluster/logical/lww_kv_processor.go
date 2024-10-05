@@ -425,11 +425,13 @@ func (p *kvTableWriter) deleteRow(
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
 	oth := &row.OriginTimestampCPutHelper{
-		OriginTimestamp: after.MvccTimestamp,
+		PreviousWasDeleted: before.IsDeleted(),
+		OriginTimestamp:    after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
 		ShouldWinTie: true,
 	}
+
 	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, oth, false)
 }
 

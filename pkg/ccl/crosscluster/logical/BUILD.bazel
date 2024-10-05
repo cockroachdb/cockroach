@@ -97,6 +97,7 @@ go_test(
     srcs = [
         "dead_letter_queue_test.go",
         "logical_replication_job_test.go",
+        "lww_kv_processor_test.go",
         "lww_row_processor_test.go",
         "main_test.go",
         "purgatory_test.go",
