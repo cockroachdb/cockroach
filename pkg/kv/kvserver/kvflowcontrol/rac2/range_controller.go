@@ -273,15 +273,14 @@ func RaftEventFromMsgStorageAppendAndMsgApps(
 	outboundMsgs []raftpb.Message,
 	logSnapshot RaftLogSnapshot,
 	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
+	replicaStateInfoMap map[roachpb.ReplicaID]ReplicaStateInfo,
 ) RaftEvent {
-	event := RaftEvent{MsgAppMode: mode, LogSnapshot: logSnapshot}
+	event := RaftEvent{
+		MsgAppMode: mode, LogSnapshot: logSnapshot, ReplicasStateInfo: replicaStateInfoMap}
 	if appendMsg.Type == raftpb.MsgStorageAppend {
-		event = RaftEvent{
-			MsgAppMode: event.MsgAppMode,
-			Term:       appendMsg.LogTerm,
-			Snap:       appendMsg.Snapshot,
-			Entries:    appendMsg.Entries,
-		}
+		event.Term = appendMsg.LogTerm
+		event.Snap = appendMsg.Snapshot
+		event.Entries = appendMsg.Entries
 	}
 	if len(outboundMsgs) == 0 {
 		return event
