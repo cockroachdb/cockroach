@@ -227,8 +227,9 @@ func (u *unstable) stableSnapTo(i uint64) {
 // restore resets the state to the given snapshot. It effectively truncates the
 // log after s.lastEntryID(), so the caller must ensure this is safe.
 func (u *unstable) restore(s snapshot) bool {
-	// All logs >= s.term are consistent with the log covered by the snapshot. If
-	// our log is such, disallow restoring a snapshot at indices below our last
+	mark := s.commitMark()
+	// All logs >= mark.Term are consistent with the log covered by the snapshot.
+	// If our log is such, disallow restoring a snapshot at indices below our last
 	// index, to avoid truncating a meaningful suffix of the log and losing its
 	// durability which could have been used to commit entries in this suffix.
 	//
@@ -236,14 +237,16 @@ func (u *unstable) restore(s snapshot) bool {
 	// Alternatively, we could retain a suffix of the log instead of truncating
 	// it, but at the time of writing the whole stack (including storage) is
 	// written such that a snapshot always clears the log.
-	if s.term <= u.term && s.lastIndex() < u.lastIndex() {
+	if mark.Term <= u.term && mark.Index < u.lastIndex() {
 		return false
 	}
-	// If s.term <= u.term, our log is consistent with the snapshot. Set the new
-	// accepted term to the max of the two so that u.term does not regress. At the
-	// time of writing, s.term is always >= u.term, because s.term == raft.Term
-	// and u.term <= raft.Term. It could be relaxed in the future.
-	term := max(u.term, s.term)
+	// If mark.Term <= u.term, our log is consistent with the snapshot. Set the
+	// new accepted term to the max of the two so that u.term does not regress. At
+	// the time of writing, mark.Term is always >= u.term, because mark.Term ==
+	// raft.Term and u.term <= raft.Term. It could be relaxed in the future.
+	//
+	// TODO(pav-kv): try placing this logic in the CommitMark type.
+	term := max(u.term, mark.Term)
 
 	u.snapshot = &s.snap
 	u.logSlice = logSlice{term: term, prev: s.lastEntryID()}

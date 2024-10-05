@@ -164,7 +164,7 @@ func TestSnapshot(t *testing.T) {
 			last := s.lastEntryID()
 			require.Equal(t, tt.last, last)
 			require.Equal(t, last.index, s.lastIndex())
-			require.Equal(t, LogMark{Term: tt.term, Index: last.index}, s.mark())
+			require.Equal(t, CommitMark{Term: tt.term, Index: last.index}, s.commitMark())
 		})
 	}
 }

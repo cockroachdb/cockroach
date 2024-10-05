@@ -361,7 +361,7 @@ func (l *raftLog) lastIndex() uint64 {
 
 // commitTo bumps the commit index to the given value if it is higher than the
 // current commit index.
-func (l *raftLog) commitTo(mark LogMark) {
+func (l *raftLog) commitTo(mark CommitMark) {
 	// TODO(pav-kv): it is only safe to update the commit index if our log is
 	// consistent with the mark.term leader. If the mark.term leader sees the
 	// mark.index entry as committed, all future leaders have it in the log. It is
