@@ -62,5 +62,6 @@ go_test(
     deps = [
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "@com_github_stretchr_testify//require",
     ],
 )

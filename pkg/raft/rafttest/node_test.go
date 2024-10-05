@@ -18,12 +18,12 @@
 package rafttest
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -37,10 +37,10 @@ func TestBasicProgress(t *testing.T) {
 		nodes = append(nodes, n)
 	}
 
-	waitLeader(nodes)
+	l := waitLeader(nodes)
 
 	for i := 0; i < 100; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")), i)
 	}
 
 	if !waitCommitConverge(nodes, 100) {
@@ -67,19 +67,19 @@ func TestRestart(t *testing.T) {
 	k1, k2 := (l+1)%5, (l+2)%5
 
 	for i := 0; i < 30; i++ {
-		nodes[l].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k1].stop()
 	for i := 0; i < 30; i++ {
-		nodes[(l+3)%5].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k2].stop()
 	for i := 0; i < 30; i++ {
-		nodes[(l+4)%5].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k2].restart()
 	for i := 0; i < 30; i++ {
-		nodes[l].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k1].restart()
 
@@ -103,24 +103,24 @@ func TestPause(t *testing.T) {
 		nodes = append(nodes, n)
 	}
 
-	waitLeader(nodes)
+	l := waitLeader(nodes)
 
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[1].pause()
+	nodes[(l+1)%5].pause()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[2].pause()
+	nodes[(l+2)%5].pause()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[2].resume()
+	nodes[(l+2)%5].resume()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[1].resume()
+	nodes[(l+1)%5].resume()
 
 	if !waitCommitConverge(nodes, 120) {
 		t.Errorf("commits failed to converge!")
@@ -138,7 +138,7 @@ func waitLeader(ns []*node) int {
 		lindex := -1
 
 		for i, n := range ns {
-			lead := n.Status().HardState.Lead
+			lead := n.status().HardState.Lead
 			if lead != raft.None {
 				l[lead] = struct{}{}
 				if n.id == lead {
@@ -161,7 +161,7 @@ func waitCommitConverge(ns []*node, target uint64) bool {
 		var good int
 
 		for _, n := range ns {
-			commit := n.Node.Status().HardState.Commit
+			commit := n.status().HardState.Commit
 			c[commit] = struct{}{}
 			if commit > target {
 				good++
