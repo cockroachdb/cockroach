@@ -893,6 +893,16 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 			outBytes = outBytes + strconv.Quote(UnsafeConvertBytesToString(tempB[:i])) + "/"
 		case escapedJSONArray:
 			outBytes = outBytes + "Arr/"
+			if i+2 >= len(tempB) {
+				// The key ends in an escaped JSON array byte, which is used in
+				// spans to scan over non-empty arrays.
+				return outBytes, nil, nil
+			}
+		case escaped00:
+			if i+2 >= len(tempB) {
+				// The key ends in an escaped NULL byte.
+				return outBytes, nil, nil
+			}
 		default:
 			return "", nil, errors.Errorf("malformed escape in buffer %#x", b)
 

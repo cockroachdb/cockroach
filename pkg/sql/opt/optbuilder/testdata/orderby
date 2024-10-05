@@ -1280,3 +1280,13 @@ WHERE EXISTS(
 )
 ----
 error (0A000): subqueries in ORDER BY with non-default NULLS ordering is not supported
+
+# TODO(#92165): Allow ordering by VECTOR columns.
+exec-ddl
+CREATE TABLE t_vector (v VECTOR)
+----
+
+build
+SELECT * FROM t_vector ORDER BY v
+----
+error (0A000): unimplemented: can't order by column type VECTOR

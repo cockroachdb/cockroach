@@ -2821,7 +2821,7 @@ project
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 memo expect=GenerateInvertedIndexScans
@@ -2891,7 +2891,7 @@ project
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null
            ├── inverted constraint: /7/1
-           │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │    └── spans: ["a"/"b", "a"/"b"]
            └── key: (1)
 
 opt expect=GenerateInvertedIndexScans
@@ -2905,7 +2905,7 @@ index-join b
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 opt expect=GenerateInvertedIndexScans
@@ -2919,7 +2919,7 @@ index-join b
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 opt expect=GenerateInvertedIndexScans
@@ -2934,8 +2934,8 @@ index-join b
       ├── columns: k:1!null
       └── inverted constraint: /7/1
            └── spans
-                ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-                └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+                ├── [2, 2]
+                └── [Arr/2, Arr/2]
 
 # Disjunction.
 opt expect=GenerateInvertedIndexScans
@@ -2950,19 +2950,19 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │         ├── [1, 1]
+      │         ├── [2, 2]
+      │         ├── [Arr/1, Arr/1]
+      │         └── [Arr/2, Arr/2]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-                     ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-                     ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-                     └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+                     ├── [1, 1]
+                     ├── [2, 2]
+                     ├── [Arr/1, Arr/1]
+                     └── [Arr/2, Arr/2]
 
 # Disjunction with non-tight predicate.
 opt expect=GenerateInvertedIndexScans
@@ -2989,29 +2989,29 @@ select
  │         │         │    └── INTERSECTION
  │         │         │         ├── span expression
  │         │         │         │    ├── tight: true, unique: true
- │         │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │         │         │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
  │         │         │         └── span expression
  │         │         │              ├── tight: true, unique: true
- │         │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │         │         │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
  │         │         └── span expression
  │         │              ├── tight: false, unique: true
  │         │              ├── union spans: empty
  │         │              └── INTERSECTION
  │         │                   ├── span expression
  │         │                   │    ├── tight: true, unique: true
- │         │                   │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+ │         │                   │    └── union spans: [Arr/Arr/3, Arr/Arr/3]
  │         │                   └── span expression
  │         │                        ├── tight: true, unique: true
- │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
+ │         │                        └── union spans: [Arr/Arr/4, Arr/Arr/4]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              └── inverted constraint: /7/1
  │                   └── spans
- │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
- │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
- │                        └── ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
+ │                        ├── [Arr/Arr/1, Arr/Arr/1]
+ │                        ├── [Arr/Arr/2, Arr/Arr/2]
+ │                        ├── [Arr/Arr/3, Arr/Arr/3]
+ │                        └── [Arr/Arr/4, Arr/Arr/4]
  └── filters
       └── (j:4 @> '[[1, 2]]') OR (j:4 @> '[[3, 4]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -3028,15 +3028,15 @@ index-join b
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-      │         └── ["7\x00\x03\x00\xff", "7\x00\x04")
+      │         ├── [Arr/{}, Arr/{}]
+      │         └── [Arr/, Arr//PrefixEnd)
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-                     └── ["7\x00\x03\x00\xff", "7\x00\x04")
+                     ├── [Arr/{}, Arr/{}]
+                     └── [Arr/, Arr//PrefixEnd)
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": {}}'
@@ -3051,15 +3051,15 @@ index-join b
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x019", "7a\x00\x019"]
-      │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+      │         ├── ["a"/{}, "a"/{}]
+      │         └── ["a"/, Arr/)
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x019", "7a\x00\x019"]
-                     └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+                     ├── ["a"/{}, "a"/{}]
+                     └── ["a"/, Arr/)
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": []}'
@@ -3074,15 +3074,15 @@ index-join b
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x018", "7a\x00\x018"]
-      │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+      │         ├── ["a"/[], "a"/[]]
+      │         └── ["a"/Arr/, "a"/Arr/]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x018", "7a\x00\x018"]
-                     └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+                     ├── ["a"/[], "a"/[]]
+                     └── ["a"/Arr/, "a"/Arr/]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
@@ -3095,7 +3095,7 @@ index-join b
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
+      │    └── spans: ["a"/Arr/Arr/"b"/"c"/Arr/"d"/"e", "a"/Arr/Arr/"b"/"c"/Arr/"d"/"e"]
       └── key: (1)
 
 # Query using the contained by operator.
@@ -3114,7 +3114,7 @@ select
  │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │         │    └── spans: [1, 1]
  │         └── key: (1)
  └── filters
       └── j:4 <@ '1' [outer=(4), immutable]
@@ -3134,7 +3134,7 @@ select
  │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
+ │         │    └── spans: [{}, {}]
  │         └── key: (1)
  └── filters
       └── j:4 <@ '{}' [outer=(4), immutable]
@@ -3154,7 +3154,7 @@ select
  │    └── scan b@j_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
+ │         │    └── spans: [[], []]
  │         └── key: (1)
  └── filters
       └── j:4 <@ '[]' [outer=(4), immutable]
@@ -3176,15 +3176,15 @@ select
  │         ├── inverted expression: /7
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         └── ["7a\x00\x018", "7a\x00\x018"]
+ │         │         ├── [{}, {}]
+ │         │         └── ["a"/[], "a"/[]]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              └── inverted constraint: /7/1
  │                   └── spans
- │                        ├── ["7\x00\x019", "7\x00\x019"]
- │                        └── ["7a\x00\x018", "7a\x00\x018"]
+ │                        ├── [{}, {}]
+ │                        └── ["a"/[], "a"/[]]
  └── filters
       └── j:4 <@ '{"a": []}' [outer=(4), immutable]
 
@@ -3205,27 +3205,27 @@ select
  │         ├── inverted expression: /7
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
- │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │         │         ├── ["7\x00\x018", "7\x00\x018"]
- │         │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
- │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │         │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
- │         │         ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
- │         │         └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
+ │         │         ├── ["b", "b"]
+ │         │         ├── [1, 1]
+ │         │         ├── [[], []]
+ │         │         ├── [Arr/"b", Arr/"b"]
+ │         │         ├── [Arr/1, Arr/1]
+ │         │         ├── [Arr/{}, Arr/{}]
+ │         │         ├── [Arr/"a"/{}, Arr/"a"/{}]
+ │         │         └── [Arr/"a"/"d"/True, Arr/"a"/"d"/True]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              └── inverted constraint: /7/1
  │                   └── spans
- │                        ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
- │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x018", "7\x00\x018"]
- │                        ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
- │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
- │                        ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
- │                        └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
+ │                        ├── ["b", "b"]
+ │                        ├── [1, 1]
+ │                        ├── [[], []]
+ │                        ├── [Arr/"b", Arr/"b"]
+ │                        ├── [Arr/1, Arr/1]
+ │                        ├── [Arr/{}, Arr/{}]
+ │                        ├── [Arr/"a"/{}, Arr/"a"/{}]
+ │                        └── [Arr/"a"/"d"/True, Arr/"a"/"d"/True]
  └── filters
       └── j:4 <@ '[{"a": {"d": true}}, 1, "b"]' [outer=(4), immutable]
 
@@ -3247,29 +3247,29 @@ select
  │         ├── inverted expression: /7
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │         │         ├── ["7\x00\x018", "7\x00\x01:")
- │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │         │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │         │         ├── [1, 1]
+ │         │         ├── [2, 2]
+ │         │         ├── [3, 3]
+ │         │         ├── [[], {}/PrefixEnd)
+ │         │         ├── [Arr/1, Arr/1]
+ │         │         ├── [Arr/2, Arr/2]
+ │         │         ├── [Arr/3, Arr/3]
+ │         │         ├── ["a"/[], "a"/[]]
+ │         │         └── ["a"/Arr/3, "a"/Arr/3]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              └── inverted constraint: /7/1
  │                   └── spans
- │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │                        ├── ["7\x00\x018", "7\x00\x01:")
- │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │                        ├── ["7a\x00\x018", "7a\x00\x018"]
- │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │                        ├── [1, 1]
+ │                        ├── [2, 2]
+ │                        ├── [3, 3]
+ │                        ├── [[], {}/PrefixEnd)
+ │                        ├── [Arr/1, Arr/1]
+ │                        ├── [Arr/2, Arr/2]
+ │                        ├── [Arr/3, Arr/3]
+ │                        ├── ["a"/[], "a"/[]]
+ │                        └── ["a"/Arr/3, "a"/Arr/3]
  └── filters
       └── (j:4 <@ '{"a": [3]}') OR (j:4 <@ '[1, 2, 3]') [outer=(4), immutable]
 
@@ -3295,33 +3295,33 @@ select
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: false
  │         │         │    └── union spans
- │         │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │         │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │         │         │         ├── [{}, {}]
+ │         │         │         ├── ["a"/[], "a"/[]]
+ │         │         │         └── ["a"/Arr/3, "a"/Arr/3]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans
- │         │                   ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │         │                   ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │         │                   ├── ["7\x00\x018", "7\x00\x018"]
- │         │                   ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │         │                   ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │                   ├── [1, 1]
+ │         │                   ├── [2, 2]
+ │         │                   ├── [3, 3]
+ │         │                   ├── [[], []]
+ │         │                   ├── [Arr/1, Arr/1]
+ │         │                   ├── [Arr/2, Arr/2]
+ │         │                   └── [Arr/3, Arr/3]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
  │              └── inverted constraint: /7/1
  │                   └── spans
- │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │                        ├── ["7\x00\x018", "7\x00\x01:")
- │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │                        ├── ["7a\x00\x018", "7a\x00\x018"]
- │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │                        ├── [1, 1]
+ │                        ├── [2, 2]
+ │                        ├── [3, 3]
+ │                        ├── [[], {}/PrefixEnd)
+ │                        ├── [Arr/1, Arr/1]
+ │                        ├── [Arr/2, Arr/2]
+ │                        ├── [Arr/3, Arr/3]
+ │                        ├── ["a"/[], "a"/[]]
+ │                        └── ["a"/Arr/3, "a"/Arr/3]
  └── filters
       ├── j:4 <@ '{"a": [3]}' [outer=(4), immutable]
       └── j:4 <@ '[1, 2, 3]' [outer=(4), immutable]
@@ -3351,8 +3351,8 @@ project
       │         ├── columns: k:1!null
       │         └── inverted constraint: /7/1
       │              └── spans
-      │                   ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │                   └── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
+      │                   ├── [NULL, NULL]
+      │                   └── [Arr/NULL, Arr/NULL]
       └── filters
            └── j:4 = 'null' [outer=(4), immutable, constraints=(/4: [/'null' - /'null']; tight), fd=()-->(4)]
 
@@ -3376,8 +3376,8 @@ project
       │         ├── columns: k:1!null
       │         └── inverted constraint: /7/1
       │              └── spans
-      │                   ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │                   └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │                   ├── ["b", "b"]
+      │                   └── [Arr/"b", Arr/"b"]
       └── filters
            └── j:4 = '"b"' [outer=(4), immutable, constraints=(/4: [/'"b"' - /'"b"']; tight), fd=()-->(4)]
 
@@ -3401,8 +3401,8 @@ project
       │         ├── columns: k:1!null
       │         └── inverted constraint: /7/1
       │              └── spans
-      │                   ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │                   └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                   ├── [1, 1]
+      │                   └── [Arr/1, Arr/1]
       └── filters
            └── j:4 = '1' [outer=(4), immutable, constraints=(/4: [/'1' - /'1']; tight), fd=()-->(4)]
 
@@ -3426,8 +3426,8 @@ project
       │         ├── columns: k:1!null
       │         └── inverted constraint: /7/1
       │              └── spans
-      │                   ├── ["7\x00\x01\x12\x00\x01", "7\x00\x01\x12\x00\x01"]
-      │                   └── ["7\x00\x03\x00\x01\x12\x00\x01", "7\x00\x03\x00\x01\x12\x00\x01"]
+      │                   ├── ["", ""]
+      │                   └── [Arr/"", Arr/""]
       └── filters
            └── j:4 = '""' [outer=(4), immutable, constraints=(/4: [/'""' - /'""']; tight), fd=()-->(4)]
 
@@ -3478,15 +3478,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         └── ["7\x00\x03", "7\x00\x03"]
+      │         │         ├── [[], []]
+      │         │         └── [Arr/, Arr/]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        └── ["7\x00\x03", "7\x00\x03"]
+      │                        ├── [[], []]
+      │                        └── [Arr/, Arr/]
       └── filters
            └── j:4 = '[]' [outer=(4), immutable, constraints=(/4: [/'[]' - /'[]']; tight), fd=()-->(4)]
 
@@ -3512,15 +3512,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7\x00\xff", "8")
+      │         │         ├── [{}, {}]
+      │         │         └── ["", [])
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        └── ["7\x00\xff", "8")
+      │                        ├── [{}, {}]
+      │                        └── ["", [])
       └── filters
            └── j:4 = '{}' [outer=(4), immutable, constraints=(/4: [/'{}' - /'{}']; tight), fd=()-->(4)]
 
@@ -3559,7 +3559,7 @@ project
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 opt expect=ConvertJSONSubscriptToFetchValue
@@ -3572,7 +3572,7 @@ project
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 # Chained fetch val operators.
@@ -3586,7 +3586,7 @@ project
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
       └── key: (1)
 
 # Do not generate an inverted scan when the fetch val and equality operators are
@@ -3636,7 +3636,7 @@ project
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │         │    └── spans: [Arr/"b", Arr/"b"]
       │         └── key: (1)
       └── filters
            └── (j:4->0) = '"b"' [outer=(4), immutable]
@@ -3663,7 +3663,7 @@ project
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
+      │         │    └── spans: [Arr/"a"/"b", Arr/"a"/"b"]
       │         └── key: (1)
       └── filters
            └── (j:4->0) = '{"a": "b"}' [outer=(4), immutable]
@@ -3688,7 +3688,7 @@ project
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │         │    └── spans: ["a"/Arr/"b", "a"/Arr/"b"]
       │         └── key: (1)
       └── filters
            └── (j:4->'a') = '["b"]' [outer=(4), immutable]
@@ -3713,7 +3713,7 @@ project
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
       │         └── key: (1)
       └── filters
            └── (j:4->'a') = '{"b": "c"}' [outer=(4), immutable]
@@ -3767,7 +3767,7 @@ project
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      │         │    └── spans: [Arr/"b"/"c", Arr/"b"/"c"]
       │         └── key: (1)
       └── filters
            └── (j:4->0) @> '{"b": "c"}' [outer=(4), immutable]
@@ -3795,17 +3795,17 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-      │         │         └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      │         │         ├── [[], []]
+      │         │         ├── [Arr/{}, Arr/{}]
+      │         │         └── [Arr/"b"/"c", Arr/"b"/"c"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-      │                        └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      │                        ├── [[], []]
+      │                        ├── [Arr/{}, Arr/{}]
+      │                        └── [Arr/"b"/"c", Arr/"b"/"c"]
       └── filters
            └── (j:4->0) <@ '{"b": "c"}' [outer=(4), immutable]
 
@@ -3832,27 +3832,27 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         │         ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
-      │         │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │         │         ├── [1, 1]
+      │         │         ├── [2, 2]
+      │         │         ├── [[], []]
+      │         │         ├── [Arr/1, Arr/1]
+      │         │         ├── [Arr/2, Arr/2]
+      │         │         ├── [Arr/[], Arr/[]]
+      │         │         ├── [Arr/Arr/1, Arr/Arr/1]
+      │         │         └── [Arr/Arr/2, Arr/Arr/2]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │                        ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
-      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │                        ├── [1, 1]
+      │                        ├── [2, 2]
+      │                        ├── [[], []]
+      │                        ├── [Arr/1, Arr/1]
+      │                        ├── [Arr/2, Arr/2]
+      │                        ├── [Arr/[], Arr/[]]
+      │                        ├── [Arr/Arr/1, Arr/Arr/1]
+      │                        └── [Arr/Arr/2, Arr/Arr/2]
       └── filters
            └── (j:4->0) <@ '[1, 2]' [outer=(4), immutable]
 
@@ -3905,15 +3905,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
+      │         │         ├── [Arr/"a", Arr/"a"]
+      │         │         └── [Arr/Arr/"a", Arr/Arr/"a"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │                        └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        ├── [Arr/"a", Arr/"a"]
+      │                        └── [Arr/Arr/"a", Arr/Arr/"a"]
       └── filters
            └── (j:4->0) @> '"a"' [outer=(4), immutable]
 
@@ -3940,17 +3940,17 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │         │         ├── ["a", "a"]
+      │         │         ├── [[], []]
+      │         │         └── [Arr/"a", Arr/"a"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        ├── ["a", "a"]
+      │                        ├── [[], []]
+      │                        └── [Arr/"a", Arr/"a"]
       └── filters
            └── (j:4->0) <@ '"a"' [outer=(4), immutable]
 
@@ -3977,15 +3977,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │         │         ├── [Arr/1, Arr/1]
+      │         │         └── [Arr/Arr/1, Arr/Arr/1]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── [Arr/1, Arr/1]
+      │                        └── [Arr/Arr/1, Arr/Arr/1]
       └── filters
            └── (j:4->0) @> '1' [outer=(4), immutable]
 
@@ -4012,17 +4012,17 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         │         ├── [1, 1]
+      │         │         ├── [[], []]
+      │         │         └── [Arr/1, Arr/1]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── [1, 1]
+      │                        ├── [[], []]
+      │                        └── [Arr/1, Arr/1]
       └── filters
            └── (j:4->0) <@ '1' [outer=(4), immutable]
 
@@ -4042,17 +4042,17 @@ project
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         │    └── union spans: ["a"/"b", "a"/"b"]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │              └── union spans: ["c"/"d", "c"/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     └── ["c"/"d", "c"/"d"]
 
 # Query using the fetch val and equality operators in a disjunction.
 opt expect=GenerateInvertedIndexScans
@@ -4067,15 +4067,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         ├── ["a"/"b", "a"/"b"]
+      │         └── ["c"/"d", "c"/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     └── ["c"/"d", "c"/"d"]
 
 # Generate an inverted scan when the index of the fetch val operator is
 # a string along with the IN operator consisting of JSON strings in
@@ -4093,17 +4093,17 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
-      │         └── ["7a\x00\x01*\x06\x00", "7a\x00\x01*\x06\x00"]
+      │         ├── ["a"/1, "a"/1]
+      │         ├── ["a"/2, "a"/2]
+      │         └── ["a"/3, "a"/3]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-                     ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
-                     └── ["7a\x00\x01*\x06\x00", "7a\x00\x01*\x06\x00"]
+                     ├── ["a"/1, "a"/1]
+                     ├── ["a"/2, "a"/2]
+                     └── ["a"/3, "a"/3]
 
 
 # Testing the IN operator, without the fetch val operator,
@@ -4129,23 +4129,23 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+      │         │         ├── [1, 1]
+      │         │         ├── [2, 2]
+      │         │         ├── [3, 3]
+      │         │         ├── [Arr/1, Arr/1]
+      │         │         ├── [Arr/2, Arr/2]
+      │         │         └── [Arr/3, Arr/3]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │                        └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+      │                        ├── [1, 1]
+      │                        ├── [2, 2]
+      │                        ├── [3, 3]
+      │                        ├── [Arr/1, Arr/1]
+      │                        ├── [Arr/2, Arr/2]
+      │                        └── [Arr/3, Arr/3]
       └── filters
            └── j:4 IN ('1', '2', '3') [outer=(4), constraints=(/4: [/'1' - /'1'] [/'2' - /'2'] [/'3' - /'3']; tight)]
 
@@ -4170,23 +4170,23 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │         │         ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
-      │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
+      │         │         ├── ["a", "a"]
+      │         │         ├── ["b", "b"]
+      │         │         ├── ["c", "c"]
+      │         │         ├── [Arr/"a", Arr/"a"]
+      │         │         ├── [Arr/"b", Arr/"b"]
+      │         │         └── [Arr/"c", Arr/"c"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │                        ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
-      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │                        └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
+      │                        ├── ["a", "a"]
+      │                        ├── ["b", "b"]
+      │                        ├── ["c", "c"]
+      │                        ├── [Arr/"a", Arr/"a"]
+      │                        ├── [Arr/"b", Arr/"b"]
+      │                        └── [Arr/"c", Arr/"c"]
       └── filters
            └── j:4 IN ('"a"', '"b"', '"c"') [outer=(4), constraints=(/4: [/'"a"' - /'"a"'] [/'"b"' - /'"b"'] [/'"c"' - /'"c"']; tight)]
 
@@ -4211,8 +4211,8 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x018", "7\x00\x018"]
-      │         │    │    └── ["7\x00\x03", "7\x00\x03"]
+      │         │    │    ├── [[], []]
+      │         │    │    └── [Arr/, Arr/]
       │         │    └── UNION
       │         │         ├── span expression
       │         │         │    ├── tight: false, unique: false
@@ -4220,10 +4220,10 @@ project
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
       │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    └── union spans: ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         │         │         │    └── union spans: [Arr/1, Arr/1]
       │         │         │         └── span expression
       │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │         │         │              └── union spans: [Arr/2, Arr/2]
       │         │         └── span expression
       │         │              ├── tight: false, unique: true
       │         │              ├── union spans: empty
@@ -4234,20 +4234,20 @@ project
       │         │                   │    └── INTERSECTION
       │         │                   │         ├── span expression
       │         │                   │         │    ├── tight: true, unique: true
-      │         │                   │         │    └── union spans: ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         │                   │         │    └── union spans: [Arr/1, Arr/1]
       │         │                   │         └── span expression
       │         │                   │              ├── tight: true, unique: true
-      │         │                   │              └── union spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │         │                   │              └── union spans: [Arr/2, Arr/2]
       │         │                   └── span expression
       │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+      │         │                        └── union spans: [Arr/3, Arr/3]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x018", "7\x00\x018"]
-      │                        └── ["7\x00\x03", "7\x00\x03"]
+      │                        ├── [[], []]
+      │                        └── [Arr/, Arr/]
       └── filters
            └── j:4 IN ('[]', '[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), constraints=(/4: [/'[]' - /'[]'] [/'[1]' - /'[1]'] [/'[1, 2]' - /'[1, 2]'] [/'[1, 2, 3]' - /'[1, 2, 3]']; tight)]
 
@@ -4271,8 +4271,8 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x019", "7\x00\x019"]
-      │         │    │    └── ["7\x00\xff", "8")
+      │         │    │    ├── [{}, {}]
+      │         │    │    └── ["", [])
       │         │    └── UNION
       │         │         ├── span expression
       │         │         │    ├── tight: false, unique: false
@@ -4284,30 +4284,30 @@ project
       │         │         │         │    └── INTERSECTION
       │         │         │         │         ├── span expression
       │         │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         │         │         │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
       │         │         │         │         └── span expression
       │         │         │         │              ├── tight: true, unique: true
-      │         │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │         │         │         │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
       │         │         │         └── span expression
       │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+      │         │         │              └── union spans: ["a"/Arr/3, "a"/Arr/3]
       │         │         └── span expression
       │         │              ├── tight: false, unique: true
       │         │              ├── union spans: empty
       │         │              └── INTERSECTION
       │         │                   ├── span expression
       │         │                   │    ├── tight: true, unique: true
-      │         │                   │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         │                   │    └── union spans: ["a"/"b", "a"/"b"]
       │         │                   └── span expression
       │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         │                        └── union spans: ["c"/"d", "c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        └── ["7\x00\xff", "8")
+      │                        ├── [{}, {}]
+      │                        └── ["", [])
       └── filters
            └── j:4 IN ('{}', '{"a": [1, 2, 3]}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'{}' - /'{}'] [/'{"a": [1, 2, 3]}' - /'{"a": [1, 2, 3]}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
 
@@ -4331,34 +4331,34 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │         │    │    ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │         │    │    ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │    │    ├── ["7\x00\x019", "7\x00\x019"]
-      │         │    │    ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │         │    │    ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │    │    ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │    │    └── ["7\x00\xff", "8")
+      │         │    │    ├── [NULL, NULL]
+      │         │    │    ├── ["a", "a"]
+      │         │    │    ├── [1, 1]
+      │         │    │    ├── [{}, {}]
+      │         │    │    ├── [Arr/NULL, Arr/NULL]
+      │         │    │    ├── [Arr/"a", Arr/"a"]
+      │         │    │    ├── [Arr/1, Arr/1]
+      │         │    │    └── ["", [])
       │         │    └── INTERSECTION
       │         │         ├── span expression
       │         │         │    ├── tight: true, unique: true
-      │         │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         │         │    └── union spans: ["a"/"b", "a"/"b"]
       │         │         └── span expression
       │         │              ├── tight: true, unique: true
-      │         │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         │              └── union spans: ["c"/"d", "c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\xff", "8")
+      │                        ├── [NULL, NULL]
+      │                        ├── ["a", "a"]
+      │                        ├── [1, 1]
+      │                        ├── [{}, {}]
+      │                        ├── [Arr/NULL, Arr/NULL]
+      │                        ├── [Arr/"a", Arr/"a"]
+      │                        ├── [Arr/1, Arr/1]
+      │                        └── ["", [])
       └── filters
            └── j:4 IN ('null', '"a"', '1', '{}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'null' - /'null'] [/'"a"' - /'"a"'] [/'1' - /'1'] [/'{}' - /'{}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
 
@@ -4378,15 +4378,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         ├── ["a"/"a", "a"/"a"]
+      │         └── ["a"/"b", "a"/"b"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-                     └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     ├── ["a"/"a", "a"/"a"]
+                     └── ["a"/"b", "a"/"b"]
 
 
 # Generate an inverted scan when the index of the fetch val operator is
@@ -4414,15 +4414,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7a\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02c\x00\x01\x12d\x00\x01"]
+      │         │         ├── ["a"/"a"/"b", "a"/"a"/"b"]
+      │         │         └── ["a"/"c"/"d", "a"/"c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │                        └── ["7a\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02c\x00\x01\x12d\x00\x01"]
+      │                        ├── ["a"/"a"/"b", "a"/"a"/"b"]
+      │                        └── ["a"/"c"/"d", "a"/"c"/"d"]
       └── filters
            └── (j:4->'a') IN ('{"a": "b"}', '{"c": "d"}') [outer=(4), immutable]
 
@@ -4451,19 +4451,19 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │         │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         │         └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │         │         ├── ["a"/NULL, "a"/NULL]
+      │         │         ├── ["a"/"a", "a"/"a"]
+      │         │         ├── ["a"/1, "a"/1]
+      │         │         └── ["a"/"a"/"b", "a"/"a"/"b"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │                        ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │                        └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │                        ├── ["a"/NULL, "a"/NULL]
+      │                        ├── ["a"/"a", "a"/"a"]
+      │                        ├── ["a"/1, "a"/1]
+      │                        └── ["a"/"a"/"b", "a"/"a"/"b"]
       └── filters
            └── (j:4->'a') IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -4492,10 +4492,10 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    ├── union spans
-      │         │    │    ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │         │    │    ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │         │    │    ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         │    │    └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │         │    │    ├── ["a"/NULL, "a"/NULL]
+      │         │    │    ├── ["a"/"a", "a"/"a"]
+      │         │    │    ├── ["a"/1, "a"/1]
+      │         │    │    └── ["a"/"a"/"b", "a"/"a"/"b"]
       │         │    └── INTERSECTION
       │         │         ├── span expression
       │         │         │    ├── tight: true, unique: true
@@ -4503,25 +4503,25 @@ project
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
       │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         │         │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
       │         │         │         └── span expression
       │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │         │         │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
       │         │         └── span expression
       │         │              ├── tight: true, unique: true
-      │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+      │         │              └── union spans: ["a"/Arr/3, "a"/Arr/3]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │                        ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
-      │                        └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │                        ├── ["a"/NULL, "a"/NULL]
+      │                        ├── ["a"/"a", "a"/"a"]
+      │                        ├── ["a"/1, "a"/1]
+      │                        ├── ["a"/Arr/1, "a"/Arr/1]
+      │                        ├── ["a"/Arr/2, "a"/Arr/2]
+      │                        ├── ["a"/Arr/3, "a"/Arr/3]
+      │                        └── ["a"/"a"/"b", "a"/"a"/"b"]
       └── filters
            └── (j:4->'a') IN ('null', '"a"', '1', '[1, 2, 3]', '{"a": "b"}') [outer=(4), immutable]
 
@@ -4550,7 +4550,7 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: true
-      │         │    ├── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         │    ├── union spans: ["a"/Arr/1, "a"/Arr/1]
       │         │    └── UNION
       │         │         ├── span expression
       │         │         │    ├── tight: false, unique: true
@@ -4558,10 +4558,10 @@ project
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
       │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         │         │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
       │         │         │         └── span expression
       │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │         │         │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
       │         │         └── span expression
       │         │              ├── tight: false, unique: true
       │         │              ├── union spans: empty
@@ -4572,21 +4572,21 @@ project
       │         │                   │    └── INTERSECTION
       │         │                   │         ├── span expression
       │         │                   │         │    ├── tight: true, unique: true
-      │         │                   │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         │                   │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
       │         │                   │         └── span expression
       │         │                   │              ├── tight: true, unique: true
-      │         │                   │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │         │                   │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
       │         │                   └── span expression
       │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+      │         │                        └── union spans: ["a"/Arr/3, "a"/Arr/3]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
-      │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+      │                        ├── ["a"/Arr/1, "a"/Arr/1]
+      │                        ├── ["a"/Arr/2, "a"/Arr/2]
+      │                        └── ["a"/Arr/3, "a"/Arr/3]
       └── filters
            └── (j:4->'a') IN ('[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), immutable]
 
@@ -4616,15 +4616,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │         │         ├── [Arr/1, Arr/1]
+      │         │         └── [Arr/2, Arr/2]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │                        ├── [Arr/1, Arr/1]
+      │                        └── [Arr/2, Arr/2]
       └── filters
            └── (j:4->0) IN ('1', '2') [outer=(4), immutable]
 
@@ -4653,15 +4653,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │         │         ├── [Arr/"a", Arr/"a"]
+      │         │         └── [Arr/"b", Arr/"b"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │                        └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │                        ├── [Arr/"a", Arr/"a"]
+      │                        └── [Arr/"b", Arr/"b"]
       └── filters
            └── (j:4->0) IN ('"a"', '"b"') [outer=(4), immutable]
 
@@ -4690,15 +4690,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7\x00\x03c\x00\x01\x12d\x00\x01", "7\x00\x03c\x00\x01\x12d\x00\x01"]
+      │         │         ├── [Arr/"a"/"b", Arr/"a"/"b"]
+      │         │         └── [Arr/"c"/"d", Arr/"c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
-      │                        └── ["7\x00\x03c\x00\x01\x12d\x00\x01", "7\x00\x03c\x00\x01\x12d\x00\x01"]
+      │                        ├── [Arr/"a"/"b", Arr/"a"/"b"]
+      │                        └── [Arr/"c"/"d", Arr/"c"/"d"]
       └── filters
            └── (j:4->0) IN ('{"a": "b"}', '{"c": "d"}') [outer=(4), immutable]
 
@@ -4894,19 +4894,19 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
+      │         │         ├── [Arr/NULL, Arr/NULL]
+      │         │         ├── [Arr/"a", Arr/"a"]
+      │         │         ├── [Arr/1, Arr/1]
+      │         │         └── [Arr/"a"/"b", Arr/"a"/"b"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
+      │                        ├── [Arr/NULL, Arr/NULL]
+      │                        ├── [Arr/"a", Arr/"a"]
+      │                        ├── [Arr/1, Arr/1]
+      │                        └── [Arr/"a"/"b", Arr/"a"/"b"]
       └── filters
            └── (j:4->0) IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -4935,7 +4935,7 @@ project
       │         ├── columns: k:1!null
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: true
-      │         │    ├── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │         │    ├── union spans: [Arr/Arr/1, Arr/Arr/1]
       │         │    └── UNION
       │         │         ├── span expression
       │         │         │    ├── tight: false, unique: true
@@ -4943,10 +4943,10 @@ project
       │         │         │    └── INTERSECTION
       │         │         │         ├── span expression
       │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │         │         │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
       │         │         │         └── span expression
       │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │         │         │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
       │         │         └── span expression
       │         │              ├── tight: false, unique: true
       │         │              ├── union spans: empty
@@ -4957,21 +4957,21 @@ project
       │         │                   │    └── INTERSECTION
       │         │                   │         ├── span expression
       │         │                   │         │    ├── tight: true, unique: true
-      │         │                   │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │         │                   │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
       │         │                   │         └── span expression
       │         │                   │              ├── tight: true, unique: true
-      │         │                   │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │         │                   │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
       │         │                   └── span expression
       │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+      │         │                        └── union spans: [Arr/Arr/3, Arr/Arr/3]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
-      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+      │                        ├── [Arr/Arr/1, Arr/Arr/1]
+      │                        ├── [Arr/Arr/2, Arr/Arr/2]
+      │                        └── [Arr/Arr/3, Arr/Arr/3]
       └── filters
            └── (j:4->0) IN ('[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), immutable]
 
@@ -5001,19 +5001,19 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x03a\x00\x01\x00", "7\x00\x03a\x00\x01\x00"]
-      │         │         ├── ["7\x00\x03a\x00\x01\x12a\x00\x01", "7\x00\x03a\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x03a\x00\x01*\x02\x00", "7\x00\x03a\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │         │         ├── [Arr/"a"/NULL, Arr/"a"/NULL]
+      │         │         ├── [Arr/"a"/"a", Arr/"a"/"a"]
+      │         │         ├── [Arr/"a"/1, Arr/"a"/1]
+      │         │         └── [Arr/"a"/"a"/"b", Arr/"a"/"a"/"b"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x03a\x00\x01\x00", "7\x00\x03a\x00\x01\x00"]
-      │                        ├── ["7\x00\x03a\x00\x01\x12a\x00\x01", "7\x00\x03a\x00\x01\x12a\x00\x01"]
-      │                        ├── ["7\x00\x03a\x00\x01*\x02\x00", "7\x00\x03a\x00\x01*\x02\x00"]
-      │                        └── ["7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │                        ├── [Arr/"a"/NULL, Arr/"a"/NULL]
+      │                        ├── [Arr/"a"/"a", Arr/"a"/"a"]
+      │                        ├── [Arr/"a"/1, Arr/"a"/1]
+      │                        └── [Arr/"a"/"a"/"b", Arr/"a"/"a"/"b"]
       └── filters
            └── ((j:4->0)->'a') IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -5032,15 +5032,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         ├── ["a"/"b", "a"/"b"]
+      │         └── ["c"/"d", "c"/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     └── ["c"/"d", "c"/"d"]
 
 # Query using the fetch val and containment operators.
 opt expect=GenerateInvertedIndexScans
@@ -5055,15 +5055,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │         ├── ["a"/"b", "a"/"b"]
+      │         └── ["a"/Arr/"b", "a"/Arr/"b"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     └── ["a"/Arr/"b", "a"/Arr/"b"]
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a' <@ '"b"'
@@ -5086,15 +5086,15 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         └── ["a"/"b", "a"/"b"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │                        ├── [{}, {}]
+      │                        └── ["a"/"b", "a"/"b"]
       └── filters
            └── (j:4->'a') <@ '"b"' [outer=(4), immutable]
 
@@ -5111,15 +5111,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-                     └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+                     ├── ["a"/"b"/"c", "a"/"b"/"c"]
+                     └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
 
 opt expect=ConvertJSONSubscriptToFetchValue
 SELECT k FROM b WHERE j['a']['b'] @> '"c"'
@@ -5133,15 +5133,15 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-                     └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+                     ├── ["a"/"b"/"c", "a"/"b"/"c"]
+                     └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a'->'b' <@ '"c"'
@@ -5164,17 +5164,17 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
-      │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         ├── ["a"/{}, "a"/{}]
+      │         │         └── ["a"/"b"/"c", "a"/"b"/"c"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        ├── ["7a\x00\x019", "7a\x00\x019"]
-      │                        └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │                        ├── [{}, {}]
+      │                        ├── ["a"/{}, "a"/{}]
+      │                        └── ["a"/"b"/"c", "a"/"b"/"c"]
       └── filters
            └── ((j:4->'a')->'b') <@ '"c"' [outer=(4), immutable]
 
@@ -5191,19 +5191,19 @@ project
       ├── inverted expression: /7
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │         └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+      │         ├── ["a"/"b", "a"/"b"]
+      │         ├── ["a"/Arr/"b", "a"/Arr/"b"]
+      │         ├── ["c"/"d", "c"/"d"]
+      │         └── ["c"/Arr/"d", "c"/Arr/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-                     ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-                     └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     ├── ["a"/Arr/"b", "a"/Arr/"b"]
+                     ├── ["c"/"d", "c"/"d"]
+                     └── ["c"/Arr/"d", "c"/Arr/"d"]
 
 # Query using the fetch val and contains operators in a disjunction with a
 # contained by operator.
@@ -5228,17 +5228,17 @@ project
       │         ├── inverted expression: /7
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         ├── ["a"/Arr/"b", "a"/Arr/"b"]
+      │         │         └── ["c"/"d", "c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │                        └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │                        ├── [{}, {}]
+      │                        ├── ["a"/Arr/"b", "a"/Arr/"b"]
+      │                        └── ["c"/"d", "c"/"d"]
       └── filters
            └── ((j:4->'a') @> '["b"]') OR (j:4 <@ '{"c": "d"}') [outer=(4), immutable]
 
@@ -5259,22 +5259,22 @@ project
       │         ├── span expression
       │         │    ├── tight: true, unique: false
       │         │    └── union spans
-      │         │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │         │         ├── ["a"/"b", "a"/"b"]
+      │         │         └── ["a"/Arr/"b", "a"/Arr/"b"]
       │         └── span expression
       │              ├── tight: true, unique: false
       │              └── union spans
-      │                   ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │                   └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+      │                   ├── ["c"/"d", "c"/"d"]
+      │                   └── ["c"/Arr/"d", "c"/Arr/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
            └── inverted constraint: /7/1
                 └── spans
-                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-                     ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-                     ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-                     └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+                     ├── ["a"/"b", "a"/"b"]
+                     ├── ["a"/Arr/"b", "a"/Arr/"b"]
+                     ├── ["c"/"d", "c"/"d"]
+                     └── ["c"/Arr/"d", "c"/Arr/"d"]
 
 # Query using the fetch val and contains operators in conjunction with a
 # contained by operator.
@@ -5302,20 +5302,20 @@ project
       │         │    └── INTERSECTION
       │         │         ├── span expression
       │         │         │    ├── tight: true, unique: true
-      │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │         │         │    └── union spans: ["a"/Arr/"b", "a"/Arr/"b"]
       │         │         └── span expression
       │         │              ├── tight: false, unique: false
       │         │              └── union spans
-      │         │                   ├── ["7\x00\x019", "7\x00\x019"]
-      │         │                   └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │         │                   ├── [{}, {}]
+      │         │                   └── ["c"/"d", "c"/"d"]
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
       │              └── inverted constraint: /7/1
       │                   └── spans
-      │                        ├── ["7\x00\x019", "7\x00\x019"]
-      │                        ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │                        └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │                        ├── [{}, {}]
+      │                        ├── ["a"/Arr/"b", "a"/Arr/"b"]
+      │                        └── ["c"/"d", "c"/"d"]
       └── filters
            └── j:4 <@ '{"c": "d"}' [outer=(4), immutable]
 
@@ -5330,7 +5330,7 @@ project
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       ├── locking: for-update
       ├── volatile
       └── key: (1)
@@ -5346,7 +5346,7 @@ project
  └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       └── key: (1)
 
 # Disjunction.
@@ -5361,12 +5361,12 @@ project
       ├── columns: k:1!null
       ├── inverted expression: /6
       │    ├── tight: true, unique: false
-      │    └── union spans: ["\x89", "\x8b")
+      │    └── union spans: [1, 3)
       ├── key: (1)
       └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
            └── inverted constraint: /6/1
-                └── spans: ["\x89", "\x8b")
+                └── spans: [1, 3)
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
@@ -5379,14 +5379,12 @@ project
       ├── columns: k:1!null
       ├── inverted expression: /6
       │    ├── tight: true, unique: false
-      │    └── union spans: ["", ""]
+      │    └── union spans: [, NULL/NULL)
       ├── key: (1)
       └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
-           ├── inverted constraint: /6/1
-           │    └── spans: ["", ""]
-           ├── key: (1)
-           └── fd: (1)-->(6)
+           └── inverted constraint: /6/1
+                └── spans: [, NULL/NULL)
 
 opt expect-not=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a IS NULL
@@ -5422,15 +5420,15 @@ select
  │         ├── inverted expression: /6
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["C", "C"]
- │         │         └── ["\x89", "\x89"]
+ │         │         ├── [[], []]
+ │         │         └── [1, 1]
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              └── inverted constraint: /6/1
  │                   └── spans
- │                        ├── ["C", "C"]
- │                        └── ["\x89", "\x89"]
+ │                        ├── [[], []]
+ │                        └── [1, 1]
  └── filters
       └── a:2 <@ ARRAY[1] [outer=(2), immutable]
 
@@ -5449,7 +5447,7 @@ select
  │    └── scan c@a_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /6/1
- │         │    └── spans: ["C", "C"]
+ │         │    └── spans: [[], []]
  │         └── key: (1)
  └── filters
       └── a:2 <@ ARRAY[] [outer=(2), immutable]
@@ -5469,7 +5467,7 @@ select
  │    └── scan c@a_inv_idx,inverted
  │         ├── columns: k:1!null
  │         ├── inverted constraint: /6/1
- │         │    └── spans: ["C", "C"]
+ │         │    └── spans: [[], []]
  │         └── key: (1)
  └── filters
       └── a:2 <@ ARRAY[NULL] [outer=(2), immutable]
@@ -5491,15 +5489,15 @@ select
  │         ├── inverted expression: /6
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["C", "C"]
- │         │         └── ["\x89", "\x8b")
+ │         │         ├── [[], []]
+ │         │         └── [1, 3)
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              └── inverted constraint: /6/1
  │                   └── spans
- │                        ├── ["C", "C"]
- │                        └── ["\x89", "\x8b")
+ │                        ├── [[], []]
+ │                        └── [1, 3)
  └── filters
       └── (a:2 <@ ARRAY[1]) OR (a:2 <@ ARRAY[2]) [outer=(2), immutable]
 
@@ -5519,21 +5517,21 @@ select
  │         ├── columns: k:1!null
  │         ├── inverted expression: /6
  │         │    ├── tight: false, unique: false
- │         │    ├── union spans: ["C", "C"]
+ │         │    ├── union spans: [[], []]
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: false
- │         │         │    └── union spans: ["\x89", "\x89"]
+ │         │         │    └── union spans: [1, 1]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x8a", "\x8a"]
+ │         │              └── union spans: [2, 2]
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
  │              └── inverted constraint: /6/1
  │                   └── spans
- │                        ├── ["C", "C"]
- │                        └── ["\x89", "\x8b")
+ │                        ├── [[], []]
+ │                        └── [1, 3)
  └── filters
       ├── a:2 <@ ARRAY[1] [outer=(2), immutable]
       └── a:2 <@ ARRAY[2] [outer=(2), immutable]
@@ -5549,7 +5547,7 @@ index-join c
  └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       ├── flags: force-index=a_inv_idx
       └── key: (1)
 
@@ -5565,12 +5563,12 @@ index-join c
       ├── columns: k:1!null
       ├── inverted expression: /6
       │    ├── tight: true, unique: false
-      │    └── union spans: ["\x89", "\x8b")
+      │    └── union spans: [1, 3)
       ├── key: (1)
       └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
            ├── inverted constraint: /6/1
-           │    └── spans: ["\x89", "\x8b")
+           │    └── spans: [1, 3)
            └── flags: force-index=a_inv_idx
 
 opt expect=GenerateInvertedIndexScans
@@ -5674,7 +5672,7 @@ index-join c
  └── scan c@a_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       └── key: (1)
 
 # We should still plan an inverted index scan with an empty JSON array even
@@ -5692,15 +5690,15 @@ index-join b
       ├── inverted expression: /8
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         └── ["7\x00\x03", "7\x00\x03"]
+      │         ├── [[], []]
+      │         └── [Arr/, Arr/]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:8!null
            └── inverted constraint: /8/1
                 └── spans
-                     ├── ["7\x00\x018", "7\x00\x018"]
-                     └── ["7\x00\x03", "7\x00\x03"]
+                     ├── [[], []]
+                     └── [Arr/, Arr/]
 
 # The inverted index will never be used for <@ expressions if the index version
 # does not have empty arrays in the inverted index.
@@ -6618,7 +6616,7 @@ project
  └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /6/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 exec-ddl
@@ -6641,7 +6639,7 @@ project
  └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /7/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 exec-ddl
@@ -6665,7 +6663,7 @@ index-join pi
  └── scan pi@idx,inverted,partial
       ├── columns: k:1!null
       ├── inverted constraint: /8/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 exec-ddl
@@ -6698,17 +6696,17 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+ │         │         │    └── union spans: ["a"/"b", "a"/"b"]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
+ │         │              └── union spans: ["group"/1, "group"/1]
  │         ├── key: (1)
  │         └── scan pi@idx,inverted,partial
  │              ├── columns: k:1!null j_inverted_key:9!null
  │              ├── inverted constraint: /9/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
- │              │         └── ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
+ │              │         ├── ["a"/"b", "a"/"b"]
+ │              │         └── ["group"/1, "group"/1]
  │              └── key: (1,9)
  └── filters
       └── s:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
@@ -6812,7 +6810,7 @@ project
  └── scan computed@field_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /9/1
-      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │    └── spans: ["a"/"b", "a"/"b"]
       └── key: (1)
 
 opt expect=GenerateInvertedIndexScans
@@ -6825,7 +6823,7 @@ project
  └── scan computed@field_inv_idx,inverted
       ├── columns: k:1!null
       ├── inverted constraint: /9/1
-      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │    └── spans: ["a"/1, "a"/1]
       └── key: (1)
 
 # Tests for multi-column inverted indexes.
@@ -7446,12 +7444,12 @@ index-join t63180
       ├── columns: rowid:2!null
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
-      │    └── union spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
+      │    └── union spans: ["a"/"c", "a"/"c"]
       ├── key: (2)
       └── scan t63180@j_idx,inverted
            ├── columns: rowid:2!null j_inverted_key:5!null
            ├── inverted constraint: /5/2
-           │    └── spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
+           │    └── spans: ["a"/"c", "a"/"c"]
            ├── flags: force-index=j_idx
            ├── key: (2)
            └── fd: (2)-->(5)
@@ -8230,19 +8228,19 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
- │         │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
- │         │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │         │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
+ │         │         ├── ["  f", "  f"]
+ │         │         ├── [" fo", " fo"]
+ │         │         ├── ["foo", "foo"]
+ │         │         └── ["oo ", "oo "]
  │         ├── key: (1)
  │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null s_inverted_key:5!null
  │              └── inverted constraint: /5/1
  │                   └── spans
- │                        ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
- │                        ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
- │                        ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │                        └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
+ │                        ├── ["  f", "  f"]
+ │                        ├── [" fo", " fo"]
+ │                        ├── ["foo", "foo"]
+ │                        └── ["oo ", "oo "]
  └── filters
       └── s:2 % 'foo' [outer=(2), stable]
 
@@ -8254,9 +8252,9 @@ select
  │    └── distinct-on
  │         └── scan trgm@s_idx,inverted
  │              └── constraint: /5
- │                   ├── [/'\x1220666f0001' - /'\x1220666f0001']
- │                   ├── [/'\x12666f6f0001' - /'\x12666f6f0001']
- │                   └── [/'\x126f6f200001' - /'\x126f6f200001']
+ │                   ├── [/" fo" - /" fo"]
+ │                   ├── [/"foo" - /"foo"]
+ │                   └── [/"oo " - /"oo "]
  └── filters
       └── s % 'foo'
 
@@ -8368,7 +8366,7 @@ project
  │    │    │    ├── columns: a:8!null b:9!null
  │    │    │    ├── constraint: /8: [/'foo' - /'foo']
  │    │    │    ├── inverted constraint: /13/9
- │    │    │    │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    │    │    └── spans: ["foo", "foo"]
  │    │    │    ├── flags: force-index=i122733
  │    │    │    ├── key: (9)
  │    │    │    └── fd: ()-->(8)
@@ -8398,8 +8396,8 @@ project
  │    │    ├── inverted expression: /14
  │    │    │    ├── tight: false, unique: false
  │    │    │    └── union spans
- │    │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
- │    │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    │         ├── ["bar", "bar"]
+ │    │    │         └── ["foo", "foo"]
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── key: (10)
  │    │    ├── fd: ()-->(9)
@@ -8411,8 +8409,8 @@ project
  │    │         │    ├── constraint: /9: [/'foo' - /'foo']
  │    │         │    ├── inverted constraint: /14/10
  │    │         │    │    └── spans
- │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
- │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │         │    │         ├── ["bar", "bar"]
+ │    │         │    │         └── ["foo", "foo"]
  │    │         │    ├── flags: force-index=i122733
  │    │         │    └── fd: ()-->(9)
  │    │         └── filters
@@ -8443,8 +8441,8 @@ project
  │    │    ├── inverted expression: /14
  │    │    │    ├── tight: false, unique: false
  │    │    │    └── union spans
- │    │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
- │    │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    │         ├── ["bar", "bar"]
+ │    │    │         └── ["foo", "foo"]
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── immutable
  │    │    ├── key: (10)
@@ -8458,8 +8456,8 @@ project
  │    │         │    ├── constraint: /9: [/'foo' - /'foo']
  │    │         │    ├── inverted constraint: /14/10
  │    │         │    │    └── spans
- │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
- │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │         │    │         ├── ["bar", "bar"]
+ │    │         │    │         └── ["foo", "foo"]
  │    │         │    ├── flags: force-index=i122733
  │    │         │    └── fd: ()-->(9)
  │    │         └── filters
@@ -9847,22 +9845,22 @@ select
  │         ├── columns: k:1!null
  │         ├── inverted expression: /9
  │         │    ├── tight: false, unique: true
- │         │    ├── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │    ├── union spans: [Arr/3, Arr/3]
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │         │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │         │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:9!null
  │              └── inverted constraint: /9/1
  │                   └── spans
- │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
- │                        └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │                        ├── [Arr/3, Arr/3]
+ │                        ├── [Arr/Arr/1, Arr/Arr/1]
+ │                        └── [Arr/Arr/2, Arr/Arr/2]
  └── filters
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -9904,17 +9902,17 @@ project
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         │    └── union spans: ["a"/"b", "a"/"b"]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │              └── union spans: ["c"/"d", "c"/"d"]
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
            ├── inverted constraint: /9/1
            │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           │         ├── ["a"/"b", "a"/"b"]
+           │         └── ["c"/"d", "c"/"d"]
            └── flags: no-zigzag-join
 
 exec-ddl
@@ -9946,17 +9944,17 @@ project
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │         │    └── union spans: ["a"/1, "a"/1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
+      │              └── union spans: ["b"/2, "b"/2]
       ├── key: (1)
       └── scan inv_zz_partial@zz_idx,inverted,partial
            ├── columns: k:1!null j_inverted_key:7!null
            ├── inverted constraint: /7/1
            │    └── spans
-           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           │         └── ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
+           │         ├── ["a"/1, "a"/1]
+           │         └── ["b"/2, "b"/2]
            └── key: (1,7)
 
 # Generate a zigzag join on a single index with a remaining filter.
@@ -10060,7 +10058,7 @@ SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
 project
  └── scan inv_zz_partial@zz_idx,inverted,partial
       └── inverted constraint: /8/1
-           └── spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
+           └── spans: ["b"/2, "b"/2]
 
 # --------------------------------------------------
 # SplitDisjunction
@@ -10390,7 +10388,7 @@ project
       │              └── scan b@j_inv_idx,inverted
       │                   ├── columns: k:19!null
       │                   ├── inverted constraint: /27/19
-      │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
+      │                   │    └── spans: ["foo"/"bar", "foo"/"bar"]
       │                   └── key: (19)
       └── aggregations
            └── const-agg [as=j:4, outer=(4)]
@@ -10436,7 +10434,7 @@ project
       │              └── scan c@a_inv_idx,inverted
       │                   ├── columns: k:17!null
       │                   ├── inverted constraint: /24/17
-      │                   │    └── spans: ["\x8a", "\x8a"]
+      │                   │    └── spans: [2, 2]
       │                   └── key: (17)
       └── aggregations
            └── const-agg [as=a:2, outer=(2)]
@@ -11914,7 +11912,7 @@ project
       │              └── scan b@j_inv_idx,inverted
       │                   ├── columns: k:19!null
       │                   ├── inverted constraint: /27/19
-      │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
+      │                   │    └── spans: ["foo"/"bar", "foo"/"bar"]
       │                   └── key: (19)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
@@ -11966,7 +11964,7 @@ project
       │              └── scan c@a_inv_idx,inverted
       │                   ├── columns: k:17!null
       │                   ├── inverted constraint: /24/17
-      │                   │    └── spans: ["\x8a", "\x8a"]
+      │                   │    └── spans: [2, 2]
       │                   └── key: (17)
       └── aggregations
            ├── const-agg [as=a:2, outer=(2)]
