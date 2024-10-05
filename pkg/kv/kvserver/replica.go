@@ -326,8 +326,10 @@ type Replica struct {
 
 		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
-		// Scratch for populating RaftEvent for flowControlV2.
+		// Scratch for populating rac2.RaftEvent.MsgApps for flowControlV2.
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
+		// Scratch for populating rac2.RaftEvent.ReplicaSateInfo for flowContrlV2.
+		replicaStateScratchForFlowControl map[roachpb.ReplicaID]rac2.ReplicaStateInfo
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
