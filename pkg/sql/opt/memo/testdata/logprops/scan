@@ -495,7 +495,7 @@ index-join inv
  └── scan inv@a_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /6/1
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       ├── key: (1)
       └── prune: (1)
 
@@ -513,7 +513,7 @@ index-join inv_multi_pks
  └── scan inv_multi_pks@a_idx,inverted
       ├── columns: k1:1(int!null) k2:2(int!null)
       ├── inverted constraint: /7/1/2
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       ├── key: (1,2)
       └── prune: (1,2)
 
@@ -538,15 +538,15 @@ index-join inv
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8a", "\x8a"]
+      │              └── union spans: [2, 2]
       ├── key: (1)
       └── scan inv@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
            ├── inverted constraint: /6/1
-           │    └── spans: ["\x89", "\x8b")
+           │    └── spans: [1, 3)
            ├── flags: no-zigzag-join
            └── prune: (1,6)
 
@@ -570,17 +570,17 @@ index-join inv
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8b", "\x8b"]
+      │              └── union spans: [3, 3]
       ├── key: (1)
       └── scan inv@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
            ├── inverted constraint: /6/1
            │    └── spans
-           │         ├── ["\x89", "\x89"]
-           │         └── ["\x8b", "\x8b"]
+           │         ├── [1, 1]
+           │         └── [3, 3]
            ├── flags: no-zigzag-join
            └── prune: (1,6)
 
@@ -603,17 +603,17 @@ index-join inv_multi_pks
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8b", "\x8b"]
+      │              └── union spans: [3, 3]
       ├── key: (1,2)
       └── scan inv_multi_pks@a_idx,inverted
            ├── columns: k1:1(int!null) k2:2(int!null) a_inverted_key:7(encodedkey!null)
            ├── inverted constraint: /7/1/2
            │    └── spans
-           │         ├── ["\x89", "\x89"]
-           │         └── ["\x8b", "\x8b"]
+           │         ├── [1, 1]
+           │         └── [3, 3]
            ├── flags: no-zigzag-join
            └── prune: (1,2,7)
 
@@ -632,7 +632,7 @@ index-join inv
  └── scan inv@a_b_idx,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       ├── key: (1)
       └── prune: (1)
 
@@ -650,7 +650,7 @@ index-join inv_multi_pks
  └── scan inv_multi_pks@a_b_idx,inverted,partial
       ├── columns: k1:1(int!null) k2:2(int!null)
       ├── inverted constraint: /8/1/2
-      │    └── spans: ["\x89", "\x89"]
+      │    └── spans: [1, 1]
       ├── key: (1,2)
       └── prune: (1,2)
 
@@ -674,15 +674,15 @@ index-join inv
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8a", "\x8a"]
+      │              └── union spans: [2, 2]
       ├── key: (1)
       └── scan inv@a_b_idx,inverted,partial
            ├── columns: k:1(int!null) a_inverted_key:7(encodedkey!null)
            ├── inverted constraint: /7/1
-           │    └── spans: ["\x89", "\x8b")
+           │    └── spans: [1, 3)
            ├── flags: no-zigzag-join
            ├── key: (1,7)
            └── prune: (1,7)
@@ -707,17 +707,17 @@ index-join inv
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8b", "\x8b"]
+      │              └── union spans: [3, 3]
       ├── key: (1)
       └── scan inv@a_b_idx,inverted,partial
            ├── columns: k:1(int!null) a_inverted_key:7(encodedkey!null)
            ├── inverted constraint: /7/1
            │    └── spans
-           │         ├── ["\x89", "\x89"]
-           │         └── ["\x8b", "\x8b"]
+           │         ├── [1, 1]
+           │         └── [3, 3]
            ├── flags: no-zigzag-join
            ├── key: (1,7)
            └── prune: (1,7)
@@ -741,17 +741,40 @@ index-join inv_multi_pks
       │    └── INTERSECTION
       │         ├── span expression
       │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["\x89", "\x89"]
+      │         │    └── union spans: [1, 1]
       │         └── span expression
       │              ├── tight: true, unique: true
-      │              └── union spans: ["\x8b", "\x8b"]
+      │              └── union spans: [3, 3]
       ├── key: (1,2)
       └── scan inv_multi_pks@a_b_idx,inverted,partial
            ├── columns: k1:1(int!null) k2:2(int!null) a_inverted_key:8(encodedkey!null)
            ├── inverted constraint: /8/1/2
            │    └── spans
-           │         ├── ["\x89", "\x89"]
-           │         └── ["\x8b", "\x8b"]
+           │         ├── [1, 1]
+           │         └── [3, 3]
            ├── flags: no-zigzag-join
            ├── key: (1,2,8)
            └── prune: (1,2,8)
+
+opt
+SELECT * FROM inv@a_idx WHERE a @> '{}'
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans: [, NULL/NULL)
+      ├── key: (1)
+      └── scan inv@a_idx,inverted
+           ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
+           ├── inverted constraint: /6/1
+           │    └── spans: [, NULL/NULL)
+           ├── flags: force-index=a_idx
+           └── prune: (1,6)

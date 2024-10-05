@@ -95,16 +95,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         └── ["7\x00\xff", "8")
+      │         ├── [{}, {}]
+      │         └── ["", [])
       ├── stats: [rows=1110]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7\x00\x019", "7\x00\x019"]
-           │         └── ["7\x00\xff", "8")
+           │         ├── [{}, {}]
+           │         └── ["", [])
            ├── flags: force-index=j_idx
            └── stats: [rows=1110, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
                histogram(5)=  0       10       0          990           0          100           0           10
@@ -123,7 +123,7 @@ index-join t
  └── scan t@j_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
-      │    └── spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │    └── spans: ["c"/"d", "c"/"d"]
       ├── stats: [rows=100, distinct(5)=1, null(5)=0]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x3763000112640001' --- '\x3763000112640002'
@@ -143,7 +143,7 @@ index-join t
  └── scan t@j_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
-      │    └── spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      │    └── spans: ["c"/"d", "c"/"d"]
       ├── stats: [rows=100, distinct(5)=1, null(5)=0]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x3763000112640001' --- '\x3763000112640002'
@@ -165,16 +165,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+      │         ├── ["c"/"d", "c"/"d"]
+      │         └── ["e"/"f", "e"/"f"]
       ├── stats: [rows=110]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+           │         ├── ["c"/"d", "c"/"d"]
+           │         └── ["e"/"f", "e"/"f"]
            └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
                histogram(5)=  0          100           0           10
                             <--- '\x3763000112640001' --- '\x3765000112660001'
@@ -194,16 +194,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         └── ["7\x00\x03", "7\x00\x03"]
+      │         ├── [[], []]
+      │         └── [Arr/, Arr/]
       ├── stats: [rows=1110]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7\x00\x018", "7\x00\x018"]
-           │         └── ["7\x00\x03", "7\x00\x03"]
+           │         ├── [[], []]
+           │         └── [Arr/, Arr/]
            ├── flags: force-index=j_idx
            └── stats: [rows=1110, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
                histogram(5)=  0       10       0          990           0          100           0           10           0      0
@@ -222,7 +222,7 @@ index-join t
  └── scan t@j_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
-      │    └── spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │    └── spans: [Arr/2, Arr/2]
       ├── stats: [rows=100, distinct(5)=1, null(5)=0]
       │   histogram(5)=  0          100           0           0
       │                <--- '\x37000300012a0400' --- '\x37000300012a0401'
@@ -244,16 +244,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+      │         ├── [Arr/2, Arr/2]
+      │         └── [Arr/3, Arr/3]
       ├── stats: [rows=110]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-           │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+           │         ├── [Arr/2, Arr/2]
+           │         └── [Arr/3, Arr/3]
            └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
                histogram(5)=  0          100           0           10           0           0
                             <--- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
@@ -277,7 +277,7 @@ select
  │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
- │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
+ │         │    └── spans: [[], []]
  │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │         │   histogram(5)=  0       10       0       0
  │         │                <--- '\x37000138' --- '\x37000139'
@@ -304,7 +304,7 @@ select
  │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
- │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
+ │         │    └── spans: [{}, {}]
  │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │         │   histogram(5)=  0       10       0       0
  │         │                <--- '\x37000139' --- '\x3700013a'
@@ -333,16 +333,16 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │         │         ├── [{}, {}]
+ │         │         └── ["c"/"d", "c"/"d"]
  │         ├── stats: [rows=110]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │              │         ├── [{}, {}]
+ │              │         └── ["c"/"d", "c"/"d"]
  │              └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           0
  │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3763000112640002'
@@ -370,18 +370,18 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
- │         │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │         │         ├── [{}, {}]
+ │         │         ├── ["c"/"d", "c"/"d"]
+ │         │         └── ["e"/"f", "e"/"f"]
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
- │              │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["c"/"d", "c"/"d"]
+ │              │         └── ["e"/"f", "e"/"f"]
  │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           10
  │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
@@ -408,23 +408,23 @@ select
  │         ├── columns: k:1(int!null)
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
- │         │    ├── union spans: ["7\x00\x019", "7\x00\x019"]
+ │         │    ├── union spans: [{}, {}]
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: false
- │         │         │    └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │         │         │    └── union spans: ["c"/"d", "c"/"d"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │         │              └── union spans: ["e"/"f", "e"/"f"]
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
- │              │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["c"/"d", "c"/"d"]
+ │              │         └── ["e"/"f", "e"/"f"]
  │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           10
  │                               <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
@@ -453,18 +453,18 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │         │         ├── ["7\x00\x018", "7\x00\x018"]
- │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │         ├── [2, 2]
+ │         │         ├── [[], []]
+ │         │         └── [Arr/2, Arr/2]
  │         ├── stats: [rows=110]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x018"]
- │              │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── [2, 2]
+ │              │         ├── [[], []]
+ │              │         └── [Arr/2, Arr/2]
  │              └── stats: [rows=110, distinct(1)=99.0991, null(1)=0, distinct(5)=2, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           0
  │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0401'
@@ -492,22 +492,22 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │         │         ├── ["7\x00\x018", "7\x00\x018"]
- │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │         ├── [2, 2]
+ │         │         ├── [3, 3]
+ │         │         ├── [[], []]
+ │         │         ├── [Arr/2, Arr/2]
+ │         │         └── [Arr/3, Arr/3]
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x018"]
- │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              │         ├── [2, 2]
+ │              │         ├── [3, 3]
+ │              │         ├── [[], []]
+ │              │         ├── [Arr/2, Arr/2]
+ │              │         └── [Arr/3, Arr/3]
  │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           10           0           0
  │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
@@ -534,29 +534,29 @@ select
  │         ├── columns: k:1(int!null)
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
- │         │    ├── union spans: ["7\x00\x018", "7\x00\x018"]
+ │         │    ├── union spans: [[], []]
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: false
  │         │         │    └── union spans
- │         │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │         │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │         │         ├── [2, 2]
+ │         │         │         └── [Arr/2, Arr/2]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans
- │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │                   ├── [3, 3]
+ │         │                   └── [Arr/3, Arr/3]
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x018"]
- │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              │         ├── [2, 2]
+ │              │         ├── [3, 3]
+ │              │         ├── [[], []]
+ │              │         ├── [Arr/2, Arr/2]
+ │              │         └── [Arr/3, Arr/3]
  │              └── stats: [rows=120, distinct(1)=108.108, null(1)=0, distinct(5)=3, null(5)=0]
  │                  histogram(5)=  0       10       0          100           0           10           0           0
  │                               <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
@@ -634,16 +634,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         └── ["7\x00\xff", "8")
+      │         ├── [{}, {}]
+      │         └── ["", [])
       ├── stats: [rows=100]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7\x00\x019", "7\x00\x019"]
-           │         └── ["7\x00\xff", "8")
+           │         ├── [{}, {}]
+           │         └── ["", [])
            └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
                histogram(5)=  0      100
                             <--- '\x37000139'
@@ -664,16 +664,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         └── ["7\x00\x03", "7\x00\x03"]
+      │         ├── [[], []]
+      │         └── [Arr/, Arr/]
       ├── stats: [rows=100]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7\x00\x018", "7\x00\x018"]
-           │         └── ["7\x00\x03", "7\x00\x03"]
+           │         ├── [[], []]
+           │         └── [Arr/, Arr/]
            └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
                histogram(5)=  0      100       0       0
                             <--- '\x37000138' --- '\x37000139'
@@ -697,7 +697,7 @@ select
  │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
- │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
  │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
  │         │   histogram(5)=
  │         └── key: (1)
@@ -723,7 +723,7 @@ select
  │    └── scan t@j_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
- │         │    └── spans: ["7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02c\x00\x01\x12d\x00\x01"]
+ │         │    └── spans: ["a"/"b"/"c"/"d", "a"/"b"/"c"/"d"]
  │         ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
  │         │   histogram(5)=
  │         └── key: (1)
@@ -755,18 +755,18 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         │         │    └── union spans: ["a"/"b"/"c", "a"/"b"/"c"]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7a\x00\x02d\x00\x01\x12e\x00\x01", "7a\x00\x02d\x00\x01\x12e\x00\x01"]
+ │         │              └── union spans: ["a"/"d"/"e", "a"/"d"/"e"]
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
- │              │         └── ["7a\x00\x02d\x00\x01\x12e\x00\x01", "7a\x00\x02d\x00\x01\x12e\x00\x01"]
+ │              │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+ │              │         └── ["a"/"d"/"e", "a"/"d"/"e"]
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -804,26 +804,26 @@ select
  │         │         │         │    └── INTERSECTION
  │         │         │         │         ├── span expression
  │         │         │         │         │    ├── tight: true, unique: true
- │         │         │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+ │         │         │         │         │    └── union spans: ["a"/Arr/"b", "a"/Arr/"b"]
  │         │         │         │         └── span expression
  │         │         │         │              ├── tight: true, unique: true
- │         │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+ │         │         │         │              └── union spans: ["a"/Arr/"c", "a"/Arr/"c"]
  │         │         │         └── span expression
  │         │         │              ├── tight: true, unique: true
- │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+ │         │         │              └── union spans: ["a"/Arr/"d", "a"/Arr/"d"]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
+ │         │              └── union spans: ["a"/Arr/"e", "a"/Arr/"e"]
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
- │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
- │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
- │              │         └── ["7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
+ │              │         ├── ["a"/Arr/"b", "a"/Arr/"b"]
+ │              │         ├── ["a"/Arr/"c", "a"/Arr/"c"]
+ │              │         ├── ["a"/Arr/"d", "a"/Arr/"d"]
+ │              │         └── ["a"/Arr/"e", "a"/Arr/"e"]
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -858,22 +858,22 @@ select
  │         │         │    └── INTERSECTION
  │         │         │         ├── span expression
  │         │         │         │    ├── tight: true, unique: true
- │         │         │         │    └── union spans: ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+ │         │         │         │    └── union spans: ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
  │         │         │         └── span expression
  │         │         │              ├── tight: true, unique: true
- │         │         │              └── union spans: ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
+ │         │         │              └── union spans: ["a"/"b"/Arr/"d", "a"/"b"/Arr/"d"]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
+ │         │              └── union spans: ["a"/"b"/Arr/"e", "a"/"b"/Arr/"e"]
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
- │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
- │              │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12e\x00\x01"]
+ │              │         ├── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
+ │              │         ├── ["a"/"b"/Arr/"d", "a"/"b"/Arr/"d"]
+ │              │         └── ["a"/"b"/Arr/"e", "a"/"b"/Arr/"e"]
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -900,16 +900,16 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │         │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+ │         │         ├── ["a"/[], "a"/[]]
+ │         │         └── ["a"/Arr/, "a"/Arr/]
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │              │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
+ │              │         ├── ["a"/[], "a"/[]]
+ │              │         └── ["a"/Arr/, "a"/Arr/]
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -936,16 +936,16 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │         │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/, Arr/)
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │              │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/, Arr/)
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -966,16 +966,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         └── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │         ├── ["a"/1, "a"/1]
+      │         └── ["a"/Arr/1, "a"/Arr/1]
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           │         └── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+           │         ├── ["a"/1, "a"/1]
+           │         └── ["a"/Arr/1, "a"/Arr/1]
            └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
                histogram(5)=
 
@@ -1000,16 +1000,16 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         └── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │         │         ├── [{}, {}]
+ │         │         └── ["a"/1, "a"/1]
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         └── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │              │         ├── [{}, {}]
+ │              │         └── ["a"/1, "a"/1]
  │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0      100
  │                               <--- '\x37000139'
@@ -1031,16 +1031,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
            └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
                histogram(5)=
 
@@ -1065,18 +1065,18 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/"b"/"c", "a"/"b"/"c"]
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │              │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/"b"/"c", "a"/"b"/"c"]
  │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0      100
  │                               <--- '\x37000139'
@@ -1097,7 +1097,7 @@ index-join t
  └── scan t@j_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
-      │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │    └── spans: ["a"/"b"/"c", "a"/"b"/"c"]
       ├── stats: [rows=4e-07, distinct(5)=4e-07, null(5)=0]
       │   histogram(5)=
       └── key: (1)
@@ -1123,18 +1123,18 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         └── ["a"/"b"/"c", "a"/"b"/"c"]
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │              │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         └── ["a"/"b"/"c", "a"/"b"/"c"]
  │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0      100
  │                               <--- '\x37000139'
@@ -1165,18 +1165,18 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │         │         │    └── union spans: ["a"/Arr/1, "a"/Arr/1]
  │         │         └── span expression
  │         │              ├── tight: true, unique: true
- │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         │              └── union spans: ["a"/Arr/2, "a"/Arr/2]
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
- │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── ["a"/Arr/1, "a"/Arr/1]
+ │              │         └── ["a"/Arr/2, "a"/Arr/2]
  │              └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
  │                  histogram(5)=
  └── filters
@@ -1203,24 +1203,24 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
- │         │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
- │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │         │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
- │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/1, "a"/1]
+ │         │         ├── ["a"/2, "a"/2]
+ │         │         ├── ["a"/[], "a"/[]]
+ │         │         ├── ["a"/Arr/1, "a"/Arr/1]
+ │         │         └── ["a"/Arr/2, "a"/Arr/2]
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
- │              │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
- │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
- │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/1, "a"/1]
+ │              │         ├── ["a"/2, "a"/2]
+ │              │         ├── ["a"/[], "a"/[]]
+ │              │         ├── ["a"/Arr/1, "a"/Arr/1]
+ │              │         └── ["a"/Arr/2, "a"/Arr/2]
  │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0      100
  │                               <--- '\x37000139'
@@ -1243,16 +1243,16 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans
-      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+      │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx,inverted
            ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
-           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+           │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
+           │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
            └── stats: [rows=4e-07, distinct(1)=4e-07, null(1)=0, distinct(5)=4e-07, null(5)=0]
                histogram(5)=
 
@@ -1277,26 +1277,26 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["7\x00\x019", "7\x00\x019"]
- │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │         │         ├── ["7a\x00\x02b\x00\x01*\x02\x00", "7a\x00\x02b\x00\x01*\x02\x00"]
- │         │         ├── ["7a\x00\x02b\x00\x01*\x04\x00", "7a\x00\x02b\x00\x01*\x04\x00"]
- │         │         ├── ["7a\x00\x02b\x00\x018", "7a\x00\x02b\x00\x018"]
- │         │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00"]
- │         │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         │         ├── [{}, {}]
+ │         │         ├── ["a"/{}, "a"/{}]
+ │         │         ├── ["a"/"b"/1, "a"/"b"/1]
+ │         │         ├── ["a"/"b"/2, "a"/"b"/2]
+ │         │         ├── ["a"/"b"/[], "a"/"b"/[]]
+ │         │         ├── ["a"/"b"/Arr/1, "a"/"b"/Arr/1]
+ │         │         └── ["a"/"b"/Arr/2, "a"/"b"/Arr/2]
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx,inverted
  │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
- │              │         ├── ["7a\x00\x02b\x00\x01*\x02\x00", "7a\x00\x02b\x00\x01*\x02\x00"]
- │              │         ├── ["7a\x00\x02b\x00\x01*\x04\x00", "7a\x00\x02b\x00\x01*\x04\x00"]
- │              │         ├── ["7a\x00\x02b\x00\x018", "7a\x00\x02b\x00\x018"]
- │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00"]
- │              │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── [{}, {}]
+ │              │         ├── ["a"/{}, "a"/{}]
+ │              │         ├── ["a"/"b"/1, "a"/"b"/1]
+ │              │         ├── ["a"/"b"/2, "a"/"b"/2]
+ │              │         ├── ["a"/"b"/[], "a"/"b"/[]]
+ │              │         ├── ["a"/"b"/Arr/1, "a"/"b"/Arr/1]
+ │              │         └── ["a"/"b"/Arr/2, "a"/"b"/Arr/2]
  │              └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0      100
  │                               <--- '\x37000139'

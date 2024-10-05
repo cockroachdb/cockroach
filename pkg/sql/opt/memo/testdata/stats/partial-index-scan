@@ -870,7 +870,7 @@ project
  └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
       ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       └── key: (1)
@@ -887,7 +887,7 @@ index-join inv
  └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
       ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       └── key: (1)
@@ -914,7 +914,7 @@ project
       │    └── scan inv@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │         │    └── spans: ["x"/"y", "x"/"y"]
       │         ├── flags: force-index=partial
       │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       │         └── key: (1)
@@ -938,7 +938,7 @@ select
  │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+ │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
  │         └── key: (1)
@@ -962,7 +962,7 @@ select
  │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+ │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
  │         └── key: (1)
@@ -1047,7 +1047,7 @@ project
  └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │    └── spans: ["g"/7, "g"/7]
       ├── flags: force-index=partial
       ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0     10     0     10
@@ -1070,7 +1070,7 @@ index-join inv_hist
  └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │    └── spans: ["g"/7, "g"/7]
       ├── flags: force-index=partial
       ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0     10     0     10
@@ -1103,7 +1103,7 @@ project
       │    └── scan inv_hist@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │         │    └── spans: ["g"/7, "g"/7]
       │         ├── flags: force-index=partial
       │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │         │   histogram(4)=  0     10     0     10
@@ -1133,7 +1133,7 @@ select
  │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+ │         │    └── spans: ["g"/7, "g"/7]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0     10     0     10
@@ -1165,7 +1165,7 @@ select
  │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+ │         │    └── spans: ["g"/7, "g"/7]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0     10     0     10

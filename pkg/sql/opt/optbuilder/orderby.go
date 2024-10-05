@@ -329,7 +329,7 @@ func ensureColumnOrderable(e tree.TypedExpr) {
 		typ = typ.ArrayContents()
 	}
 	switch typ.Family() {
-	case types.TSQueryFamily, types.TSVectorFamily:
+	case types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		panic(unimplementedWithIssueDetailf(92165, "", "can't order by column type %s", typ.SQLString()))
 	}
 }
