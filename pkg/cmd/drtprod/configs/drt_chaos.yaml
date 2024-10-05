@@ -45,6 +45,8 @@ targets:
           - "./cockroach"
         flags:
           enable-fluent-sink: true
+          store-count: 4
+          args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
         on_rollback:
