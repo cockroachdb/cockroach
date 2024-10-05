@@ -869,6 +869,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	rac2ModeToUse := r.replicationAdmissionControlModeToUse(ctx)
+	var logSnapshot raft.LogSnapshot
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
 	state := logstore.RaftState{ // used for append below
@@ -919,6 +920,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
 		}
+		if rac2ModeForReady == rac2.MsgAppPull {
+			logSnapshot = raftGroup.LogSnapshot()
+		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
 		// Ready, which can happen if the proposals got dropped (raft does this
@@ -947,6 +951,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
 		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs,
+		replica_rac2.RaftLogSnapshot(logSnapshot),
 		r.raftMu.msgAppScratchForFlowControl)
 	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftEvent)
 	if !hasReady {
@@ -1480,7 +1485,20 @@ func (r *Replica) processRACv2RangeController(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	// Can read Replica.mu.currentRACv2Mode since updates require both raftMu
 	// and Replica.mu.
-	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(ctx, r.mu.currentRACv2Mode)
+	mode := r.mu.currentRACv2Mode
+	var logSnapshot raft.LogSnapshot
+	if mode == rac2.MsgAppPull {
+		err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+			logSnapshot = raftGroup.LogSnapshot()
+			return false, nil
+		})
+		if err != nil {
+			// The only error here is errRemoved, so ignore.
+			return
+		}
+	}
+	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(
+		ctx, r.mu.currentRACv2Mode, replica_rac2.RaftLogSnapshot(logSnapshot))
 }
 
 // SendMsgApp implements rac2.MsgAppSender.
