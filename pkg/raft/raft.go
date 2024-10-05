@@ -968,22 +968,13 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 // only be called in StateLeader.
 func (r *raft) maybeCommit() bool {
 	index := r.trk.Committed()
-	if index <= r.raftLog.committed {
-		// The commit index must not regress.
-		// TODO(pav-kv): consider making it an assertion.
-		return false
-	}
 	// Section 5.4.2 of raft paper (https://raft.github.io/raft.pdf):
 	//
 	// Only log entries from the leader’s current term are committed by counting
 	// replicas; once an entry from the current term has been committed in this
 	// way, then all prior entries are committed indirectly because of the Log
 	// Matching Property.
-	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
-		return false
-	}
-	r.raftLog.commitTo(CommitMark{Term: r.Term, Index: index})
-	return true
+	return r.raftLog.maybeCommit(entryID{term: r.Term, index: index})
 }
 
 func (r *raft) reset(term uint64) {
@@ -2136,11 +2127,10 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	if r.raftLog.maybeAppend(a) {
 		// TODO(pav-kv): make it possible to commit even if the append did not
 		// succeed or is stale. If accTerm >= m.Term, then our log contains all
-		// committed entries at m.Term (by raft invariants), so it is safe to bump
-		// the commit index even if the MsgApp is stale.
-		lastIndex := a.lastIndex()
-		r.raftLog.commitTo(CommitMark{Term: m.Term, Index: min(m.Commit, lastIndex)})
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex,
+		// committed entries at m.Term (see CommitMark comment for why), so it is
+		// safe to bump the commit index even if the MsgApp is stale.
+		r.raftLog.commitTo(CommitMark{Term: m.Term, Index: m.Commit})
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: a.lastIndex(),
 			Commit: r.raftLog.committed})
 		return
 	}
@@ -2194,33 +2184,7 @@ func (r *raft) checkMatch(match uint64) {
 
 func (r *raft) handleHeartbeat(m pb.Message) {
 	r.checkMatch(m.Match)
-
-	// The m.Term leader is indicating to us through this heartbeat message
-	// that indices <= m.Commit in its log are committed. If our log matches
-	// the leader's up to index M, then we can update our commit index to
-	// min(m.Commit, M).
-	//
-	// If accTerm == m.Term, i.e. the last accepted log append came from this
-	// leader, then we know that our log is a prefix of the leader's log. We can
-	// thus put M = r.raftLog.lastIndex() in the formula above.
-	//
-	// Otherwise (accTerm != m.Term), we haven't accepted a single log append from
-	// the m.Term leader, so we don't know M, and it is unsafe to update the
-	// commit index.
-	//
-	// NB: in the latter case, our log is lagging the leader's. If the leader is
-	// stable, we will eventually accept a MsgApp which sets accTerm == m.Term and
-	// enables advancing the commit index. By this, we have the guarantee that our
-	// commit index converges to the leader's.
-	//
-	// TODO(pav-kv): the condition can be relaxed, it is actually safe to bump the
-	// commit index if accTerm >= m.Term.
-	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
-	// migrated to raftLog/unstable.
-	mark := CommitMark{Term: m.Term, Index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.Term == r.raftLog.accTerm() {
-		r.raftLog.commitTo(mark)
-	}
+	r.raftLog.commitTo(CommitMark{Term: m.Term, Index: m.Commit})
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
 
@@ -2367,12 +2331,11 @@ func (r *raft) restore(s snapshot) bool {
 
 	// Now go ahead and actually restore.
 
-	if r.raftLog.matchTerm(id) {
+	if r.raftLog.maybeCommit(id) {
 		// TODO(pav-kv): can print %+v of the id, but it will change the format.
 		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
-		r.raftLog.commitTo(s.commitMark())
 		return false
 	}
 

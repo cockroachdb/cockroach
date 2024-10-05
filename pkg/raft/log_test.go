@@ -539,19 +539,15 @@ func TestCommitTo(t *testing.T) {
 	for _, tt := range []struct {
 		commit CommitMark
 		want   uint64
-		panic  bool
 	}{
 		{commit: CommitMark{Term: 3, Index: 3}, want: 3},
-		{commit: CommitMark{Term: 3, Index: 2}, want: 2},     // commit does not regress
-		{commit: CommitMark{Term: 3, Index: 4}, panic: true}, // commit out of range -> panic
-		// TODO(pav-kv): add commit marks with a different term.
+		{commit: CommitMark{Term: 3, Index: 1}, want: 2}, // commit does not regress
+		{commit: CommitMark{Term: 3, Index: 2}, want: 2},
+		{commit: CommitMark{Term: 3, Index: 4}, want: 3}, // commit out of range -> cap
+		{commit: CommitMark{Term: 2, Index: 3}, want: 3}, // committed in previous term
+		{commit: CommitMark{Term: 4, Index: 3}, want: 2}, // committed in future term
 	} {
 		t.Run("", func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					require.True(t, tt.panic)
-				}
-			}()
 			raftLog := newLog(NewMemoryStorage(), raftlogger.DiscardLogger)
 			require.True(t, raftLog.append(init))
 			raftLog.committed = commit
