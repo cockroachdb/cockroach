@@ -511,8 +511,6 @@ func newRaft(c *Config) *raft {
 	return r
 }
 
-func (r *raft) hasLeader() bool { return r.lead != None }
-
 func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {

@@ -18,12 +18,10 @@
 package raft
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -31,104 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// readyWithTimeout selects from n.Ready() with a 1-second timeout. It
-// panics on timeout, which is better than the indefinite wait that
-// would occur if this channel were read without being wrapped in a
-// select.
-func readyWithTimeout(n Node) Ready {
-	select {
-	case rd := <-n.Ready():
-		if nn, ok := n.(*nodeTestHarness); ok {
-			n = nn.node
-		}
-		if nn, ok := n.(*node); ok {
-			nn.rn.raft.logger.Infof("emitted ready: %s", DescribeReady(rd, nil))
-		}
-		return rd
-	case <-time.After(time.Second):
-		panic("timed out waiting for ready")
-	}
-}
-
-// TestNodeStep ensures that node.Step sends msgProp to propc chan
-// and other kinds of messages to recvc chan.
-func TestNodeStep(t *testing.T) {
-	for i, msgn := range raftpb.MessageType_name {
-		n := &node{
-			propc: make(chan msgWithResult, 1),
-			recvc: make(chan raftpb.Message, 1),
-		}
-		msgt := raftpb.MessageType(i)
-		n.Step(context.TODO(), raftpb.Message{Type: msgt})
-		// Proposal goes to proc chan. Others go to recvc chan.
-		if msgt == raftpb.MsgProp {
-			select {
-			case <-n.propc:
-			default:
-				t.Errorf("%d: cannot receive %s on propc chan", msgt, msgn)
-			}
-		} else {
-			if IsLocalMsg(msgt) {
-				select {
-				case <-n.recvc:
-					t.Errorf("%d: step should ignore %s", msgt, msgn)
-				default:
-				}
-			} else {
-				select {
-				case <-n.recvc:
-				default:
-					t.Errorf("%d: cannot receive %s on recvc chan", msgt, msgn)
-				}
-			}
-		}
-	}
-}
-
-// TestNodeStepUnblock should Cancel and Stop should unblock Step()
-func TestNodeStepUnblock(t *testing.T) {
-	// a node without buffer to block step
-	n := &node{
-		propc: make(chan msgWithResult),
-		done:  make(chan struct{}),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	stopFunc := func() { close(n.done) }
-
-	tests := []struct {
-		unblock func()
-		werr    error
-	}{
-		{stopFunc, ErrStopped},
-		{cancel, context.Canceled},
-	}
-
-	for i, tt := range tests {
-		errc := make(chan error, 1)
-		go func() {
-			err := n.Step(ctx, raftpb.Message{Type: raftpb.MsgProp})
-			errc <- err
-		}()
-		tt.unblock()
-		select {
-		case err := <-errc:
-			assert.Equal(t, tt.werr, err, "#%d", i)
-			// clean up side-effect
-			if ctx.Err() != nil {
-				ctx = context.TODO()
-			}
-			select {
-			case <-n.done:
-				n.done = make(chan struct{})
-			default:
-			}
-		case <-time.After(1 * time.Second):
-			t.Fatalf("#%d: failed to unblock step", i)
-		}
-	}
-}
 
 // TestNodePropose ensures that node.Propose sends the given proposal to the underlying raft.
 func TestNodePropose(t *testing.T) {
@@ -144,23 +44,20 @@ func TestNodePropose(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	require.NoError(t, n.Campaign(context.TODO()))
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
-	n.Propose(context.TODO(), []byte("somedata"))
-	n.Stop()
+	require.NoError(t, rn.Propose([]byte("somedata")))
 
 	require.Len(t, msgs, 2)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
@@ -210,26 +107,23 @@ func TestNodeProposeConfig(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	n.Campaign(context.TODO())
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
-	n.ProposeConfChange(context.TODO(), cc)
-	n.Stop()
+	require.NoError(t, rn.ProposeConfChange(cc))
 
 	require.Len(t, msgs, 2)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
@@ -242,67 +136,58 @@ func TestNodeProposeConfig(t *testing.T) {
 func TestNodeProposeAddDuplicateNode(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
-	defer cancel()
-	n.Campaign(ctx)
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+	require.NoError(t, rn.Campaign())
+
 	allCommittedEntries := make([]raftpb.Entry, 0)
-	ticker := time.NewTicker(time.Millisecond * 100)
-	defer ticker.Stop()
-	goroutineStopped := make(chan struct{})
-	applyConfChan := make(chan struct{})
 
-	rd := readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	go func() {
-		defer close(goroutineStopped)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				n.Tick()
-			case rd := <-n.Ready():
-				t.Log(DescribeReady(rd, nil))
-				s.Append(rd.Entries)
-				applied := false
-				for _, e := range rd.CommittedEntries {
-					allCommittedEntries = append(allCommittedEntries, e)
-					switch e.Type {
-					case raftpb.EntryNormal:
-					case raftpb.EntryConfChange:
-						var cc raftpb.ConfChange
-						cc.Unmarshal(e.Data)
-						n.ApplyConfChange(cc)
-						applied = true
-					}
-				}
-				n.Advance()
-				if applied {
-					applyConfChan <- struct{}{}
-				}
+	ready := func() (appliedConfChange bool) {
+		rd := rn.Ready()
+		t.Log(DescribeReady(rd, nil))
+		require.NoError(t, s.Append(rd.Entries))
+		applied := false
+		for _, e := range rd.CommittedEntries {
+			allCommittedEntries = append(allCommittedEntries, e)
+			switch e.Type {
+			case raftpb.EntryNormal:
+			case raftpb.EntryConfChange:
+				var cc raftpb.ConfChange
+				require.NoError(t, cc.Unmarshal(e.Data))
+				rn.ApplyConfChange(cc)
+				applied = true
 			}
 		}
-	}()
+		rn.Advance(rd)
+		return applied
+	}
+	waitAppliedConfChange := func() bool {
+		for i := 0; i < 10; i++ {
+			if ready() {
+				return true
+			}
+		}
+		return false
+	}
 
 	cc1 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata1, _ := cc1.Marshal()
-	n.ProposeConfChange(ctx, cc1)
-	<-applyConfChan
+	require.NoError(t, rn.ProposeConfChange(cc1))
+	require.True(t, waitAppliedConfChange())
 
 	// try add the same node again
-	n.ProposeConfChange(ctx, cc1)
-	<-applyConfChan
+	require.NoError(t, rn.ProposeConfChange(cc1))
+	require.True(t, waitAppliedConfChange())
 
 	// the new node join should be ok
 	cc2 := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 2}
 	ccdata2, _ := cc2.Marshal()
-	n.ProposeConfChange(ctx, cc2)
-	<-applyConfChan
-
-	cancel()
-	<-goroutineStopped
+	require.NoError(t, rn.ProposeConfChange(cc2))
+	require.True(t, waitAppliedConfChange())
 
 	assert.Len(t, allCommittedEntries, 4)
 	assert.Equal(t, ccdata1, allCommittedEntries[1].Data)
@@ -315,33 +200,15 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 func TestBlockProposal(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
-	go n.run()
-	defer n.Stop()
 
-	errc := make(chan error, 1)
-	go func() {
-		errc <- n.Propose(context.TODO(), []byte("somedata"))
-	}()
+	require.ErrorIs(t, ErrProposalDropped, rn.Propose([]byte("somedata")))
 
-	time.Sleep(10 * time.Millisecond)
+	require.NoError(t, rn.Campaign())
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	select {
-	case err := <-errc:
-		t.Errorf("err = %v, want blocking", err)
-	default:
-	}
-
-	n.Campaign(context.TODO())
-	rd := <-n.Ready()
-	s.Append(rd.Entries)
-	n.Advance()
-	select {
-	case err := <-errc:
-		assert.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Errorf("blocking proposal, want unblocking")
-	}
+	require.NoError(t, rn.Propose([]byte("somedata")))
 }
 
 func TestNodeProposeWaitDropped(t *testing.T) {
@@ -362,24 +229,21 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
-	n.Campaign(context.TODO())
+	require.NoError(t, rn.Campaign())
 	for {
-		rd := <-n.Ready()
-		s.Append(rd.Entries)
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
 		// change the step function to dropStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = dropStep
-			n.Advance()
+			rn.Advance(rd)
 			break
 		}
-		n.Advance()
+		rn.Advance(rd)
 	}
-	assert.Equal(t, ErrProposalDropped, n.Propose(context.Background(), droppingMsg))
+	assert.Equal(t, ErrProposalDropped, rn.Propose(droppingMsg))
 
-	n.Stop()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
 }
@@ -389,49 +253,10 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 func TestNodeTick(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
 	r := rn.raft
-	go n.run()
 	elapsed := r.electionElapsed
-	n.Tick()
-
-	for len(n.tickc) != 0 {
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	n.Stop()
+	rn.Tick()
 	assert.Equal(t, elapsed+1, r.electionElapsed)
-}
-
-// TestNodeStop ensures that node.Stop() blocks until the node has stopped
-// processing, and that it is idempotent
-func TestNodeStop(t *testing.T) {
-	rn := newTestRawNode(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-	n := newNode(rn)
-	donec := make(chan struct{})
-
-	go func() {
-		n.run()
-		close(donec)
-	}()
-
-	status := n.Status()
-	n.Stop()
-
-	select {
-	case <-donec:
-	case <-time.After(time.Second):
-		t.Fatalf("timed out waiting for node to stop!")
-	}
-
-	emptyStatus := Status{}
-	assert.NotEqual(t, emptyStatus, status)
-
-	// Further status should return be empty, the node is stopped.
-	assert.Equal(t, emptyStatus, n.Status())
-
-	// Subsequent Stops should have no effect.
-	n.Stop()
 }
 
 // TestNodeStart ensures that a node can be started correctly. The node should
@@ -476,50 +301,39 @@ func TestNodeStart(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	StartNode(c, []Peer{{ID: 1}})
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c, Peer{ID: 1})
-	defer cancel()
 
-	{
-		rd := <-n.Ready()
-		require.Equal(t, wants[0], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
+	require.NoError(t, rn.Bootstrap([]Peer{{ID: 1}}))
 
-	require.NoError(t, n.Campaign(ctx))
+	rd := rn.Ready()
+	require.Equal(t, wants[0], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	{
-		// Persist vote.
-		rd := <-n.Ready()
-		storage.Append(rd.Entries)
-		n.Advance()
-		// Append empty entry.
-		rd = <-n.Ready()
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	require.NoError(t, rn.Campaign())
 
-	n.Propose(ctx, []byte("foo"))
-	{
-		rd := <-n.Ready()
-		assert.Equal(t, wants[1], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	// Persist vote.
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+	// Append empty entry.
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	{
-		rd := <-n.Ready()
-		assert.Equal(t, wants[2], rd)
-		storage.Append(rd.Entries)
-		n.Advance()
-	}
+	require.NoError(t, rn.Propose([]byte("foo")))
+	rd = rn.Ready()
+	assert.Equal(t, wants[1], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
-	case <-time.After(time.Millisecond):
-	}
+	rd = rn.Ready()
+	assert.Equal(t, wants[2], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+
+	require.False(t, rn.HasReady())
 }
 
 func TestNodeRestart(t *testing.T) {
@@ -539,8 +353,8 @@ func TestNodeRestart(t *testing.T) {
 	}
 
 	storage := NewMemoryStorage()
-	storage.SetHardState(st)
-	storage.Append(entries)
+	require.NoError(t, storage.SetHardState(st))
+	require.NoError(t, storage.Append(entries))
 	c := &Config{
 		ID:              1,
 		ElectionTick:    10,
@@ -551,16 +365,14 @@ func TestNodeRestart(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	n := RestartNode(c)
-	defer n.Stop()
-	assert.Equal(t, want, <-n.Ready())
-	n.Advance()
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
 
-	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
-	case <-time.After(time.Millisecond):
+	rd := rn.Ready()
+	if assert.Equal(t, want, rd) {
+		rn.Advance(rd)
 	}
+	require.False(t, rn.HasReady())
 }
 
 func TestNodeRestartFromSnapshot(t *testing.T) {
@@ -588,9 +400,9 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	}
 
 	s := NewMemoryStorage()
-	s.SetHardState(st)
-	s.ApplySnapshot(snap)
-	s.Append(entries)
+	require.NoError(t, s.SetHardState(st))
+	require.NoError(t, s.ApplySnapshot(snap))
+	require.NoError(t, s.Append(entries))
 	c := &Config{
 		ID:              1,
 		ElectionTick:    10,
@@ -601,17 +413,14 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	n := RestartNode(c)
-	defer n.Stop()
-	if assert.Equal(t, want, <-n.Ready()) {
-		n.Advance()
-	}
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
 
-	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
-	case <-time.After(time.Millisecond):
+	rd := rn.Ready()
+	if assert.Equal(t, want, rd) {
+		rn.Advance(rd)
 	}
+	require.False(t, rn.HasReady())
 }
 
 func TestNodeAdvance(t *testing.T) {
@@ -626,28 +435,25 @@ func TestNodeAdvance(t *testing.T) {
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c)
-	defer cancel()
+	rn, err := NewRawNode(c)
+	require.NoError(t, err)
 
-	n.Campaign(ctx)
+	require.NoError(t, rn.Campaign())
 	// Persist vote.
-	rd := readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
+	rd := rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 	// Append empty entry.
-	rd = readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
-	n.Propose(ctx, []byte("foo"))
-	rd = readyWithTimeout(n)
-	storage.Append(rd.Entries)
-	n.Advance()
-	select {
-	case <-n.Ready():
-	case <-time.After(100 * time.Millisecond):
-		t.Errorf("expect Ready after Advance, but there is no Ready available")
-	}
+	require.NoError(t, rn.Propose([]byte("foo")))
+	rd = rn.Ready()
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
+
+	require.True(t, rn.HasReady())
 }
 
 func TestSoftStateEqual(t *testing.T) {
@@ -681,52 +487,47 @@ func TestIsHardStateEqual(t *testing.T) {
 }
 
 func TestNodeProposeAddLearnerNode(t *testing.T) {
-	ticker := time.NewTicker(time.Millisecond * 100)
-	defer ticker.Stop()
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
-	n := newNode(rn)
-	go n.run()
-	n.Campaign(context.TODO())
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	applyConfChan := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			select {
-			case <-stop:
-				return
-			case <-ticker.C:
-				n.Tick()
-			case rd := <-n.Ready():
-				s.Append(rd.Entries)
-				t.Logf("raft: %v", rd.Entries)
-				for _, ent := range rd.Entries {
-					if ent.Type != raftpb.EntryConfChange {
-						continue
-					}
-					var cc raftpb.ConfChange
-					cc.Unmarshal(ent.Data)
-					state := n.ApplyConfChange(cc)
-					assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.NodeID && cc.NodeID == 2,
-						"apply conf change should return new added learner: %v", state.String())
-					assert.Len(t, state.Voters, 1,
-						"add learner should not change the nodes: %v", state.String())
+	require.NoError(t, rn.Campaign())
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-					t.Logf("apply raft conf %v changed to: %v", cc, state.String())
-					applyConfChan <- struct{}{}
-				}
-				n.Advance()
+	ready := func() (appliedConfChange bool) {
+		rd := rn.Ready()
+		require.NoError(t, s.Append(rd.Entries))
+		t.Logf("raft: %v", rd.Entries)
+		for _, ent := range rd.CommittedEntries {
+			if ent.Type != raftpb.EntryConfChange {
+				continue
+			}
+			var cc raftpb.ConfChange
+			require.NoError(t, cc.Unmarshal(ent.Data))
+			state := rn.ApplyConfChange(cc)
+			assert.True(t, len(state.Learners) > 0 && state.Learners[0] == cc.NodeID && cc.NodeID == 2,
+				"apply conf change should return new added learner: %v", state.String())
+			assert.Len(t, state.Voters, 1,
+				"add learner should not change the nodes: %v", state.String())
+
+			t.Logf("apply raft conf %v changed to: %v", cc, state.String())
+			appliedConfChange = true
+		}
+		rn.Advance(rd)
+		return appliedConfChange
+	}
+	waitAppliedConfChange := func() bool {
+		for i := 0; i < 10; i++ {
+			if ready() {
+				return true
 			}
 		}
-	}()
+		return false
+	}
+
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddLearnerNode, NodeID: 2}
-	n.ProposeConfChange(context.TODO(), cc)
-	<-applyConfChan
-	close(stop)
-	<-done
-	n.Stop()
+	require.NoError(t, rn.ProposeConfChange(cc))
+	require.True(t, waitAppliedConfChange())
 }
 
 func TestAppendPagination(t *testing.T) {
@@ -776,48 +577,47 @@ func TestCommitPagination(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
 	cfg.MaxCommittedSizePerReady = 2048
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
-	defer cancel()
-	n.Campaign(ctx)
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+
+	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
-	rd := readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
-	// Append empty entry.
-	rd = readyWithTimeout(n)
-	s.Append(rd.Entries)
-	n.Advance()
-	// Apply empty entry.
-	rd = readyWithTimeout(n)
-	require.Len(t, rd.CommittedEntries, 1)
+	rd := rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	s.Append(rd.Entries)
-	n.Advance()
+	// Append empty entry.
+	rd = rn.Ready()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
+	// Apply empty entry.
+	rd = rn.Ready()
+	require.Len(t, rd.CommittedEntries, 1)
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 3; i++ {
-		require.NoError(t, n.Propose(ctx, blob), "#%d", i)
+		require.NoError(t, rn.Propose(blob), "#%d", i)
 	}
 
 	// First the three proposals have to be appended.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Entries, 3)
-
-	s.Append(rd.Entries)
-	n.Advance()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
 	// The 3 proposals will commit in two batches.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 2)
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 
-	s.Append(rd.Entries)
-	n.Advance()
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 1)
-
-	s.Append(rd.Entries)
-	n.Advance()
+	require.NoError(t, s.Append(rd.Entries))
+	rn.Advance(rd)
 }
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
@@ -825,42 +625,43 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	cfg := newTestConfig(1, 10, 1, s)
 	cfg.MaxCommittedSizePerReady = 2048
 	cfg.AsyncStorageWrites = true
-	ctx, cancel, n := newNodeTestHarness(context.Background(), t, cfg)
-	defer cancel()
-	n.Campaign(ctx)
+
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
-	rd := readyWithTimeout(n)
+	rd := rn.Ready()
 	require.Len(t, rd.Messages, 1)
 	m := rd.Messages[0]
 	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
-		require.NoError(t, n.Step(ctx, resp))
+		require.NoError(t, rn.Step(resp))
 	}
 	// Append empty entry.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
 	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
-		require.NoError(t, n.Step(ctx, resp))
+		require.NoError(t, rn.Step(resp))
 	}
 	// Apply empty entry.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 2)
 	for _, m := range rd.Messages {
 		switch m.Type {
 		case raftpb.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
-				require.NoError(t, n.Step(ctx, resp))
+				require.NoError(t, rn.Step(resp))
 			}
 		case raftpb.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
 			require.Len(t, m.Responses, 1)
-			require.NoError(t, n.Step(ctx, m.Responses[0]))
+			require.NoError(t, rn.Step(m.Responses[0]))
 		default:
 			t.Fatalf("unexpected: %v", m)
 		}
@@ -868,24 +669,24 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 
 	// Propose first entry.
 	blob := []byte(strings.Repeat("a", 1024))
-	require.NoError(t, n.Propose(ctx, blob))
+	require.NoError(t, rn.Propose(blob))
 
 	// Append first entry.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
 	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
 	require.Len(t, m.Entries, 1)
 	require.NoError(t, s.Append(m.Entries))
 	for _, resp := range m.Responses {
-		require.NoError(t, n.Step(ctx, resp))
+		require.NoError(t, rn.Step(resp))
 	}
 
 	// Propose second entry.
-	require.NoError(t, n.Propose(ctx, blob))
+	require.NoError(t, rn.Propose(blob))
 
 	// Append second entry. Don't apply first entry yet.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 2)
 	var applyResps []raftpb.Message
 	for _, m := range rd.Messages {
@@ -893,7 +694,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 		case raftpb.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
-				require.NoError(t, n.Step(ctx, resp))
+				require.NoError(t, rn.Step(resp))
 			}
 		case raftpb.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
@@ -905,17 +706,17 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	}
 
 	// Propose third entry.
-	require.NoError(t, n.Propose(ctx, blob))
+	require.NoError(t, rn.Propose(blob))
 
 	// Append third entry. Don't apply second entry yet.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 2)
 	for _, m := range rd.Messages {
 		switch m.Type {
 		case raftpb.MsgStorageAppend:
 			require.NoError(t, s.Append(m.Entries))
 			for _, resp := range m.Responses {
-				require.NoError(t, n.Step(ctx, resp))
+				require.NoError(t, rn.Step(resp))
 			}
 		case raftpb.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
@@ -928,24 +729,19 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 
 	// Third entry should not be returned to be applied until first entry's
 	// application is acknowledged.
-	drain := true
-	for drain {
-		select {
-		case rd := <-n.Ready():
-			for _, m := range rd.Messages {
-				require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
-			}
-		case <-time.After(10 * time.Millisecond):
-			drain = false
+	for rn.HasReady() { // drain the Ready-s
+		rd := rn.Ready()
+		for _, m := range rd.Messages {
+			require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
 		}
 	}
 
 	// Acknowledged first entry application.
-	require.NoError(t, n.Step(ctx, applyResps[0]))
+	require.NoError(t, rn.Step(applyResps[0]))
 	applyResps = applyResps[1:]
 
 	// Third entry now returned for application.
-	rd = readyWithTimeout(n)
+	rd = rn.Ready()
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
 	require.Equal(t, raftpb.MsgStorageApply, m.Type)
@@ -954,7 +750,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 
 	// Acknowledged second and third entry application.
 	for _, resp := range applyResps {
-		require.NoError(t, n.Step(ctx, resp))
+		require.NoError(t, rn.Step(resp))
 	}
 	applyResps = nil
 }
@@ -1017,11 +813,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	rn, err := NewRawNode(cfg)
 	require.NoError(t, err)
 
-	n := newNode(rn)
-	go n.run()
-	defer n.Stop()
-
-	rd := readyWithTimeout(&n)
+	rd := rn.Ready()
 	assert.False(t, !IsEmptyHardState(rd.HardState) && rd.HardState.Commit < persistedHardState.Commit,
 		"HardState regressed: Commit %d -> %d\nCommitting:\n%+v",
 		persistedHardState.Commit, rd.HardState.Commit,
