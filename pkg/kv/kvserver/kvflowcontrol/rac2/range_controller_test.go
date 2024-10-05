@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1486,19 +1487,19 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 
 	// No outbound msgs.
 	event := RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, nil, msgAppScratch)
+		MsgAppPush, 20, appendMsg, nil, msgAppScratch, raft.LogSnapshot{})
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
 	require.Nil(t, event.MsgApps)
 	// Zero value.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raftpb.Message{}, nil, msgAppScratch)
+		MsgAppPush, 20, raftpb.Message{}, nil, msgAppScratch, raft.LogSnapshot{})
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
 	// is for the leader.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, appendMsg, outboundMsgs[:2], msgAppScratch)
+		MsgAppPush, 20, appendMsg, outboundMsgs[:2], msgAppScratch, raft.LogSnapshot{})
 	require.Equal(t, uint64(10), event.Term)
 	require.Equal(t, appendMsg.Snapshot, event.Snap)
 	require.Equal(t, appendMsg.Entries, event.Entries)
@@ -1507,7 +1508,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// ensure msgAppScratch is cleared before reuse.
 	for i := 0; i < 2; i++ {
 		event = RaftEventFromMsgStorageAppendAndMsgApps(
-			MsgAppPush, 19, appendMsg, outboundMsgs, msgAppScratch)
+			MsgAppPush, 19, appendMsg, outboundMsgs, msgAppScratch, raft.LogSnapshot{})
 		require.Equal(t, uint64(10), event.Term)
 		require.Equal(t, appendMsg.Snapshot, event.Snap)
 		require.Equal(t, appendMsg.Entries, event.Entries)
@@ -2144,6 +2145,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 						tc.existingSendStreamState,
 						tc.msgApps,
 						tc.scratchSendingEntries,
+						raft.LogSnapshot{},
 					)
 				})
 			} else {
@@ -2155,6 +2157,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 					tc.existingSendStreamState,
 					tc.msgApps,
 					tc.scratchSendingEntries,
+					raft.LogSnapshot{},
 				)
 				require.Equal(t, tc.expectedRaftEventReplica, gotRaftEventReplica)
 				require.Equal(t, tc.expectedScratchEntries, gotScratch)

@@ -868,6 +868,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var hasReady bool
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
+	var logSnap raft.LogSnapshot
 	rac2ModeToUse := r.replicationAdmissionControlModeToUse(ctx)
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
@@ -919,6 +920,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
 		}
+		if rac2ModeForReady == rac2.MsgAppPull {
+			logSnap = raftGroup.LogSnapshot()
+		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
 		// Ready, which can happen if the proposals got dropped (raft does this
@@ -947,7 +951,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
 		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs,
-		r.raftMu.msgAppScratchForFlowControl)
+		r.raftMu.msgAppScratchForFlowControl, logSnap)
 	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftEvent)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
