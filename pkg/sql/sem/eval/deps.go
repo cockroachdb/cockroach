@@ -485,9 +485,6 @@ type InternalRows interface {
 	// Types returns the types of the columns returned by this iterator. The
 	// returned array is guaranteed to correspond 1:1 with the tree.Datums rows
 	// returned by Cur().
-	//
-	// WARNING: this method is safe to call anytime *after* the first call to
-	// Next() (including after Close() was called).
 	Types() colinfo.ResultColumns
 }
 
