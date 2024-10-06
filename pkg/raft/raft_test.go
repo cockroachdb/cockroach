@@ -1158,34 +1158,37 @@ func TestHandleMsgApp(t *testing.T) {
 
 // TestHandleHeartbeat ensures that the follower handles heartbeats properly.
 func TestHandleHeartbeat(t *testing.T) {
-	commit := uint64(2)
-	tests := []struct {
-		m       pb.Message
+	const commit = uint64(2)
+	for _, tt := range []struct {
 		accTerm uint64
+		commit  LogMark
 		wCommit uint64
 	}{
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 2, commit + 1},
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 2, commit}, // do not decrease commit
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit - 1}, 1, commit},
-
+		// Commit marks at the same term.
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit}, wCommit: commit},     // no-op
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit - 1}, wCommit: commit}, // do not regress
+		{accTerm: 2, commit: LogMark{Term: 2, Index: commit + 1}, wCommit: commit + 1},
 		// Do not increase the commit index if the log is not guaranteed to be a
 		// prefix of the leader's log.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 1}, 1, commit},
+		{accTerm: 1, commit: LogMark{Term: 2, Index: commit + 1}, wCommit: commit + 1},
 		// Do not increase the commit index beyond our log size.
-		{pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeat, Term: 2, Commit: commit + 10}, 2, commit + 1}, // do not decrease commit
-	}
-
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1, 2))
-		init := entryID{}.append(1, 1, tt.accTerm)
-		require.NoError(t, storage.Append(init.entries))
-		sm := newTestRaft(1, 5, 1, storage)
-		sm.becomeFollower(init.term, 2)
-		sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
-		sm.handleHeartbeat(tt.m)
-		m := sm.readMessages()
-		require.Len(t, m, 1, "#%d", i)
-		assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type, "#%d", i)
+		{accTerm: 1, commit: LogMark{Term: 2, Index: commit + 10}, wCommit: commit + 1},
+	} {
+		t.Run("", func(t *testing.T) {
+			storage := newTestMemoryStorage(withPeers(1, 2))
+			init := entryID{}.append(1, 1, tt.accTerm)
+			require.NoError(t, storage.Append(init.entries))
+			sm := newTestRaft(1, 5, 1, storage)
+			sm.becomeFollower(init.term, 2)
+			sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
+			sm.handleHeartbeat(pb.Message{
+				From: 2, To: 1, Type: pb.MsgHeartbeat,
+				Term: tt.commit.Term, Commit: tt.commit.Index,
+			})
+			m := sm.readMessages()
+			require.Len(t, m, 1)
+			assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type)
+		})
 	}
 }
 
