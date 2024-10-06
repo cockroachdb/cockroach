@@ -7,11 +7,15 @@ package ldapccl
 
 import (
 	"context"
+	"net/url"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -36,6 +40,15 @@ var (
 	beginAuthUseCounter    = telemetry.GetCounterOnce(beginAuthCounterName)
 	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
 	enableUseCounter       = telemetry.GetCounterOnce(enableCounterName)
+	// ldapSearchRe performs a regex match for ldap search options provided in HBA
+	// configuration. This generally adheres to the format "(key=value)" with
+	// interleaved spaces but could be more flexible as value field could be
+	// provided as a regex string(mail=*@example.com), a key-value distinguished
+	// name(memberOf="CN=test") or a combination of both(memberOf="CN=Sh*").
+	//
+	// The regex string is kept generic as search options could also contain
+	// multiple search entries like "(key1=value1)(key2=value2)".
+	ldapSearchRe = regexp.MustCompile(`\(\s*\S+\s*=\s*\S+.*\)`)
 )
 
 // ldapAuthenticator is an object that is used to enable ldap connection
@@ -139,33 +152,6 @@ func (authenticator *ldapAuthenticator) setLDAPConfigOptions(entry *hba.Entry) e
 	return nil
 }
 
-// validateLDAPOptions checks the ldap authenticator config values for validity.
-func (authenticator *ldapAuthenticator) validateLDAPOptions() error {
-	const ldapOptionsErrorMsg = "ldap params in HBA conf missing"
-	if authenticator.mu.conf.ldapServer == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap server")
-	}
-	if authenticator.mu.conf.ldapPort == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap port")
-	}
-	if authenticator.mu.conf.ldapBaseDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " base DN")
-	}
-	if authenticator.mu.conf.ldapBindDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind DN")
-	}
-	if authenticator.mu.conf.ldapBindPassword == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind password")
-	}
-	if authenticator.mu.conf.ldapSearchFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " search filter")
-	}
-	if authenticator.mu.conf.ldapSearchAttribute == "" {
-		return errors.New(ldapOptionsErrorMsg + " search attribute")
-	}
-	return nil
-}
-
 // ValidateLDAPLogin validates an attempt to bind to an LDAP server.
 // In particular, it checks that:
 // * The cluster has an enterprise license.
@@ -216,11 +202,6 @@ func (authenticator *ldapAuthenticator) ValidateLDAPLogin(
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
 	}
 
-	if err := authenticator.validateLDAPOptions(); err != nil {
-		return redact.Sprintf("error validating hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authenticator options")
-	}
-
 	// Establish a LDAPs connection with the set LDAP server and port
 	err := authenticator.mu.util.InitLDAPsConn(ctx, authenticator.mu.conf)
 	if err != nil {
@@ -253,6 +234,52 @@ func (authenticator *ldapAuthenticator) ValidateLDAPLogin(
 	return "", nil
 }
 
+// checkHBAEntryLDAP validates that the HBA entry for ldap has all the options
+// set to acceptable values and mandatory options are all set.
+func checkHBAEntryLDAP(_ *settings.Values, entry hba.Entry) error {
+	var parseErr error
+	entryOptions := map[string]bool{}
+	for _, opt := range entry.Options {
+		switch opt[0] {
+		case "ldapserver":
+			_, parseErr = url.Parse(opt[1])
+		case "ldapport":
+			if opt[1] != "389" && opt[1] != "636" {
+				parseErr = errors.Newf("%q is not set to either 389 or 636", opt[0])
+			}
+		case "ldapbasedn":
+			fallthrough
+		case "ldapbinddn":
+			_, parseErr = distinguishedname.ParseDN(opt[1])
+		case "ldapbindpasswd":
+			fallthrough
+		case "ldapsearchattribute":
+			if opt[1] == "" {
+				parseErr = errors.Newf("%q is set to empty", opt[0])
+			}
+		case "ldapsearchfilter":
+			fallthrough
+		case "ldapgrouplistfilter":
+			if !ldapSearchRe.MatchString(opt[1]) {
+				parseErr = errors.Newf("%q is not of the format \"(key = value)\"", opt[0])
+			}
+		default:
+			return errors.Newf("unknown ldap option provided in hba conf: %q", opt[0])
+		}
+		if parseErr != nil {
+			return errors.Wrapf(parseErr, "LDAP option %q is set to invalid value: %q", opt[0], opt[1])
+		}
+		entryOptions[opt[0]] = true
+	}
+	// check for missing ldap options
+	for _, opt := range []string{"ldapserver", "ldapport", "ldapbasedn", "ldapbinddn", "ldapbindpasswd", "ldapsearchattribute", "ldapsearchfilter"} {
+		if _, ok := entryOptions[opt]; !ok {
+			return errors.Newf("ldap option not found in hba entry: %q", opt)
+		}
+	}
+	return nil
+}
+
 // ConfigureLDAPAuth initializes and returns a ldapAuthenticator. It also sets up listeners so
 // that the ldapAuthenticator's config is updated when the cluster settings values change.
 var ConfigureLDAPAuth = func(
@@ -278,4 +305,5 @@ var ConfigureLDAPAuth = func(
 
 func init() {
 	pgwire.ConfigureLDAPAuth = ConfigureLDAPAuth
+	pgwire.RegisterAuthMethod("ldap", pgwire.AuthLDAP, hba.ConnAny, checkHBAEntryLDAP)
 }
