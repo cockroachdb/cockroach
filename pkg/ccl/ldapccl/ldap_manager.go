@@ -7,8 +7,12 @@ package ldapccl
 
 import (
 	"context"
+	"net/url"
+	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -23,7 +27,18 @@ const (
 	enableCounterName = counterPrefix + "enable"
 )
 
-var enableUseCounter = telemetry.GetCounterOnce(enableCounterName)
+var (
+	enableUseCounter = telemetry.GetCounterOnce(enableCounterName)
+	// ldapSearchRe performs a regex match for ldap search options provided in HBA
+	// configuration. This generally adheres to the format "(key=value)" with
+	// interleaved spaces but could be more flexible as value field could be
+	// provided as a regex string(mail=*@example.com), a key-value distinguished
+	// name(memberOf="CN=test") or a combination of both(memberOf="CN=Sh*").
+	//
+	// The regex string is kept generic as search options could also contain
+	// multiple search entries like "(key1=value1)(key2=value2)".
+	ldapSearchRe = regexp.MustCompile(`\(\s*\S+\s*=\s*\S+.*\)`)
+)
 
 // ldapAuthManager is an object that is used for both:
 // 1. enabling ldap connection validation that are used as part of the CRDB
@@ -79,11 +94,10 @@ func (authManager *ldapAuthManager) reloadConfig(ctx context.Context, st *cluste
 
 // reloadConfig refreshes the values in conf from the cluster settings without locking the mutex.
 func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *cluster.Settings) {
-	conf := ldapConfig{
-		domainCACert:  LDAPDomainCACertificate.Get(&st.SV),
-		clientTLSCert: LDAPClientTLSCertSetting.Get(&st.SV),
-		clientTLSKey:  LDAPClientTLSKeySetting.Get(&st.SV),
-	}
+	conf := authManager.mu.conf
+	conf.domainCACert = LDAPDomainCACertificate.Get(&st.SV)
+	conf.clientTLSCert = LDAPClientTLSCertSetting.Get(&st.SV)
+	conf.clientTLSKey = LDAPClientTLSKeySetting.Get(&st.SV)
 	authManager.mu.conf = conf
 
 	var err error
@@ -103,9 +117,7 @@ func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *
 // setLDAPConfigOptions extracts hba conf parameters required for connecting and
 // querying LDAP server from hba conf entry and sets them for LDAP auth.
 func (authManager *ldapAuthManager) setLDAPConfigOptions(entry *hba.Entry) error {
-	conf := ldapConfig{
-		domainCACert: authManager.mu.conf.domainCACert,
-	}
+	conf := authManager.mu.conf
 	for _, opt := range entry.Options {
 		switch opt[0] {
 		case "ldapserver":
@@ -132,23 +144,48 @@ func (authManager *ldapAuthManager) setLDAPConfigOptions(entry *hba.Entry) error
 	return nil
 }
 
-// validateLDAPBaseOptions checks the mandatory ldap auth config values for validity.
-func (authManager *ldapAuthManager) validateLDAPBaseOptions() error {
-	const ldapOptionsErrorMsg = "ldap params in HBA conf missing"
-	if authManager.mu.conf.ldapServer == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap server")
+// checkHBAEntryLDAP validates that the HBA entry for ldap has all the options
+// set to acceptable values and mandatory options are all set.
+func checkHBAEntryLDAP(_ *settings.Values, entry hba.Entry) error {
+	var parseErr error
+	entryOptions := map[string]bool{}
+	for _, opt := range entry.Options {
+		switch opt[0] {
+		case "ldapserver":
+			_, parseErr = url.Parse(opt[1])
+		case "ldapport":
+			if opt[1] != "389" && opt[1] != "636" {
+				parseErr = errors.Newf("%q is not set to either 389 or 636", opt[0])
+			}
+		case "ldapbasedn":
+			fallthrough
+		case "ldapbinddn":
+			_, parseErr = distinguishedname.ParseDN(opt[1])
+		case "ldapbindpasswd":
+			fallthrough
+		case "ldapsearchattribute":
+			if opt[1] == "" {
+				parseErr = errors.Newf("%q is set to empty", opt[0])
+			}
+		case "ldapsearchfilter":
+			fallthrough
+		case "ldapgrouplistfilter":
+			if !ldapSearchRe.MatchString(opt[1]) {
+				parseErr = errors.Newf("%q is not of the format \"(key = value)\"", opt[0])
+			}
+		default:
+			return errors.Newf("unknown ldap option provided in hba conf: %q", opt[0])
+		}
+		if parseErr != nil {
+			return errors.Wrapf(parseErr, "LDAP option %q is set to invalid value: %q", opt[0], opt[1])
+		}
+		entryOptions[opt[0]] = true
 	}
-	if authManager.mu.conf.ldapPort == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap port")
-	}
-	if authManager.mu.conf.ldapBaseDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " base DN")
-	}
-	if authManager.mu.conf.ldapBindDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind DN")
-	}
-	if authManager.mu.conf.ldapBindPassword == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind password")
+	// check for missing ldap options
+	for _, opt := range []string{"ldapserver", "ldapport", "ldapbasedn", "ldapbinddn", "ldapbindpasswd", "ldapsearchattribute", "ldapsearchfilter"} {
+		if _, ok := entryOptions[opt]; !ok {
+			return errors.Newf("ldap option not found in hba entry: %q", opt)
+		}
 	}
 	return nil
 }
@@ -178,4 +215,5 @@ var ConfigureLDAPAuth = func(
 
 func init() {
 	pgwire.ConfigureLDAPAuth = ConfigureLDAPAuth
+	pgwire.RegisterAuthMethod("ldap", pgwire.AuthLDAP, hba.ConnAny, checkHBAEntryLDAP)
 }

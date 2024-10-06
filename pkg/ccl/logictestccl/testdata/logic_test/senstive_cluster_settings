@@ -13,8 +13,10 @@ statement ok
 SET CLUSTER SETTING server.identity_map.configuration = "crdb fake_external_userid fake_user"
 
 statement ok
-SET CLUSTER SETTING server.host_based_authentication.configuration = "host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
-host all all all trust"
+SET CLUSTER SETTING server.host_based_authentication.configuration =
+'host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust'
 
 statement ok
 SET CLUSTER SETTING server.redact_sensitive_settings.enabled = false
@@ -43,7 +45,8 @@ crdb fake_external_userid fake_user
 query T
 SHOW CLUSTER SETTING server.host_based_authentication.configuration
 ----
-host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
 host all all all trust
 
 query TT rowsort
@@ -66,7 +69,8 @@ SELECT variable, value
 FROM [show all cluster settings]
 WHERE variable = 'server.host_based_authentication.configuration'
 ----
-server.host_based_authentication.configuration host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
+server.host_based_authentication.configuration host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+                                               host all fake_user all cert map=crdb
                                                host all all all trust
 
 user root
@@ -148,7 +152,8 @@ crdb fake_external_userid fake_user
 query T
 SHOW CLUSTER SETTING server.host_based_authentication.configuration
 ----
-host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
 host all all all trust
 
 query TT rowsort
@@ -171,7 +176,8 @@ SELECT variable, value
 FROM [show all cluster settings]
 WHERE variable = 'server.host_based_authentication.configuration'
 ----
-server.host_based_authentication.configuration host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
+server.host_based_authentication.configuration host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+                                               host all fake_user all cert map=crdb
                                                host all all all trust
 
 # Verify that tenant overrides for sensitive settings can only be viewed with
@@ -189,8 +195,10 @@ statement ok
 ALTER TENANT [10] SET CLUSTER SETTING server.identity_map.configuration = "crdb fake_external_userid fake_user"
 
 statement ok
-ALTER TENANT [10] SET CLUSTER SETTING server.host_based_authentication.configuration = "host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
-host all all all trust"
+ALTER TENANT [10] SET CLUSTER SETTING server.host_based_authentication.configuration =
+'host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust'
 
 statement ok
 CREATE USER testuser
@@ -269,7 +277,7 @@ SELECT variable, value, origin
 FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
 WHERE variable = 'server.host_based_authentication.configuration'
 ----
-server.host_based_authentication.configuration  host all fake_user all ldap ldapbindpasswd=fake_password map=crdb\nhost all all all trust  per-tenant-override
+server.host_based_authentication.configuration  host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)\nhost all fake_user all cert map=crdb\nhost all all all trust  per-tenant-override
 
 query T
 SHOW CLUSTER SETTING server.identity_map.configuration FOR TENANT [10]
@@ -279,5 +287,6 @@ crdb fake_external_userid fake_user
 query T
 SHOW CLUSTER SETTING server.host_based_authentication.configuration FOR TENANT [10]
 ----
-host all fake_user all ldap ldapbindpasswd=fake_password map=crdb
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
 host all all all trust
