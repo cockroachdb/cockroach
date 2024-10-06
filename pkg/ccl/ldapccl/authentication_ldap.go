@@ -80,16 +80,6 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
 	}
 
-	if err := authManager.validateLDAPBaseOptions(); err != nil {
-		return nil, redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager base options")
-	}
-
-	if err := authManager.validateLDAPUserFetchOptions(); err != nil {
-		return nil, redact.Sprintf("error validating authentication hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager authentication options")
-	}
-
 	// Establish a LDAPs connection with the set LDAP server and port
 	err := authManager.mu.util.MaybeInitLDAPsConn(ctx, authManager.mu.conf)
 	if err != nil {
@@ -116,18 +106,6 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 	}
 
 	return retrievedUserDN, "", nil
-}
-
-// validateLDAPUserFetchOptions checks the ldap user search config values.
-func (authManager *ldapAuthManager) validateLDAPUserFetchOptions() error {
-	const ldapOptionsErrorMsg = "ldap authentication params in HBA conf missing"
-	if authManager.mu.conf.ldapSearchFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " search filter")
-	}
-	if authManager.mu.conf.ldapSearchAttribute == "" {
-		return errors.New(ldapOptionsErrorMsg + " search attribute")
-	}
-	return nil
 }
 
 // ValidateLDAPLogin validates an attempt to bind provided user DN to configured LDAP server.
@@ -171,11 +149,6 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
-	}
-
-	if err := authManager.validateLDAPBaseOptions(); err != nil {
-		return redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager base options")
 	}
 
 	// Establish a LDAPs connection with the set LDAP server and port

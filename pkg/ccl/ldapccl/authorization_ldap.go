@@ -33,15 +33,6 @@ var (
 	authZSuccessCounter  = telemetry.GetCounterOnce(authZSuccessCounterName)
 )
 
-// validateLDAPAuthZOptions checks the ldap authorization config values.
-func (authManager *ldapAuthManager) validateLDAPAuthZOptions() error {
-	const ldapOptionsErrorMsg = "ldap authorization params in HBA conf missing"
-	if authManager.mu.conf.ldapGroupListFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " group list attribute")
-	}
-	return nil
-}
-
 // FetchLDAPGroups retrieves ldap groups for supplied ldap user DN.
 // In particular, it checks that:
 // * The cluster has an enterprise license.
@@ -84,16 +75,6 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return nil, redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authorization: unable to parse hba conf options")
-	}
-
-	if err := authManager.validateLDAPBaseOptions(); err != nil {
-		return nil, redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authorization: unable to validate authManager base options")
-	}
-
-	if err := authManager.validateLDAPAuthZOptions(); err != nil {
-		return nil, redact.Sprintf("error validating authorization hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authorization: unable to validate authManager authorization options")
 	}
 
 	// Establish a LDAPs connection with the set LDAP server and port
