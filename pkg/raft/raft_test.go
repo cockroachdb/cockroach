@@ -1100,15 +1100,20 @@ func TestHandleMsgApp(t *testing.T) {
 	for _, tt := range []struct {
 		ls     logSlice
 		commit uint64
+		match  uint64
 
 		wIndex  uint64
 		wCommit uint64
 		wReject bool
+		wPanic  bool
 	}{
 		// Append rejections cases.
 		{ls: entryID{index: 1, term: 1}.append(1), wReject: true}, // stale append
 		{ls: entryID{index: 2, term: 1}.append(), wReject: true},  // prev mismatch
 		{ls: entryID{index: 3, term: 2}.append(), wReject: true},  // prev missing
+		// LogMark regression causes a panic.
+		{ls: entryID{index: 1, term: 1}.append().withTerm(4), match: 1, wPanic: true},
+		{ls: entryID{index: 10, term: 3}.append(), match: 5, wPanic: true},
 		// No-op append that only bumps the commit index.
 		{
 			ls: entryID{term: 1, index: 1}.append().withTerm(2), commit: 1,
@@ -1127,10 +1132,12 @@ func TestHandleMsgApp(t *testing.T) {
 		{ls: entryID{index: 2, term: 2}.append(), commit: 4, wIndex: 2, wCommit: 2},
 	} {
 		t.Run("", func(t *testing.T) {
+			defer func() { require.Equal(t, tt.wPanic, recover() != nil) }()
+
 			storage := newTestMemoryStorage(withPeers(1))
 			require.NoError(t, storage.Append(index(1).terms(1, 2)))
 			sm := newTestRaft(1, 10, 1, storage)
-			sm.becomeFollower(2, None)
+			sm.becomeFollower(3, None)
 			sm.handleAppendEntries(pb.Message{
 				To:      sm.id,
 				Type:    pb.MsgApp,
@@ -1139,7 +1146,7 @@ func TestHandleMsgApp(t *testing.T) {
 				LogTerm: tt.ls.prev.term,
 				Entries: tt.ls.entries,
 				Commit:  tt.commit,
-				Match:   0, // TODO(pav-kv): test this behaviour too
+				Match:   tt.match,
 			})
 			m := sm.readMessages()
 			require.Len(t, m, 1)
@@ -1162,7 +1169,9 @@ func TestHandleHeartbeat(t *testing.T) {
 	for _, tt := range []struct {
 		accTerm uint64
 		commit  LogMark
+		match   uint64
 		wCommit uint64
+		wPanic  bool
 	}{
 		// Commit marks at the same term.
 		{accTerm: 2, commit: LogMark{Term: 2, Index: commit}, wCommit: commit},     // no-op
@@ -1172,9 +1181,13 @@ func TestHandleHeartbeat(t *testing.T) {
 		// prefix of the leader's log.
 		{accTerm: 1, commit: LogMark{Term: 2, Index: commit + 1}, wCommit: commit + 1},
 		// Do not increase the commit index beyond our log size.
-		{accTerm: 1, commit: LogMark{Term: 2, Index: commit + 10}, wCommit: commit + 1},
+		{commit: LogMark{Term: 2, Index: commit + 10}, accTerm: 2, wCommit: commit + 1},
+		// LogMark regression causes a panic.
+		{accTerm: 2, commit: LogMark{Term: 3, Index: commit + 1}, match: 3, wPanic: true},
 	} {
 		t.Run("", func(t *testing.T) {
+			defer func() { require.Equal(t, tt.wPanic, recover() != nil) }()
+
 			storage := newTestMemoryStorage(withPeers(1, 2))
 			init := entryID{}.append(1, 1, tt.accTerm)
 			require.NoError(t, storage.Append(init.entries))
@@ -1184,6 +1197,7 @@ func TestHandleHeartbeat(t *testing.T) {
 			sm.handleHeartbeat(pb.Message{
 				From: 2, To: 1, Type: pb.MsgHeartbeat,
 				Term: tt.commit.Term, Commit: tt.commit.Index,
+				Match: tt.match,
 			})
 			m := sm.readMessages()
 			require.Len(t, m, 1)
