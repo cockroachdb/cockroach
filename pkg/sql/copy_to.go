@@ -181,10 +181,9 @@ func runCopyTo(
 		}).String()
 	}
 
-	it, err := p.execCfg.InternalDB.NewInternalExecutor(p.SessionData()).QueryIteratorEx(
+	it, err := p.QueryIteratorEx(
 		ctx,
 		cmd.Stmt.String(),
-		txn,
 		sessiondata.NoSessionDataOverride,
 		q,
 	)

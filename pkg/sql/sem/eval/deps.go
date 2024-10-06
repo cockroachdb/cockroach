@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -480,6 +481,14 @@ type InternalRows interface {
 	// is idempotent and *must* be called once the caller is done with the
 	// iterator.
 	Close() error
+
+	// Types returns the types of the columns returned by this iterator. The
+	// returned array is guaranteed to correspond 1:1 with the tree.Datums rows
+	// returned by Cur().
+	//
+	// WARNING: this method is safe to call anytime *after* the first call to
+	// Next() (including after Close() was called).
+	Types() colinfo.ResultColumns
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
