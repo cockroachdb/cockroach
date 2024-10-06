@@ -10,6 +10,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -146,6 +148,10 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 }
 
 func jwtRunTest(t *testing.T, insecure bool) {
+	httpScheme := "http://"
+	if !insecure {
+		httpScheme = "https://"
+	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
@@ -190,12 +196,27 @@ func jwtRunTest(t *testing.T, insecure bool) {
 			})
 		defer srv.Stopper().Stop(context.Background())
 		s := srv.ApplicationLayer()
+		pgServer := s.PGServer().(*pgwire.Server)
+		pgServer.TestingEnableConnLogging()
+		pgServer.TestingEnableAuthLogging()
+		s.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+
+		httpClient, err := s.GetAdminHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
 		sv := &s.ClusterSettings().SV
 
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
+
+		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+		defer testutils.TestingHook(
+			&ldapccl.NewLDAPUtil,
+			ldapccl.NewMockLDAPUtil)()
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			resultString, err := func() (string, error) {
@@ -419,6 +440,47 @@ func jwtRunTest(t *testing.T, insecure bool) {
 					}
 					defer resp.Body.Close()
 					return strconv.Itoa(resp.StatusCode), nil
+
+				case "set_hba":
+					_, err := conn.ExecContext(context.Background(),
+						`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, td.Input)
+					if err != nil {
+						return "", err
+					}
+
+					// Wait until the configuration has propagated back to the
+					// test client. We need to wait because the cluster setting
+					// change propagates asynchronously.
+					expConf := pgwire.DefaultHBAConfig
+					if td.Input != "" {
+						expConf, err = pgwire.ParseAndNormalize(td.Input)
+						if err != nil {
+							// The SET above succeeded so we don't expect a problem here.
+							t.Fatal(err)
+						}
+					}
+					testutils.SucceedsSoon(t, func() error {
+						curConf, _ := pgServer.GetAuthenticationConfiguration()
+						if expConf.String() != curConf.String() {
+							return errors.Newf(
+								"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
+								curConf, expConf)
+						}
+						return nil
+					})
+
+					// Verify the HBA configuration was processed properly by
+					// reporting the resulting cached configuration.
+					resp, err := httpClient.Get(httpHBAUrl)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return "", err
+					}
+					return string(body), nil
 
 				default:
 					td.Fatalf(t, "unknown command: %s", td.Cmd)
