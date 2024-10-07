@@ -266,8 +266,6 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		livePercentage = float64(liveBytes) / float64(total)
 	}
 
-	// TODO (xinhaoz): Get store ids from span stats after
-	// https://github.com/cockroachdb/cockroach/issues/129060 is complete.
 	storeIds := make([]int, len(stats.StoreIDs))
 	for i, id := range stats.StoreIDs {
 		storeIds[i] = int(id)
