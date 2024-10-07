@@ -40,24 +40,50 @@ type Builder struct {
 	alloc     tree.DatumAlloc
 }
 
-// Init initializes a Builder with a table and index.
+// Init initializes a Builder with a table and index. It does not set up the
+// Builder to create external spans, even if the table uses external row data.
 func (s *Builder) Init(
 	evalCtx *eval.Context, codec keys.SQLCodec, table catalog.TableDescriptor, index catalog.Index,
 ) {
+	if ext := table.ExternalRowData(); ext != nil {
+		panic(errors.AssertionFailedf("%s uses external row data", table.GetName()))
+	}
 	s.evalCtx = evalCtx
 	s.codec = codec
 	s.keyAndPrefixCols = table.IndexFetchSpecKeyAndSuffixColumns(index)
 	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
 }
 
-// InitWithFetchSpec creates a Builder using IndexFetchSpec.
+// InitAllowingExternalRowData initializes a Builder with a table and index. If
+// the table uses external row data, the Builder will create external spans.
+func (s *Builder) InitAllowingExternalRowData(
+	evalCtx *eval.Context, codec keys.SQLCodec, table catalog.TableDescriptor, index catalog.Index,
+) {
+	s.evalCtx = evalCtx
+	s.keyAndPrefixCols = table.IndexFetchSpecKeyAndSuffixColumns(index)
+	if ext := table.ExternalRowData(); ext != nil {
+		s.codec = keys.MakeSQLCodec(ext.TenantID)
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(s.codec, ext.TableID, index.GetID())
+	} else {
+		s.codec = codec
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
+	}
+}
+
+// InitWithFetchSpec creates a Builder using IndexFetchSpec. If the spec
+// specifies external row data, the Builder will create external spans.
 func (s *Builder) InitWithFetchSpec(
 	evalCtx *eval.Context, codec keys.SQLCodec, spec *fetchpb.IndexFetchSpec,
 ) {
 	s.evalCtx = evalCtx
-	s.codec = codec
 	s.keyAndPrefixCols = spec.KeyAndSuffixColumns
-	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, spec.TableID, spec.IndexID)
+	if ext := spec.External; ext != nil {
+		s.codec = keys.MakeSQLCodec(ext.TenantID)
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(s.codec, ext.TableID, spec.IndexID)
+	} else {
+		s.codec = codec
+		s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, spec.TableID, spec.IndexID)
+	}
 }
 
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the

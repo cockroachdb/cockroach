@@ -376,15 +376,23 @@ type TableDescriptor interface {
 	IsPartitionAllBy() bool
 
 	// PrimaryIndexSpan returns the Span that corresponds to the entire primary
-	// index; can be used for a full table scan.
+	// index; can be used for a full table scan. This will not be an external span
+	// even if the table uses external row data.
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	// IndexSpan returns the Span that corresponds to an entire index; can be used
-	// for a full index scan.
+	// for a full index scan. This will not be an external span even if the table
+	// uses external row data.
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	// AllIndexSpans returns the Spans for each index in the table, including those
-	// being added in the mutations.
+	// IndexSpanAllowingExternalRowData returns the Span that corresponds to an
+	// entire index; can be used for a full index scan. If the table uses external
+	// row data, this will be an external span.
+	IndexSpanAllowingExternalRowData(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	// AllIndexSpans returns the Spans for each index in the table, including
+	// those being added in the mutations. These will not be external spans even
+	// if the table uses external row data.
 	AllIndexSpans(codec keys.SQLCodec) roachpb.Spans
-	// TableSpan returns the Span that corresponds to the entire table.
+	// TableSpan returns the Span that corresponds to the entire table. This will
+	// not be an external span even if the table uses external row data.
 	TableSpan(codec keys.SQLCodec) roachpb.Span
 	// GetIndexMutationCapabilities returns:
 	// 1. Whether the index is a mutation

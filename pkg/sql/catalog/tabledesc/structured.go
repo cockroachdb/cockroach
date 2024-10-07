@@ -2210,12 +2210,31 @@ func (desc *wrapper) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
 
 // IndexSpan implements the TableDescriptor interface.
 func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roachpb.Span {
+	if desc.External != nil {
+		panic(errors.AssertionFailedf("%s uses external row data", desc.Name))
+	}
 	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), indexID))
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+// IndexSpanAllowingExternalRowData implements the TableDescriptor interface.
+func (desc *wrapper) IndexSpanAllowingExternalRowData(
+	codec keys.SQLCodec, indexID descpb.IndexID,
+) roachpb.Span {
+	tableID := desc.GetID()
+	if desc.External != nil {
+		codec = keys.MakeSQLCodec(desc.External.TenantID)
+		tableID = desc.External.TableID
+	}
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, tableID, indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
 // TableSpan implements the TableDescriptor interface.
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
+	if desc.External != nil {
+		panic(errors.AssertionFailedf("%s uses external row data", desc.Name))
+	}
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
