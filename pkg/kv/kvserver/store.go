@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -74,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -361,6 +363,9 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		SystemConfigProvider: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
+		KVFlowAdmittedPiggybacker: node_rac2.NewAdmittedPiggybacker(),
+		KVFlowStreamTokenProvider: rac2.NewStreamTokenCounterProvider(st, clock),
+		KVFlowEvalWaitMetrics:     rac2.NewEvalWaitMetrics(),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
@@ -2206,6 +2211,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	s.rangeIDAlloc = idAlloc
+
+	if s.cfg.KVFlowSendTokenWatcher == nil {
+		if buildutil.CrdbTestBuild {
+			// Create the missing token watcher for tests, which use testStoreConfig
+			s.cfg.KVFlowSendTokenWatcher = rac2.NewSendTokenWatcher(
+				s.stopper, timeutil.DefaultTimeSource{})
+		} else {
+			return errors.New("missing KVFlowSendTokenWatcher")
+		}
+	}
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
