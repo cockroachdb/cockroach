@@ -69,11 +69,8 @@ bump-epoch 1
 
 tick-election 1
 ----
-DEBUG 1 does not have store liveness support from a quorum of peers
+ok
 
 tick-election 1
 ----
 DEBUG 1 has not received messages from a quorum of peers in the last election timeout
-DEBUG 1 does not have store liveness support from a quorum of peers
-WARN 1 stepped down to follower since quorum is not active
-INFO 1 became follower at term 1
