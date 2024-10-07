@@ -187,7 +187,7 @@ func ingestionPlanHook(
 			return nil
 		}
 
-		readerID, err := createReaderTenant(ctx, p, tenantInfo, destinationTenantID, options)
+		readerID, err := createReaderTenant(ctx, p, tenantInfo.Name, destinationTenantID, options)
 		if err != nil {
 			return err
 		}
@@ -299,7 +299,7 @@ func createReplicationJob(
 func createReaderTenant(
 	ctx context.Context,
 	p sql.PlanHookState,
-	tenantInfo mtinfopb.TenantInfoWithUsage,
+	tenantName roachpb.TenantName,
 	destinationTenantID roachpb.TenantID,
 	options *resolvedTenantReplicationOptions,
 ) (roachpb.TenantID, error) {
@@ -307,7 +307,7 @@ func createReaderTenant(
 	if options.ReaderTenantEnabled() {
 		var readerInfo mtinfopb.TenantInfoWithUsage
 		readerInfo.DataState = mtinfopb.DataStateAdd
-		readerInfo.Name = tenantInfo.Name + "-readonly"
+		readerInfo.Name = tenantName + "-readonly"
 		readerInfo.ReadFromTenant = &destinationTenantID
 
 		readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
