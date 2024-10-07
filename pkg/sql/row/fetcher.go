@@ -900,7 +900,7 @@ func (rf *Fetcher) processKV(
 		// sentinel kv (column family 0) that is always present when a row is
 		// present, even if that row is all NULLs. Thus, a row is deleted if and
 		// only if the first kv in it a tombstone (RawBytes is empty).
-		table.rowIsDeleted = len(kv.Value.RawBytes) == 0
+		table.rowIsDeleted = !kv.Value.IsPresent()
 	}
 
 	if table.rowLastModified.Less(kv.Value.Timestamp) {
@@ -1327,8 +1327,12 @@ func (rf *Fetcher) finalizeRow() error {
 	}
 
 	if table.originTimestampOutputIdx != noOutputColumn {
-		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastOriginTimestamp)})
-		table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: dec}
+		if rf.table.rowLastOriginTimestamp.IsSet() {
+			dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastOriginTimestamp)})
+			table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: dec}
+		} else {
+			table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		}
 	}
 
 	// Fill in any missing values with NULLs

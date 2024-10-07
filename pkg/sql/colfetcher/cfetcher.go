@@ -962,7 +962,11 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				cf.machine.originIDCol.Set(cf.machine.rowIdx, int32(cf.table.rowLastOriginID))
 			}
 			if cf.table.originTimestampOutputIdx != noOutputColumn {
-				cf.machine.originTimestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastOriginTimestamp)
+				if cf.table.rowLastOriginTimestamp.IsSet() {
+					cf.machine.originTimestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastOriginTimestamp)
+				} else {
+					cf.machine.colvecs.Nulls[cf.table.originTimestampOutputIdx].SetNull(cf.machine.rowIdx)
+				}
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
@@ -1210,7 +1214,7 @@ func (cf *cFetcher) processValueSingle(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
 		}
 		val := cf.machine.nextKV.Value
-		if len(val.RawBytes) == 0 {
+		if !val.IsPresent() {
 			return prettyKey, "", nil
 		}
 		typ := cf.table.spec.FetchedColumns[idx].Type
