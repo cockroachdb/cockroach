@@ -2031,8 +2031,10 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				}
 			}
 			tokens := entry.tokens
-			if fn := rss.parent.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
-				tokens = fn(tokens)
+			if rss.parent.parent.opts.Knobs != nil {
+				if fn := rss.parent.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
+					tokens = fn(tokens)
+				}
 			}
 			if inSendQueue && entry.index >= rss.mu.nextRaftIndexInitial {
 				// Was in send-queue and had eval tokens deducted for it.
@@ -2074,8 +2076,10 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				pri = entry.pri
 			}
 			tokens := entry.tokens
-			if fn := rss.parent.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
-				tokens = fn(tokens)
+			if rss.parent.parent.opts.Knobs != nil {
+				if fn := rss.parent.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
+					tokens = fn(tokens)
+				}
 			}
 			if inSendQueue && entry.index >= rss.mu.nextRaftIndexInitial {
 				// Is in send-queue and will have eval tokens deducted for it.
