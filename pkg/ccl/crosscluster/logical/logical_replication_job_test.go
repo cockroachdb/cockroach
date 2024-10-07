@@ -659,7 +659,7 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 	)
 
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH IGNORE_CDC_IGNORED_TTL_DELETES", dbAURL.String()).Scan(&jobBID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
 
 	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
@@ -669,10 +669,10 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 
 	// Verify that Job contains FilterRangeFeed
 	details := jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails()
-	require.False(t, details.IgnoreCDCIgnoredTTLDeletes)
+	require.False(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
 
 	details = jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails()
-	require.True(t, details.IgnoreCDCIgnoredTTLDeletes)
+	require.True(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
 
 	require.Equal(t, len(filterVal), 2)
 

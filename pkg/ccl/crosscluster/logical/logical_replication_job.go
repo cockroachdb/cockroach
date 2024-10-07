@@ -420,7 +420,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		tableMetadataByDestID,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
-		payload.IgnoreCDCIgnoredTTLDeletes,
+		payload.Discard,
 		payload.Mode,
 		payload.MetricsLabel,
 	)
