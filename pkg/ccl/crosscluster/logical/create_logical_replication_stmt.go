@@ -182,12 +182,8 @@ func createLogicalReplicationStreamPlanHook(
 			}
 
 			if mode != jobspb.LogicalReplicationDetails_Validated {
-				fks := td.OutboundForeignKeys()
-				for _, fk := range append(fks[:len(fks):len(fks)], td.InboundForeignKeys()...) {
-					// TODO(dt): move the constraint to un-validated for them.
-					if fk.IsConstraintValidated() {
-						return pgerror.Newf(pgcode.InvalidParameterValue, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'")
-					}
+				if len(td.OutboundForeignKeys()) > 0 || len(td.InboundForeignKeys()) > 0 {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are only supported with MODE = 'validated'")
 				}
 			}
 		}
