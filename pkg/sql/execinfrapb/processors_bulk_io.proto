@@ -527,13 +527,14 @@ message LogicalReplicationWriterSpec {
     // names.
     map<int32, TableReplicationMetadata> table_metadata_by_dest_id = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableMetadataByDestID"];
 
-    // IgnoreCDCIgnoredTTLDeletes is an option on whether to filter out 'OmitinRangefeed' events
-    // when processing changes in LDR
-    optional bool ignore_cdc_ignored_ttl_deletes = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
+    reserved 9;
+
+    // Discard is an option on whether to filter some events.
+    optional jobs.jobspb.LogicalReplicationDetails.Discard discard  = 12 [(gogoproto.nullable) = false];
 
     optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
 
     optional string metrics_label = 11 [(gogoproto.nullable) = false];
 
-    // Next ID: 12.
+    // Next ID: 13.
 }

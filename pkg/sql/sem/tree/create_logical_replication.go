@@ -25,13 +25,13 @@ type LogicalReplicationResources struct {
 
 type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
-	UserFunctions              map[UnresolvedName]RoutineName
-	Cursor                     Expr
-	MetricsLabel               Expr
-	Mode                       Expr
-	DefaultFunction            Expr
-	IgnoreCDCIgnoredTTLDeletes *DBool
-	SkipSchemaCheck            *DBool
+	UserFunctions   map[UnresolvedName]RoutineName
+	Cursor          Expr
+	MetricsLabel    Expr
+	Mode            Expr
+	DefaultFunction Expr
+	Discard         Expr
+	SkipSchemaCheck *DBool
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -122,10 +122,12 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&k)
 		}
 	}
-	if lro.IgnoreCDCIgnoredTTLDeletes != nil && *lro.IgnoreCDCIgnoredTTLDeletes {
+	if lro.Discard != nil {
 		maybeAddSep()
-		ctx.WriteString("IGNORE_CDC_IGNORED_TTL_DELETES")
+		ctx.WriteString("DISCARD = ")
+		ctx.FormatNode(lro.Discard)
 	}
+
 	if lro.SkipSchemaCheck != nil && *lro.SkipSchemaCheck {
 		maybeAddSep()
 		ctx.WriteString("SKIP SCHEMA CHECK")
@@ -176,12 +178,12 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		}
 	}
 
-	if o.IgnoreCDCIgnoredTTLDeletes != nil {
-		if other.IgnoreCDCIgnoredTTLDeletes != nil {
-			return errors.New("IGNORE_CDC_IGNORED_TTL_DELETES option specified multiple times")
+	if o.Discard != nil {
+		if other.Discard != nil {
+			return errors.New("DISCARD option specified multiple times")
 		}
 	} else {
-		o.IgnoreCDCIgnoredTTLDeletes = other.IgnoreCDCIgnoredTTLDeletes
+		o.Discard = other.Discard
 	}
 	if o.SkipSchemaCheck != nil {
 		if other.SkipSchemaCheck != nil {
@@ -209,7 +211,7 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.Mode == options.Mode &&
 		o.DefaultFunction == options.DefaultFunction &&
 		o.UserFunctions == nil &&
-		o.IgnoreCDCIgnoredTTLDeletes == options.IgnoreCDCIgnoredTTLDeletes &&
+		o.Discard == options.Discard &&
 		o.SkipSchemaCheck == options.SkipSchemaCheck &&
 		o.MetricsLabel == options.MetricsLabel
 }
