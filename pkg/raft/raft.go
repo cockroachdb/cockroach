@@ -319,7 +319,7 @@ type raft struct {
 	config               quorum.Config
 	trk                  tracker.ProgressTracker
 	electionTracker      tracker.ElectionTracker
-	fortificationTracker tracker.FortificationTracker
+	fortificationTracker *tracker.FortificationTracker
 	lazyReplication      bool
 
 	state pb.StateType
@@ -455,7 +455,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
-	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
+	r.fortificationTracker = tracker.NewFortificationTracker(&r.config, r.storeLiveness, r.logger)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
