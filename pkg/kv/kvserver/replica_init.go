@@ -225,6 +225,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
 	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
+	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
@@ -324,7 +325,8 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
-	r.flowControlV2.InitRaftLocked(ctx, replica_rac2.NewRaftNode(rg, (*replicaForRACv2)(r)))
+	r.flowControlV2.InitRaftLocked(
+		ctx, replica_rac2.NewRaftNode(rg, (*replicaForRACv2)(r)), rg.LogMark())
 	return nil
 }
 
