@@ -27,7 +27,7 @@ const (
 	crossFlag          = "cross"
 	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
 	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
-	nogoDisableFlag    = "--//build/toolchains:nogo_disable_flag"
+	nogoDisableFlag    = "--norun_validations"
 	geosTarget         = "//c-deps:libgeos"
 	devTarget          = "//pkg/cmd/dev:dev"
 )
@@ -254,9 +254,6 @@ func (d *dev) stageArtifacts(
 		return err
 	}
 	bazelBin, err := d.getBazelBin(ctx, configArgs)
-	if err != nil {
-		return err
-	}
 
 	for _, target := range targets {
 		if target.kind != "go_binary" && target.kind != "geos" {

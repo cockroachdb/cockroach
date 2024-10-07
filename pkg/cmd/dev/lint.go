@@ -119,7 +119,7 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	}
 	if pkg != "" && filter == "" {
 		toLint := strings.TrimPrefix(pkg, "./")
-		args := []string{"build", toLint, "--//build/toolchains:nogo_flag"}
+		args := []string{"build", toLint, "--run_validations"}
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 		}
@@ -133,7 +133,7 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 			"//pkg/obsservice/cmd/obsservice",
 			"//pkg/cmd/roachprod",
 			"//pkg/cmd/roachtest",
-			"--//build/toolchains:nogo_flag",
+			"--run_validations",
 		}
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
