@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -84,6 +85,7 @@ const csvData = `%d|155190|7706|1|17|21168.23|0.04|0.02|N|O|1996-03-13|1996-02-1
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer ccl.TestingEnableEnterprise()() // allow usage of READ COMMITTED
 	ctx := context.Background()
 
 	doTest := func(t *testing.T, d *datadriven.TestData, conn clisqlclient.Conn) string {
