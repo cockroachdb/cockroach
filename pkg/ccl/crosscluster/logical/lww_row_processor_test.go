@@ -73,9 +73,6 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 	createTable := func(t *testing.T, stmt string) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(stmt, tableName))
-		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s "+lwwColumnAdd,
-			tableName))
 		tableNumber++
 		return tableName
 	}
@@ -149,7 +146,6 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	tableName := "tab"
 	runner.Exec(b, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-	runner.Exec(b, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
@@ -325,9 +321,6 @@ func TestLWWConflictResolution(t *testing.T) {
 	createTable := func(t *testing.T) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (pk int primary key, payload string)`, tableName))
-		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s "+lwwColumnAdd,
-			tableName))
 		tableNumber++
 		return tableName
 	}
@@ -403,7 +396,6 @@ func TestLWWConflictResolution(t *testing.T) {
 
 				keyValue2 := encoder(timeOneDayBackward, row2...)
 				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
-
 				expectedRows := [][]string{
 					{"1", "row1"},
 				}

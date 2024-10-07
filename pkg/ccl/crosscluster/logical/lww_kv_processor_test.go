@@ -46,9 +46,6 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 	createTable := func(t *testing.T, schema string) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(schema, tableName))
-		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s "+lwwColumnAdd,
-			tableName))
 		tableNumber++
 		return tableName
 	}

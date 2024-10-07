@@ -131,8 +131,6 @@ case $1 in
       "init")
         roachprod run $A:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $A)"
         roachprod run $B:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $B)"
-        roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
-        roachprod sql $B:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
         roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expire_after = '3 hours');"
         roachprod sql $B:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expire_after = '3 hours');"
         ;;

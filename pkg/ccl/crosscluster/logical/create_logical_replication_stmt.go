@@ -155,28 +155,6 @@ func createLogicalReplicationStreamPlanHook(
 			repPairs[i].DstDescriptorID = int32(td.GetID())
 			dstTableDescs[i] = td
 
-			// TODO(dt): remove when we support this via KV metadata.
-			var foundTSCol bool
-			for _, col := range td.GetColumns() {
-				if col.Name == originTimestampColumnName {
-					foundTSCol = true
-					if col.Type.Family() != types.DecimalFamily {
-						return errors.Newf(
-							"%s column must be type DECIMAL for use by logical replication", originTimestampColumnName,
-						)
-					}
-					break
-				}
-			}
-			if !foundTSCol {
-				return errors.WithHintf(errors.Newf(
-					"tables written to by logical replication currently require a %q DECIMAL column",
-					originTimestampColumnName,
-				), "try 'ALTER TABLE %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL'",
-					dstObjName.String(), originTimestampColumnName,
-				)
-			}
-
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
 				tree.Name(prefix.Database.GetName()),
 				tree.Name(prefix.Schema.GetName()),

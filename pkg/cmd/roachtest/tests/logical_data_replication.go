@@ -679,11 +679,6 @@ func setupLDR(
 
 	dbName, tableName := ldrWorkload.dbName, ldrWorkload.tableName
 
-	// Setup LDR-specific columns
-	timestampQuery := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL", dbName, tableName)
-	setup.left.sysSQL.Exec(t, timestampQuery)
-	setup.right.sysSQL.Exec(t, timestampQuery)
-
 	startLDR := func(targetDB *sqlutils.SQLRunner, sourceURL string) int {
 		targetDB.Exec(t, fmt.Sprintf("USE %s", dbName))
 		r := targetDB.QueryRow(t,
@@ -728,7 +723,7 @@ func VerifyCorrectness(
 
 	m := c.NewMonitor(context.Background(), setup.CRDBNodes())
 	var leftFingerprint, rightFingerprint [][]string
-	queryStmt := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s WITH EXCLUDE COLUMNS = ('crdb_replication_origin_timestamp')", ldrWorkload.dbName, ldrWorkload.tableName)
+	queryStmt := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", ldrWorkload.dbName, ldrWorkload.tableName)
 	m.Go(func(ctx context.Context) error {
 		leftFingerprint = setup.left.sysSQL.QueryStr(t, queryStmt)
 		return nil
