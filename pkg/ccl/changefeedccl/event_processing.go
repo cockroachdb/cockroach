@@ -453,6 +453,9 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		)
 	})
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			c.metrics.SinkErrors.Inc(1)
+		}
 		return err
 	}
 	if log.V(3) {
