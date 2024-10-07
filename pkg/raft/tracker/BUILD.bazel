@@ -14,9 +14,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "@org_golang_x_exp//maps",
     ],
 )
@@ -31,6 +33,7 @@ go_test(
     embed = [":tracker"],
     deps = [
         "//pkg/raft/quorum",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/util/hlc",

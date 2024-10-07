@@ -11,9 +11,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // FortificationTracker is used to track fortification from peers. This can
@@ -37,18 +39,41 @@ type FortificationTracker struct {
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
 	fortification map[pb.PeerID]pb.Epoch
+
+	// leaderMaxSupported is the maximum LeadSupportUntil that the leader has
+	// ever claimed to support. Tracking this ensures that LeadSupportUntil
+	// never regresses for a raft group. Naively, without any tracking, this
+	// can happen around configuration changes[1] and leader step down[2].
+	//
+	// NB: We use an atomicTimestamp here, which allows us to forward
+	// leadMaxSupported on every call to LeadSupportUntil, without requiring
+	// callers to acquire a write lock. Typically, LeadSupportUntil is called into
+	// by get{LeadSupport,}Status
+	//
+	// [1] We must ensure that the current LeadSupportUntil is greater than or
+	// equal to any previously calculated LeadSupportUntil before proposing a new
+	// configuration change.
+	// [2] A leader may step down while its LeadSupportUntil is in the future. In
+	// such cases, it shouldn't take any action (such as broadcasting
+	// de-fortification messages, voting for another peer, or calling an election
+	// at a higher term) that could elect a leader until LeadSupportUntil is in
+	// the past.
+	leaderMaxSupported atomicTimestamp
+
+	logger raftlogger.Logger
 }
 
-// MakeFortificationTracker initializes a FortificationTracker.
-func MakeFortificationTracker(
-	config *quorum.Config, storeLiveness raftstoreliveness.StoreLiveness,
-) FortificationTracker {
+// NewFortificationTracker initializes a FortificationTracker.
+func NewFortificationTracker(
+	config *quorum.Config, storeLiveness raftstoreliveness.StoreLiveness, logger raftlogger.Logger,
+) *FortificationTracker {
 	st := FortificationTracker{
 		config:        config,
 		storeLiveness: storeLiveness,
 		fortification: map[pb.PeerID]pb.Epoch{},
+		logger:        logger,
 	}
-	return st
+	return &st
 }
 
 // FortificationEnabled returns whether the raft fortification protocol is
@@ -70,9 +95,7 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 func (ft *FortificationTracker) Reset(term uint64) {
 	ft.term = term
 	clear(ft.fortification)
-	// TODO(arul): when we introduce ft.LeadSupportUntil we need to make sure it
-	// isn't reset here, because we don't want it to regress when a leader steps
-	// down.
+	ft.leaderMaxSupported.Reset()
 }
 
 // IsFortifiedBy returns whether the follower fortifies the leader or not.
@@ -104,7 +127,12 @@ func (ft *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, i
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // fortification until based on the fortification being tracked for it by its
 // peers.
-func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
+func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timestamp {
+	if state != pb.StateLeader {
+		// We're not the leader, so LeadSupportUntil shouldn't advance.
+		return ft.leaderMaxSupported.Load()
+	}
+
 	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
@@ -119,13 +147,33 @@ func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 			supportExpMap[id] = curExp
 		}
 	}
-	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
+
+	leadSupportUntil := ft.config.Voters.LeadSupportExpiration(supportExpMap)
+	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+}
+
+// CanDefortify returns whether the caller can safely[1] de-fortify the term
+// based on the sate tracked by the FortificationTracker.
+//
+// [1] Without risking regressions in the maximum that's ever been indicated to
+// the layers above. Or, more simply, without risking regression of leader
+// leases.
+func (ft *FortificationTracker) CanDefortify() bool {
+	leaderMaxSupported := ft.leaderMaxSupported.Load()
+	if leaderMaxSupported.IsEmpty() {
+		// If leaderMaxSupported is empty, it means that we've never returned any
+		// timestamps to the layers above in calls to LeadSupportUntil. We should be
+		// able to de-fortify. If a tree falls in a forrest ...
+		ft.logger.Debugf("leaderMaxSupported is empty when computing whether we can de-fortify or not")
+	}
+	return ft.storeLiveness.SupportExpired(leaderMaxSupported)
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or
 // not.
 func (ft *FortificationTracker) QuorumActive() bool {
-	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
+	// NB: Only run by the leader.
+	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil(pb.StateLeader))
 }
 
 // Term returns the leadership term for which the tracker is/was tracking
@@ -153,4 +201,31 @@ func (ft *FortificationTracker) String() string {
 		fmt.Fprintf(&buf, "%d : %d\n", id, ft.fortification[id])
 	}
 	return buf.String()
+}
+
+// atomicTimestamp is a thin wrapper to provide atomic access to a timestamp.
+type atomicTimestamp struct {
+	mu syncutil.Mutex
+
+	ts hlc.Timestamp
+}
+
+func (a *atomicTimestamp) Load() hlc.Timestamp {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ts
+}
+
+func (a *atomicTimestamp) Forward(ts hlc.Timestamp) hlc.Timestamp {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ts.Forward(ts)
+	return a.ts
+}
+
+func (a *atomicTimestamp) Reset() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.ts = hlc.Timestamp{}
 }
