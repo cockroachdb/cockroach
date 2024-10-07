@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const multiRegionNoEnterpriseContains = "use of multi-region features requires an enterprise license"
-
 func TestMultiRegionNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -37,8 +35,7 @@ func TestMultiRegionNoLicense(t *testing.T) {
 	} {
 		t.Run(errorStmt, func(t *testing.T) {
 			_, err := sqlDB.Exec(errorStmt)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), multiRegionNoEnterpriseContains)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -69,25 +66,24 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 
 	defer ccl.TestingDisableEnterprise()()
 
-	// Test certain commands are no longer usable.
+	// Test certain commands are still supported with enterprise disabled
 	t.Run("no new multi-region items", func(t *testing.T) {
 		for _, tc := range []struct {
-			stmt             string
-			expectedContains string
+			stmt string
 		}{
 			{
-				stmt:             `CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`,
-				expectedContains: multiRegionNoEnterpriseContains,
+				stmt: `CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`,
 			},
 			{
-				stmt:             `ALTER DATABASE test ADD REGION "us-east3"`,
-				expectedContains: "use of ADD REGION requires an enterprise license",
+				stmt: `ALTER DATABASE test ADD REGION "us-east3"`,
+			},
+			{
+				stmt: `ALTER DATABASE test DROP REGION "us-east3"`,
 			},
 		} {
 			t.Run(tc.stmt, func(t *testing.T) {
 				_, err := sqlDB.Exec(tc.stmt)
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedContains)
+				require.NoError(t, err)
 			})
 		}
 	})
@@ -146,10 +142,9 @@ func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
 
 	defer ccl.TestingDisableEnterprise()()
 
-	// Cannot set global_reads with enterprise license disabled.
+	// Can set global_reads with enterprise license disabled.
 	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
-	require.Error(t, err)
-	require.Regexp(t, "use of global_reads requires an enterprise license", err)
+	require.NoError(t, err)
 
 	// Can unset global_reads with enterprise license disabled.
 	_, err = sqlDB.Exec(`ALTER TABLE t2 CONFIGURE ZONE USING global_reads = false`)

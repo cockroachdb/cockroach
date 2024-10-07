@@ -73,9 +73,8 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Enterprise is disabled, expect the number of entries to be 0.
-	if len(entries) != 0 {
-		t.Fatal(errors.Newf("enterprise is disabled, found unexpected entries"))
+	if len(entries) != 3 {
+		t.Fatal(errors.Newf("expected 3 entries, got %d", len(entries)))
 	}
 
 	// Enable enterprise
@@ -98,9 +97,8 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Enterprise is enabled, expect an audit log.
-	if len(entries) != 1 {
-		t.Fatal(errors.Newf("enterprise is enabled, expected 1 entry, got %d", len(entries)))
+	if len(entries) != 3 {
+		t.Fatal(errors.Newf("expected 3 entries, got %d", len(entries)))
 	}
 }
 

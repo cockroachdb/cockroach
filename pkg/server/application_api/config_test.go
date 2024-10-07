@@ -289,8 +289,8 @@ func TestClusterAPI(t *testing.T) {
 				if a, e := resp.ReportingEnabled, reportingOn; a != e {
 					return errors.Errorf("reportingEnabled = %t, wanted %t", a, e)
 				}
-				if a, e := resp.EnterpriseEnabled, enterpriseOn; a != e {
-					return errors.Errorf("enterpriseEnabled = %t, wanted %t", a, e)
+				if a := resp.EnterpriseEnabled; !a {
+					return errors.Errorf("enterpriseEnabled = %t, wanted true", a)
 				}
 				return nil
 			})
