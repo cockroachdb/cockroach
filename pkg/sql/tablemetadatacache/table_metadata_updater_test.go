@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -146,11 +147,17 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 	require.Greater(t, metrics.Duration.CumulativeSnapshot().Mean(), float64(0))
 	count = 0
 	currentProgress = 0
-
+	sw := timeutil.NewStopWatch()
+	sw.Start()
 	// generate 500 random tables
 	conn.Exec(t,
 		`SELECT crdb_internal.generate_test_objects('{"names": "random_table_", "counts": [500], "randomize_columns": true}'::JSONB)`)
+	sw.Stop()
+	t.Logf("Time elapsed to generate tables: %s", sw.Elapsed())
+	sw.Start()
 	require.NoError(t, updater.RunUpdater(ctx))
+	sw.Stop()
+	t.Logf("Time elapsed to run update job: %s", sw.Elapsed())
 	// The updated tables metric doesn't reset between runs, so it should increase by updatedTables + 500, because 500
 	// random tables were previously generated
 	expectedTablesUpdated := (updatedTables * 2) + 500
