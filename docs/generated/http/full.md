@@ -4951,6 +4951,7 @@ Response object returned by TableIndexStatsResponse.
 | statistics | [TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
 | last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the latest reset index usage statistics request. | [reserved](#support-status) |
 | index_recommendations | [cockroach.sql.IndexRecommendation](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.IndexRecommendation) | repeated |  | [reserved](#support-status) |
+| database_id | [int32](#cockroach.server.serverpb.TableIndexStatsResponse-int32) |  | database_id is the ID of the database that contains the table. | [reserved](#support-status) |
 
 
 

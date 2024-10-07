@@ -224,7 +224,7 @@ func getTableIndexUsageStats(
 		return nil, err
 	}
 
-	tableID, err := getTableIDFromDatabaseAndTableName(ctx, req.Database, req.Table, ie, userName)
+	tableID, dbID, err := getIDFromDatabaseAndTableName(ctx, req.Database, req.Table, ie, userName)
 
 	if err != nil {
 		return nil, err
@@ -329,40 +329,42 @@ func getTableIndexUsageStats(
 		Statistics:           idxUsageStats,
 		LastReset:            &lastReset,
 		IndexRecommendations: idxRecommendations,
+		DatabaseID:           int32(dbID),
 	}
 
 	return resp, nil
 }
 
-// getTableIDFromDatabaseAndTableName is a helper function that retrieves
+// getIDFromDatabaseAndTableName is a helper function that retrieves
 // the tableID given the database and table name. The tablename must be of
 // the form schema.table if a schema exists.
-func getTableIDFromDatabaseAndTableName(
+func getIDFromDatabaseAndTableName(
 	ctx context.Context,
 	database string,
 	table string,
 	ie isql.Executor,
 	userName username.SQLUsername,
-) (int, error) {
+) (tableID, databaseID int, err error) {
 	// Fully qualified table name is either database.table or database.schema.table
 	fqtName, err := getFullyQualifiedTableName(database, table)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	row, err := ie.QueryRowEx(
 		ctx, "get-table-id", nil,
 		sessiondata.InternalExecutorOverride{User: userName, Database: database},
-		"SELECT $1::regclass::oid", table,
+		"SELECT $1::regclass::oid, crdb_internal.get_database_id($2)", table, database,
 	)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if row == nil {
-		return 0, errors.Newf("expected to find table ID for table %s, but found nothing", fqtName)
+		return 0, 0, errors.Newf("expected to find table ID for table %s, but found nothing", fqtName)
 	}
-	tableID := tree.MustBeDOid(row[0]).Oid
-	return int(tableID), nil
+	tableID = int(tree.MustBeDOid(row[0]).Oid)
+	databaseID = int(tree.MustBeDInt(row[1]))
+	return tableID, databaseID, nil
 }
 
 func getDatabaseIndexRecommendations(

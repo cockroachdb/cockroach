@@ -120,6 +120,7 @@ const mapStateToProps = (
       lastRead: TimestampToMoment(details?.statistics?.stats?.last_read),
       lastReset: TimestampToMoment(stats?.data?.last_reset),
       indexRecommendations,
+      databaseID: stats?.data?.database_id,
     },
   };
 };
