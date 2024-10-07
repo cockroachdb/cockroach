@@ -25,7 +25,7 @@ func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
 // MakeTenantSpan creates the start/end key pair associated with the specified tenant.
 func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
 	if tenID == roachpb.TenantOne {
-		return roachpb.Span{Key: TableDataMin, EndKey: TableDataMax}
+		return roachpb.Span{Key: PrefixlessNamespaceTableMin, EndKey: PrefixlessNamespaceTableMax}
 	}
 	tenIDint := tenID.ToUint64()
 	return roachpb.Span{
@@ -138,9 +138,10 @@ type sqlDecoder struct {
 
 // MakeSQLCodec creates a new  SQLCodec suitable for manipulating SQL keys.
 func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
-	if tenID.IsSystem() {
-		return SystemSQLCodec
+	if tenID == roachpb.TenantOne {
+		return PrefixlessSystemSQLCodec
 	}
+
 	sp := MakeTenantSpan(tenID)
 	sp.Key = sp.Key[:len(sp.Key):len(sp.Key)]             // bound capacity, avoid aliasing
 	sp.EndKey = sp.EndKey[:len(sp.EndKey):len(sp.EndKey)] // bound capacity, avoid aliasing
@@ -150,7 +151,15 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 	}
 }
 
-// SystemSQLCodec is a SQL key codec for the system tenant.
+// SystemSQLCodec is a SQL key codec for the system tenant with tenantID {2}.
+var SystemSQLCodec = func() SQLCodec {
+	if roachpb.EnableExperimentalUA {
+		return MakeSQLCodec(roachpb.TenantTwo)
+	}
+	return PrefixlessSystemSQLCodec
+}()
+
+// PrefixlessSystemCodec is a SQL codec for the system tenant with tenantID {1}.
 //
 // NB: We don't use MakeSQLCodec here since the system tenant is special and its
 // prefix is empty, rather than the start of its span, so the Codec for it wants
@@ -158,8 +167,10 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 // endKey to TableDataMax instead of MaxKey here, but TableDataMax is currently
 // defined in terms of this codec. We would want to fix this if/when we make the
 // tenant with ID one non-system, but we'll get rid of/rename this then as well.
-var SystemSQLCodec = SQLCodec{
-	sqlEncoder: sqlEncoder{&MinKey, &MaxKey, roachpb.SystemTenantID},
+//
+// TODO(chandrat) revisit minKey and maxKeys.
+var PrefixlessSystemSQLCodec = SQLCodec{
+	sqlEncoder: sqlEncoder{&MinKey, &MaxKey, roachpb.TenantOne},
 	sqlDecoder: sqlDecoder{&MinKey},
 }
 

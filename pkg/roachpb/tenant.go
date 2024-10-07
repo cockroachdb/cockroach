@@ -12,9 +12,14 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// COCKROACH_EXPERIMENTAL_UA environment variable is used to control which of TenantOne or
+// TenantTwo should be treated as system tenant.
+var EnableExperimentalUA bool = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_UA", false)
 
 // SystemTenantID is the ID associated with the tenant that manages a cluster.
 //
@@ -22,15 +27,29 @@ import (
 // node-internal processes. Additionally it is given special treatment in any
 // authorization decisions, bypassing typical restrictions that tenants act only
 // on their own key spans.
-var SystemTenantID = TenantOne
+var SystemTenantID = func() TenantID {
+	if EnableExperimentalUA {
+		return TenantTwo
+	}
+	return TenantOne
+}()
 
 // TenantOne is a special tenant ID, associated the numeric ID 1, which for
 // legacy compatibility reasons stores its tables without a tenant prefix.
 var TenantOne = MustMakeTenantID(1)
 
+// TenantTwo is a special tenant ID, with associated numeric ID 2. It will
+// eventually replace TenantOne as system tenant.
+var TenantTwo = MustMakeTenantID(2)
+
 // MinTenantID is the minimum ID of a (non-system) tenant in a multi-tenant
 // cluster.
-var MinTenantID = MustMakeTenantID(2)
+var MinTenantID = func() TenantID {
+	if EnableExperimentalUA {
+		return MustMakeTenantID(3)
+	}
+	return TenantTwo
+}()
 
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.
@@ -112,7 +131,7 @@ func (t TenantID) IsSystem() bool {
 // IsSystemTenantID returns whether the provided ID corresponds to that of the
 // system tenant.
 func IsSystemTenantID(id uint64) bool {
-	return id == SystemTenantID.ToUint64()
+	return id == TenantTwo.ToUint64() || id == TenantOne.ToUint64()
 }
 
 type tenantKey struct{}
