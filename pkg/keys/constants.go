@@ -351,8 +351,12 @@ var (
 
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = SystemSQLCodec.TablePrefix(0)
+	// PrefixlessTableDataMin is the start of the range of prefixless table data keys.
+	PrefixlessTableDataMin = PrefixlessSystemSQLCodec.TablePrefix(0)
 	// TableDataMax is the end of the range of table data keys.
 	TableDataMax = SystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
+	// PrefixlessTableDataMax is the end of the range of prefixless table data keys.
+	PrefixlessTableDataMax = PrefixlessSystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
 	// ScratchRangeMin is a key used in tests to write arbitrary data without
 	// overlapping with meta, system or tenant ranges.
 	ScratchRangeMin = TableDataMax
@@ -368,8 +372,12 @@ var (
 	// NamespaceTableMin is the start key of system.namespace, which is a system
 	// table that does not reside in the same range as other system tables.
 	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
+	// PrefixlessNamespaceTableMin is the start key of prefixless system.namespace table.
+	PrefixlessNamespaceTableMin = PrefixlessSystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
+	// PrefixlessNamespaceTableMax is the end key of prefixless system.namespace table.
+	PrefixlessNamespaceTableMax = PrefixlessSystemSQLCodec.TablePrefix(NamespaceTableID + 1)
 
 	// 4. Non-system tenant SQL keys
 	//
