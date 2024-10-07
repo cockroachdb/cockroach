@@ -60,10 +60,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 		rng,
 		tableName,
 		1,
-		false, /* isMultiregion */
-		// We do not have full support for column families.
-		randgen.SkipColumnFamilyMutation(),
-		randgen.RequirePrimaryIndex(),
+		randgen.TableOptPrimaryIndexRequired|randgen.TableOptSkipColumnFamilyMutations,
 	)
 	stmt := tree.SerializeForDisplay(createStmt)
 	t.Log(stmt)
