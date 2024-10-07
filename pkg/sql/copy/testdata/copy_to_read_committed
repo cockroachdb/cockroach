@@ -1,0 +1,27 @@
+# Verify that the default transaction isolation level is applied to the
+# internal queries issued by the COPY command.
+exec-ddl
+SET default_transaction_isolation = 'read committed'
+----
+
+copy-to
+COPY (SELECT current_setting('transaction_isolation')) TO STDOUT
+----
+read committed
+
+copy-to
+COPY (SELECT 1, 2, 3) TO STDOUT
+----
+1	2	3
+
+copy-to
+COPY (
+  SELECT repeat('a' || i::STRING, 5), repeat('b' || i::STRING, 5)
+  FROM ROWS FROM (generate_series(1, 5)) AS i
+) TO STDOUT;
+----
+a1a1a1a1a1	b1b1b1b1b1
+a2a2a2a2a2	b2b2b2b2b2
+a3a3a3a3a3	b3b3b3b3b3
+a4a4a4a4a4	b4b4b4b4b4
+a5a5a5a5a5	b5b5b5b5b5
