@@ -109,6 +109,7 @@ const (
 	TableOptSkipColumnFamilyMutations
 	TableOptMultiRegion
 	TableOptAllowPartiallyVisibleIndex
+	TableOptCrazyNames
 )
 
 func (t TableOpt) IsSet(o TableOpt) bool {
@@ -162,8 +163,13 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	opt TableOpt,
 	generateColumnIndexSuffix func() string,
 ) *tree.CreateTable {
-	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
-	name := g.GenerateOne(strconv.Itoa(tableIdx))
+	var name string
+	if opt.IsSet(TableOptCrazyNames) {
+		g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
+		name = g.GenerateOne(strconv.Itoa(tableIdx))
+	} else {
+		name = fmt.Sprintf("%s%d", prefix, tableIdx)
+	}
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
 		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix,
 	)
@@ -204,7 +210,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i))
+		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -212,7 +218,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i))
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), opt)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -454,13 +460,20 @@ func PopulateTableWithRandData(
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
-func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.ColumnTableDef {
-	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d", tableIdx))
-	colName := g.GenerateOne(colSuffix)
+func randColumnTableDef(
+	rng *rand.Rand, tableIdx int, colSuffix string, opt TableOpt,
+) *tree.ColumnTableDef {
+	var colName tree.Name
+	if opt.IsSet(TableOptCrazyNames) {
+		g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d", tableIdx))
+		colName = tree.Name(g.GenerateOne(colSuffix))
+	} else {
+		colName = tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colSuffix))
+	}
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		Name: tree.Name(colName),
+		Name: colName,
 		Type: RandColumnType(rng),
 	}
 	// Slightly prefer non-nullable columns
@@ -482,9 +495,13 @@ func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.Co
 // column (either STORED or VIRTUAL). The computed expressions refer to columns
 // in normalColDefs.
 func randComputedColumnTableDef(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colSuffix string,
+	rng *rand.Rand,
+	normalColDefs []*tree.ColumnTableDef,
+	tableIdx int,
+	colSuffix string,
+	opt TableOpt,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colSuffix)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix, opt)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 
@@ -647,7 +664,11 @@ func randIndexTableDefFromCols(
 		numExpressions := rng.Intn(10) + 1
 		for i := 0; i < numPartitions; i++ {
 			var partition tree.ListPartition
-			partition.Name = tree.Name(g.GenerateOne(strconv.Itoa(i)))
+			if opt.IsSet(TableOptCrazyNames) {
+				partition.Name = tree.Name(g.GenerateOne(strconv.Itoa(i)))
+			} else {
+				partition.Name = tree.Name(fmt.Sprintf("%s_part_%d", tableName, i))
+			}
 			// Add up to 10 expressions in each partition.
 			for j := 0; j < numExpressions; j++ {
 				// Use a tuple to contain the expressions in case there are multiple
