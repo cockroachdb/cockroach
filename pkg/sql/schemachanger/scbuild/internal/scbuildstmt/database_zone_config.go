@@ -118,7 +118,7 @@ func (dzo *databaseZoneConfigObj) retrieveCompleteZoneConfig(
 	if getInheritedDefault {
 		zc, err = dzo.getInheritedDefaultZoneConfig(b)
 	} else {
-		zc, _, err = dzo.getZoneConfig(b, false /* inheritDefaultRange */)
+		zc, err = dzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -140,7 +140,7 @@ func (dzo *databaseZoneConfigObj) completeZoneConfig(b BuildCtx, zone *zonepb.Zo
 	if zone.IsComplete() {
 		return nil
 	}
-	defaultZone, _, err := dzo.getZoneConfig(b, true /* inheritDefaultRange */)
+	defaultZone, err := dzo.getZoneConfig(b, true /* inheritDefaultRange */)
 	if err != nil {
 		return err
 	}
@@ -156,42 +156,36 @@ func (dzo *databaseZoneConfigObj) getInheritedDefaultZoneConfig(
 	b BuildCtx,
 ) (*zonepb.ZoneConfig, error) {
 	// Get the zone config of the DEFAULT RANGE.
-	zc, _, err := dzo.getZoneConfig(b, true /* inheritDefaultRange */)
+	zc, err := dzo.getZoneConfig(b, true /* inheritDefaultRange */)
 	return zc, err
 }
 
 func (dzo *databaseZoneConfigObj) getZoneConfig(
 	b BuildCtx, inheritDefaultRange bool,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	var subzones []zonepb.Subzone
-	zc, subzones, err := lookUpSystemZonesTable(b, dzo, inheritDefaultRange)
+) (*zonepb.ZoneConfig, error) {
+	zc, _, err := lookUpSystemZonesTable(b, dzo, inheritDefaultRange, false /* isSubzoneConfig */)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	// If the zone config exists, we know that it is not a subzone placeholder.
+	// If the zone config exists, return.
 	if zc != nil {
-		return zc, nil, err
+		return zc, err
 	}
 
-	zc = zonepb.NewZoneConfig()
-	zc.Subzones = subzones
-	subzone := zc
-
-	// No zone config for this ID. Retrieve the default zone config, but only as
-	// long as that wasn't the ID we were trying to retrieve
+	// Otherwise, no zone config for this ID. Retrieve the default zone config,
+	// but only as long as that wasn't the ID we were trying to retrieve
 	// (to avoid infinite recursion).
 	if !inheritDefaultRange {
-		zc, _, err := dzo.getZoneConfig(b, true /* inheritDefaultRange */)
+		zc, err = dzo.getZoneConfig(b, true /* inheritDefaultRange */)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return zc, subzone, nil
+		return zc, nil
 	}
 
 	// `targetID == keys.RootNamespaceID` but that zc config is not found
 	// in `system.zones` table. Return a special, recognizable error!
-	return nil, nil, sqlerrors.ErrNoZoneConfigApplies
+	return nil, sqlerrors.ErrNoZoneConfigApplies
 }
 
 func (dzo *databaseZoneConfigObj) applyZoneConfig(

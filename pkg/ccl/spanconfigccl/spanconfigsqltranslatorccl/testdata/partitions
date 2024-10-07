@@ -32,7 +32,13 @@ translate database=db table=person
 
 exec-sql
 ALTER PARTITION default OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION australia OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER PARTITION north_america OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 3;
 ----
 
@@ -52,8 +58,17 @@ translate database=db table=person
 
 exec-sql
 ALTER PARTITION old_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+
+exec-sql
 ALTER PARTITION yung_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 5;
+----
+
+exec-sql
 ALTER PARTITION old_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 6;
+----
+
+exec-sql
 ALTER PARTITION yung_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 7;
 ----
 
@@ -87,8 +102,17 @@ CREATE TABLE db.list_default_then_range (
             PARTITION P2N1N2 VALUES FROM (10) TO (maxvalue)
         )
 );
+----
+
+exec-sql
 ALTER PARTITION P1N1 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+
+exec-sql
 ALTER PARTITION P1N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 5;
+----
+
+exec-sql
 ALTER PARTITION P2N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 6;
 ----
 
@@ -112,7 +136,13 @@ translate database=db table=list_multi_column_partitions
 
 exec-sql
 ALTER TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 3;
+----
+
+exec-sql
 ALTER PARTITION default OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION six_and_seven OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 2;
 ----
 
@@ -130,9 +160,21 @@ CREATE TABLE db.partition_by_list(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i
   PARTITION four_and_three  VALUES IN (4, 3),
   PARTITION everything_else VALUES IN (6, default)
 );
+----
+
+exec-sql
 ALTER TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER PARTITION four_and_three OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 3;
+----
+
+exec-sql
 ALTER PARTITION everything_else OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 4;
 ----
 
@@ -153,8 +195,17 @@ exec-sql
 CREATE TABLE db.test(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
   PARTITION one_and_five    VALUES IN (1, 5)
 );
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.test CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER INDEX db.test@test_pkey CONFIGURE ZONE USING num_replicas = 4;
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.test CONFIGURE ZONE USING gc.ttlseconds = 3;
 ----
 
