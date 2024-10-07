@@ -145,7 +145,7 @@ func MakeDiskRowContainer(
 	for i, orderInfo := range ordering {
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 		switch t := typs[orderInfo.ColIdx]; t.Family() {
-		case types.TSQueryFamily, types.TSVectorFamily:
+		case types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
 				92165, "", "can't order by column type %s", t.SQLStringForError(),
 			)
