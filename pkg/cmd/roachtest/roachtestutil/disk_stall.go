@@ -23,10 +23,23 @@ type DiskStaller interface {
 	Setup(ctx context.Context)
 	Cleanup(ctx context.Context)
 	Stall(ctx context.Context, nodes option.NodeListOption)
+	Slow(ctx context.Context, nodes option.NodeListOption, bytesPerSecond int)
 	Unstall(ctx context.Context, nodes option.NodeListOption)
 	DataDir() string
 	LogDir() string
 }
+
+type NoopDiskStaller struct{}
+
+var _ DiskStaller = NoopDiskStaller{}
+
+func (n NoopDiskStaller) Cleanup(ctx context.Context)                            {}
+func (n NoopDiskStaller) DataDir() string                                        { return "{store-dir}" }
+func (n NoopDiskStaller) LogDir() string                                         { return "logs" }
+func (n NoopDiskStaller) Setup(ctx context.Context)                              {}
+func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int) {}
+func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)       {}
+func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)     {}
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -68,15 +81,20 @@ func (s *cgroupDiskStaller) Setup(ctx context.Context) {
 func (s *cgroupDiskStaller) Cleanup(ctx context.Context) {}
 
 func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
+	// NB: I don't understand why, but attempting to set a bytesPerSecond={0,1}
+	// results in Invalid argument from the io.max cgroupv2 API.
+	s.Slow(ctx, nodes, 4)
+}
+
+func (s *cgroupDiskStaller) Slow(
+	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
+) {
 	// Shuffle the order of read and write stall initiation.
 	rand.Shuffle(len(s.readOrWrite), func(i, j int) {
 		s.readOrWrite[i], s.readOrWrite[j] = s.readOrWrite[j], s.readOrWrite[i]
 	})
 	for _, rw := range s.readOrWrite {
-		// NB: I don't understand why, but attempting to set a
-		// bytesPerSecond={0,1} results in Invalid argument from the io.max
-		// cgroupv2 API.
-		if err := s.setThroughput(ctx, nodes, rw, throughput{limited: true, bytesPerSecond: 4}); err != nil {
+		if err := s.setThroughput(ctx, nodes, rw, throughput{limited: true, bytesPerSecond: bytesPerSecond}); err != nil {
 			s.f.Fatal(err)
 		}
 	}
@@ -223,6 +241,13 @@ func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
 
 func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
 	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup suspend --noflush --nolockfs data1`)
+}
+
+func (s *dmsetupDiskStaller) Slow(
+	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
+) {
+	// TODO(baptist): Consider https://github.com/kawamuray/ddi.
+	s.f.Fatal("Slow is not supported for dmsetupDiskStaller")
 }
 
 func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
