@@ -9,6 +9,7 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
+<<<<<<< HEAD
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
   kvflowcontrol.tokens.eval.elastic.returned                        | 3.0 MiB  
@@ -32,6 +33,49 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.regular.returned                        | 3.0 MiB  
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+||||||| parent of 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted     | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned     | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B      
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted     | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned     | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B      
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted     | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned     | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B      
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted     | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B      
+  kvflowcontrol.tokens.send.regular.returned     | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B      
+=======
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.regular.returned     | 0 B     
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.send.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.send.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.send.regular.returned     | 0 B     
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B     
+>>>>>>> 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
 
 
 -- (Splitting range.)
@@ -46,6 +90,7 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
+<<<<<<< HEAD
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 18 MiB  
   kvflowcontrol.tokens.eval.elastic.returned                        | 18 MiB  
@@ -69,6 +114,49 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.regular.returned                        | 18 MiB  
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B     
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B     
+||||||| parent of 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted     | 18 MiB  
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.elastic.returned     | 18 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted     | 18 MiB  
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.regular.returned     | 18 MiB  
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted     | 18 MiB  
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.send.elastic.returned     | 18 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.send.regular.deducted     | 18 MiB  
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.send.regular.returned     | 18 MiB  
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B     
+=======
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.regular.returned     | 0 B     
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.send.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.send.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.send.regular.returned     | 0 B     
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B     
+>>>>>>> 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
 
 
 -- Observe the newly split off replica, with its own three streams.
@@ -94,6 +182,7 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
+<<<<<<< HEAD
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 30 MiB  
   kvflowcontrol.tokens.eval.elastic.returned                        | 30 MiB  
@@ -117,6 +206,49 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.regular.returned                        | 30 MiB  
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B     
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B     
+||||||| parent of 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted     | 30 MiB  
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.elastic.returned     | 30 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted     | 30 MiB  
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.regular.returned     | 30 MiB  
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted     | 30 MiB  
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.send.elastic.returned     | 30 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.send.regular.deducted     | 30 MiB  
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.send.regular.returned     | 30 MiB  
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B     
+=======
+  kvflowcontrol.tokens.eval.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.eval.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.eval.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.eval.regular.returned     | 0 B     
+  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.elastic.available    | 24 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted     | 0 B     
+  kvflowcontrol.tokens.send.elastic.disconnected | 0 B     
+  kvflowcontrol.tokens.send.elastic.returned     | 0 B     
+  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B     
+  kvflowcontrol.tokens.send.regular.available    | 48 MiB  
+  kvflowcontrol.tokens.send.regular.deducted     | 0 B     
+  kvflowcontrol.tokens.send.regular.disconnected | 0 B     
+  kvflowcontrol.tokens.send.regular.returned     | 0 B     
+  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B     
+>>>>>>> 204b7fb0dcd (kvserver: add rac2 pull mode integration test variations)
 
 
 -- Observe only the merged replica with its own three streams.
