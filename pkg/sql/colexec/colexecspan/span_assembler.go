@@ -48,6 +48,10 @@ func NewColSpanAssembler(
 		}
 	}
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, fetchSpec.TableID, fetchSpec.IndexID)
+	if ext := fetchSpec.External; ext != nil {
+		codec = keys.MakeSQLCodec(ext.TenantID)
+		keyPrefix = rowenc.MakeIndexKeyPrefix(codec, ext.TableID, fetchSpec.IndexID)
+	}
 	sa.scratchKey = append(sa.scratchKey[:0], keyPrefix...)
 	sa.prefixLength = len(keyPrefix)
 	sa.allocator = allocator
