@@ -68,6 +68,8 @@ export const mapStateToProps = (
     };
   });
 
+  console.log(stats?.data);
+
   return {
     databaseName: database,
     tableName: table,
@@ -90,6 +92,7 @@ export const mapStateToProps = (
       ),
       lastReset: util.TimestampToMoment(stats?.data?.last_reset, util.minDate),
       indexRecommendations,
+      databaseID: stats?.data?.database_id,
     },
     breadcrumbItems: null,
   };
