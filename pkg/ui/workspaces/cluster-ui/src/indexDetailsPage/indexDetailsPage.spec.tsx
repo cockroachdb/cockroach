@@ -35,6 +35,7 @@ describe("IndexDetailsPage", () => {
       indexID: undefined,
       lastRead: util.minDate,
       lastReset: util.minDate,
+      databaseID: 1,
     },
     breadcrumbItems: null,
     isTenant: false,
