@@ -76,6 +76,7 @@ type AggMetrics struct {
 	LaggingRanges               *aggmetric.AggGauge
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
+	SinkErrors                  *aggmetric.AggCounter
 
 	Timers *timers.Timers
 
@@ -152,6 +153,7 @@ type sliMetrics struct {
 	LaggingRanges               *aggmetric.Gauge
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
+	SinkErrors                  *aggmetric.Counter
 
 	Timers *timers.ScopedTimers
 
@@ -851,6 +853,12 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaSinkErrors := metric.Metadata{
+		Name:        "changefeed.sink_errors",
+		Help:        "Number of changefeed errors caused by the sink",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -937,6 +945,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		LaggingRanges:             b.Gauge(metaLaggingRanges),
 		TotalRanges:               b.Gauge(metaTotalRanges),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
+		SinkErrors:                b.Counter(metaSinkErrors),
 		Timers:                    timers.New(histogramWindow),
 		NetMetrics:                lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
@@ -1004,6 +1013,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		TotalRanges:                 a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
+		SinkErrors:                  a.SinkErrors.AddChild(scope),
 
 		Timers: a.Timers.GetOrCreateScopedTimers(scope),
 
