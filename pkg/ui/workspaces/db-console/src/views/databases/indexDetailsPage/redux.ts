@@ -90,6 +90,7 @@ export const mapStateToProps = (
       ),
       lastReset: util.TimestampToMoment(stats?.data?.last_reset, util.minDate),
       indexRecommendations,
+      databaseID: stats?.data?.database_id,
     },
     breadcrumbItems: null,
   };

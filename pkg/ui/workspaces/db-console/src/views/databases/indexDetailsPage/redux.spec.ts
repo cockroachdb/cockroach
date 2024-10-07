@@ -153,6 +153,7 @@ describe("Index Details Page", function () {
           indexID: undefined,
           lastRead: util.minDate,
           lastReset: util.minDate,
+          databaseID: undefined,
         },
         breadcrumbItems: null,
       },
@@ -185,6 +186,7 @@ describe("Index Details Page", function () {
         },
       ],
       last_reset: util.stringToTimestamp("2021-11-12T20:18:22.167627Z"),
+      database_id: 10,
     });
 
     await driver.refreshIndexStats();
@@ -213,6 +215,7 @@ describe("Index Details Page", function () {
           util.stringToTimestamp("2021-11-12T20:18:22.167627Z"),
         ),
         indexRecommendations: [],
+        databaseID: 10,
       },
       breadcrumbItems: null,
     });

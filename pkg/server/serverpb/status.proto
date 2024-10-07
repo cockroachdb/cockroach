@@ -2032,6 +2032,9 @@ message TableIndexStatsResponse {
   // Timestamp of the latest reset index usage statistics request.
   google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
   repeated cockroach.sql.IndexRecommendation index_recommendations = 3;
+
+  // database_id is the ID of the database that contains the table.
+  int32 database_id  = 4 [(gogoproto.customname) = "DatabaseID"];
 }
 
 // Request object for issuing a index usage stats reset request.

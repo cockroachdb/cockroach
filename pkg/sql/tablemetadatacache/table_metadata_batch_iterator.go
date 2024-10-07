@@ -80,8 +80,8 @@ func newTableMetadataBatchIterator(
 		ie:        ie,
 		batchRows: make([]tableMetadataIterRow, 0, tableBatchSize),
 		lastID: paginationKey{
-			parentID: 0,
-			schemaID: 0,
+			parentID: 1,
+			schemaID: 1,
 			name:     "",
 		},
 		queryStatement: newBatchQueryStatement(aostClause),
@@ -200,7 +200,7 @@ WITH tables AS (SELECT n.id,
                 FROM system.namespace n
                 JOIN system.descriptor d ON n.id = d.id
 								%[1]s
-                WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3)
+                WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) AND n."parentSchemaID" != 0
                 ORDER BY (n."parentID", n."parentSchemaID", n.name)
                 LIMIT $4),
 span_array AS (SELECT array_agg((span[1], span[2])) as all_spans FROM tables),
