@@ -1899,6 +1899,10 @@ func (os *optTableStat) IsAuto() bool {
 	return os.stat.IsAuto()
 }
 
+func (os *optTableStat) Name() string {
+	return os.stat.Name
+}
+
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a
 // reference to the table wrapper.
 type optFamily struct {
