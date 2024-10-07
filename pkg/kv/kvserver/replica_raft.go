@@ -1026,6 +1026,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	// Grab the known leaseholder before applying to the state machine.
+	startingLeaseholderID := r.shMu.state.Lease.Replica.ReplicaID
 	refreshReason := noReason
 	if hasMsg(msgStorageAppend) {
 		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
@@ -1290,6 +1292,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Unlock()
 	if err != nil {
 		return stats, errors.Wrap(err, "during advance")
+	}
+
+	if leaseholderID := r.shMu.state.Lease.Replica.ReplicaID; leaderID == r.replicaID &&
+		leaseholderID != startingLeaseholderID &&
+		leaseholderID != r.replicaID {
+		// Leader is this replica and leaseholder changed and is some other replica.
+		// RACv2 needs to know promptly about this in case it needs to force-flush the
+		// send-queue for the new leaseholder.
+		r.store.scheduler.EnqueueRaftReady(r.RangeID)
 	}
 
 	// NB: All early returns other than the one due to not having a ready
