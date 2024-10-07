@@ -37,7 +37,7 @@ targets:
         args:
           - $CLUSTER
           - cockroach
-      - script: "pkg/cmd/drtprod/configs/setup_datadog_cluster"
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
           - $CLUSTER
@@ -86,4 +86,7 @@ targets:
         args:
           - $WORKLOAD_CLUSTER
           - workload
-      - script: "pkg/cmd/drtprod/configs/setup_datadog_workload"
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        flags:
+          warehouses: 12000
