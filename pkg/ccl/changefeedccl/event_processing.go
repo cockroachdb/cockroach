@@ -450,6 +450,10 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		)
 	})
 	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Warningf(ctx, `sink failed to emit row: %v`, err)
+			c.metrics.SinkErrors.Inc(1)
+		}
 		return err
 	}
 	if log.V(3) {
