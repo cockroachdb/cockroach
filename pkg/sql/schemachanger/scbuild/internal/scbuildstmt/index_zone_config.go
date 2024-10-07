@@ -43,7 +43,7 @@ func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element 
 		subzones = parentZoneConfig.Subzones
 	}
 
-	ss, err := generateSubzoneSpans(b, izo.tableID, subzones, izo.indexID, "")
+	ss, err := generateSubzoneSpans(b, izo.tableID, subzones)
 	if err != nil {
 		panic(err)
 	}
@@ -67,14 +67,23 @@ func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.Zon
 		return b.QueryByID(id).FilterIndexZoneConfig()
 	}, sameIdx)
 
+	// Since we will be performing a subzone config update, we need to retrieve
+	// its parent's (table's) zone config for later use. This is because we need
+	// context of any existing subzone spans to generate an accurate subzone span
+	// for this subzone.
+	_ = izo.tableZoneConfigObj.retrievePartialZoneConfig(b)
+
+	var partialZone *zonepb.ZoneConfig
 	if mostRecentElem != nil {
-		idxZc := zonepb.NewZoneConfig()
-		idxZc.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
-		izo.zoneConfig = idxZc
+		// Construct a zone config placeholder with the correct subzone. This
+		// will be what we return.
+		partialZone = zonepb.NewZoneConfig()
+		partialZone.DeleteTableConfig()
+		partialZone.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
+		izo.indexSubzone = &mostRecentElem.Subzone
 		izo.seqNum = mostRecentElem.SeqNum
 	}
-
-	return izo.zoneConfig
+	return partialZone
 }
 
 func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
@@ -86,7 +95,11 @@ func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
 	if getInheritedDefault {
 		zc, err = izo.getInheritedDefaultZoneConfig(b)
 	} else {
-		zc, placeholder, err = izo.getZoneConfig(b, false /* inheritDefaultRange */)
+		zc, err = izo.tableZoneConfigObj.getZoneConfig(b, false /* inheritDefaultRange */)
+		if err != nil {
+			return nil, nil, err
+		}
+		placeholder, err = izo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -144,6 +157,20 @@ func (izo *indexZoneConfigObj) getInheritedFieldsForPartialSubzone(
 	// Since we have just an index, we should copy from the inherited
 	// zone's fields (whether that was the table or database).
 	return &zoneInheritedFields, nil
+}
+
+func (izo *indexZoneConfigObj) getZoneConfig(
+	b BuildCtx, inheritDefaultRange bool,
+) (*zonepb.ZoneConfig, error) {
+	_, subzones, err := lookUpSystemZonesTable(b, izo, inheritDefaultRange, true /* isSubzoneConfig */)
+	if err != nil {
+		return nil, err
+	}
+	subzoneConfig := zonepb.NewZoneConfig()
+	subzoneConfig.DeleteTableConfig()
+	subzoneConfig.Subzones = subzones
+
+	return subzoneConfig, nil
 }
 
 func (izo *indexZoneConfigObj) applyZoneConfig(

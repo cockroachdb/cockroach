@@ -108,11 +108,7 @@ type zoneConfigRetriever interface {
 	//     (if our target is a database).
 	//   - Otherwise, we will just return the found zone config
 	//     (so `subzoneId` and `subzone` will be nil).
-	getZoneConfig(b BuildCtx, inheritDefaultRange bool) (
-		*zonepb.ZoneConfig,
-		*zonepb.ZoneConfig,
-		error,
-	)
+	getZoneConfig(b BuildCtx, inheritDefaultRange bool) (*zonepb.ZoneConfig, error)
 }
 
 type zoneConfigMutator interface {
@@ -399,7 +395,7 @@ func fillIndexAndPartitionFromZoneSpecifier(
 // table by `targetID`.
 // If `targetID` is not found, a nil `zone` is returned.
 func lookUpSystemZonesTable(
-	b BuildCtx, objType zoneConfigObject, inheritDefaultRange bool,
+	b BuildCtx, objType zoneConfigObject, inheritDefaultRange bool, isSubzoneConfig bool,
 ) (zone *zonepb.ZoneConfig, subzones []zonepb.Subzone, err error) {
 	// Get the zone config of the DEFAULT RANGE
 	if inheritDefaultRange {
@@ -411,9 +407,9 @@ func lookUpSystemZonesTable(
 	} else {
 		// It's a descriptor-backed target (i.e. a database ID or a table ID)
 		zone = objType.retrievePartialZoneConfig(b)
-		// If we are dealing with Index subzones, clear out the zone config and
+		// If we are dealing with index subzones, clear out the zone config and
 		// just use the subzones.
-		if _, ok := objType.(*indexZoneConfigObj); ok {
+		if isSubzoneConfig {
 			if zone != nil && zone.Subzones != nil {
 				subzones = zone.Subzones
 				zone = nil
@@ -675,11 +671,7 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
 func generateSubzoneSpans(
-	b BuildCtx,
-	tableID catid.DescID,
-	subzones []zonepb.Subzone,
-	indexID catid.IndexID,
-	partitionName string,
+	b BuildCtx, tableID catid.DescID, subzones []zonepb.Subzone,
 ) ([]zonepb.SubzoneSpan, error) {
 	if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
 		"replication zones on indexes or partitions"); err != nil {
