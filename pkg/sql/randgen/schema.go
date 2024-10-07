@@ -101,14 +101,23 @@ func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Stateme
 	}
 }
 
+type TableOpt uint8
+
+const (
+	TableOptNone                 TableOpt = 0
+	TableOptPrimaryIndexRequired TableOpt = 1 << (iota - 1)
+	TableOptSkipColumnFamilyMutations
+	TableOptMultiRegion
+	TableOptAllowPartiallyVisibleIndex
+)
+
+func (t TableOpt) IsSet(o TableOpt) bool {
+	return t&o == o
+}
+
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
-	ctx context.Context,
-	rng *rand.Rand,
-	prefix string,
-	num int,
-	isMultiRegion bool,
-	mutators ...Mutator,
+	ctx context.Context, rng *rand.Rand, prefix string, num int, opt TableOpt, mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -117,7 +126,7 @@ func RandCreateTables(
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
-		t := RandCreateTable(ctx, rng, prefix, i+1, isMultiRegion)
+		t := RandCreateTable(ctx, rng, prefix, i+1, opt)
 		tables[i] = t
 	}
 
@@ -130,11 +139,10 @@ func RandCreateTables(
 
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(
-	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
+	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
 	return RandCreateTableWithColumnIndexNumberGenerator(
-		ctx, rng, prefix, tableIdx, isMultiRegion,
-		true /* allowPartiallyVisibleIndex */, nil, /* generateColumnIndexNumber */
+		ctx, rng, prefix, tableIdx, opt, nil, /* generateColumnIndexNumber */
 	)
 }
 
@@ -151,45 +159,22 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	rng *rand.Rand,
 	prefix string,
 	tableIdx int,
-	isMultiRegion bool,
-	allowPartiallyVisibleIndex bool,
+	opt TableOpt,
 	generateColumnIndexSuffix func() string,
-	opts ...TableGenerationOption,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
 	name := g.GenerateOne(strconv.Itoa(tableIdx))
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix, opts...,
+		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix,
 	)
 }
 
 func RandCreateTableWithName(
-	ctx context.Context,
-	rng *rand.Rand,
-	tableName string,
-	tableIdx int,
-	isMultiRegion bool,
-	opts ...TableGenerationOption,
+	ctx context.Context, rng *rand.Rand, tableName string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, tableName, tableIdx, isMultiRegion,
-		true /* allowPartiallyVisibleIndex */, nil /* generateColumnIndexSuffix */, opts...,
+		ctx, rng, tableName, tableIdx, opt, nil, /* generateColumnIndexSuffix */
 	)
-}
-
-type tableGenerationOptions struct {
-	primaryIndexRequired      bool
-	skipColumnFamilyMutations bool
-}
-
-type TableGenerationOption func(*tableGenerationOptions)
-
-func SkipColumnFamilyMutation() TableGenerationOption {
-	return func(o *tableGenerationOptions) { o.skipColumnFamilyMutations = true }
-}
-
-func RequirePrimaryIndex() TableGenerationOption {
-	return func(o *tableGenerationOptions) { o.primaryIndexRequired = true }
 }
 
 func randCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -197,16 +182,9 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	rng *rand.Rand,
 	tableName string,
 	tableIdx int,
-	isMultiRegion bool,
-	allowPartiallyVisibleIndex bool,
+	opt TableOpt,
 	generateColumnIndexSuffix func() string,
-	opts ...TableGenerationOption,
 ) *tree.CreateTable {
-	options := &tableGenerationOptions{}
-	for _, o := range opts {
-		o(options)
-	}
-
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -241,9 +219,9 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
-	if options.primaryIndexRequired || (rng.Intn(8) != 0) {
+	if opt.IsSet(TableOptPrimaryIndexRequired) || (rng.Intn(8) != 0) {
 		for {
-			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, opt)
 			canUseIndex := ok && !indexDef.Inverted
 			if canUseIndex {
 				// Although not necessary for Cockroach to function correctly,
@@ -263,7 +241,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 					IndexTableDef: indexDef,
 				})
 			}
-			if canUseIndex || !options.primaryIndexRequired {
+			if canUseIndex || !opt.IsSet(TableOptPrimaryIndexRequired) {
 				break
 			}
 		}
@@ -272,7 +250,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
+		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, false /* isPrimaryIndex */, opt)
 		if !ok {
 			continue
 		}
@@ -305,7 +283,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 			indexDef.Invisibility.Value = 0.0
 			if notvisible := rng.Intn(6) == 0; notvisible {
 				indexDef.Invisibility.Value = 1.0
-				if allowPartiallyVisibleIndex {
+				if opt.IsSet(TableOptAllowPartiallyVisibleIndex) {
 					if rng.Intn(2) == 0 {
 						indexDef.Invisibility.Value = 1 - rng.Float64()
 						indexDef.Invisibility.FloatProvided = true
@@ -323,7 +301,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	}
 
 	// Create some random column families.
-	if (!options.skipColumnFamilyMutations) && rng.Intn(2) == 0 {
+	if !opt.IsSet(TableOptSkipColumnFamilyMutations) && rng.Intn(2) == 0 {
 		ColumnFamilyMutator(rng, ret)
 	}
 
@@ -527,7 +505,7 @@ func randIndexTableDefFromCols(
 	columnTableDefs []*tree.ColumnTableDef,
 	tableName string,
 	isPrimaryIndex bool,
-	isMultiRegion bool,
+	opt TableOpt,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -658,7 +636,7 @@ func randIndexTableDefFromCols(
 	// not support partitioning.
 	// TODO(harding): Allow partitioning the primary index. This will require
 	// massaging the syntax.
-	if !isMultiRegion && !isPrimaryIndex && !partitioningNotSupported && len(prefix) > 0 && rng.Intn(10) == 0 {
+	if !opt.IsSet(TableOptMultiRegion) && !isPrimaryIndex && !partitioningNotSupported && len(prefix) > 0 && rng.Intn(10) == 0 {
 		def.PartitionByIndex = &tree.PartitionByIndex{PartitionBy: &tree.PartitionBy{}}
 		prefixLen := 1 + rng.Intn(len(prefix))
 		def.PartitionByIndex.Fields = prefix[:prefixLen]
