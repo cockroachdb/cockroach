@@ -6,10 +6,12 @@
 import useSWRImmutable from "swr/immutable";
 
 import { fetchDataJSON } from "../fetchData";
+import { ResultsWithPagination, PaginationRequest } from "../types";
+
 import {
-  APIV2ResponseWithPaginationState,
-  SimplePaginationState,
-} from "../types";
+  convertServerPaginationToClientPagination,
+  DatabaseGrantsResponseServer,
+} from "./serverTypes";
 
 export type DatabaseGrant = {
   grantee: string;
@@ -25,12 +27,8 @@ type DatabaseGrantsRequest = {
   dbId: number;
   sortBy?: GrantsSortOptions;
   sortOrder?: "asc" | "desc";
-  pagination?: SimplePaginationState;
+  pagination?: PaginationRequest;
 };
-
-export type DatabaseGrantsResponse = APIV2ResponseWithPaginationState<
-  DatabaseGrant[]
->;
 
 const createDbGrantsPath = (req: DatabaseGrantsRequest): string => {
   const { dbId, pagination, sortBy, sortOrder } = req;
@@ -50,11 +48,23 @@ const createDbGrantsPath = (req: DatabaseGrantsRequest): string => {
   return `api/v2/grants/databases/${dbId}/?` + urlParams.toString();
 };
 
+type DatabaseGrantsResponse = ResultsWithPagination<DatabaseGrant[]>;
+
 const fetchDbGrants = (
   req: DatabaseGrantsRequest,
 ): Promise<DatabaseGrantsResponse> => {
   const path = createDbGrantsPath(req);
-  return fetchDataJSON(path);
+  return fetchDataJSON<DatabaseGrantsResponseServer, null>(path).then(resp => {
+    return {
+      results: resp.results.map(r => ({
+        grantee: r.grantee,
+        privilege: r.privilege,
+      })),
+      pagination: convertServerPaginationToClientPagination(
+        resp.pagination_info,
+      ),
+    };
+  });
 };
 
 export const useDatabaseGrantsImmutable = (req: DatabaseGrantsRequest) => {
@@ -65,7 +75,6 @@ export const useDatabaseGrantsImmutable = (req: DatabaseGrantsRequest) => {
 
   return {
     databaseGrants: data?.results,
-    pagination: data?.pagination_info,
     isLoading,
     error: error,
   };
@@ -75,12 +84,10 @@ type TableGrantsRequest = {
   tableId: number;
   sortBy?: GrantsSortOptions;
   sortOrder?: "asc" | "desc";
-  pagination?: SimplePaginationState;
+  pagination?: PaginationRequest;
 };
 
-export type TableGrantsResponse = APIV2ResponseWithPaginationState<
-  DatabaseGrant[]
->;
+export type TableGrantsResponse = ResultsWithPagination<DatabaseGrant[]>;
 
 const createTableGrantsPath = (req: TableGrantsRequest): string => {
   const { tableId, pagination, sortBy, sortOrder } = req;
@@ -100,11 +107,19 @@ const createTableGrantsPath = (req: TableGrantsRequest): string => {
   return `api/v2/grants/tables/${tableId}/?` + urlParams.toString();
 };
 
-const fetchTableGrants = (
+const fetchTableGrants = async (
   req: TableGrantsRequest,
 ): Promise<TableGrantsResponse> => {
   const path = createTableGrantsPath(req);
-  return fetchDataJSON(path);
+  const resp = await fetchDataJSON<DatabaseGrantsResponseServer, null>(path);
+  return {
+    results: resp.results,
+    pagination: {
+      pageSize: resp.pagination_info?.page_size ?? 0,
+      pageNum: resp.pagination_info?.page_num ?? 0,
+      totalResults: resp.pagination_info?.total_results ?? 0,
+    },
+  };
 };
 
 export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
@@ -115,7 +130,6 @@ export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
 
   return {
     tableGrants: data?.results,
-    pagination: data?.pagination_info,
     isLoading,
     error: error,
   };

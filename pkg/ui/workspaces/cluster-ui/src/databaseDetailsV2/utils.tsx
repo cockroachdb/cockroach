@@ -3,14 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import moment from "moment-timezone";
-
 import { TableMetadata } from "src/api/databases/getTableMetadataApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 
 import { TableRow } from "./types";
 
-export const rawTableMetadataToRows = (
+export const tableMetadataToRows = (
   tables: TableMetadata[],
   nodesInfo: {
     nodeIDToRegion: Record<NodeID, string>;
@@ -21,7 +19,7 @@ export const rawTableMetadataToRows = (
   return tables.map(table => {
     const nodesByRegion: Record<string, NodeID[]> = {};
     if (!nodesInfo.isLoading) {
-      table.store_ids?.forEach(storeID => {
+      table.storeIds?.forEach(storeID => {
         const nodeID = nodesInfo.storeIDToNodeID[storeID as StoreID];
         const region = nodesInfo.nodeIDToRegion[nodeID];
         if (!nodesByRegion[region]) {
@@ -31,21 +29,10 @@ export const rawTableMetadataToRows = (
       });
     }
     return {
-      name: table.table_name,
-      dbName: table.db_name,
-      tableID: table.table_id,
-      dbID: table.db_id,
-      replicationSizeBytes: table.replication_size_bytes,
-      rangeCount: table.range_count,
-      columnCount: table.column_count,
+      ...table,
       nodesByRegion: nodesByRegion,
-      liveDataPercentage: table.percent_live_data,
-      liveDataBytes: table.total_live_data_bytes,
-      totalDataBytes: table.total_data_bytes,
-      statsLastUpdated: moment.utc(table.stats_last_updated),
-      autoStatsEnabled: table.auto_stats_enabled,
-      key: table.table_id.toString(),
-      qualifiedNameWithSchema: `${table.schema_name}.${table.table_name}`,
+      key: table.tableId.toString(),
+      qualifiedNameWithSchema: `${table.schemaName}.${table.tableName}`,
     };
   });
 };

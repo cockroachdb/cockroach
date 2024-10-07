@@ -34,15 +34,15 @@ export const TableDetailsPageV2 = () => {
 
   const partiallyQualifiedTableName = !tableNotFound
     ? data
-      ? data.metadata.schema_name + "." + data.metadata.table_name
+      ? data.metadata.schemaName + "." + data.metadata.tableName
       : ""
     : "Table not found";
 
   const breadCrumbItems = [
     { link: `/databases`, name: "Databases" },
     {
-      link: `/databases/${data?.metadata.db_id}`,
-      name: data?.metadata.db_name,
+      link: `/databases/${data?.metadata.dbId}`,
+      name: data?.metadata.dbName,
     },
     {
       link: null,
@@ -66,9 +66,9 @@ export const TableDetailsPageV2 = () => {
       label: "Indexes",
       children: (
         <TableIndexesView
-          dbName={data?.metadata.db_name}
-          schemaName={data?.metadata.schema_name}
-          tableName={data?.metadata.table_name}
+          dbName={data?.metadata.dbName}
+          schemaName={data?.metadata.schemaName}
+          tableName={data?.metadata.tableName}
         />
       ),
     },
