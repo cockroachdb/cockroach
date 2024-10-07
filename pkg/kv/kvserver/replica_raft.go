@@ -833,10 +833,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		level := kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 			ctx, r.store.ClusterSettings(), r.store.TestingKnobs().FlowControlTestingKnobs)
 		if level > r.raftMu.flowControlLevel {
-			if r.raftMu.flowControlLevel == kvflowcontrol.V2NotEnabledWhenLeader {
-				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
+			var basicState replica_rac2.RaftNodeBasicState
+			func() {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				basicState = replica_rac2.MakeRaftNodeBasicStateLocked(
+					r.mu.internalRaftGroup, r.shMu.state.Lease.Replica.ReplicaID)
+				if r.raftMu.flowControlLevel == kvflowcontrol.V2NotEnabledWhenLeader {
 					// This will close all connected streams and consequently all
 					// requests waiting on v1 kvflowcontrol.ReplicationAdmissionHandles
 					// will return.
@@ -844,10 +847,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					// Replace with a noop integration since want no code to execute on
 					// various calls.
 					r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
-				}()
-			}
+				}
+			}()
 			r.raftMu.flowControlLevel = level
-			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(ctx, level)
+			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(ctx, level, basicState)
 		}
 	}
 
@@ -869,6 +872,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	rac2ModeToUse := r.replicationAdmissionControlModeToUse(ctx)
+	// Replication AC v2 state that is initialized while holding Replica.mu.
+	replicaStateInfoMap := r.raftMu.replicaStateScratchForFlowControl
+	var raftNodeBasicState replica_rac2.RaftNodeBasicState
 	var logSnapshot raft.LogSnapshot
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
@@ -923,6 +929,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if rac2ModeForReady == rac2.MsgAppPull {
 			logSnapshot = raftGroup.LogSnapshot()
 		}
+		raftNodeBasicState = replica_rac2.MakeRaftNodeBasicStateLocked(
+			raftGroup, r.shMu.state.Lease.Replica.ReplicaID)
+		replica_rac2.MakeReplicaStateInfos(raftGroup, replicaStateInfoMap)
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
 		// Ready, which can happen if the proposals got dropped (raft does this
@@ -952,8 +961,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
 		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs,
 		replica_rac2.RaftLogSnapshot(logSnapshot),
-		r.raftMu.msgAppScratchForFlowControl)
-	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftEvent)
+		r.raftMu.msgAppScratchForFlowControl, replicaStateInfoMap)
+	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftNodeBasicState, raftEvent)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
 		// Consider the case when our quota is of size 1 and two out of three

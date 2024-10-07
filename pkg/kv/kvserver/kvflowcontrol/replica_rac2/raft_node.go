@@ -13,6 +13,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+// MakeRaftNodeBasicStateLocked makes a RaftNodeBasicState given a RawNode and
+// current known leaseholder. Replica.mu must be held, at least for read.
+func MakeRaftNodeBasicStateLocked(
+	rn *raft.RawNode, leaseholderID roachpb.ReplicaID,
+) RaftNodeBasicState {
+	return RaftNodeBasicState{
+		Term:              rn.Term(),
+		Leader:            roachpb.ReplicaID(rn.Lead()),
+		NextUnstableIndex: rn.NextUnstableIndex(),
+		Leaseholder:       leaseholderID,
+	}
+}
+
+// MakeReplicaStateInfos populates infoMap using a RawNode. Replica.mu must be
+// held, at least for read.
+func MakeReplicaStateInfos(rn *raft.RawNode, infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo) {
+	clear(infoMap)
+	rn.WithProgress(func(peerID raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
+		infoMap[roachpb.ReplicaID(peerID)] = rac2.ReplicaStateInfo{
+			Match: progress.Match,
+			Next:  progress.Next,
+			State: progress.State,
+		}
+	})
+}
+
 type raftNodeForRACv2 struct {
 	*raft.RawNode
 	r ReplicaForRaftNode
@@ -25,37 +51,10 @@ type ReplicaForRaftNode interface {
 	MuUnlock()
 }
 
-// NewRaftNode creates a RaftNode implementation from the given RawNode.
-func NewRaftNode(rn *raft.RawNode, r ReplicaForRaftNode) RaftNode {
+// NewRaftNode creates a rac2.RaftInterface implementation from the given
+// RawNode.
+func NewRaftNode(rn *raft.RawNode, r ReplicaForRaftNode) rac2.RaftInterface {
 	return raftNodeForRACv2{RawNode: rn, r: r}
-}
-
-func (rn raftNodeForRACv2) TermLocked() uint64 {
-	return rn.Term()
-}
-
-func (rn raftNodeForRACv2) LeaderLocked() roachpb.ReplicaID {
-	return roachpb.ReplicaID(rn.Lead())
-}
-
-func (rn raftNodeForRACv2) LogMarkLocked() rac2.LogMark {
-	return rn.LogMark()
-}
-
-func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
-	return rn.NextUnstableIndex()
-}
-
-func (rn raftNodeForRACv2) ReplicasStateLocked(
-	infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo,
-) {
-	rn.WithProgress(func(peerID raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
-		infoMap[roachpb.ReplicaID(peerID)] = rac2.ReplicaStateInfo{
-			Match: progress.Match,
-			Next:  progress.Next,
-			State: progress.State,
-		}
-	})
 }
 
 // SendPingRaftMuLocked implements rac2.RaftInterface.
