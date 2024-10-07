@@ -810,6 +810,12 @@ func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
 	if p.leaderNodeID == 0 {
 		return
 	}
+	// NB: just using av.Admitted[:] in kvflowcontrolpb.AdmittedState below
+	// causes av.Admitted to escape to the heap when initially returned from the
+	// admitted() call, which doesn't account for the early returns that can be
+	// common. So we explicitly allocate here.
+	admitted := make([]uint64, raftpb.NumPriorities)
+	copy(admitted, av.Admitted[:])
 	// Piggyback the new admitted vector to the message stream going to the node
 	// containing the leader replica.
 	p.opts.AdmittedPiggybacker.Add(p.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
@@ -819,7 +825,7 @@ func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
 		ToReplicaID:   p.leaderID,
 		Admitted: kvflowcontrolpb.AdmittedState{
 			Term:     av.Term,
-			Admitted: av.Admitted[:],
+			Admitted: admitted,
 		}})
 }
 
