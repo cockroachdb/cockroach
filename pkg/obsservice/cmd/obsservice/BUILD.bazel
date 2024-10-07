@@ -20,7 +20,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_spf13_cobra//:cobra",
-        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//:grpc",
         "@org_golang_x_sys//unix",
     ],
 )
