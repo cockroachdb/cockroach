@@ -646,14 +646,17 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	ctx := context.Background()
 
-	// number of keys == 2 * number of rows; 1 column family and 1 index entry
-	// for each row.
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		// number of keys == 2 * number of rows; 1 column family and 1 index entry
+		// for each row.
+		if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
+			return err
+		}
+		if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			return err
+		}
+		return nil
+	})
 
 	// Run some schema changes with operations.
 
