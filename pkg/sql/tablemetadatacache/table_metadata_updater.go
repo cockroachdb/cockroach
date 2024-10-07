@@ -84,7 +84,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	// upsertQuery is the query used to upsert table metadata rows,
 	// it is reused for each batch to avoid allocations between batches.
 	upsert := newTableMetadataBatchUpsertQuery(tableBatchSize)
-	it := newTableMetadataBatchIterator(u.ie)
+	it := newTableMetadataBatchIterator(u.ie, u.testKnobs.GetAOSTClause())
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
 	if err != nil {
 		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
