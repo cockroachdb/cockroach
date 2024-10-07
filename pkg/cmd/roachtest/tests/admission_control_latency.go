@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -204,6 +205,7 @@ func registerLatencyTests(r registry.Registry) {
 	addMetamorphic(r, addNode{}, 3.0)
 	addMetamorphic(r, decommission{}, 3.0)
 	addMetamorphic(r, backfill{}, 40.0)
+	addMetamorphic(r, &slowDisk{}, math.Inf(1))
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
@@ -212,6 +214,7 @@ func registerLatencyTests(r registry.Registry) {
 	addFull(r, addNode{}, 3.0)
 	addFull(r, decommission{}, 3.0)
 	addFull(r, backfill{}, 40.0)
+	addFull(r, &slowDisk{}, math.Inf(1))
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
@@ -220,11 +223,13 @@ func registerLatencyTests(r registry.Registry) {
 	addDev(r, addNode{}, math.Inf(1))
 	addDev(r, decommission{}, math.Inf(1))
 	addDev(r, backfill{}, math.Inf(1))
+	addDev(r, &slowDisk{}, math.Inf(1))
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
 	// NB: We use low memory to force non-cache disk reads earlier.
-	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low))
+	// TODO(baptist): Allow the non-disk tests to reuse the cluster.
+	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low), spec.ReuseNone())
 }
 
 func (v variations) perturbationName() string {
@@ -355,6 +360,37 @@ func (b backfill) startPerturbation(ctx context.Context, t test.Test, v variatio
 
 // endPerturbation does nothing as the backfill database is already created.
 func (b backfill) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
+}
+
+type slowDisk struct {
+	staller roachtestutil.DiskStaller
+}
+
+var _ perturbation = &slowDisk{}
+
+// startTargetNode implements perturbation.
+func (s *slowDisk) startTargetNode(ctx context.Context, t test.Test, v variations) {
+	v.startNoBackup(ctx, t, v.targetNodes())
+	if v.IsLocal() {
+		s.staller = roachtestutil.NoopDiskStaller{}
+	} else {
+		s.staller = roachtestutil.MakeCgroupDiskStaller(t, v, false /* readsToo */, false /* logsToo */)
+	}
+}
+
+// startPerturbation implements perturbation.
+func (s *slowDisk) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+	// TODO(baptist): Do this more dynamically?
+	s.staller.Slow(ctx, v.targetNodes(), 20_000_000)
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
+}
+
+// endPerturbation implements perturbation.
+func (s *slowDisk) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+	s.staller.Unstall(ctx, v.targetNodes())
 	waitDuration(ctx, v.validationDuration)
 	return v.validationDuration
 }
