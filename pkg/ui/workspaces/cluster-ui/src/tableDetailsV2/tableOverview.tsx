@@ -9,7 +9,7 @@ import moment from "moment-timezone";
 import React from "react";
 
 import { useNodeStatuses } from "src/api";
-import { TableDetailsResponse } from "src/api/databases/getTableMetadataApi";
+import { TableDetails } from "src/api/databases/getTableMetadataApi";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
@@ -18,7 +18,7 @@ import { StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 
 type TableOverviewProps = {
-  tableDetails: TableDetailsResponse;
+  tableDetails: TableDetails;
 };
 
 export const TableOverview: React.FC<TableOverviewProps> = ({
@@ -38,7 +38,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       return "";
     }
     const nodesByRegion: Record<string, number[]> = {};
-    metadata.store_ids.forEach(storeID => {
+    metadata.storeIds.forEach(storeID => {
       const nodeID = storeIDToNodeID[storeID as StoreID];
       const region = nodeIDToRegion[nodeID];
       if (!nodesByRegion[region]) {
@@ -54,35 +54,32 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       .join(", ");
   };
 
-  const percentLiveDataWithPrecision = (
-    metadata.percent_live_data * 100
-  ).toFixed(2);
+  const percentLiveDataWithPrecision = (metadata.percentLiveData * 100).toFixed(
+    2,
+  );
 
-  const formattedErrorText = metadata.last_update_error
-    ? "Update error: " + metadata.last_update_error
+  const formattedErrorText = metadata.lastUpdateError
+    ? "Update error: " + metadata.lastUpdateError
     : "";
 
   return (
     <>
       <PageSection>
-        <SqlBox
-          value={tableDetails.create_statement}
-          size={SqlBoxSize.CUSTOM}
-        />
+        <SqlBox value={tableDetails.createStatement} size={SqlBoxSize.CUSTOM} />
       </PageSection>
       <PageSection>
         <Row justify={"end"}>
           <Col>
             <Tooltip title={formattedErrorText}>
               <Row gutter={8} align={"middle"} justify={"center"}>
-                {metadata.last_update_error && (
+                {metadata.lastUpdateError && (
                   <Icon fill="warning" iconName={"Caution"} />
                 )}
                 <Col>
                   Last updated:{" "}
                   <Timestamp
                     format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-                    time={moment.utc(metadata.last_updated)}
+                    time={moment.utc(metadata.lastUpdated)}
                     fallback={"Never"}
                   />
                 </Col>
@@ -95,9 +92,9 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
             <SummaryCard>
               <SummaryCardItem
                 label="Size"
-                value={Bytes(metadata.replication_size_bytes)}
+                value={Bytes(metadata.replicationSizeBytes)}
               />
-              <SummaryCardItem label="Ranges" value={metadata.range_count} />
+              <SummaryCardItem label="Ranges" value={metadata.rangeCount} />
               <SummaryCardItem
                 label="Regions / Nodes"
                 value={
@@ -116,21 +113,21 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                   <div>
                     <div>{percentLiveDataWithPrecision}% </div>
                     <div>
-                      {Bytes(metadata.total_live_data_bytes)} /{" "}
-                      {Bytes(metadata.total_live_data_bytes)}
+                      {Bytes(metadata.totalLiveDataBytes)} /{" "}
+                      {Bytes(metadata.totalLiveDataBytes)}
                     </div>
                   </div>
                 }
               />
               <SummaryCardItem
                 label="Auto stats collections"
-                value={metadata.auto_stats_enabled ? "Enabled" : "Disabled"}
+                value={metadata.autoStatsEnabled ? "Enabled" : "Disabled"}
               />
               <SummaryCardItem
                 label="Stats last updated"
                 value={
                   <Timestamp
-                    time={moment.utc(metadata.stats_last_updated)}
+                    time={metadata.statsLastUpdated}
                     format={DATE_WITH_SECONDS_FORMAT_24_TZ}
                     fallback={"Never"}
                   />

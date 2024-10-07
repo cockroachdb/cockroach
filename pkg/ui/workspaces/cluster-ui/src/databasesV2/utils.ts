@@ -19,7 +19,7 @@ export const rawDatabaseMetadataToDatabaseRows = (
   return raw.map((db: DatabaseMetadata): DatabaseRow => {
     const nodesByRegion: Record<string, NodeID[]> = {};
     if (!nodesInfo.isLoading) {
-      db.store_ids?.forEach(storeID => {
+      db.storeIds?.forEach(storeID => {
         const nodeID = nodesInfo.storeIDToNodeID[storeID as StoreID];
         const region = nodesInfo.nodeIDToRegion[nodeID];
         if (!nodesByRegion[region]) {
@@ -29,13 +29,13 @@ export const rawDatabaseMetadataToDatabaseRows = (
       });
     }
     return {
-      name: db.db_name,
-      id: db.db_id,
-      tableCount: db.table_count ?? 0,
-      approximateDiskSizeBytes: db.size_bytes ?? 0,
-      rangeCount: db.table_count ?? 0,
+      name: db.dbName,
+      id: db.dbId,
+      tableCount: db.tableCount ?? 0,
+      approximateDiskSizeBytes: db.sizeBytes ?? 0,
+      rangeCount: db.tableCount ?? 0,
       schemaInsightsCount: 0,
-      key: db.db_id.toString(),
+      key: db.dbId.toString(),
       nodesByRegion: {
         isLoading: nodesInfo.isLoading,
         data: nodesByRegion,

@@ -60,7 +60,7 @@ export const DatabaseDetailsPageV2 = () => {
   const dbName =
     error?.status === 404 || !data
       ? "Database Not Found"
-      : data.metadata.db_name;
+      : data.metadata.dbName;
 
   const breadCrumbItems = [
     { name: "Databases", link: DB_PAGE_PATH },
