@@ -125,7 +125,7 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;`)
 
 	// Create the random tables.
-	opt := randgen.TableOptNone
+	opt := randgen.TableOptCrazyNames
 	if isMultiRegion {
 		opt |= randgen.TableOptMultiRegion
 	}
