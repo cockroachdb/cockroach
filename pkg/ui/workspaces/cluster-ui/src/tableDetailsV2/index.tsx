@@ -14,6 +14,7 @@ import { Loading } from "src/loading";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 
 import { TableGrantsView } from "./tableGrantsView";
+import { TableIndexesView } from "./tableIndexesView";
 import { TableOverview } from "./tableOverview";
 
 enum TabKeys {
@@ -60,7 +61,17 @@ export const TableDetailsPageV2 = () => {
       ),
     },
     { key: TabKeys.GRANTS, label: "Grants", children: <TableGrantsView /> },
-    { key: TabKeys.INDEXES, label: "Indexes" },
+    {
+      key: TabKeys.INDEXES,
+      label: "Indexes",
+      children: (
+        <TableIndexesView
+          dbName={data?.metadata.db_name}
+          schemaName={data?.metadata.schema_name}
+          tableName={data?.metadata.table_name}
+        />
+      ),
+    },
   ];
 
   return (

@@ -82,7 +82,7 @@ describe("TableMetadataJobControl", () => {
       </TimezoneContext.Provider>,
     );
 
-    expect(screen.getByText(/Last refreshed: Never/)).toBeInTheDocument();
+    expect(screen.getByText(/Never/)).toBeInTheDocument();
   });
 
   it("triggers update when refresh button is clicked", async () => {

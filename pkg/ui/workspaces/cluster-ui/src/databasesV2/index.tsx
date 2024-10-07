@@ -13,10 +13,10 @@ import {
   DatabaseSortOptions,
   useDatabaseMetadata,
 } from "src/api/databases/getDatabaseMetadataApi";
-import { ColumnTitle } from "src/components/columnTitle";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
+import { Tooltip } from "src/components/tooltip";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
@@ -41,12 +41,9 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
 })[] = [
   {
     title: (
-      <ColumnTitle
-        title={DatabaseColName.NAME}
-        withToolTip={{
-          tooltipText: "The name of the database.",
-        }}
-      />
+      <Tooltip title={"The name of the database."}>
+        {DatabaseColName.NAME}
+      </Tooltip>
     ),
     sorter: (a, b) => a.name.localeCompare(b.name),
     sortKey: DatabaseSortOptions.NAME,
@@ -56,13 +53,13 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   },
   {
     title: (
-      <ColumnTitle
-        title={DatabaseColName.SIZE}
-        withToolTip={{
-          tooltipText:
-            "The approximate total disk size across all table replicas in the database.",
-        }}
-      />
+      <Tooltip
+        title={
+          "The approximate total disk size across all table replicas in the database."
+        }
+      >
+        {DatabaseColName.SIZE}
+      </Tooltip>
     ),
     sortKey: DatabaseSortOptions.REPLICATION_SIZE,
     sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
@@ -72,12 +69,9 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   },
   {
     title: (
-      <ColumnTitle
-        title={DatabaseColName.TABLE_COUNT}
-        withToolTip={{
-          tooltipText: "The total number of tables in the database.",
-        }}
-      />
+      <Tooltip title={"The total number of tables in the database."}>
+        {DatabaseColName.TABLE_COUNT}
+      </Tooltip>
     ),
     sortKey: DatabaseSortOptions.TABLE_COUNT,
     sorter: true,
@@ -87,13 +81,11 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
   },
   {
     title: (
-      <ColumnTitle
-        title={DatabaseColName.NODE_REGIONS}
-        withToolTip={{
-          tooltipText:
-            "Regions/Nodes on which the database tables are located.",
-        }}
-      />
+      <Tooltip
+        title={"Regions/Nodes on which the database tables are located."}
+      >
+        {DatabaseColName.NODE_REGIONS}
+      </Tooltip>
     ),
     render: (db: DatabaseRow) => (
       <Skeleton loading={db.nodesByRegion.isLoading}>
