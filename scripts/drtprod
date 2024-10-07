@@ -568,11 +568,9 @@ EOF"
         $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
         # set row level ttl
         $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
-        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
 
         $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
         $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
-        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
 
         roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
         roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
