@@ -21,6 +21,17 @@ type TestingKnobs struct {
 	// OverrideV2EnabledWhenLeaderLevel is used to override the level at which
 	// RACv2 is enabled when a replica is the leader.
 	OverrideV2EnabledWhenLeaderLevel func() V2EnabledWhenLeaderLevel
+	// OverridePullPushMode is used to override whether the pull mode, or push
+	// mode is enabled.
+	//
+	// - when set to true, pull mode is enabled
+	// - when set to false, push mode is enabled
+	// - when left unset the otherwise set mode is used
+	//
+	// This is used to test the behavior of the flow control in push and pull
+	// mode, while also having the ability to switch between the two
+	// apply_to_(elastic|all) modes.
+	OverridePullPushMode func() bool
 }
 
 // TestingKnobsV1 are the testing knobs that appply to replication flow control
