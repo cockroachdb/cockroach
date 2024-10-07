@@ -56,10 +56,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.node.admission.granter.slots_exhausted_duration.kv"
-            title={
-              "Admission Slots Exhausted " +
-              nodeDisplayName(nodeDisplayNameByID, nid)
-            }
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             nonNegativeRate
           />
@@ -81,7 +78,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
               title={
-                "Regular (Foreground) IO Exhausted " +
+                "Regular (Foreground) " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
@@ -91,7 +88,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.admission.granter.elastic_io_tokens_exhausted_duration.kv"
               title={
-                "Elastic (Background) IO Exhausted " +
+                "Elastic (Background) " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
@@ -115,7 +112,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.admission.io.overload"
-              title={"IO Overload " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>
@@ -135,10 +132,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
-            title={
-              "Elastic CPU Exhausted " +
-              nodeDisplayName(nodeDisplayNameByID, nid)
-            }
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             nonNegativeRate
           />
@@ -166,18 +160,14 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.sql-kv-response-p99"
-              title={
-                "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"SQL-KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.sql-sql-response-p99"
-              title={
-                "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"SQL-SQL " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -193,23 +183,20 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
     >
-      <Axis units={AxisUnits.Duration} label="Delay Duration">
+      <Axis units={AxisUnits.Duration} label="Write Delay Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.kv-stores-p99"
-              title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.elastic-stores-p99"
-              title={
-                "elastic (background) write " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -247,26 +234,20 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
     >
-      <Axis units={AxisUnits.Duration} label="Wait Duration">
+      <Axis units={AxisUnits.Duration} label="Flow Token Wait Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
-              title={
-                "Regular flow token wait time " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
-              title={
-                "Elastic flow token wait time " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -282,25 +263,19 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
     >
-      <Axis label="Count">
+      <Axis label="Blocked Stream Count">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
-              title={
-                "Blocked regular streams " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
-              title={
-                "Blocked elastic streams " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
           </>
@@ -320,18 +295,12 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               name="cr.node.admission.elastic_cpu.utilization"
-              title={
-                "Elastic CPU Utilization " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
             <Metric
               name="cr.node.admission.elastic_cpu.utilization_limit"
-              title={
-                "Elastic CPU Utilization Limit " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={nodeDisplayName(nodeDisplayNameByID, nid) + " Limit"}
               sources={[nid]}
             />
           </>
@@ -414,9 +383,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.storage.l0-sublevels"
-              title={
-                "L0 Sublevels " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>
