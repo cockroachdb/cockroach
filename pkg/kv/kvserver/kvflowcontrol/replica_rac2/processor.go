@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -49,6 +50,9 @@ type RaftScheduler interface {
 
 // RaftNodeBasicState provides basic state from the RawNode.
 type RaftNodeBasicState struct {
+	// State represents the current role of the RawNode. We are interested in
+	// transitions in and out of StateLeader.
+	State raft.StateType
 	// Term is the current term of this replica.
 	Term uint64
 	// Leader is the current known leader, or zero if Raft does not know the
@@ -607,19 +611,27 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		p.term = state.Term
 	}
 	replicasChanged := p.desc.replicasChanged
+	leaseChanged := state.Leaseholder != p.leaseholderID
+
+	// Detect when we leave or enter leadership. Note that leftLeader and
+	// becameLeader can be true simultaneously, meaning that we left being leader
+	// of the previous term, and became the leader of state.Term.
+	leftLeader := p.leader.rc != nil && (termChanged || state.State != raft.StateLeader)
+	becameLeader := (p.leader.rc == nil || leftLeader) && state.State == raft.StateLeader
+
+	if !leftLeader && !becameLeader && !replicasChanged && !leaseChanged && !force {
+		// Common case.
+		//
+		// NB: if termChanged is the only observed change, everything has already
+		// been made consistent (since we updated p.term above), so we will fall
+		// here and return.
+		return
+	}
+	// At least one thing has changed, or the initialization is forced.
+
 	if replicasChanged {
 		p.desc.replicasChanged = false
 	}
-	if !replicasChanged && state.Leader == p.leaderID && state.Leaseholder == p.leaseholderID &&
-		(p.leader.rc == nil || !termChanged) && !force {
-		// Common case.
-		//
-		// NB: if termChanged is the only observed change, and RangeController is
-		// nil, everything has already been made consistent (since we updated
-		// p.term above), so we will fall here and return.
-		return
-	}
-	// The leader or leaseholder or replicas or term changed. We set everything.
 	p.leaderID = state.Leader
 	p.leaseholderID = state.Leaseholder
 	// Set leaderNodeID, leaderStoreID.
@@ -627,9 +639,9 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		p.leaderNodeID = 0
 		p.leaderStoreID = 0
 	} else {
-		rd, ok := p.desc.replicas[state.Leader]
+		rd, ok := p.desc.replicas[p.leaderID]
 		if !ok {
-			if state.Leader == p.opts.ReplicaID {
+			if state.State == raft.StateLeader {
 				// Is leader, but not in the set of replicas. We expect this should not
 				// be happening anymore, due to raft.Config.StepDownOnRemoval being set
 				// to true. But we tolerate it.
@@ -648,26 +660,22 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 			p.leaderStoreID = rd.StoreID
 		}
 	}
-	if p.leaderID != p.opts.ReplicaID {
-		if p.leader.rc != nil {
-			// Transition from leader to follower.
-			p.closeLeaderStateRaftMuLocked(ctx)
-		}
+
+	if leftLeader {
+		p.closeLeaderStateRaftMuLocked(ctx)
+	}
+	if p.leader.rc == nil && !becameLeader {
+		// Weren't the leader, or left leadership. Haven't become the leader again.
 		return
 	}
-	// Is the leader.
+	// Was the leader, or became one.
 	if p.enabledWhenLeader == kvflowcontrol.V2NotEnabledWhenLeader {
 		return
 	}
-	if p.leader.rc != nil && termChanged {
-		// Need to recreate the RangeController.
-		p.closeLeaderStateRaftMuLocked(ctx)
-	}
-	if p.leader.rc == nil {
+	if becameLeader {
 		p.createLeaderStateRaftMuLocked(ctx, state.Term, state.NextUnstableIndex)
-		return
 	}
-	// Existing RangeController.
+	// Invariant: p.leader.rc != nil.
 	if replicasChanged {
 		if err := p.leader.rc.SetReplicasRaftMuLocked(ctx, p.desc.replicas); err != nil {
 			log.Errorf(ctx, "error setting replicas: %v", err)

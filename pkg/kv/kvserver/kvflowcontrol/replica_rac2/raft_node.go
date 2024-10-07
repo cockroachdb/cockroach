@@ -19,6 +19,7 @@ func MakeRaftNodeBasicStateLocked(
 	rn *raft.RawNode, leaseholderID roachpb.ReplicaID,
 ) RaftNodeBasicState {
 	return RaftNodeBasicState{
+		State:             rn.State(),
 		Term:              rn.Term(),
 		Leader:            roachpb.ReplicaID(rn.Lead()),
 		NextUnstableIndex: rn.NextUnstableIndex(),
