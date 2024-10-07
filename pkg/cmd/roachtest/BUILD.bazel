@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "roachtest_lib",
@@ -128,5 +129,12 @@ go_test(
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "roachtest",
+    disallowed_list = [
+        "//pkg/util/log",
     ],
 )

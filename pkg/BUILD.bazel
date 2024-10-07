@@ -164,6 +164,7 @@ ALL_TESTS = [
     "//pkg/cmd/roachtest/spec:spec_test",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest/testselector:testselector_test",
+    "//pkg/cmd/roachtest:roachtest_disallowed_imports_test",
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/col/coldata:coldata_disallowed_imports_test",
     "//pkg/col/coldata:coldata_test",
