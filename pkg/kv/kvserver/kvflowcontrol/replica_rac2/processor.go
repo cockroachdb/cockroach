@@ -51,6 +51,9 @@ type RaftScheduler interface {
 type RaftNodeBasicState struct {
 	// Term is the current term of this replica.
 	Term uint64
+	// IsLeader is true if the RawNode is the leader of the Term, and acts in
+	// StateLeader. We are interested in transitions in and out of StateLeader.
+	IsLeader bool
 	// Leader is the current known leader, or zero if Raft does not know the
 	// leader. This state can advance past the group membership state, so the
 	// leader may not be known as a current group member.
@@ -380,8 +383,12 @@ type processorImpl struct {
 	// cycle. It is used to notice transitions out of leadership and back, to
 	// recreate leader.rc.
 	term uint64
+	// isLeader is true if this replica is the leader of the term, and acts as
+	// one, i.e. raft RawNode is in StateLeader.
+	isLeader bool
 	// leaderID is the ID of the current term leader. Can be zero if unknown.
 	leaderID roachpb.ReplicaID
+
 	// leaderNodeID and leaderStoreID are a function of leaderID and replicas
 	// fields. They are set when leaderID is non-zero and replicas contains
 	// leaderID, else are 0.
@@ -606,24 +613,34 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	if termChanged {
 		p.term = state.Term
 	}
+	leadChanged := state.Leader != p.leaderID
+	leaseChanged := state.Leaseholder != p.leaseholderID
 	replicasChanged := p.desc.replicasChanged
+
+	// Detect when we leave or enter leadership. Note that leftLeader and
+	// becameLeader can be true simultaneously, meaning that we left being leader
+	// of the previous term, and became the leader of state.Term.
+	wasLeader := p.isLeader
+	p.isLeader = state.IsLeader
+	leftLeader := wasLeader && (termChanged || !state.IsLeader)
+	becameLeader := (!wasLeader || termChanged) && state.IsLeader
+
+	// Check the common case: nothing changed.
+	if !leftLeader && !becameLeader && !leadChanged && !leaseChanged && !replicasChanged && !force {
+		// NB: if termChanged is the only observed change, everything has already
+		// been made consistent (since we updated p.term above), so we will fall
+		// here and return.
+		return
+	}
+	// At least one thing has changed, or the initialization is forced.
+
 	if replicasChanged {
 		p.desc.replicasChanged = false
 	}
-	if !replicasChanged && state.Leader == p.leaderID && state.Leaseholder == p.leaseholderID &&
-		(p.leader.rc == nil || !termChanged) && !force {
-		// Common case.
-		//
-		// NB: if termChanged is the only observed change, and RangeController is
-		// nil, everything has already been made consistent (since we updated
-		// p.term above), so we will fall here and return.
-		return
-	}
-	// The leader or leaseholder or replicas or term changed. We set everything.
 	p.leaderID = state.Leader
 	p.leaseholderID = state.Leaseholder
 	// Set leaderNodeID, leaderStoreID.
-	if p.leaderID == 0 {
+	if state.Leader == 0 {
 		p.leaderNodeID = 0
 		p.leaderStoreID = 0
 	} else {
@@ -648,22 +665,17 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 			p.leaderStoreID = rd.StoreID
 		}
 	}
-	if p.leaderID != p.opts.ReplicaID {
-		if p.leader.rc != nil {
-			// Transition from leader to follower.
-			p.closeLeaderStateRaftMuLocked(ctx)
-		}
-		return
-	}
-	// Is the leader.
+
 	if p.enabledWhenLeader == kvflowcontrol.V2NotEnabledWhenLeader {
 		return
 	}
-	if p.leader.rc != nil && termChanged {
-		// Need to recreate the RangeController.
+	if leftLeader {
 		p.closeLeaderStateRaftMuLocked(ctx)
 	}
-	if p.leader.rc == nil {
+	if !state.IsLeader {
+		return
+	}
+	if p.leader.rc == nil { // becameLeader || force
 		p.createLeaderStateRaftMuLocked(ctx, state.Term, state.NextUnstableIndex)
 		return
 	}
