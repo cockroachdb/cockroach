@@ -515,7 +515,13 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 	}
 }
 
-func writeBinaryBytes(b *writeBuffer, v []byte) {
+func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
+	v = tree.ResolveBlankPaddedCharBytes(v, t)
+	if t.Oid() == oid.T_char && len(v) == 0 {
+		// Match Postgres and always explicitly include a null byte if we have
+		// an empty string for the "char" type in the binary format.
+		v = []byte{0}
+	}
 	b.putInt32(int32(len(v)))
 	b.write(v)
 }
@@ -633,10 +639,10 @@ func writeBinaryDatumNotNull(
 		writeBinaryDecimal(b, &v.Decimal)
 
 	case *tree.DBytes:
-		writeBinaryBytes(b, []byte(*v))
+		writeBinaryBytes(b, []byte(*v), t)
 
 	case *tree.DUuid:
-		writeBinaryBytes(b, v.GetBytes())
+		writeBinaryBytes(b, v.GetBytes(), t)
 
 	case *tree.DIPAddr:
 		// We calculate the Postgres binary format for an IPAddr. For the spec see,
@@ -859,13 +865,13 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		writeBinaryDecimal(b, &v)
 
 	case types.BytesFamily:
-		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx))
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.UuidFamily:
-		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx))
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.StringFamily:
-		writeBinaryString(b, string(vecs.BytesCols[colIdx].Get(rowIdx)), typ)
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.TimestampFamily:
 		writeBinaryTimestamp(b, vecs.TimestampCols[colIdx].Get(rowIdx))
