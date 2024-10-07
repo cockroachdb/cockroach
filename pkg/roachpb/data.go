@@ -280,11 +280,16 @@ func (v Value) checksum() uint32 {
 		return 0
 	}
 
-	if len(v.RawBytes) < headerSize || v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
-		return 0
+	checksumStart := 0
+	if v.usesExtendedEncoding() {
+		extendedHeaderSize := int(extendedMVCCValLenSize + binary.BigEndian.Uint32(v.RawBytes))
+		if len(v.RawBytes) < extendedHeaderSize+headerSize {
+			return 0
+		}
+		checksumStart = extendedHeaderSize + 1
 	}
 
-	_, u, err := encoding.DecodeUint32Ascending(v.RawBytes[:checksumSize])
+	_, u, err := encoding.DecodeUint32Ascending(v.RawBytes[checksumStart : checksumStart+checksumSize])
 	if err != nil {
 		panic(err)
 	}
@@ -295,6 +300,10 @@ func (v *Value) setChecksum(cksum uint32) {
 	if len(v.RawBytes) >= checksumSize {
 		encoding.EncodeUint32Ascending(v.RawBytes[:0], cksum)
 	}
+}
+
+func (v *Value) usesExtendedEncoding() bool {
+	return len(v.RawBytes) > headerSize && v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL)
 }
 
 // InitChecksum initializes a checksum based on the provided key and
@@ -363,7 +372,7 @@ func (v *Value) IsPresent() bool {
 	// then case we'll hit this case if the 5th character of that string
 	// happens to be `e` (ascii 101). There aren't _that_ many callers to
 	// IsPresent(). We may just need to audit them all.
-	if len(v.RawBytes) >= extendedPreludeSize && v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+	if v.usesExtendedEncoding() {
 		headerSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
 		return len(v.RawBytes) > int(headerSize)
 	}
@@ -442,7 +451,7 @@ func (v Value) extendedSimpleTagPos() int {
 }
 
 func (v Value) dataBytes() []byte {
-	if v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+	if v.usesExtendedEncoding() {
 		simpleTagPos := v.extendedSimpleTagPos()
 		return v.RawBytes[simpleTagPos+1:]
 	}
@@ -452,7 +461,7 @@ func (v Value) dataBytes() []byte {
 // TagAndDataBytes returns the value's tag and data (no checksum, no timestamp).
 // This is suitable to be used as the expected value in a CPut.
 func (v Value) TagAndDataBytes() []byte {
-	if len(v.RawBytes) > tagPos && v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+	if v.usesExtendedEncoding() {
 		simpleTagPos := v.extendedSimpleTagPos()
 		return v.RawBytes[simpleTagPos:]
 	}
@@ -849,6 +858,15 @@ func computeChecksum(key, rawBytes []byte, crc hash.Hash32) uint32 {
 	if len(rawBytes) < headerSize {
 		return 0
 	}
+
+	if rawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+		simpleValueStart := extendedMVCCValLenSize + binary.BigEndian.Uint32(rawBytes) + 1
+		rawBytes = rawBytes[simpleValueStart:]
+		if len(rawBytes) < headerSize {
+			return 0
+		}
+	}
+
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
