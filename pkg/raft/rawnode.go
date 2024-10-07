@@ -530,8 +530,18 @@ func (rn *RawNode) Term() uint64 {
 }
 
 // Lead returns the leader of Term(), or None if the leader is unknown.
+//
+// NB: it is possible that Lead() returns this node's ID, yet State() does not
+// return StateLeader. It means this node was the leader, but it has stepped
+// down. If the caller needs to know whether this node is acting as the leader,
+// it should check the State() instead of Lead() == ID.
 func (rn *RawNode) Lead() pb.PeerID {
 	return rn.raft.lead
+}
+
+// State returns the current role of the RawNode.
+func (rn *RawNode) State() StateType {
+	return rn.raft.state
 }
 
 // LogMark returns the current log mark of the raft log. It is not guaranteed to
