@@ -31,6 +31,7 @@ import {
 } from "../api/indexDetailsApi";
 import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
 import { commonStyles } from "../common";
+import { CockroachCloudContext } from "../contexts";
 import { CaretRight } from "../icon/caretRight";
 import { Pagination } from "../pagination";
 import {
@@ -63,11 +64,17 @@ import {
   Count,
   DATE_FORMAT_24_TZ,
   EncodeDatabaseTableIndexUri,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
   performanceTuningRecipes,
   unique,
   unset,
 } from "../util";
-import { DB_PAGE_PATH, tableDetailsPagePath } from "../util/routes";
+import {
+  databaseDetailsPagePath,
+  DB_PAGE_PATH,
+  tableDetailsPagePath,
+} from "../util/routes";
 
 import styles from "./indexDetailsPage.module.scss";
 
@@ -121,6 +128,7 @@ interface IndexDetails {
   lastRead: Moment;
   lastReset: Moment;
   indexRecommendations: IndexRecommendation[];
+  databaseID: number;
 }
 
 export type RecommendationType = "DROP_UNUSED" | "Unknown";
@@ -156,6 +164,8 @@ export class IndexDetailsPage extends React.Component<
   IndexDetailsPageProps,
   IndexDetailsPageState
 > {
+  static contextType = CockroachCloudContext;
+
   refreshDataInterval: NodeJS.Timeout;
   constructor(props: IndexDetailsPageProps) {
     super(props);
@@ -379,15 +389,26 @@ export class IndexDetailsPage extends React.Component<
         />
       );
     }
+
+    const isCockroachCloud = this.context;
     // If no props are passed, render db-console breadcrumb links by default.
     return (
       <Breadcrumbs
         items={[
           { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: tableDetailsPagePath(
-              parseInt(this.props.details.tableID, 10),
-            ),
+            link: isCockroachCloud
+              ? EncodeDatabaseUri(this.props.databaseName)
+              : databaseDetailsPagePath(this.props.details.databaseID),
+            name: this.props.databaseName,
+          },
+          {
+            link: isCockroachCloud
+              ? EncodeDatabaseTableUri(
+                  this.props.databaseName,
+                  this.props.tableName,
+                )
+              : tableDetailsPagePath(parseInt(this.props.details.tableID, 10)),
             name: `Table: ${this.props.tableName}`,
           },
           {

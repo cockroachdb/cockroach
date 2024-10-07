@@ -351,17 +351,18 @@ CREATE TABLE schema.test_table (
 
 	for _, tc := range testCases {
 		tableName := fmt.Sprintf("%s.%s", tc.schema, tc.table)
-		tableID, err := getTableIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
+		tableID, databaseID, err := getIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
 		require.NoError(t, err)
 
 		// Get actual Table ID.
 		actualTableID := db.QueryStr(t, `
-SELECT table_id 
+SELECT table_id, parent_id
 FROM crdb_internal.tables 
 WHERE database_name=$1 AND schema_name=$2 AND name=$3`,
 			tc.database, tc.schema, tc.table)
 
 		// Assert Table ID is correct.
 		require.Equal(t, fmt.Sprint(tableID), actualTableID[0][0])
+		require.Equal(t, fmt.Sprint(databaseID), actualTableID[0][1])
 	}
 }

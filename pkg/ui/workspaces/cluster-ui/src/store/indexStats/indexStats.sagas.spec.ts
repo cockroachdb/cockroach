@@ -77,6 +77,7 @@ describe("IndexStats sagas", () => {
           created_at: null,
         },
       ],
+      database_id: 10,
       last_reset: null,
       index_recommendations: [
         {
