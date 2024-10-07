@@ -2214,6 +2214,19 @@ func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roac
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
+// IndexSpanAllowingExternalRowData implements the TableDescriptor interface.
+func (desc *wrapper) IndexSpanAllowingExternalRowData(
+	codec keys.SQLCodec, indexID descpb.IndexID,
+) roachpb.Span {
+	tableID := desc.GetID()
+	if ext := desc.ExternalRowData(); ext != nil {
+		codec = keys.MakeSQLCodec(ext.TenantID)
+		tableID = ext.TableID
+	}
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, tableID, indexID))
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
 // TableSpan implements the TableDescriptor interface.
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
 	prefix := codec.TablePrefix(uint32(desc.ID))
