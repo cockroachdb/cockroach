@@ -184,8 +184,8 @@ func run(
 			} else {
 				licenseFiles := []release.ArchiveFile{
 					{
-						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "LICENSE.txt"),
-						ArchiveFilePath:   "LICENSE.txt",
+						LocalAbsolutePath: filepath.Join(o.PkgDir, "LICENSE"),
+						ArchiveFilePath:   "LICENSE",
 					},
 					{
 						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"),

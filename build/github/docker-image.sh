@@ -32,7 +32,7 @@ cp _bazel/bin/pkg/cmd/cockroach/cockroach_/cockroach build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos.so build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos_c.so build/deploy
 
-cp -r licenses build/deploy/
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt build/deploy/
 
 chmod 755 build/deploy/cockroach
 
