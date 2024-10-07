@@ -74,7 +74,7 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
     --ungzip \
     --ignore-zeros \
     --strip-components=1
-  cp --recursive licenses "build/deploy-${platform}"
+  cp LICENSE THIRD-PARTY-NOTICES.txt "build/deploy-${platform}"
   # Move the libs where Dockerfile expects them to be
   mv build/deploy-${platform}/lib/* build/deploy-${platform}/
   rmdir build/deploy-${platform}/lib
