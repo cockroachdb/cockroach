@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -261,10 +262,12 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 	ts1 := timeutil.Unix(1724329716, 0)
 
 	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				LicenseTestingKnobs: license.TestingKnobs{
+					Enable:            true,
+					SkipDisable:       true,
 					OverrideStartTime: &ts1,
 				},
 			},
@@ -273,7 +276,7 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	// All of the licenses that we install later depend on this org name.
-	_, err := db.Exec(
+	_, err := sqlDB.Exec(
 		"SET CLUSTER SETTING cluster.organization = 'CRDB Unit Test'",
 	)
 	require.NoError(t, err)
@@ -284,36 +287,83 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 	require.Equal(t, false, enforcer.GetHasLicense())
 	gracePeriodTS, hasGracePeriod := enforcer.GetGracePeriodEndTS()
 	require.True(t, hasGracePeriod)
-	require.Equal(t, ts1.Add(7*24*time.Hour), gracePeriodTS)
+	require.Equal(t, ts1.Add(30*24*time.Hour), gracePeriodTS)
 
 	jan1st2000 := timeutil.Unix(946728000, 0)
 
 	for i, tc := range []struct {
-		license                string
+		// licenses is a list of licenses to be installed sequentially.
+		// All licenses except the last one must be installed successfully.
+		// The outcome of the final license is controlled by the errRE field.
+		licenses []string
+		// errRE specifies a regular expression that matches the expected error message
+		// when installing the last license. If no error is expected, this should be
+		// set to an empty string.
+		errRE string
+		// expectedGracePeriodEnd is the timestamp representing when the grace period
+		// should end. This value is verified only if the last license is installed
+		// successfully.
 		expectedGracePeriodEnd time.Time
 	}{
 		// Note: all licenses below expire on Jan 1st 2000
 		//
 		// Free license - 30 days grace period
-		{"crl-0-EMDYt8MDGAMiDkNSREIgVW5pdCBUZXN0", jan1st2000.Add(30 * 24 * time.Hour)},
+		{[]string{"crl-0-EMDYt8MDGAMiDkNSREIgVW5pdCBUZXN0"}, "", jan1st2000.Add(30 * 24 * time.Hour)},
 		// Trial license - 7 days grace period
-		{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0", jan1st2000.Add(7 * 24 * time.Hour)},
+		{[]string{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0"}, "", jan1st2000.Add(7 * 24 * time.Hour)},
 		// Enterprise - no grace period
-		{"crl-0-EMDYt8MDGAEiDkNSREIgVW5pdCBUZXN0KAM", timeutil.UnixEpoch},
+		{[]string{"crl-0-EMDYt8MDGAEiDkNSREIgVW5pdCBUZXN0KAM"}, "", timeutil.UnixEpoch},
 		// No license - 7 days grace period
-		{"", ts1.Add(7 * 24 * time.Hour)},
+		{[]string{""}, "", ts1.Add(30 * 24 * time.Hour)},
+		// Only 1 trial license allowed
+		{[]string{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0", "crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0"},
+			"a trial license has previously been installed on this cluster", timeutil.UnixEpoch},
 	} {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			_, err := db.Exec(
-				fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", tc.license),
-			)
+			// Reset from prior test unit.
+			cnt, err := enforcer.SetTrialUsageCount(ctx, 0, false /* checkOldCount */)
 			require.NoError(t, err)
+			require.Equal(t, int64(0), cnt)
+
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Loop through all but the last license. They should all succeed.
+			for i := 0; i < len(tc.licenses)-1; i++ {
+				sql := fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", tc.licenses[i])
+				tdb.Exec(t, sql)
+
+				// If installing a trial license, we need to wait for the callback to
+				// bump the count before continuing. We depend on the count to cause an
+				// error if another trial license is installed.
+				l, err := decode(tc.licenses[i])
+				require.NoError(t, err)
+				if l.Type == licenseccl.License_Trial {
+					var cnt int64
+					require.Eventually(t, func() bool {
+						cnt = trialLicenseUsageCount.Load()
+						return cnt > 0
+					}, 20*time.Second, time.Millisecond,
+						"trialLicenseUsageCount last returned %t", cnt)
+				}
+			}
+
+			// Handle the last license separately
+			lastLicense := tc.licenses[len(tc.licenses)-1]
+			sql := fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", lastLicense)
+
+			if tc.errRE != "" {
+				tdb.ExpectErr(t, tc.errRE, sql) // The last license may result in an error
+				return
+			}
+
+			tdb.Exec(t, sql)
+
 			// The SQL can return back before the callback has finished. So, we wait a
 			// bit to see if the desired state is reached.
 			var hasLicense bool
 			require.Eventually(t, func() bool {
 				hasLicense = enforcer.GetHasLicense()
-				return (tc.license != "") == hasLicense
+				return (lastLicense != "") == hasLicense
 			}, 20*time.Second, time.Millisecond,
 				"GetHasLicense() last returned %t", hasLicense)
 			var ts time.Time
