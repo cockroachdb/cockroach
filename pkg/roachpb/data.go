@@ -373,10 +373,10 @@ func (v *Value) IsPresent() bool {
 	// happens to be `e` (ascii 101). There aren't _that_ many callers to
 	// IsPresent(). We may just need to audit them all.
 	if v.usesExtendedEncoding() {
-		headerSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
-		return len(v.RawBytes) > int(headerSize)
+		extendedHeaderSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
+		return len(v.RawBytes) > int(extendedHeaderSize)
 	}
-	return len(v.RawBytes) >= 0
+	return true
 }
 
 // MakeValueFromString returns a value with bytes and tag set.
@@ -422,13 +422,12 @@ func (v Value) GetMVCCValueHeader() (enginepb.MVCCValueHeader, error) {
 		return enginepb.MVCCValueHeader{}, nil
 	}
 	if v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
-		headerLen := binary.BigEndian.Uint32(v.RawBytes)
-		headerSize := extendedPreludeSize + headerLen
-		if len(v.RawBytes) < int(headerSize) {
+		extendedHeaderSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
+		if len(v.RawBytes) < int(extendedHeaderSize) {
 			return enginepb.MVCCValueHeader{}, nil
 		}
 
-		parseBytes := v.RawBytes[extendedPreludeSize:headerSize]
+		parseBytes := v.RawBytes[extendedPreludeSize:extendedHeaderSize]
 		var vh enginepb.MVCCValueHeader
 		// NOTE: we don't use protoutil to avoid passing header through an interface,
 		// which would cause a heap allocation and incur the cost of dynamic dispatch.
