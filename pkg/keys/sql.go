@@ -185,6 +185,12 @@ func (e sqlEncoder) TenantSpan() roachpb.Span {
 	return roachpb.Span{Key: key, EndKey: endKey}
 }
 
+// TableSpan returns a span representing the table's keyspace.
+func (e sqlEncoder) TableSpan(tableID uint32) roachpb.Span {
+	key := e.TablePrefix(tableID)
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+}
+
 // TablePrefix returns the key prefix used for the table's data.
 func (e sqlEncoder) TablePrefix(tableID uint32) roachpb.Key {
 	k := e.TenantPrefix()
