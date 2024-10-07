@@ -541,6 +541,10 @@ type StoreTestingKnobs struct {
 	// true, the report is ignored and ReportUnreachable is not called on the
 	// raft group for that replica.
 	RaftReportUnreachableBypass func(roachpb.ReplicaID) bool
+
+	// DisableUpdateLastUpdateTimesMapOnRaftGroupStep disables updating the
+	// lastUpdateTimes map when a raft group is stepped.
+	DisableUpdateLastUpdateTimesMapOnRaftGroupStep bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
