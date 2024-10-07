@@ -1962,6 +1962,7 @@ func TestExtendedDecoding(t *testing.T) {
 		return buf
 	}
 
+	key := Key("hello")
 	var boolValue Value
 	boolValue.SetBool(true)
 
@@ -1972,8 +1973,18 @@ func TestExtendedDecoding(t *testing.T) {
 	}
 	for name, tv := range testValues {
 		t.Run(name, func(t *testing.T) {
+			tv.InitChecksum(key)
 			extendedValueBytes := encodeWithValueHeader(tv, enginepb.MVCCValueHeader{OriginID: 1})
 			extendedValue := Value{RawBytes: extendedValueBytes, Timestamp: tv.Timestamp}
+
+			// These methods error on degenerte values.
+			if len(tv.RawBytes) >= headerSize {
+				require.NoError(t, tv.Verify(key))
+				require.NoError(t, extendedValue.Verify(key))
+			}
+
+			require.Equal(t, tv.checksum(), extendedValue.checksum())
+			require.Equal(t, tv.computeChecksum(key), tv.computeChecksum(key))
 
 			require.Equal(t, tv.IsPresent(), extendedValue.IsPresent())
 			require.Equal(t, tv.GetTag(), extendedValue.GetTag())
