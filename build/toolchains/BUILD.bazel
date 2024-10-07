@@ -414,46 +414,6 @@ config_setting(
 )
 
 bool_flag(
-    name = "nogo_flag",
-    build_setting_default = False,
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "nogo",
-    flag_values = {
-        ":nogo_flag": "true",
-        ":nogo_disable_flag": "false",
-    },
-)
-
-# Note: the flag nonogo_flag and config_setting nonogo_explicit aren't meant
-# to be directly used in select()'s. Not using nogo is the default behavior.
-# The flag and config_setting are here solely so that they can be used by `dev`
-# to check whether an option is configured.
-bool_flag(
-    name = "nonogo_explicit_flag",
-    build_setting_default = False,
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "nonogo_explicit",
-    flag_values = {
-        ":nonogo_explicit_flag": "true",
-    },
-    visibility = ["//build/bazelutil:__pkg__"],
-)
-
-# Note: nogo_disable can be set to force nogo checks off even if
-# `build --config lintonbuild` is set in .bazelrc.
-bool_flag(
-    name = "nogo_disable_flag",
-    build_setting_default = False,
-    visibility = ["//visibility:public"],
-)
-
-bool_flag(
     name = "force_build_cdeps_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],

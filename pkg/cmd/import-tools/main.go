@@ -37,6 +37,7 @@ import (
 	_ "golang.org/x/perf/cmd/benchstat"
 	_ "golang.org/x/tools/cmd/goyacc"
 	_ "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow"
+	_ "golang.org/x/tools/go/vcs"
 	_ "honnef.co/go/tools/cmd/staticcheck"
 )
 
