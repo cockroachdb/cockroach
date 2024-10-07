@@ -227,13 +227,21 @@ func (v variations) makeClusterSpec() spec.ClusterSpec {
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low))
 }
 
+func (v variations) perturbationName() string {
+	t := reflect.TypeOf(v.perturbation)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.Name()
+}
+
 func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
 	v := setupMetamorphic(p)
 	v.acceptableChange = acceptableChange
 	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
 	// a given seed.
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/metamorphic/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
@@ -248,7 +256,7 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 	v := setupFull(p)
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/full/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
@@ -263,7 +271,7 @@ func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
 	v := setupDev(p)
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/dev/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.ManualOnly,
 		Owner:            registry.OwnerKV,
