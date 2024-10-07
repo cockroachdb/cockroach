@@ -3106,6 +3106,17 @@ func (k kafkaManager) start(ctx context.Context, service string, envVars ...stri
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
+	// Wait for kafka to be ready. Otherwise we can sometimes try to connect to
+	// it too fast which fails the test.
+	k.waitForKafkaAvailable(ctx)
+}
+
+func (k kafkaManager) waitForKafkaAvailable(ctx context.Context) {
+	k.t.Status("waiting for kafka to be ready")
+	// Note: this command will retry the connection itself for some seconds, so
+	// we don't need to explicitly retry here.
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), filepath.Join(k.binDir(), "kafka-topics"),
+		"--bootstrap-server=localhost:9092", "--list")
 }
 
 var kafkaServices = map[string][]string{
@@ -3612,6 +3623,7 @@ func setupKafka(
 	}
 
 	kafka.start(ctx, "kafka")
+	kafka.waitForKafkaAvailable(ctx)
 	return kafka, func() { kafka.stop(ctx) }
 }
 
