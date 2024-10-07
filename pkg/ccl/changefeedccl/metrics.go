@@ -85,6 +85,7 @@ type AggMetrics struct {
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
+	SinkErrors                  *aggmetric.AggCounter
 
 	Timers *timers.Timers
 
@@ -165,6 +166,7 @@ type sliMetrics struct {
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
+	SinkErrors                  *aggmetric.Counter
 
 	Timers *timers.ScopedTimers
 
@@ -968,6 +970,12 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaSinkErrors := metric.Metadata{
+		Name:        "changefeed.sink_errors",
+		Help:        "Number of changefeed errors caused by the sink",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -1069,6 +1077,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		SinkErrors: b.Counter(metaSinkErrors),
 		Timers:     timers.New(histogramWindow),
 		NetMetrics: lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
@@ -1139,6 +1148,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		TotalRanges:                 a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		SinkErrors:                  a.SinkErrors.AddChild(scope),
 
 		Timers: a.Timers.GetOrCreateScopedTimers(scope),
 
