@@ -92,14 +92,13 @@ func (t *Tracker) Track(
 // equal to the leader term. evalTokensGEIndex is used to separately count the
 // untracked (eval) tokens that are for indices >= evalTokensGEIndex.
 func (t *Tracker) Untrack(
-	term uint64, admitted [raftpb.NumPriorities]uint64, evalTokensGEIndex uint64,
+	av AdmittedVector, evalTokensGEIndex uint64,
 ) (returnedSend, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens) {
-	for pri := range admitted {
-		uptoIndex := admitted[pri]
+	for pri, uptoIndex := range av.Admitted {
 		var untracked int
 		for n := len(t.tracked[pri]); untracked < n; untracked++ {
 			deduction := t.tracked[pri][untracked]
-			if deduction.term > term || (deduction.term == term && deduction.index > uptoIndex) {
+			if deduction.term > av.Term || (deduction.term == av.Term && deduction.index > uptoIndex) {
 				break
 			}
 			returnedSend[pri] += deduction.tokens
