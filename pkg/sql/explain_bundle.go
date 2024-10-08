@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 const noPlan = "no plan"
@@ -600,12 +603,11 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	// Note: we do not shortcut out of this function if there is no table/sequence/view to report:
 	// the bundle analysis tool require schema.sql to always be present, even if it's empty.
 
-	first := true
 	blankLine := func() {
-		if !first {
+		if buf.Len() > 0 {
+			// Don't add newlines to the beginning of the file.
 			buf.WriteByte('\n')
 		}
-		first = false
 	}
 	blankLine()
 	c.printCreateAllDatabases(&buf, dbNames)
@@ -625,28 +627,20 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	if mem.Metadata().HasUserDefinedRoutines() {
 		// Get all relevant user-defined routines.
-		blankLine()
-		err = c.PrintRelevantCreateRoutine(
-			&buf, strings.ToLower(b.stmt), b.flags.RedactValues, &b.errorStrings, false, /* procedure */
-		)
-		if err != nil {
-			b.printError(fmt.Sprintf("-- error getting schema for udfs: %v", err), &buf)
-		}
-	}
-	if call, ok := mem.RootExpr().(*memo.CallExpr); ok {
-		// Currently, a stored procedure can only be called from a CALL statement,
-		// which can only be the root expression.
-		if proc, ok := call.Proc.(*memo.UDFCallExpr); ok {
+		var ids intsets.Fast
+		isProcedure := make(map[oid.Oid]bool)
+		mem.Metadata().ForEachUserDefinedRoutine(func(ol *tree.Overload) {
+			ids.Add(int(ol.Oid))
+			isProcedure[ol.Oid] = ol.Type == tree.ProcedureRoutine
+		})
+		ids.ForEach(func(id int) {
 			blankLine()
-			err = c.PrintRelevantCreateRoutine(
-				&buf, strings.ToLower(proc.Def.Name), b.flags.RedactValues, &b.errorStrings, true, /* procedure */
-			)
+			routineOid := oid.Oid(id)
+			err = c.PrintCreateRoutine(&buf, routineOid, b.flags.RedactValues, isProcedure[routineOid])
 			if err != nil {
-				b.printError(fmt.Sprintf("-- error getting schema for procedure: %v", err), &buf)
+				b.printError(fmt.Sprintf("-- error getting schema for routine with ID %d: %v", id, err), &buf)
 			}
-		} else {
-			b.printError("-- unexpected input expression for CALL statement", &buf)
-		}
+		})
 	}
 	for i := range tables {
 		blankLine()
@@ -1029,50 +1023,28 @@ func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintRelevantCreateRoutine(
-	w io.Writer, stmt string, redactValues bool, errorStrings *[]string, procedure bool,
+func (c *stmtEnvCollector) PrintCreateRoutine(
+	w io.Writer, id oid.Oid, redactValues bool, procedure bool,
 ) error {
-	// The select function_name returns a DOidWrapper,
-	// we need to cast it to string for queryRows function to process.
-	// TODO(#104976): consider getting the udf sql body statements from the memo metadata.
-	var routineTypeName, routineNameQuery string
+	var createRoutineQuery string
+	descID := catid.UserDefinedOIDToID(id)
+	queryTemplate := "SELECT create_statement FROM crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d"
 	if procedure {
-		routineTypeName = "PROCEDURE"
-		routineNameQuery = "SELECT procedure_name::STRING as procedure_name_str FROM [SHOW PROCEDURES]"
+		createRoutineQuery = fmt.Sprintf(queryTemplate, "procedure", descID)
 	} else {
-		routineTypeName = "FUNCTION"
-		routineNameQuery = "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
+		createRoutineQuery = fmt.Sprintf(queryTemplate, "function", descID)
 	}
-	routineNames, err := c.queryRows(routineNameQuery)
+	if redactValues {
+		createRoutineQuery = fmt.Sprintf(
+			"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
+			createRoutineQuery,
+		)
+	}
+	createStatement, err := c.query(createRoutineQuery)
 	if err != nil {
 		return err
 	}
-	for _, name := range routineNames {
-		if strings.Contains(stmt, name) {
-			createRoutineQuery := fmt.Sprintf(
-				"SELECT create_statement FROM [ SHOW CREATE %s \"%s\" ]", routineTypeName, name,
-			)
-			if redactValues {
-				createRoutineQuery = fmt.Sprintf(
-					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE %s \"%s\" ]",
-					routineTypeName, name,
-				)
-			}
-			createStatement, err := c.query(createRoutineQuery)
-			if err != nil {
-				var errString string
-				if procedure {
-					errString = fmt.Sprintf("-- error getting stored procedure %s: %s", name, err)
-				} else {
-					errString = fmt.Sprintf("-- error getting user defined function %s: %s", name, err)
-				}
-				fmt.Fprint(w, errString+"\n")
-				*errorStrings = append(*errorStrings, errString)
-				continue
-			}
-			fmt.Fprintf(w, "%s\n", createStatement)
-		}
-	}
+	fmt.Fprintf(w, "%s;\n", createStatement)
 	return nil
 }
 
