@@ -18,6 +18,7 @@ type ValidationContext struct {
 	CurConfig                         *quorum.Config
 	Applied                           uint64
 	PendingConfIndex                  uint64
+	LeadSupportSafe                   bool
 	DisableValidationAgainstCurConfig bool
 }
 
@@ -33,6 +34,17 @@ func ValidateProp(ctx ValidationContext, cc pb.ConfChangeV2) error {
 	if ctx.PendingConfIndex > ctx.Applied {
 		return errors.Errorf("possible unapplied conf change at index %d (applied to %d)",
 			ctx.PendingConfIndex, ctx.Applied)
+	}
+
+	// If the lead support has not caught up from the previous configuration, we
+	// must not propose another configuration change. Doing so would compromise
+	// the lead support promise made by the previous configuration and used as an
+	// expiration of a leader lease. Instead, we wait for the lead support under
+	// the current configuration to catch up to the maximum lead support reached
+	// under the previous config. If the lead support is never able to catch up,
+	// the leader will eventually step down due to CheckQuorum.
+	if !ctx.LeadSupportSafe {
+		return errors.Errorf("lead support has not caught up to previous configuration")
 	}
 
 	// The DisableValidationAgainstCurConfig flag allows disabling config change
