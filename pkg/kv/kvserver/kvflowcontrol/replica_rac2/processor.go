@@ -774,7 +774,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
 	// NB: this resets the scheduling bit in logTracker, which allows us to
 	// schedule this call again when the admitted vector is updated next time.
-	av, dirty := p.logTracker.admitted(true /* sched */)
+	av, dirty := p.logTracker.admittedDirty()
 	// Don't send the admitted vector if it hasn't been updated since the last
 	// time it was sent.
 	if !dirty {
@@ -1050,8 +1050,7 @@ func (p *processorImpl) AdmittedLogEntry(
 
 // AdmittedState implements Processor.
 func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
-	admitted, _ := p.logTracker.admitted(false /* sched */)
-	return admitted
+	return p.logTracker.admitted()
 }
 
 // AdmitRaftMuLocked implements Processor.

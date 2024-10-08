@@ -38,24 +38,30 @@ func (l *logTracker) init(stable rac2.LogMark) {
 	l.lt = rac2.NewLogTracker(stable)
 }
 
-// admitted returns the current admitted vector, and a bool indicating whether
-// this is the first call observing this particular admitted vector. The caller
-// may decide not to send this vector to the leader if it is not new (since it
-// has already been sent).
-//
-// The passed-in bool indicates whether this call is made from the Ready
-// handler. In this case the scheduled flag is reset, which allows the next
-// logAdmitted call to return true and allow scheduling a Ready iteration again.
-// This flow avoids unnecessary Ready scheduling events.
-func (l *logTracker) admitted(sched bool) (av rac2.AdmittedVector, dirty bool) {
+// admitted returns the current admitted vector, and resets the dirty bit.
+func (l *logTracker) admitted() rac2.AdmittedVector {
 	l.Lock()
 	defer l.Unlock()
-	dirty, l.dirty = l.dirty, false
-	if sched {
-		l.scheduled = false
+	l.dirty = false
+	return l.lt.Admitted()
+}
+
+// admittedDirty returns the current admitted vector if it hasn't been read yet,
+// either by admitted() or admittedDirty() method. Returns zero value if the
+// latest admitted vector has been read.
+//
+// This call is made from the Ready handler. It resets the scheduled flag, which
+// allows the next logAdmitted call to return true and allow scheduling a Ready
+// iteration again. This flow avoids unnecessary Ready scheduling events.
+func (l *logTracker) admittedDirty() (av rac2.AdmittedVector, dirty bool) {
+	l.Lock()
+	defer l.Unlock()
+	l.scheduled = false
+	if !l.dirty {
+		return
 	}
-	av = l.lt.Admitted()
-	return av, dirty
+	l.dirty = false
+	return l.lt.Admitted(), true
 }
 
 func (l *logTracker) snap(ctx context.Context, mark rac2.LogMark) {
