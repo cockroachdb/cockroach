@@ -503,6 +503,9 @@ type RangeControllerOptions struct {
 
 // RangeControllerInitState is the initial state at the time of creation.
 type RangeControllerInitState struct {
+	// Term is the raft term of the leader who runs this RangeController. It does
+	// not change during the lifetime of the RangeController.
+	Term uint64
 	// Must include RangeControllerOptions.ReplicaID.
 	ReplicaSet ReplicaSet
 	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
@@ -515,7 +518,10 @@ type RangeControllerInitState struct {
 
 // rangeController is tied to a single leader term.
 type rangeController struct {
-	opts       RangeControllerOptions
+	opts RangeControllerOptions
+	// term is the raft term of the leader who runs this range controller. The
+	// term does not change during the lifetime of the range controller.
+	term       uint64
 	replicaSet ReplicaSet
 	// leaseholder can be NoReplicaID or not be in ReplicaSet, i.e., it is
 	// eventually consistent with the set of replicas.
@@ -596,6 +602,7 @@ func NewRangeController(
 	}
 	rc := &rangeController{
 		opts:          o,
+		term:          init.Term,
 		leaseholder:   init.Leaseholder,
 		nextRaftIndex: init.NextRaftIndex,
 		replicaMap:    make(map[roachpb.ReplicaID]*replicaState),
@@ -1812,7 +1819,7 @@ func (rs *replicaState) createReplicaSendStream(
 		parent: rs,
 	}
 	rss := rs.sendStream
-	rss.mu.tracker.Init(rs.stream)
+	rss.mu.tracker.Init(rs.parent.term, rs.stream)
 	rss.mu.closed = false
 	rss.changeConnectedStateLocked(replicate, rs.parent.opts.Clock.PhysicalTime())
 	rss.mu.mode = mode
