@@ -7,12 +7,14 @@ package kvserver
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -9997,7 +9999,9 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						expLagging = append(expLagging, l.Liveness)
 					}
 				}
-				sort.Sort(expLagging)
+				slices.SortFunc(expLagging, func(a, b livenesspb.Liveness) int {
+					return cmp.Compare(a.NodeID, b.NodeID)
+				})
 				require.Equal(t, expLagging, lagging)
 			}
 		})
