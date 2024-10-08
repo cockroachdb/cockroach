@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -79,6 +80,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
 	for _, name := range req.TableNames {
 		uon, err := parser.ParseTableName(name)
 		if err != nil {
@@ -91,9 +94,10 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs[name] = td.TableDescriptor
-
-		// TODO (msbutler): get all udts across target tables to conduct
-		// verification during planning.
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
+		if err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
 	}
 
 	registry := execConfig.JobRegistry
@@ -128,7 +132,44 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
 		TableDescriptors:     tableDescs,
+		TypeDescriptors:      typeDescriptors,
 	}, nil
+}
+
+func getUDTs(
+	ctx context.Context,
+	txn descs.Txn,
+	typeDescriptors []descpb.TypeDescriptor,
+	foundTypeDescriptors map[descpb.ID]struct{},
+	td *tabledesc.Mutable,
+) ([]descpb.TypeDescriptor, map[descpb.ID]struct{}, error) {
+	descriptors := txn.Descriptors()
+	dbDesc, err := descriptors.MutableByID(txn.KV()).Database(ctx, td.GetParentID())
+	if err != nil {
+		return nil, nil, err
+	}
+	typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
+		func(id descpb.ID) (catalog.TypeDescriptor, error) {
+
+			return descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+		})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "resolving type descriptors")
+	}
+	for _, typeID := range typeIDs {
+		if _, ok := foundTypeDescriptors[typeID]; ok {
+			continue
+		}
+		foundTypeDescriptors[typeID] = struct{}{}
+
+		typeDesc, err := descriptors.MutableByID(txn.KV()).Type(ctx, typeID)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
+	}
+	return typeDescriptors, nil, nil
 }
 
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
@@ -153,29 +194,9 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs = append(tableDescs, td.TableDescriptor)
 
-		// fetch Type Descriptors, if any.
-		dbDesc, err := descriptors.MutableByID(r.txn.KV()).Database(ctx, td.GetParentID())
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
 		if err != nil {
 			return nil, err
-		}
-		typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
-			func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				if _, ok := foundTypeDescriptors[id]; ok {
-					return nil, nil
-				}
-				foundTypeDescriptors[id] = struct{}{}
-				return descriptors.ByIDWithLeased(r.txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
-			})
-		if err != nil {
-			return nil, errors.Wrap(err, "resolving type descriptors")
-		}
-		for _, typeID := range typeIDs {
-			typeDesc, err := descriptors.MutableByID(r.txn.KV()).Type(ctx, typeID)
-			if err != nil {
-				return nil, err
-			}
-
-			typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
 		}
 	}
 	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)

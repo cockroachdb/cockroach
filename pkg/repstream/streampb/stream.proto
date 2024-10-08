@@ -51,6 +51,8 @@ message ReplicationProducerSpec {
   // TODO(ssd): We likely want to remove this one-time table
   // descriptor fetch with a schemafeed that the consumer starts.
   map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
+
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when
