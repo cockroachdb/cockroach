@@ -43,13 +43,13 @@ import (
 )
 
 func TestFollowerUpdateTermFromMessage(t *testing.T) {
-	testUpdateTermFromMessage(t, StateFollower)
+	testUpdateTermFromMessage(t, pb.StateFollower)
 }
 func TestCandidateUpdateTermFromMessage(t *testing.T) {
-	testUpdateTermFromMessage(t, StateCandidate)
+	testUpdateTermFromMessage(t, pb.StateCandidate)
 }
 func TestLeaderUpdateTermFromMessage(t *testing.T) {
-	testUpdateTermFromMessage(t, StateLeader)
+	testUpdateTermFromMessage(t, pb.StateLeader)
 }
 
 // testUpdateTermFromMessage tests that if one server’s current term is
@@ -57,14 +57,14 @@ func TestLeaderUpdateTermFromMessage(t *testing.T) {
 // value. If a candidate or leader discovers that its term is out of date,
 // it immediately reverts to follower state.
 // Reference: section 5.1
-func testUpdateTermFromMessage(t *testing.T, state StateType) {
+func testUpdateTermFromMessage(t *testing.T, state pb.StateType) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
-	case StateFollower:
+	case pb.StateFollower:
 		r.becomeFollower(1, 2)
-	case StateCandidate:
+	case pb.StateCandidate:
 		r.becomeCandidate()
-	case StateLeader:
+	case pb.StateLeader:
 		r.becomeCandidate()
 		r.becomeLeader()
 	}
@@ -72,7 +72,7 @@ func testUpdateTermFromMessage(t *testing.T, state StateType) {
 	r.Step(pb.Message{Type: pb.MsgApp, Term: 2})
 
 	assert.Equal(t, uint64(2), r.Term)
-	assert.Equal(t, StateFollower, r.state)
+	assert.Equal(t, pb.StateFollower, r.state)
 }
 
 // TestRejectStaleTermMessage tests that if a server receives a request with
@@ -98,7 +98,7 @@ func TestRejectStaleTermMessage(t *testing.T) {
 // Reference: section 5.2
 func TestStartAsFollower(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	assert.Equal(t, StateFollower, r.state)
+	assert.Equal(t, pb.StateFollower, r.state)
 }
 
 // TestLeaderBcastBeat tests that if the leader receives a heartbeat tick,
@@ -152,10 +152,10 @@ func TestLeaderBcastBeat(t *testing.T) {
 }
 
 func TestFollowerStartElection(t *testing.T) {
-	testNonleaderStartElection(t, StateFollower)
+	testNonleaderStartElection(t, pb.StateFollower)
 }
 func TestCandidateStartNewElection(t *testing.T) {
-	testNonleaderStartElection(t, StateCandidate)
+	testNonleaderStartElection(t, pb.StateCandidate)
 }
 
 // testNonleaderStartElection tests that if a follower receives no communication
@@ -168,14 +168,14 @@ func TestCandidateStartNewElection(t *testing.T) {
 // start a new election by incrementing its term and initiating another
 // round of RequestVote RPCs.
 // Reference: section 5.2
-func testNonleaderStartElection(t *testing.T, state StateType) {
+func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 	// election timeout
 	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
-	case StateFollower:
+	case pb.StateFollower:
 		r.becomeFollower(1, 2)
-	case StateCandidate:
+	case pb.StateCandidate:
 		r.becomeCandidate()
 	}
 
@@ -185,7 +185,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	r.advanceMessagesAfterAppend()
 
 	assert.Equal(t, uint64(2), r.Term)
-	assert.Equal(t, StateCandidate, r.state)
+	assert.Equal(t, pb.StateCandidate, r.state)
 	assert.True(t, r.electionTracker.TestingGetVotes()[r.id])
 
 	msgs := r.readMessages()
@@ -206,26 +206,26 @@ func TestLeaderElectionInOneRoundRPC(t *testing.T) {
 	tests := []struct {
 		size  int
 		votes map[pb.PeerID]bool
-		state StateType
+		state pb.StateType
 	}{
 		// win the election when receiving votes from a majority of the servers
-		{1, map[pb.PeerID]bool{}, StateLeader},
-		{3, map[pb.PeerID]bool{2: true, 3: true}, StateLeader},
-		{3, map[pb.PeerID]bool{2: true}, StateLeader},
-		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true, 5: true}, StateLeader},
-		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true}, StateLeader},
-		{5, map[pb.PeerID]bool{2: true, 3: true}, StateLeader},
+		{1, map[pb.PeerID]bool{}, pb.StateLeader},
+		{3, map[pb.PeerID]bool{2: true, 3: true}, pb.StateLeader},
+		{3, map[pb.PeerID]bool{2: true}, pb.StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true, 5: true}, pb.StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true}, pb.StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true}, pb.StateLeader},
 
 		// return to follower state if it receives vote denial from a majority
-		{3, map[pb.PeerID]bool{2: false, 3: false}, StateFollower},
-		{5, map[pb.PeerID]bool{2: false, 3: false, 4: false, 5: false}, StateFollower},
-		{5, map[pb.PeerID]bool{2: true, 3: false, 4: false, 5: false}, StateFollower},
+		{3, map[pb.PeerID]bool{2: false, 3: false}, pb.StateFollower},
+		{5, map[pb.PeerID]bool{2: false, 3: false, 4: false, 5: false}, pb.StateFollower},
+		{5, map[pb.PeerID]bool{2: true, 3: false, 4: false, 5: false}, pb.StateFollower},
 
 		// stay in candidate if it does not obtain the majority
-		{3, map[pb.PeerID]bool{}, StateCandidate},
-		{5, map[pb.PeerID]bool{2: true}, StateCandidate},
-		{5, map[pb.PeerID]bool{2: false, 3: false}, StateCandidate},
-		{5, map[pb.PeerID]bool{}, StateCandidate},
+		{3, map[pb.PeerID]bool{}, pb.StateCandidate},
+		{5, map[pb.PeerID]bool{2: true}, pb.StateCandidate},
+		{5, map[pb.PeerID]bool{2: false, 3: false}, pb.StateCandidate},
+		{5, map[pb.PeerID]bool{}, pb.StateCandidate},
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(idsBySize(tt.size)...)))
@@ -282,11 +282,11 @@ func TestCandidateFallback(t *testing.T) {
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-		require.Equal(t, StateCandidate, r.state, "#%d", i)
+		require.Equal(t, pb.StateCandidate, r.state, "#%d", i)
 
 		r.Step(tt)
 
-		assert.Equal(t, StateFollower, r.state, "#%d", i)
+		assert.Equal(t, pb.StateFollower, r.state, "#%d", i)
 		assert.Equal(t, tt.Term, r.Term, "#%d", i)
 	}
 }
@@ -294,26 +294,26 @@ func TestCandidateFallback(t *testing.T) {
 func TestFollowerElectionTimeoutRandomized(t *testing.T) {
 	raftlogger.SetLogger(raftlogger.DiscardLogger)
 	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
-	testNonleaderElectionTimeoutRandomized(t, StateFollower)
+	testNonleaderElectionTimeoutRandomized(t, pb.StateFollower)
 }
 func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 	raftlogger.SetLogger(raftlogger.DiscardLogger)
 	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
-	testNonleaderElectionTimeoutRandomized(t, StateCandidate)
+	testNonleaderElectionTimeoutRandomized(t, pb.StateCandidate)
 }
 
 // testNonleaderElectionTimeoutRandomized tests that election timeout for
 // follower or candidate is randomized.
 // Reference: section 5.2
-func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
+func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
 	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	timeouts := make(map[int]bool)
 	for round := 0; round < 50*et; round++ {
 		switch state {
-		case StateFollower:
+		case pb.StateFollower:
 			r.becomeFollower(r.Term+1, 2)
-		case StateCandidate:
+		case pb.StateCandidate:
 			r.becomeCandidate()
 		}
 
@@ -333,19 +333,19 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state StateType) {
 func TestFollowersElectionTimeoutNonconflict(t *testing.T) {
 	raftlogger.SetLogger(raftlogger.DiscardLogger)
 	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
-	testNonleadersElectionTimeoutNonconflict(t, StateFollower)
+	testNonleadersElectionTimeoutNonconflict(t, pb.StateFollower)
 }
 func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
 	raftlogger.SetLogger(raftlogger.DiscardLogger)
 	defer raftlogger.SetLogger(raftlogger.DefaultRaftLogger)
-	testNonleadersElectionTimeoutNonconflict(t, StateCandidate)
+	testNonleadersElectionTimeoutNonconflict(t, pb.StateCandidate)
 }
 
 // testNonleadersElectionTimeoutNonconflict tests that in most cases only a
 // single server(follower or candidate) will time out, which reduces the
 // likelihood of split vote in the new election.
 // Reference: section 5.2
-func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
+func testNonleadersElectionTimeoutNonconflict(t *testing.T, state pb.StateType) {
 	et := 10
 	size := 5
 	rs := make([]*raft, size)
@@ -357,9 +357,9 @@ func testNonleadersElectionTimeoutNonconflict(t *testing.T, state StateType) {
 	for round := 0; round < 1000; round++ {
 		for _, r := range rs {
 			switch state {
-			case StateFollower:
+			case pb.StateFollower:
 				r.becomeFollower(r.Term+1, None)
-			case StateCandidate:
+			case pb.StateCandidate:
 				r.becomeCandidate()
 			}
 		}
@@ -807,7 +807,7 @@ func cmpMessages(a, b pb.Message) int {
 }
 
 func commitNoopEntry(r *raft, s *MemoryStorage) {
-	if r.state != StateLeader {
+	if r.state != pb.StateLeader {
 		panic("it should only be used when it is the leader")
 	}
 	r.bcastAppend()

@@ -133,7 +133,7 @@ func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
 	return &raft.Status{
 		BasicStatus: raft.BasicStatus{
 			HardState: raftpb.HardState{Commit: 100, Lead: 1},
-			SoftState: raft.SoftState{RaftState: raft.StateLeader},
+			SoftState: raft.SoftState{RaftState: raftpb.StateLeader},
 		},
 		Progress: prs,
 	}
@@ -8995,9 +8995,9 @@ func TestReplicaMetrics(t *testing.T) {
 		// and 2 is ok.
 		status.HardState.Commit = 12
 		if lead == 1 {
-			status.SoftState.RaftState = raft.StateLeader
+			status.SoftState.RaftState = raftpb.StateLeader
 		} else {
-			status.SoftState.RaftState = raft.StateFollower
+			status.SoftState.RaftState = raftpb.StateFollower
 		}
 		status.HardState.Lead = lead
 		return status
@@ -9886,7 +9886,7 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 }
 
 func (q *testQuiescer) isRaftLeaderRLocked() bool {
-	return q.status != nil && q.status.RaftState == raft.StateLeader
+	return q.status != nil && q.status.RaftState == raftpb.StateLeader
 }
 
 func (q *testQuiescer) raftSparseStatusRLocked() *raft.SparseStatus {
@@ -9960,7 +9960,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 							Commit: logIndex,
 						},
 						SoftState: raft.SoftState{
-							RaftState: raft.StateLeader,
+							RaftState: raftpb.StateLeader,
 						},
 						Applied:        logIndex,
 						LeadTransferee: 0,
@@ -11507,7 +11507,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11533,15 +11533,15 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			p.leaseStatus.Lease.Replica.StoreID = 1
 		}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {true, func(p *params) {
@@ -11627,7 +11627,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11648,15 +11648,15 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	}{
 		"dead leader": {true, func(p *params) {}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {true, func(p *params) {
@@ -11744,7 +11744,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11764,15 +11764,15 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 	}{
 		"dead leader": {true, func(p *params) {}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {false, func(p *params) {
@@ -11848,7 +11848,7 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 		raftStatus: raft.SparseStatus{
 			BasicStatus: raft.BasicStatus{
 				SoftState: raft.SoftState{
-					RaftState: raft.StateLeader,
+					RaftState: raftpb.StateLeader,
 				},
 				HardState: raftpb.HardState{
 					Lead:   localID,
@@ -11878,15 +11878,15 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			true, func(p *params) {},
 		},
 		"follower": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateFollower
+			p.raftStatus.SoftState.RaftState = raftpb.StateFollower
 			p.raftStatus.Lead = remoteID
 		}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"invalid lease": {false, func(p *params) {
