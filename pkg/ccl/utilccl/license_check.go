@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// trialLicenseUsageCount keeps track of the number of times a free trial
-// license has already been installed on this cluster.
-var trialLicenseUsageCount atomic.Int64
+// trialLicenseExpiryTimestamp tracks the expiration timestamp of any trial licenses
+// that have been installed on this cluster (past or present).
+var trialLicenseExpiryTimestamp atomic.Int64
 
 var enterpriseLicense = settings.RegisterStringSetting(
 	settings.SystemVisible,
@@ -45,7 +45,8 @@ var enterpriseLicense = settings.RegisterStringSetting(
 				return nil
 			}
 
-			if l.Type == licenseccl.License_Trial && trialLicenseUsageCount.Load() > 0 {
+			if l.Type == licenseccl.License_Trial && trialLicenseExpiryTimestamp.Load() > 0 &&
+				l.ValidUntilUnixSec != trialLicenseExpiryTimestamp.Load() {
 				return errors.WithHint(errors.Newf("a trial license has previously been installed on this cluster"),
 					"Please install a non-trial license to continue")
 			}
@@ -378,12 +379,12 @@ func RegisterCallbackOnLicenseChange(
 		}
 		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
 
-		cnt, err := licenseEnforcer.CalculateTrialUsageCount(ctx, licenseType, isChange)
+		expiry, err := licenseEnforcer.UpdateTrialLicenseExpiry(ctx, licenseType, isChange, licenseExpiry.Unix())
 		if err != nil {
-			log.Errorf(ctx, "unable to calculate trial license usage count: %v", err)
+			log.Errorf(ctx, "unable to update trial license expiry: %v", err)
 			return
 		}
-		trialLicenseUsageCount.Store(cnt)
+		trialLicenseExpiryTimestamp.Store(expiry)
 	}
 	// Install the hook so that we refresh license details when the license changes.
 	enterpriseLicense.SetOnChange(&st.SV,
