@@ -3371,20 +3371,10 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 `)
 		h.query(n1, v2FlowTokensQueryStr)
 
-		// TODO(pav-kv,kvoli): When #129581 is complete, this test will fail
-		// because the range won't quiesce with a lagging admitted vector. Update
-		// the test to assert that the range doesn't quiesce then.
-		//
-		// Wait for the range to quiesce.
-		h.comment(`-- (Wait for range to quiesce.)`)
-		testutils.SucceedsSoon(t, func() error {
-			leader := tc.GetRaftLeader(t, roachpb.RKey(k))
-			require.NotNil(t, leader)
-			if !leader.IsQuiescent() {
-				return errors.Errorf("%s not quiescent", leader)
-			}
-			return nil
-		})
+		// The range must not quiesce because the leader holds send tokens.
+		leader := tc.GetRaftLeader(t, roachpb.RKey(k))
+		require.NotNil(t, leader)
+		require.False(t, leader.IsQuiescent())
 
 		h.comment(`
 -- (Allow below-raft admission to proceed. We've disabled the fallback token
@@ -3409,6 +3399,15 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 -- are returned through the fallback mechanism. 
 `)
 		h.query(n1, v2FlowTokensQueryStr)
+
+		// The range eventually quiesces because all the tokens have been returned.
+		h.comment(`-- (Wait for range to quiesce.)`)
+		testutils.SucceedsSoon(t, func() error {
+			if !leader.IsQuiescent() {
+				return errors.Errorf("%s not quiescent", leader)
+			}
+			return nil
+		})
 	})
 }
 

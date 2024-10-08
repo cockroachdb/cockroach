@@ -79,6 +79,11 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	MaybeSendPingsRaftMuLocked()
+	// HoldsSendTokensRaftMuLocked returns true if the replica holds any send
+	// tokens. Used to prevent replica quiescence.
+	//
+	// Requires replica.raftMu to be held.
+	HoldsSendTokensRaftMuLocked() bool
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -1151,10 +1156,23 @@ func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
-		if s := state.sendStream; s != nil && s.shouldPing() {
+		if s := state.sendStream; s != nil && s.holdsTokens() {
 			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
 		}
 	}
+}
+
+// HoldsSendTokensRaftMuLocked implements RangeController.
+func (rc *rangeController) HoldsSendTokensRaftMuLocked() bool {
+	// TODO(pav-kv): in Replica.tick, we can call MaybeSendPingsRaftMuLocked
+	// first, which does the same checks. It can return whether any tokens are
+	// held, and this signal can be then used to prevent quiescence.
+	for _, state := range rc.replicaMap {
+		if s := state.sendStream; s != nil && s.holdsTokens() {
+			return true
+		}
+	}
+	return false
 }
 
 // SetReplicasRaftMuLocked sets the replicas of the range. The caller will
@@ -1559,7 +1577,7 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 	rss.mu.connectedStateStart = now
 }
 
-func (rss *replicaSendStream) shouldPing() bool {
+func (rss *replicaSendStream) holdsTokens() bool {
 	rss.mu.Lock() // TODO(pav-kv): should we make it RWMutex.RLock()?
 	defer rss.mu.Unlock()
 	return !rss.mu.tracker.Empty()

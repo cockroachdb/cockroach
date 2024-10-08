@@ -217,6 +217,11 @@ func (c *testRangeController) MaybeSendPingsRaftMuLocked() {
 	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsRaftMuLocked()\n")
 }
 
+func (c *testRangeController) HoldsSendTokensRaftMuLocked() bool {
+	fmt.Fprintf(c.b, " RangeController.HoldsSendTokensRaftMuLocked()\n")
+	return false
+}
+
 func (c *testRangeController) SetReplicasRaftMuLocked(
 	ctx context.Context, replicas rac2.ReplicaSet,
 ) error {

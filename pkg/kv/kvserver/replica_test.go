@@ -9859,6 +9859,7 @@ type testQuiescer struct {
 	desc                   roachpb.RangeDescriptor
 	numProposals           int
 	pendingQuota           bool
+	sendTokens             bool
 	ticksSinceLastProposal int
 	status                 *raft.SparseStatus
 	lastIndex              kvpb.RaftIndex
@@ -9910,6 +9911,10 @@ func (q *testQuiescer) hasPendingProposalsRLocked() bool {
 
 func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
+}
+
+func (q *testQuiescer) hasSendTokensRaftMuLocked() bool {
+	return q.sendTokens
 }
 
 func (q *testQuiescer) ticksSinceLastProposalRLocked() int {
@@ -10015,6 +10020,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.pendingQuota = true
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.sendTokens = true
 		return q
 	})
 	test(true, func(q *testQuiescer) *testQuiescer {
