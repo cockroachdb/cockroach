@@ -437,10 +437,12 @@ func maybeRevertToCutoverTimestamp(
 	// existed in the record at the point of the update rather the
 	// value that may be in the job record before the update.
 	var (
-		shouldRevertToCutover  bool
-		cutoverTimestamp       hlc.Timestamp
-		originalSpanToRevert   roachpb.Span
-		remainingSpansToRevert roachpb.Spans
+		shouldRevertToCutover   bool
+		cutoverTimestamp        hlc.Timestamp
+		originalSpanToRevert    roachpb.Span
+		remainingSpansToRevert  roachpb.Spans
+		replicatedTimeAtCutover hlc.Timestamp
+		readerTenantID          roachpb.TenantID
 	)
 	if err := ingestionJob.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -457,6 +459,8 @@ func maybeRevertToCutoverTimestamp(
 			}
 
 			cutoverTimestamp = streamIngestionProgress.CutoverTime
+			replicatedTimeAtCutover = streamIngestionProgress.ReplicatedTimeAtCutover
+			readerTenantID = streamIngestionDetails.ReadTenantID
 			originalSpanToRevert = streamIngestionDetails.Span
 			remainingSpansToRevert = streamIngestionProgress.RemainingCutoverSpans
 			shouldRevertToCutover = cutoverTimeIsEligibleForCutover(ctx, cutoverTimestamp, md.Progress)
@@ -476,6 +480,13 @@ func maybeRevertToCutoverTimestamp(
 	}
 	if !shouldRevertToCutover {
 		return cutoverTimestamp, false, nil
+	}
+	// Identical cutoverTimestamp and replicatedTimeAtCutover implies that
+	// CUTOVER TO LATEST command was run. Destroy reader tenant if not CUTOVER TO LATEST.
+	if !cutoverTimestamp.Equal(replicatedTimeAtCutover) && readerTenantID.IsSet() {
+		if err := stopTenant(ctx, p.ExecCfg(), readerTenantID); err != nil {
+			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
+		}
 	}
 	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
@@ -538,6 +549,35 @@ func activateTenant(
 
 		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, info)
 	})
+}
+
+func stopTenant(ctx context.Context, execCfg *sql.ExecutorConfig, tenantID roachpb.TenantID) error {
+	var tenantInfo *mtinfopb.TenantInfo
+
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		tenantInfo, err = sql.GetTenantRecordByID(ctx, txn, tenantID, execCfg.Settings)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	ie := execCfg.InternalDB.Executor()
+	if _, err := ie.Exec(ctx, "stop tenant", nil, `ALTER VIRTUAL CLUSTER $1 STOP SERVICE`, tenantInfo.Name); err != nil {
+		return err
+	}
+
+	tenantInfo.ServiceMode = mtinfopb.ServiceModeNone
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantInfo)
+	}); err != nil {
+		return err
+	}
+
+	if _, err := ie.Exec(ctx, "drop tenant", nil, `DROP VIRTUAL CLUSTER IF EXISTS $1 IMMEDIATE`, tenantInfo.Name); err != nil {
+		return err
+	}
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

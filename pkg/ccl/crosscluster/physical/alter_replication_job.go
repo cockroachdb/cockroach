@@ -555,13 +555,13 @@ func alterTenantJobCutover(
 	}
 	progress := job.Progress()
 
+	replicatedTimeAtCutover := replicationutils.ReplicatedTimeFromProgress(&progress)
+	if replicatedTimeAtCutover.IsEmpty() {
+		replicatedTimeAtCutover = details.ReplicationStartTime
+	}
+
 	if alterTenantStmt.Cutover.Latest {
-		replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
-		if replicatedTime.IsEmpty() {
-			cutoverTime = details.ReplicationStartTime
-		} else {
-			cutoverTime = replicatedTime
-		}
+		cutoverTime = replicatedTimeAtCutover
 	}
 
 	// TODO(ssd): We could use the replication manager here, but
@@ -585,7 +585,7 @@ func alterTenantJobCutover(
 				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := applyCutoverTime(ctx, job, txn, cutoverTime); err != nil {
+	if err := applyCutoverTime(ctx, job, txn, cutoverTime, replicatedTimeAtCutover); err != nil {
 		return hlc.Timestamp{}, err
 	}
 
@@ -595,7 +595,11 @@ func alterTenantJobCutover(
 // applyCutoverTime modifies the consumer job record with a cutover time and
 // unpauses the job if necessary.
 func applyCutoverTime(
-	ctx context.Context, job *jobs.Job, txn isql.Txn, cutoverTimestamp hlc.Timestamp,
+	ctx context.Context,
+	job *jobs.Job,
+	txn isql.Txn,
+	cutoverTimestamp hlc.Timestamp,
+	replicatedTimeAtCutover hlc.Timestamp,
 ) error {
 	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
 	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -610,6 +614,7 @@ func applyCutoverTime(
 		// Update the sentinel being polled by the stream ingestion job to
 		// check if a complete has been signaled.
 		progress.CutoverTime = cutoverTimestamp
+		progress.ReplicatedTimeAtCutover = replicatedTimeAtCutover
 		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 		ju.UpdateProgress(md.Progress)
 		return ju.Unpaused(ctx, md)
