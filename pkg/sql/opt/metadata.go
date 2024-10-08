@@ -573,13 +573,22 @@ func (md *Metadata) HasUserDefinedRoutines() bool {
 func (md *Metadata) AddUserDefinedRoutine(
 	overload *tree.Overload, name *tree.UnresolvedObjectName,
 ) {
-	if overload.Type != tree.UDFRoutine {
+	if overload.Type == tree.BuiltinRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))
 	md.routineDeps[id] = overload
 	if name != nil {
 		md.objectRefsByName[id] = append(md.objectRefsByName[id], name)
+	}
+}
+
+// ForEachUserDefinedRoutine executes the given function for each user-defined
+// routine (UDF or stored procedure) overload. The order of iteration is
+// non-deterministic.
+func (md *Metadata) ForEachUserDefinedRoutine(fn func(overload *tree.Overload)) {
+	for _, dep := range md.routineDeps {
+		fn(dep.overload)
 	}
 }
 
