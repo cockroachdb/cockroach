@@ -636,6 +636,8 @@ var defaultSrcClusterSetting = map[string]string{
 	// Large timeout makes test to not fail with unexpected timeout failures.
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
+	// Finer grain checkpoints to keep replicated time close to present.
+	`physical_replication.producer.timestamp_granularity`: `'100ms'`,
 	// Make all AddSSTable operation to trigger AddSSTable events.
 	`kv.bulk_io_write.small_write_size`: `'1'`,
 	`jobs.registry.interval.adopt`:      `'1s'`,
