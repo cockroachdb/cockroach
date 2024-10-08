@@ -82,13 +82,6 @@ func loadDefaultMethods() {
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
 	RegisterAuthMethod("trust", authTrust, hba.ConnAny, NoOptionsAllowed)
-	// The "ldap" method requires a clear text password which will be used to bind
-	// with a LDAP server. The remaining connection parameters are provided in hba
-	// conf options
-	//
-	// Care should be taken by administrators to only accept this auth
-	// method over secure connections, e.g. those encrypted using SSL.
-	RegisterAuthMethod("ldap", authLDAP, hba.ConnAny, nil)
 }
 
 // AuthMethod is a top-level factory for composing the various
@@ -112,7 +105,7 @@ var _ AuthMethod = authTrust
 var _ AuthMethod = authReject
 var _ AuthMethod = authSessionRevivalToken([]byte{})
 var _ AuthMethod = authJwtToken
-var _ AuthMethod = authLDAP
+var _ AuthMethod = AuthLDAP
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -918,9 +911,14 @@ var ConfigureLDAPAuth = func(
 	return &noLDAPConfigured{}
 }
 
-// authLDAP is the AuthMethod constructor for the CRDB-specific
-// ldap auth mechanism.
-func authLDAP(
+// AuthLDAP is the AuthMethod constructor for the CRDB-specific ldap auth
+// mechanism. The "LDAP" method requires a clear text password which will be
+// used to bind with a LDAP server. The remaining connection parameters are
+// provided in hba conf options.
+//
+// Care should be taken by administrators to only accept this auth method over
+// secure connections, e.g. those encrypted using SSL.
+func AuthLDAP(
 	sCtx context.Context,
 	c AuthConn,
 	sessionUser username.SQLUsername,

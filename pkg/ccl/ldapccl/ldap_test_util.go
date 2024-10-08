@@ -28,6 +28,15 @@ type mockLDAPUtil struct {
 	groupDNs  []string
 }
 
+var _ ILDAPUtil = &mockLDAPUtil{}
+
+var NewMockLDAPUtil func(context.Context, ldapConfig) (ILDAPUtil, error) = func(
+	ctx context.Context,
+	conf ldapConfig,
+) (ILDAPUtil, error) {
+	return &mockLDAPUtil{}, nil
+}
+
 // MaybeInitLDAPsConn implements the ILDAPUtil interface.
 func (lu *mockLDAPUtil) MaybeInitLDAPsConn(ctx context.Context, conf ldapConfig) error {
 	if strings.Contains(conf.ldapServer, invalidParam) {
@@ -112,8 +121,6 @@ func (lu *mockLDAPUtil) ListGroups(
 
 	return lu.groupDNs, nil
 }
-
-var _ ILDAPUtil = &mockLDAPUtil{}
 
 func constructHBAEntry(
 	t *testing.T,
