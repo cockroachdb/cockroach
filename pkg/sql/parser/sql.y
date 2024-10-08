@@ -8632,11 +8632,11 @@ show_external_connections_stmt:
 
 // %Help: SHOW TYPES - list user defined types
 // %Category: Misc
-// %Text: SHOW TYPES
+// %Text: SHOW TYPES [WITH_COMMENT]
 show_types_stmt:
-  SHOW TYPES
+  SHOW TYPES with_comment
   {
-    $$.val = &tree.ShowTypes{}
+    $$.val = &tree.ShowTypes{WithComment: $3.bool()}
   }
 | SHOW TYPES error // SHOW HELP: SHOW TYPES
 

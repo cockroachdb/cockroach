@@ -842,7 +842,7 @@ show_external_connections_stmt ::=
 	| 'SHOW' 'EXTERNAL' 'CONNECTION' string_or_placeholder
 
 show_types_stmt ::=
-	'SHOW' 'TYPES'
+	'SHOW' 'TYPES' with_comment
 
 show_functions_stmt ::=
 	'SHOW' 'FUNCTIONS' 'FROM' name '.' name

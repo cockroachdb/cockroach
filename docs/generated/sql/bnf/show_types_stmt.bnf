@@ -1,2 +1,2 @@
 show_types_stmt ::=
-	'SHOW' 'TYPES'
+	'SHOW' 'TYPES' with_comment

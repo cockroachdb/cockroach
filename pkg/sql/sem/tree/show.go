@@ -403,11 +403,17 @@ func (node *ShowEnums) Format(ctx *FmtCtx) {
 }
 
 // ShowTypes represents a SHOW TYPES statement.
-type ShowTypes struct{}
+type ShowTypes struct {
+	WithComment bool
+}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTypes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TYPES")
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowTraceType is an enum of SHOW TRACE variants.

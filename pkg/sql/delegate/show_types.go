@@ -9,11 +9,31 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-func (d *delegator) delegateShowTypes() (tree.Statement, error) {
+func (d *delegator) delegateShowTypes(n *tree.ShowTypes) (tree.Statement, error) {
+
+	dbName := lexbase.EscapeSQLIdent(d.evalCtx.SessionData().Database)
+	commentColumn, commentJoin := ``, ``
+	if n.WithComment {
+		commentColumn = `, comment`
+		commentJoin = fmt.Sprintf(`
+			LEFT JOIN
+				(
+					SELECT 
+						objoid, description as comment
+					FROM
+						%s.pg_catalog.pg_description
+					WHERE
+						classoid = %d
+				) c
+			ON
+				 	(types.oid::int - 100000) = c.objoid`, dbName, catconstants.PgCatalogTypeTableID)
+	}
+
 	// Query all enum and composite types. Two explanations about the WHERE
 	// clause we use:
 	// - we filter out types defined in internally generated namespaces so that
@@ -25,16 +45,17 @@ func (d *delegator) delegateShowTypes() (tree.Statement, error) {
 SELECT
 	nsp.nspname AS schema,
 	types.typname AS name,
-	rl.rolname AS owner
+	rl.rolname AS owner %[2]s
 FROM
 	%[1]s.pg_catalog.pg_type AS types
 	LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (types.typowner = rl.oid)
 	JOIN %[1]s.pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+	%[3]s
 WHERE types.typtype IN ('e','c') AND
       types.typrelid IN (0, types.oid) AND
       nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')
 ORDER BY (nsp.nspname, types.typname)
-`, lexbase.EscapeSQLIdent(d.evalCtx.SessionData().Database))
+`, dbName, commentColumn, commentJoin)
 	return d.parse(query)
 }
 
