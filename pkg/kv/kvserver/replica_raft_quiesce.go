@@ -6,8 +6,9 @@
 package kvserver
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -248,11 +249,6 @@ func (s laggingReplicaSet) AnyMemberStale(livenessMap livenesspb.IsLiveMap) bool
 	return false
 }
 
-// Implement Sort.Interface.
-func (s laggingReplicaSet) Len() int           { return len(s) }
-func (s laggingReplicaSet) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeID }
-
 // shouldReplicaQuiesce determines if a replica should be quiesced. All the
 // access to Replica internals is gated by the quiescer interface to facilitate
 // testing. Returns the raft.Status and true on success, and (nil, false) on
@@ -446,7 +442,9 @@ func shouldReplicaQuiesce(
 			return nil, nil, false
 		}
 	}
-	sort.Sort(lagging)
+	slices.SortFunc(lagging, func(a, b livenesspb.Liveness) int {
+		return cmp.Compare(a.NodeID, b.NodeID)
+	})
 	if !foundSelf {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
