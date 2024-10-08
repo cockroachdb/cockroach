@@ -1262,32 +1262,27 @@ func TestForeignKeyConstraints(t *testing.T) {
 	dbA.Exec(t, "CREATE TABLE test(a int primary key, b int)")
 
 	testutils.RunTrueAndFalse(t, "immediate-mode", func(t *testing.T, immediateMode bool) {
-		testutils.RunTrueAndFalse(t, "valid-foreign-key", func(t *testing.T, validForeignKey bool) {
-			fkStmt := "ALTER TABLE test ADD CONSTRAINT fkc FOREIGN KEY (b) REFERENCES tab(pk)"
-			if !validForeignKey {
-				fkStmt = fkStmt + " NOT VALID"
-			}
-			dbA.Exec(t, fkStmt)
+		fkStmt := "ALTER TABLE test ADD CONSTRAINT fkc FOREIGN KEY (b) REFERENCES tab(pk)"
+		dbA.Exec(t, fkStmt)
 
-			var mode string
-			if immediateMode {
-				mode = "IMMEDIATE"
-			} else {
-				mode = "VALIDATED"
-			}
+		var mode string
+		if immediateMode {
+			mode = "IMMEDIATE"
+		} else {
+			mode = "VALIDATED"
+		}
 
-			var jobID jobspb.JobID
-			stmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = " + mode
-			if immediateMode && validForeignKey {
-				dbA.ExpectErr(t, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'", stmt, dbBURL.String())
-			} else {
-				dbA.QueryRow(t, stmt, dbBURL.String()).Scan(&jobID)
-				dbA.Exec(t, "CANCEL JOB $1", jobID)
-				jobutils.WaitForJobToCancel(t, dbA, jobID)
-			}
+		var jobID jobspb.JobID
+		stmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = " + mode
+		if immediateMode {
+			dbA.ExpectErr(t, "foreign keys are only supported with MODE = 'validated'", stmt, dbBURL.String())
+		} else {
+			dbA.QueryRow(t, stmt, dbBURL.String()).Scan(&jobID)
+			dbA.Exec(t, "CANCEL JOB $1", jobID)
+			jobutils.WaitForJobToCancel(t, dbA, jobID)
+		}
 
-			dbA.Exec(t, "ALTER TABLE test DROP CONSTRAINT fkc")
-		})
+		dbA.Exec(t, "ALTER TABLE test DROP CONSTRAINT fkc")
 	})
 }
 
