@@ -623,8 +623,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	if err := c.PrintCreateEnum(&buf, b.flags.RedactValues); err != nil {
 		b.printError(fmt.Sprintf("-- error getting schema for enums: %v", err), &buf)
 	}
-	if mem.Metadata().HasUserDefinedFunctions() {
-		// Get all relevant user-defined functions.
+	if mem.Metadata().HasUserDefinedRoutines() {
+		// Get all relevant user-defined routines.
 		blankLine()
 		err = c.PrintRelevantCreateRoutine(
 			&buf, strings.ToLower(b.stmt), b.flags.RedactValues, &b.errorStrings, false, /* procedure */
