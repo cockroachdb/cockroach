@@ -326,13 +326,21 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	t.Run("types", func(t *testing.T) {
 		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
 		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 'hello'::test_type1;")
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
-		)
-		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "test_type1", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("test_type1")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type1' type in schema.sql")
+					}
+					reg = regexp.MustCompile("test_type2")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant user defined type 'test_type2' in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
