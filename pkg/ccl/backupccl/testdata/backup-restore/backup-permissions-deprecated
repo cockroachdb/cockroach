@@ -143,7 +143,7 @@ GRANT CONNECT ON DATABASE d TO testuser;
 ----
 
 exec-sql cluster=s3 user=testuser
-SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+SHOW BACKUP FROM LATEST IN 'http://COCKROACH_TEST_HTTP_SERVER/'
 ----
 pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified http URI
 
@@ -161,6 +161,6 @@ CREATE USER testuser
 ----
 
 exec-sql cluster=s4 user=testuser
-SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
+SHOW BACKUP FROM LATEST IN 'http://COCKROACH_TEST_HTTP_SERVER/'
 ----
-pq: make storage: external http access disabled
+pq: read LATEST path: external http access disabled
