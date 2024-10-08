@@ -87,11 +87,11 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	r.store.unquiescedReplicas.Unlock()
 
 	st := r.raftSparseStatusRLocked()
-	if st.RaftState == raft.StateLeader {
+	if st.RaftState == raftpb.StateLeader {
 		r.mu.lastUpdateTimes.updateOnUnquiesce(
 			r.shMu.state.Desc.Replicas().Descriptors(), st.Progress, r.Clock().PhysicalTime())
 
-	} else if st.RaftState == raft.StateFollower && st.Lead != raft.None && wakeLeader {
+	} else if st.RaftState == raftpb.StateFollower && st.Lead != raft.None && wakeLeader {
 		// Propose an empty command which will wake the leader.
 		if log.V(3) {
 			log.Infof(ctx, "waking r%d leader", r.RangeID)
@@ -371,7 +371,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		}
 		return nil, nil, false
 	}
-	if status.SoftState.RaftState != raft.StateLeader {
+	if status.SoftState.RaftState != raftpb.StateLeader {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
 		}

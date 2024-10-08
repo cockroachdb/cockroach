@@ -125,7 +125,7 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -1185,11 +1185,11 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 }
 
 func (rp *replicaProposer) onErrProposalDropped(
-	ents []raftpb.Entry, _ []*ProposalData, stateType raft.StateType,
+	ents []raftpb.Entry, _ []*ProposalData, stateType raftpb.StateType,
 ) {
 	n := int64(len(ents))
 	rp.store.metrics.RaftProposalsDropped.Inc(n)
-	if stateType == raft.StateLeader {
+	if stateType == raftpb.StateLeader {
 		rp.store.metrics.RaftProposalsDroppedLeader.Inc(n)
 	}
 }

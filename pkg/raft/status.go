@@ -101,7 +101,7 @@ func getBasicStatus(r *raft) BasicStatus {
 	s.HardState = r.hardState()
 	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
-	if s.RaftState == StateFollower && s.Lead == r.id {
+	if s.RaftState == pb.StateFollower && s.Lead == r.id {
 		// A raft leader's term ends when it is shut down. It'll rejoin its peers as
 		// a follower when it comes back up, but its Lead and Term field may still
 		// correspond to its pre-restart leadership term. We expect this to quickly
@@ -125,7 +125,7 @@ func getBasicStatus(r *raft) BasicStatus {
 func getStatus(r *raft) Status {
 	var s Status
 	s.BasicStatus = getBasicStatus(r)
-	if s.RaftState == StateLeader {
+	if s.RaftState == pb.StateLeader {
 		s.Progress = getProgressCopy(r)
 	}
 	s.Config = r.config.Clone()
@@ -142,7 +142,7 @@ func getStatus(r *raft) Status {
 func getSparseStatus(r *raft) SparseStatus {
 	var s SparseStatus
 	s.BasicStatus = getBasicStatus(r)
-	if s.RaftState == StateLeader {
+	if s.RaftState == pb.StateLeader {
 		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
 		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
 			s.Progress[id] = pr

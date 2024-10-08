@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -431,7 +430,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 		require.NoError(t, repl0.RaftReportUnreachable(4))
 		// Check the Raft progress.
 		s := repl0.RaftStatus()
-		require.Equal(t, raft.StateLeader, s.RaftState)
+		require.Equal(t, raftpb.StateLeader, s.RaftState)
 		p := s.Progress
 		require.Len(t, p, 4)
 		require.Contains(t, p, raftpb.PeerID(4))
