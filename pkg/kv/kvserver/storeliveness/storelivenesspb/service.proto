@@ -154,3 +154,20 @@ message SupportState {
   int64              epoch      = 2 [(gogoproto.casttype) = "Epoch"];
   util.hlc.Timestamp expiration = 3 [(gogoproto.nullable) = false];
 }
+
+// InspectStoreLivenessRequest is used to power the Store Liveness /inspectz
+// functionality. The request doesn't take any parameters.
+message InspectStoreLivenessRequest {}
+
+// InspectStoreLivenessRequest is used to power the Store Liveness /inspectz
+// functionality. The response is a list of SupportStatesPerStore.
+message InspectStoreLivenessResponse {
+  repeated SupportStatesPerStore support_states_per_store = 1 [(gogoproto.nullable) = false];
+}
+
+// SupportStatesPerStore includes all SupportStates for a given store; they
+// correspond to either the support-from or support-for map of a given store.
+message SupportStatesPerStore {
+  StoreIdent store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  repeated SupportState support_states = 2 [(gogoproto.nullable) = false];
+}

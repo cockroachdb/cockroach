@@ -15,6 +15,8 @@ import (
 // Fabric is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
 type Fabric interface {
+	InspectFabric
+
 	// SupportFor returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the local store (S_local) for the store (S_remote)
 	// corresponding to the specified id, and a boolean indicating whether S_local
@@ -56,4 +58,11 @@ type Fabric interface {
 	// Liveness is not sending heartbeats but is still responding to heartbeats
 	// to ensure any promise by the local store to provide support is still kept.
 	SupportFromEnabled(ctx context.Context) bool
+}
+
+// InspectFabric is an interface that exposes all in-memory support state for a
+// given store. It is used to power the Store Liveness /inspectz functionality.
+type InspectFabric interface {
+	InspectSupportFrom() slpb.SupportStatesPerStore
+	InspectSupportFor() slpb.SupportStatesPerStore
 }
