@@ -24,6 +24,9 @@ import (
 type logTracker struct {
 	syncutil.Mutex
 	lt rac2.LogTracker
+	// av is the latest computed admitted vector. It is stale if dirty is true. In
+	// this case it will be recomputed when requested.
+	av rac2.AdmittedVector
 	// dirty is true when the admitted vector has changed and should be sent to
 	// the leader.
 	dirty bool
@@ -36,6 +39,7 @@ func (l *logTracker) init(stable rac2.LogMark) {
 	l.Lock()
 	defer l.Unlock()
 	l.lt = rac2.NewLogTracker(stable)
+	l.av = l.lt.Admitted()
 }
 
 // admitted returns the current admitted vector, and a bool indicating whether
@@ -47,15 +51,17 @@ func (l *logTracker) init(stable rac2.LogMark) {
 // handler. In this case the scheduled flag is reset, which allows the next
 // logAdmitted call to return true and allow scheduling a Ready iteration again.
 // This flow avoids unnecessary Ready scheduling events.
-func (l *logTracker) admitted(sched bool) (av rac2.AdmittedVector, dirty bool) {
+func (l *logTracker) admitted(sched bool) (_ rac2.AdmittedVector, dirty bool) {
 	l.Lock()
 	defer l.Unlock()
-	dirty, l.dirty = l.dirty, false
-	if sched {
+	if sched && l.scheduled {
 		l.scheduled = false
 	}
-	av = l.lt.Admitted()
-	return av, dirty
+	if dirty = l.dirty; dirty {
+		l.av = l.lt.Admitted()
+		l.dirty = false
+	}
+	return l.av, dirty
 }
 
 func (l *logTracker) snap(ctx context.Context, mark rac2.LogMark) {
