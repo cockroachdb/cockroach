@@ -52,7 +52,6 @@ func TestTokenTracker(t *testing.T) {
 
 	ctx := context.Background()
 	tracker := &Tracker{}
-	tracker.Init(kvflowcontrol.Stream{})
 
 	// Used to marshal the output of the Inspect() method into a human-readable
 	// formatted JSON string. See case "inspect" below.
@@ -63,6 +62,12 @@ func TestTokenTracker(t *testing.T) {
 	}
 	datadriven.RunTest(t, "testdata/token_tracker", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
+		case "init":
+			var term uint64
+			d.ScanArgs(t, "term", &term)
+			tracker.Init(term, kvflowcontrol.Stream{})
+			return "ok"
+
 		case "track":
 			var buf strings.Builder
 			for _, line := range strings.Split(d.Input, "\n") {

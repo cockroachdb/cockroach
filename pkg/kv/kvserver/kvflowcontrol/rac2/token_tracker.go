@@ -26,6 +26,8 @@ type entryID struct {
 // deducted for an in-flight log entry identified by its raft entryID, with
 // a given priority.
 type Tracker struct {
+	// term is the raft leader term owning this tracker.
+	term uint64
 	// tracked contains the per-priority tracked log entries ordered by log index.
 	tracked [raftpb.NumPriorities][]tracked
 
@@ -38,8 +40,9 @@ type tracked struct {
 	tokens kvflowcontrol.Tokens
 }
 
-func (t *Tracker) Init(stream kvflowcontrol.Stream) {
+func (t *Tracker) Init(term uint64, stream kvflowcontrol.Stream) {
 	*t = Tracker{
+		term:    term,
 		tracked: [raftpb.NumPriorities][]tracked{},
 		stream:  stream,
 	}
@@ -91,15 +94,22 @@ func (t *Tracker) Track(
 func (t *Tracker) Untrack(
 	av AdmittedVector, evalTokensGEIndex uint64,
 ) (returnedSend, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens) {
-	// TODO(pav-kv): the logic below is not correct. We need to check av.Term to
-	// be the same as this leader's term. If it's below, ignore. If above, release
-	// all tokens. If same, release a prefix up to the given index.
+	if av.Term != t.term {
+		// If av.Term < t.term, this is an admission vector for a stale leader, and
+		// we should ignore it. The current-term log is not guaranteed to be
+		// consistent with the av.Term log.
+		//
+		// TODO(pav-kv): if av.Term > t.term, we should return all tokens instead of
+		// returning here. However, raft will know about the term bump soon enough,
+		// exit StateLeader, and the tokens will be returned anyway.
+		return
+	}
+
 	for pri, uptoIndex := range av.Admitted {
 		var untracked int
 		for n := len(t.tracked[pri]); untracked < n; untracked++ {
 			deduction := t.tracked[pri][untracked]
-			if deduction.id.term > av.Term ||
-				deduction.id.term == av.Term && deduction.id.index > uptoIndex {
+			if deduction.id.index > uptoIndex {
 				break
 			}
 			returnedSend[pri] += deduction.tokens
@@ -113,8 +123,8 @@ func (t *Tracker) Untrack(
 	return returnedSend, returnedEval
 }
 
-// UntrackAll iterates through all tracked token deductions, untracking all of them
-// and returning the sum of tokens for each priority.
+// UntrackAll removes all tracked deductions, and returns the total amount of
+// previously tracked tokens for each priority.
 func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
 	for pri, deductions := range t.tracked {
 		for _, deduction := range deductions {
@@ -122,7 +132,6 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 		}
 	}
 	t.tracked = [raftpb.NumPriorities][]tracked{}
-
 	return returned
 }
 
