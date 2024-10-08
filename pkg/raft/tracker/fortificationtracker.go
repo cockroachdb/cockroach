@@ -22,6 +22,17 @@ type FortificationTracker struct {
 	config        *quorum.Config
 	storeLiveness raftstoreliveness.StoreLiveness
 
+	// term is the leadership term associated with fortification tracking. It
+	// allows a leader whose leadership term has since ended to keep track of
+	// fortification state and take action based on it (e.g. de-fortify
+	// followers). It should be reset right before a peer steps up to become a
+	// leader again.
+	//
+	// The term differs from raft.term in that raft.term is the highest term known
+	// to a peer, whereas FortificationTracker.term is the highest term a peer was
+	// a leader at since it was restarted.
+	term uint64
+
 	// fortification contains a map of nodes which have fortified the leader
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
@@ -54,8 +65,10 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 	ft.fortification[id] = max(ft.fortification[id], epoch)
 }
 
-// Reset clears out any previously tracked fortification.
-func (ft *FortificationTracker) Reset() {
+// Reset clears out any previously tracked fortification and prepares the
+// fortification tracker to be used by a newly elected leader.
+func (ft *FortificationTracker) Reset(term uint64) {
+	ft.term = term
 	clear(ft.fortification)
 	// TODO(arul): when we introduce ft.LeadSupportUntil we need to make sure it
 	// isn't reset here, because we don't want it to regress when a leader steps
@@ -113,6 +126,12 @@ func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
 // not.
 func (ft *FortificationTracker) QuorumActive() bool {
 	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
+}
+
+// Term returns the leadership term for which the tracker is/was tracking
+// fortification state.
+func (ft *FortificationTracker) Term() uint64 {
+	return ft.term
 }
 
 func (ft *FortificationTracker) Empty() bool {
