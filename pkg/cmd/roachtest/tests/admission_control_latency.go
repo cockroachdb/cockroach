@@ -214,7 +214,7 @@ func registerLatencyTests(r registry.Registry) {
 	addFull(r, addNode{}, 3.0)
 	addFull(r, decommission{}, 3.0)
 	addFull(r, backfill{}, 40.0)
-	addFull(r, &slowDisk{}, math.Inf(1))
+	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
@@ -365,14 +365,33 @@ func (b backfill) endPerturbation(ctx context.Context, t test.Test, v variations
 }
 
 type slowDisk struct {
-	staller roachtestutil.DiskStaller
+	// slowLiveness will place the liveness range on the slow node (may not be the slow disk).
+	slowLiveness bool
+	// walFailover will add add WAL failover to the slow node.
+	walFailover bool
+	staller     roachtestutil.DiskStaller
 }
 
 var _ perturbation = &slowDisk{}
 
 // startTargetNode implements perturbation.
 func (s *slowDisk) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
+	extraArgs := []string{}
+	if s.walFailover && v.disks > 1 {
+		extraArgs = append(extraArgs, "--wal-failover=among-stores")
+	}
+	v.startNoBackup(ctx, t, v.targetNodes(), extraArgs...)
+
+	if s.slowLiveness {
+		// TODO(baptist): Handle multiple target nodes.
+		target := v.targetNodes()[0]
+		db := v.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		cmd := fmt.Sprintf(`ALTER RANGE liveness CONFIGURE ZONE USING CONSTRAINTS='{"+node%d":1}', lease_preferences='[[+node%d]]'`, target, target)
+		_, err := db.ExecContext(ctx, cmd)
+		require.NoError(t, err)
+	}
+
 	if v.IsLocal() {
 		s.staller = roachtestutil.NoopDiskStaller{}
 	} else {
@@ -838,7 +857,7 @@ func isAcceptableChange(
 }
 
 // startNoBackup starts the nodes without enabling backup.
-func (v variations) startNoBackup(ctx context.Context, t test.Test, nodes option.NodeListOption) {
+func (v variations) startNoBackup(ctx context.Context, t test.Test, nodes option.NodeListOption, extraArgs ...string) {
 	nodesPerRegion := v.numNodes / NUM_REGIONS
 	for _, node := range nodes {
 		// Don't start a backup schedule because this test is timing sensitive.
@@ -846,6 +865,7 @@ func (v variations) startNoBackup(ctx context.Context, t test.Test, nodes option
 		opts.RoachprodOpts.StoreCount = v.disks
 		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--locality=region=fake-%d", (node-1)/nodesPerRegion))
+		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, extraArgs...)
 		v.Start(ctx, t.L(), opts, install.MakeClusterSettings(), v.Node(node))
 	}
 }
