@@ -145,11 +145,10 @@ func TestMsgAppFlowControl(t *testing.T) {
 							r.tick()
 						}
 						ms := r.readMessages()
-						require.Len(t, ms, 3)
-						require.Equal(t, ms[0].Type, pb.MsgHeartbeat)
-						require.Equal(t, ms[1].Type, pb.MsgFortifyLeader)
-						require.Equal(t, ms[2].Type, pb.MsgApp)
-						require.Empty(t, ms[0].Entries)
+						require.Len(t, ms, 2)
+						require.Equal(t, ms[0].Type, pb.MsgFortifyLeader)
+						require.Equal(t, ms[1].Type, pb.MsgApp)
+						require.Empty(t, ms[1].Entries)
 					} else {
 						r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
 						ms := r.readMessages()

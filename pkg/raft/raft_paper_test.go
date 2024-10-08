@@ -104,9 +104,9 @@ func TestStartAsFollower(t *testing.T) {
 // TestLeaderBcastBeat tests that if the leader receives a heartbeat tick,
 // it will send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries
 // as heartbeat to all followers.
-// Note that if store liveness is enabled, the leader will also send a MsgApp
-// on every heartbeat interval.
 // Reference: section 5.2
+// Note that if store liveness is enabled, the leader might send a MsgApp on
+// every heartbeat interval, but it won't send a MsgHeartbeat.
 func TestLeaderBcastBeat(t *testing.T) {
 	// heartbeat interval
 	hi := 3
@@ -141,8 +141,6 @@ func TestLeaderBcastBeat(t *testing.T) {
 					{From: 1, To: 3, Term: 1, Type: pb.MsgApp, Entries: r.raftLog.allEntries()},
 					{From: 1, To: 2, Term: 1, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 3, Term: 1, Type: pb.MsgFortifyLeader},
-					{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
-					{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
 				}, msgs)
 			} else {
 				assert.Equal(t, []pb.Message{

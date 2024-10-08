@@ -5,12 +5,21 @@
 # StateReplicate for the follower. In other words, we don't end up in
 # a stable state with a fully caught up follower in StateProbe.
 
+# TODO(ibrahim): Remove this test once store liveness is on by default since we
+# have the test heartbeat_timeout_recovers_from_probing outside the
+# mixedversions directory that assumes that store liveness is enabled.
+
 # Turn off output during the setup of the test.
 log-level none
 ----
 ok
 
-add-nodes 3 voters=(1,2,3) index=10
+# Start 3 nodes, two of them has the older version 24.2.
+add-nodes 2 voters=(1,2,3) index=10 crdb-version=24.2
+----
+ok
+
+add-nodes 1 voters=(1,2,3) index=10 crdb-version=24.3
 ----
 ok
 
@@ -47,32 +56,28 @@ tick-heartbeat 1
 ----
 ok
 
-# Heartbeat -> MsgApp -> MsgAppResp -> StateReplicate.
+# Heartbeat -> HeartbeatResp -> MsgApp -> MsgAppResp -> StateReplicate.
 stabilize
 ----
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0
+  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
   2->1 MsgHeartbeatResp Term:1 Log:0/0
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 3 handling Ready
   Ready MustSync=false:
   Messages:
   3->1 MsgHeartbeatResp Term:1 Log:0/0
 > 1 receiving messages
   2->1 MsgHeartbeatResp Term:1 Log:0/0
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
   3->1 MsgHeartbeatResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=false:

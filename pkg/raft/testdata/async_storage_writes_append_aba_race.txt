@@ -408,12 +408,6 @@ process-ready 4
 ----
 Ready MustSync=false:
 Messages:
-4->1 MsgHeartbeat Term:3 Log:0/0
-4->2 MsgHeartbeat Term:3 Log:0/0
-4->3 MsgHeartbeat Term:3 Log:0/0
-4->5 MsgHeartbeat Term:3 Log:0/0
-4->6 MsgHeartbeat Term:3 Log:0/0
-4->7 MsgHeartbeat Term:3 Log:0/0
 4->1 MsgFortifyLeader Term:3 Log:0/0
 4->2 MsgFortifyLeader Term:3 Log:0/0
 4->3 MsgFortifyLeader Term:3 Log:0/0
@@ -432,10 +426,9 @@ Messages:
 
 deliver-msgs 1
 ----
-4->1 MsgHeartbeat Term:3 Log:0/0
-INFO 1 [term: 2] received a MsgHeartbeat message with higher term from 4 [term: 3]
-INFO 1 became follower at term 3
 4->1 MsgFortifyLeader Term:3 Log:0/0
+INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3]
+INFO 1 became follower at term 3
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 INFO found conflict at index 12 [existing term: 2, conflicting term: 3]
 INFO replace the unstable entries from index 12
@@ -447,7 +440,6 @@ HardState Term:3 Commit:11 Lead:4 LeadEpoch:1
 Entries:
 3/12 EntryNormal ""
 Messages:
-1->4 MsgHeartbeatResp Term:3 Log:0/0
 1->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""] Responses:[
   1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->4 MsgAppResp Term:3 Log:0/12 Commit:11

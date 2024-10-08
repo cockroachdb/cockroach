@@ -1231,24 +1231,22 @@ func TestHandleHeatbeatTimeoutStoreLivenessEnabled(t *testing.T) {
 	}
 
 	msgs := sm.readMessages()
-	require.Len(t, msgs, 2)
-	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
-	assert.Equal(t, pb.MsgApp, msgs[1].Type)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, pb.MsgApp, msgs[0].Type)
 
 	// On another heartbeat timeout, the leader sends a MsgApp.
 	for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
 		sm.tick()
 	}
 	msgs = sm.readMessages()
-	require.Len(t, msgs, 2)
-	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
-	assert.Equal(t, pb.MsgApp, msgs[1].Type)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, pb.MsgApp, msgs[0].Type)
 
 	// Once the leader receives a MsgAppResp, it doesn't send MsgApp.
 	sm.Step(pb.Message{
 		From:   2,
 		Type:   pb.MsgAppResp,
-		Index:  msgs[1].Index + uint64(len(msgs[1].Entries)),
+		Index:  msgs[0].Index + uint64(len(msgs[0].Entries)),
 		Commit: sm.raftLog.lastIndex(),
 	})
 
@@ -1261,8 +1259,7 @@ func TestHandleHeatbeatTimeoutStoreLivenessEnabled(t *testing.T) {
 		sm.tick()
 	}
 	msgs = sm.readMessages()
-	require.Len(t, msgs, 1)
-	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
+	require.Len(t, msgs, 0)
 }
 
 // TestMsgAppRespWaitReset verifies the resume behavior of a leader
@@ -2036,7 +2033,10 @@ func TestLeaderAppResp(t *testing.T) {
 }
 
 // TestBcastBeat is when the leader receives a heartbeat tick, it should
-// send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries.
+// send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries if
+// store liveness is disabled. On the other hand, if store liveness is enabled,
+// the leader doesn't send a MsgHeartbeat but sends a MsgApp if the follower
+// needs it to catch up.
 func TestBcastBeat(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
 		func(t *testing.T, storeLivenessEnabled bool) {
@@ -2082,14 +2082,12 @@ func TestBcastBeat(t *testing.T) {
 				sm.tick()
 			}
 			msgs := sm.readMessages()
-			// If storeliveness is enabled, the heartbeat timeout will also send a
-			// MsgApp if it needs to. In this case since follower 2 is slow, we will
-			// send a MsgApp to it.
+			// If storeliveness is enabled, the heartbeat timeout will send a MsgApp
+			// if it needs to. In this case since follower 2 is slow, we will send a
+			// MsgApp to it.
 			if storeLivenessEnabled {
-				require.Len(t, msgs, 5)
+				require.Len(t, msgs, 3)
 				assert.Equal(t, []pb.Message{
-					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
-					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
 					{From: 1, To: 2, Term: 2, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgApp, LogTerm: 2, Index: 1011, Commit: 1000,
@@ -2101,14 +2099,14 @@ func TestBcastBeat(t *testing.T) {
 					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
 				}, msgs)
-			}
 
-			// Make sure that the heartbeat messages contain the expected fields.
-			for i, m := range msgs[:2] {
-				require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
-				require.Zero(t, m.Index, "#%d", i)
-				require.Zero(t, m.LogTerm, "#%d", i)
-				require.Empty(t, m.Entries, "#%d", i)
+				// Make sure that the heartbeat messages contain the expected fields.
+				for i, m := range msgs {
+					require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
+					require.Zero(t, m.Index, "#%d", i)
+					require.Zero(t, m.LogTerm, "#%d", i)
+					require.Empty(t, m.Entries, "#%d", i)
+				}
 			}
 		})
 }
@@ -2280,11 +2278,10 @@ func TestSendAppendForProgressProbeStoreLivenessEnabled(t *testing.T) {
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 
 		msg := r.readMessages()
-		assert.Len(t, msg, 3)
-		assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
-		assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
-		assert.Equal(t, pb.MsgApp, msg[2].Type)
-		assert.Equal(t, msg[2].Index, uint64(1))
+		assert.Len(t, msg, 2)
+		assert.Equal(t, pb.MsgFortifyLeader, msg[0].Type)
+		assert.Equal(t, pb.MsgApp, msg[1].Type)
+		assert.Equal(t, msg[1].Index, uint64(1))
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
 	}
 }

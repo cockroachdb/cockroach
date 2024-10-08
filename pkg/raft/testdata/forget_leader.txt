@@ -93,7 +93,24 @@ raft-state
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 4: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:0
 
-# When receiving a heartbeat from the leader, they revert to followers.
+# Give store liveness support to allow MsgFortifyLeader to be sent.
+grant-support 2 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 1 1
+3 1 1 1 1
+4 x 1 1 1
+
+grant-support 4 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 1 1
+3 1 1 1 1
+4 2 1 1 1
+
+# When receiving MsgFortifyLeader from the leader, they revert to followers.
 tick-heartbeat 1
 ----
 ok
@@ -101,11 +118,11 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0
-  1->3 MsgHeartbeat Term:1 Log:0/0
-  1->4 MsgHeartbeat Term:1 Log:0/0
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->4 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
@@ -113,41 +130,50 @@ stabilize
   Ready MustSync=true:
   HardState Term:1 Commit:11 Lead:0 LeadEpoch:0
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0
-> 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0
+  1->2 MsgFortifyLeader Term:1 Log:0/0
 > 4 receiving messages
-  1->4 MsgHeartbeat Term:1 Log:0/0
+  1->4 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 4 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  4->1 MsgHeartbeatResp Term:1 Log:0/0
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 1 receiving messages
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  4->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
-2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
-4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
+
+withdraw-support 2 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 x 1 1 1
+3 1 1 1 1
+4 2 1 1 1
 
 withdraw-support 3 1
 ----
   1 2 3 4
-1 1 1 1 1
+1 2 1 1 1
+2 x 1 1 1
+3 x 1 1 1
+4 2 1 1 1
+
+withdraw-support 4 1
+----
+  1 2 3 4
+1 2 1 1 1
 2 x 1 1 1
 3 x 1 1 1
 4 x 1 1 1
@@ -162,10 +188,10 @@ INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
-2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
 3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
-4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
 
 forget-leader 3
 ----
@@ -173,10 +199,10 @@ ok
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
-2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
 3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
-4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
 
 stabilize log-level=none
 ----
@@ -202,7 +228,7 @@ ok
 withdraw-support 2 3
 ----
   1 2 3 4
-1 1 1 1 1
+1 2 1 1 1
 2 x 1 x 1
 3 x 1 1 1
 4 x 1 1 1
@@ -224,7 +250,7 @@ INFO 2 forgetting leader 3 at term 2
 withdraw-support 1 3
 ----
   1 2 3 4
-1 1 1 x 1
+1 2 1 x 1
 2 x 1 x 1
 3 x 1 1 1
 4 x 1 1 1
@@ -232,7 +258,7 @@ withdraw-support 1 3
 withdraw-support 3 3
 ----
   1 2 3 4
-1 1 1 x 1
+1 2 1 x 1
 2 x 1 x 1
 3 x 1 x 1
 4 x 1 1 1
@@ -240,7 +266,7 @@ withdraw-support 3 3
 withdraw-support 4 3
 ----
   1 2 3 4
-1 1 1 x 1
+1 2 1 x 1
 2 x 1 x 1
 3 x 1 x 1
 4 x 1 x 1
