@@ -60,33 +60,29 @@ func (t *Tracker) Empty() bool {
 
 // Track token deductions of the given priority with the given raft log index and term.
 func (t *Tracker) Track(
-	ctx context.Context, term uint64, index uint64, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
+	ctx context.Context, id entryID, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
 ) bool {
 	if len(t.tracked[pri]) >= 1 {
 		last := t.tracked[pri][len(t.tracked[pri])-1].id
 		// Tracker exists in the context of a single replicaSendStream, which cannot
 		// span the leader losing leadership and regaining it. So the indices must
 		// advance.
-		if last.index >= index {
+		if last.index >= id.index {
 			log.Fatalf(ctx, "expected in order tracked log indexes (%d < %d)",
-				last.index, index)
+				last.index, id.index)
 			return false
 		}
-		if last.term > term {
+		if last.term > id.term {
 			log.Fatalf(ctx, "expected in order tracked leader terms (%d < %d)",
-				last.term, term)
+				last.term, id.term)
 			return false
 		}
 	}
-
-	t.tracked[pri] = append(t.tracked[pri], tracked{
-		id:     entryID{index: index, term: term},
-		tokens: tokens,
-	})
+	t.tracked[pri] = append(t.tracked[pri], tracked{id: id, tokens: tokens})
 
 	if log.V(1) {
 		log.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
-			tokens, pri, t.stream, term, index)
+			tokens, pri, t.stream, id.term, id.index)
 	}
 	return true
 }
