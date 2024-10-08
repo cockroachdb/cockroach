@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -77,6 +78,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
+	ids := make([]descpb.ID, 0, len(req.TableNames)+2)
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	for _, name := range req.TableNames {
 		uon, err := parser.ParseTableName(name)
@@ -90,7 +92,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs[name] = td.TableDescriptor
+		ids = append(ids, td.GetID())
 	}
+	// Additionally protect the descriptor and namespace tables.
+	ids = append(ids,
+		systemschema.DescriptorTable.GetID(),
+		systemschema.NamespaceTable.GetID())
 
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
@@ -102,12 +109,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		spans,
 		strings.Join(req.TableNames, ","))
 
-	// TODO(ssd): Update this to protect the right set of
-	// tables. Perhaps we can just protect the tables and depend
-	// on something else to protect the namespace and descriptor
-	// tables.
 	deprecatedSpansToProtect := roachpb.Spans(spans)
-	targetToProtect := ptpb.MakeClusterTarget()
+	targetToProtect := ptpb.MakeSchemaObjectsTarget(ids)
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
