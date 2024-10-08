@@ -9938,7 +9938,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 
 	const logIndex = 10
 	const invalidIndex = 11
-	test := func(expected bool, transform func(q *testQuiescer) *testQuiescer) {
+	test := func(expected bool, transform func(q *testQuiescer)) {
 		t.Run("", func(t *testing.T) {
 			// A testQuiescer initialized so that shouldReplicaQuiesce will return
 			// true. The transform function is intended to perform one mutation to
@@ -9992,7 +9992,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 					3: {IsLive: true},
 				},
 			}
-			q = transform(q)
+			transform(q)
 			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
 			require.Equal(t, expected, ok)
 			if ok {
@@ -10011,191 +10011,121 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		})
 	}
 
-	test(true, func(q *testQuiescer) *testQuiescer {
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.numProposals = 1
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.pendingQuota = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.sendTokens = true
-		return q
-	})
-	test(true, func(q *testQuiescer) *testQuiescer {
+	test(true, func(q *testQuiescer) {})
+	test(false, func(q *testQuiescer) { q.numProposals = 1 })
+	test(false, func(q *testQuiescer) { q.pendingQuota = true })
+	test(false, func(q *testQuiescer) { q.sendTokens = true })
+	test(true, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks // quiesce on quiesceAfterTicks
-		return q
 	})
-	test(true, func(q *testQuiescer) *testQuiescer {
+	test(true, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks + 1 // quiesce above quiesceAfterTicks
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks - 1 // don't quiesce below quiesceAfterTicks
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = 0 // don't quiesce on 0
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = -1 // don't quiesce on negative (shouldn't happen)
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.mergeInProgress = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.isDestroyed = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status = nil
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.RaftState = raft.StateFollower
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.RaftState = raft.StateCandidate
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.LeadTransferee = 1
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.Commit = invalidIndex
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.Applied = invalidIndex
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.lastIndex = invalidIndex
-		return q
-	})
+	test(false, func(q *testQuiescer) { q.mergeInProgress = true })
+	test(false, func(q *testQuiescer) { q.isDestroyed = true })
+	test(false, func(q *testQuiescer) { q.status = nil })
+	test(false, func(q *testQuiescer) { q.status.RaftState = raft.StateFollower })
+	test(false, func(q *testQuiescer) { q.status.RaftState = raft.StateCandidate })
+	test(false, func(q *testQuiescer) { q.status.LeadTransferee = 1 })
+	test(false, func(q *testQuiescer) { q.status.Commit = invalidIndex })
+	test(false, func(q *testQuiescer) { q.status.Applied = invalidIndex })
+	test(false, func(q *testQuiescer) { q.lastIndex = invalidIndex })
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		delete(q.status.Progress, q.status.ID)
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.storeID = 9
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.raftReady = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) { q.storeID = 9 })
+
+	for _, leaseState := range []kvserverpb.LeaseState{
+		kvserverpb.LeaseState_ERROR,
+		kvserverpb.LeaseState_UNUSABLE,
+		kvserverpb.LeaseState_EXPIRED,
+		kvserverpb.LeaseState_PROSCRIBED,
+	} {
+		test(false, func(q *testQuiescer) { q.leaseStatus.State = leaseState })
+	}
+	test(false, func(q *testQuiescer) { q.raftReady = true })
+	test(false, func(q *testQuiescer) {
 		pr := q.status.Progress[2]
 		pr.State = tracker.StateProbe
 		q.status.Progress[2] = pr
-		return q
 	})
 	// Create a mismatch between the raft progress replica IDs and the
 	// replica IDs in the range descriptor.
 	for i := 0; i < 3; i++ {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.desc.InternalReplicas[i].ReplicaID = roachpb.ReplicaID(4 + i)
-			return q
 		})
 	}
 	// Pass a nil liveness map.
-	test(true, func(q *testQuiescer) *testQuiescer {
-		q.livenessMap = nil
-		return q
-	})
+	test(true, func(q *testQuiescer) { q.livenessMap = nil })
 	// Verify quiesce even when replica progress doesn't match, if
 	// the replica is on a non-live node.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(true, func(q *testQuiescer) *testQuiescer {
+		test(true, func(q *testQuiescer) {
 			nodeID := roachpb.NodeID(i)
 			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
 				Liveness: livenesspb.Liveness{NodeID: nodeID},
 				IsLive:   false,
 			}
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// given a nil liveness map.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.livenessMap = nil
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// liveness map does not contain the lagging replica.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			delete(q.livenessMap, roachpb.NodeID(i))
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when a follower is paused.
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.paused = map[roachpb.ReplicaID]struct{}{
 			q.desc.Replicas().Descriptors()[0].ReplicaID: {},
 		}
-		return q
 	})
 	// Verify no quiescence with expiration-based leases, regardless
 	// of kv.expiration_leases_only.enabled.
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
 		q.leaseStatus.Lease.Epoch = 0
 		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
 		q.leaseStatus.Lease.Epoch = 0
 		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
-		return q
 	})
 	// Verify no quiescence with leader leases.
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.leaseStatus.Lease.Epoch = 0
 		q.leaseStatus.Lease.Term = 1
-		return q
 	})
 }
 
