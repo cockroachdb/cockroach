@@ -59,7 +59,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	}
 
 	if updater == nil {
-		updater = newTableMetadataUpdater(j.job, &metrics, execCtx.ExecCfg().InternalDB.Executor(), testKnobs)
+		updater = newTableMetadataUpdater(j.updateProgress, &metrics, execCtx.ExecCfg().InternalDB.Executor(), testKnobs)
 	}
 	// We must reset the job's num runs to 0 so that it doesn't get
 	// delayed by the job system's exponential backoff strategy.
@@ -130,8 +130,8 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	}
 }
 
-func updateProgress(ctx context.Context, job *jobs.Job, progress float32) {
-	if err := job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
+	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
 		log.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }
