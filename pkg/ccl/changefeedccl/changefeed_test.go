@@ -6615,7 +6615,7 @@ func TestChangefeedPrimaryKeyChangeWorks(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY USING HASH, b STRING NOT NULL)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 
@@ -6626,20 +6626,20 @@ func TestChangefeedPrimaryKeyChangeWorks(t *testing.T) {
 		// 'initial' is skipped because only the latest value ('updated') is
 		// emitted by the initial scan.
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo: [2, 0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [11, 1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [6, 2]->{"after": {"a": 2, "b": "b"}}`,
 		})
 
-		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b) USING HASH`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'c'), (4, 'd')`)
 		assertPayloads(t, foo, []string{
-			`foo: ["c"]->{"after": {"a": 3, "b": "c"}}`,
-			`foo: ["d"]->{"after": {"a": 4, "b": "d"}}`,
+			`foo: [6, "c"]->{"after": {"a": 3, "b": "c"}}`,
+			`foo: [15, "d"]->{"after": {"a": 4, "b": "d"}}`,
 		})
 
 		// ALTER PRIMARY KEY should work and we should see the changed
@@ -6655,8 +6655,8 @@ INSERT INTO foo VALUES (1, 'f');
 		// Note that the primary key change is asynchronous and that only the
 		// subsequent write will be displayed using the new primary key.
 		assertPayloads(t, foo, []string{
-			`foo: ["a"]->{"after": {"a": 6, "b": "a"}}`,
-			`foo: ["e"]->{"after": {"a": 5, "b": "e"}}`,
+			`foo: [6, "a"]->{"after": {"a": 6, "b": "a"}}`,
+			`foo: [14, "e"]->{"after": {"a": 5, "b": "e"}}`,
 		})
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1, "b": "f"}}`,
