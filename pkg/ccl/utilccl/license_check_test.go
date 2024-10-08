@@ -434,15 +434,17 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 		{[]string{"crl-0-EMDYt8MDGAEiDkNSREIgVW5pdCBUZXN0KAM"}, "", timeutil.UnixEpoch},
 		// No license - 7 days grace period
 		{[]string{""}, "", ts1.Add(30 * 24 * time.Hour)},
-		// Only 1 trial license allowed
+		// Two trial license allowed if they both have the same expiry
 		{[]string{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0", "crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0"},
+			"", jan1st2000.Add(7 * 24 * time.Hour)},
+		// A second trial license is not allowed if it has a different expiry (Jan 1st 2000 8:01 AST)
+		{[]string{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0", "crl-0-EPzYt8MDGAQiDkNSREIgVW5pdCBUZXN0"},
 			"a trial license has previously been installed on this cluster", timeutil.UnixEpoch},
 	} {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
 			// Reset from prior test unit.
-			cnt, err := enforcer.SetTrialUsageCount(ctx, 0, false /* checkOldCount */)
+			err := enforcer.TestingResetTrialUsage(ctx)
 			require.NoError(t, err)
-			require.Equal(t, int64(0), cnt)
 
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -452,17 +454,17 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				tdb.Exec(t, sql)
 
 				// If installing a trial license, we need to wait for the callback to
-				// bump the count before continuing. We depend on the count to cause an
+				// bump the expiry before continuing. We depend on the expiry to cause an
 				// error if another trial license is installed.
 				l, err := decode(tc.licenses[i])
 				require.NoError(t, err)
 				if l.Type == licenseccl.License_Trial {
-					var cnt int64
+					var expiry int64
 					require.Eventually(t, func() bool {
-						cnt = trialLicenseUsageCount.Load()
-						return cnt > 0
+						expiry = trialLicenseExpiryTimestamp.Load()
+						return expiry > 0
 					}, 20*time.Second, time.Millisecond,
-						"trialLicenseUsageCount last returned %t", cnt)
+						"trialLicenseExpiryTimestamp last returned %t", expiry)
 				}
 			}
 
@@ -484,7 +486,7 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				hasLicense = enforcer.GetHasLicense()
 				return (lastLicense != "") == hasLicense
 			}, 20*time.Second, time.Millisecond,
-				"GetHasLicense() last returned %t", hasLicense)
+				"GetHasLicense() did not return hasLicense of %t in time", lastLicense != "")
 			var ts time.Time
 			var hasGracePeriod bool
 			require.Eventually(t, func() bool {
@@ -494,7 +496,7 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				}
 				return ts.Equal(tc.expectedGracePeriodEnd)
 			}, 20*time.Second, time.Millisecond,
-				"GetGracePeriodEndTS() last returned %v (%t)", ts, hasGracePeriod)
+				"GetGracePeriodEndTS() did not return grace period of %s in time", tc.expectedGracePeriodEnd.String())
 		})
 	}
 }
