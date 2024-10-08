@@ -13134,7 +13134,7 @@ select
  ├── scan t85356
  │    └── columns: c0:1
  └── filters
-      ├── c0:1 = CASE WHEN (c0:1 IS NOT DISTINCT FROM CAST(NULL AS DECIMAL(15,3))) AND CAST(NULL AS BOOL) THEN c0:1 ELSE 1.100 END [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+      ├── c0:1 = CASE WHEN (c0:1 IS NOT DISTINCT FROM CAST(NULL AS DECIMAL(15,3))) AND CAST(NULL AS BOOL) THEN c0:1::DECIMAL ELSE 1.1 END [outer=(1), immutable, constraints=(/1: (/NULL - ])]
       └── c0:1 = 2 [outer=(1), immutable, constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
 
 exec-ddl
