@@ -1137,7 +1137,7 @@ func (r *testingRCRange) testingReturnTokens(
 	for _, deduction := range rs.sendStream.mu.tracker.tracked[raftPri] {
 		if r.mu.outstandingReturns[rid]-deduction.tokens >= 0 {
 			r.mu.outstandingReturns[rid] -= deduction.tokens
-			returnIndex = deduction.index
+			returnIndex = deduction.id.index
 		}
 	}
 	if returnIndex != 0 {
@@ -1221,7 +1221,7 @@ func (t *Tracker) testingString() string {
 		buf.WriteString(fmt.Sprintf("pri=%s\n", RaftToAdmissionPriority(raftpb.Priority(pri))))
 		for _, deduction := range deductions {
 			buf.WriteString(fmt.Sprintf("  tokens=%s log-position=%v/%v\n",
-				testingPrintTrimmedTokens(deduction.tokens), deduction.term, deduction.index))
+				testingPrintTrimmedTokens(deduction.tokens), deduction.id.term, deduction.id.index))
 		}
 	}
 
