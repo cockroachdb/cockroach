@@ -116,6 +116,7 @@ type ACWorkQueue interface {
 }
 
 type rangeControllerInitState struct {
+	term          uint64
 	replicaSet    rac2.ReplicaSet
 	leaseholder   roachpb.ReplicaID
 	nextRaftIndex uint64
@@ -707,6 +708,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 	}
 	p.term = term
 	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+		term:           term,
 		replicaSet:     p.desc.replicas,
 		leaseholder:    p.leaseholderID,
 		nextRaftIndex:  nextUnstableIndex,
@@ -1204,6 +1206,7 @@ func (f RangeControllerFactoryImpl) New(
 			Knobs:                  f.knobs,
 		},
 		rac2.RangeControllerInitState{
+			Term:          state.term,
 			ReplicaSet:    state.replicaSet,
 			Leaseholder:   state.leaseholder,
 			NextRaftIndex: state.nextRaftIndex,
