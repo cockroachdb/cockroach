@@ -10,8 +10,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/inspectz/inspectzpb",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
         "//pkg/util/errorutil",
         "//pkg/util/log",
