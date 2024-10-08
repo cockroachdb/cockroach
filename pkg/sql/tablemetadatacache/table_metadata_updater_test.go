@@ -9,10 +9,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
@@ -28,27 +31,29 @@ import (
 
 // TestDataDrivenTableMetadataCacheUpdater tests the operations performed by
 // tableMetadataCacheUpdater. It reads data written to system.table_metadata
-// by the cache updater to ensure the udpates are valid.
+// by the cache updater to ensure the updates are valid.
 func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	knobs := tablemetadatacacheutil.CreateTestingKnobs()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			TableMetadata: knobs,
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-
-	queryConn := s.ApplicationLayer().SQLConn(t)
-	s.ApplicationLayer().DB()
-
 	// We won't check the job progress in this test.
 	mockUpdateProgress := func(ctx context.Context, progress float32) {}
 	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, ""), func(t *testing.T, path string) {
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				TableMetadata: knobs,
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+
+		queryConn := s.ApplicationLayer().SQLConn(t)
+		s.ApplicationLayer().DB()
+
+		spanStatsServer := s.TenantStatusServer().(serverpb.TenantStatusServer)
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "query":
@@ -62,14 +67,27 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				}
 				return res
 			case "update-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, s.InternalExecutor().(isql.Executor), knobs)
+				var spanStatsErrors string
+				var spanStatsSrv spanStatsFetcher = spanStatsServer
+				d.MaybeScanArgs(t, "injectSpanStatsErrors", &spanStatsErrors)
+				if spanStatsErrors != "" {
+					spanStatsSrv = &mockSpanStatsFetcher{
+						getSpanStats: func(ctx context.Context, request *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error) {
+							return &roachpb.SpanStatsResponse{
+								SpanToStats: make(map[string]*roachpb.SpanStats),
+								Errors:      strings.Split(spanStatsErrors, ","),
+							}, nil
+						},
+					}
+				}
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), knobs)
 				updated, err := updater.updateCache(ctx)
 				if err != nil {
 					return err.Error()
 				}
 				return fmt.Sprintf("updated %d table(s)", updated)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, s.InternalExecutor().(isql.Executor), knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()
@@ -153,4 +171,19 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 	require.Equal(t, int64(0), metrics.Errors.Count())
 	require.Equal(t, float32(.99), currentProgress)
 	require.Equal(t, int64(2), metrics.NumRuns.Count())
+}
+
+type mockSpanStatsFetcher struct {
+	getSpanStats func(ctx context.Context, request *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
+}
+
+var _ spanStatsFetcher = &mockSpanStatsFetcher{}
+
+func (m *mockSpanStatsFetcher) SpanStats(
+	ctx context.Context, request *roachpb.SpanStatsRequest,
+) (*roachpb.SpanStatsResponse, error) {
+	if m.getSpanStats == nil {
+		return nil, nil
+	}
+	return m.getSpanStats(ctx, request)
 }
