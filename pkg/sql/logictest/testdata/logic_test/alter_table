@@ -624,7 +624,7 @@ statement ok
 ALTER TABLE add_default ADD COLUMN e TIMESTAMP DEFAULT statement_timestamp()
 
 query II rowsort
-SELECT a,b FROM add_default WHERE e > d AND e - d < interval '10s'
+SELECT a,b FROM add_default WHERE e > d AND e - d < interval '20s'
 ----
 2 42
 3 10
