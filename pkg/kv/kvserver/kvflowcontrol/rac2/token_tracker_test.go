@@ -93,7 +93,8 @@ func TestTokenTracker(t *testing.T) {
 				parts[3] = strings.TrimPrefix(parts[3], "pri=")
 				pri := AdmissionToRaftPriority(parsePriority(t, parts[3]))
 
-				tracker.Track(ctx, term, index, pri, kvflowcontrol.Tokens(tokens))
+				tracker.Track(ctx, entryID{index: index, term: term}, pri,
+					kvflowcontrol.Tokens(tokens))
 				buf.WriteString(fmt.Sprintf("tracked: term=%d index=%-2d tokens=%-3d pri=%v\n",
 					term, index, tokens, pri))
 			}
