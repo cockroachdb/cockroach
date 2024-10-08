@@ -1,4 +1,5 @@
 # Yaml for creating and configuring the drt-scale cluster. This also configures the datadog.
+# Build the roachprod and roachtest binaries (using --cross) before running this script and delete any certs folder
 environment:
   ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
   ROACHPROD_DNS: drt.crdb.io
@@ -105,4 +106,19 @@ targets:
           - --
           - chmod
           - 600
-          - ./certs/*
+          - certs/*
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - bin/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - bin/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
