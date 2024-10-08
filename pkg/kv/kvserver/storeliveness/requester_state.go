@@ -149,6 +149,18 @@ func (rsh *requesterStateHandler) getSupportFrom(id slpb.StoreIdent) (slpb.Suppo
 	return supportState, ok
 }
 
+// exportAllSupportFrom exports a copy of all SupportStates from the
+// requesterState.supportFrom map.
+func (rsh *requesterStateHandler) exportAllSupportFrom() []slpb.SupportState {
+	rsh.mu.RLock()
+	defer rsh.mu.RUnlock()
+	supportStates := make([]slpb.SupportState, len(rsh.requesterState.supportFrom))
+	for _, ss := range rsh.requesterState.supportFrom {
+		supportStates = append(supportStates, ss.state)
+	}
+	return supportStates
+}
+
 // addStore adds a store to the requesterState.supportFrom map, if not present.
 // The function returns a boolean indicating whether the store was added.
 func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) bool {

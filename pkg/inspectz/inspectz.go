@@ -13,8 +13,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -32,6 +34,7 @@ type Server struct {
 	mux                                    *http.ServeMux
 	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
+	storeLiveness                          kvserver.InspectAllStoreLiveness
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -41,6 +44,7 @@ func NewServer(
 	ambient log.AmbientContext,
 	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
 	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
+	storeLiveness kvserver.InspectAllStoreLiveness,
 ) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
@@ -51,11 +55,20 @@ func NewServer(
 		handlesV2:          handlesV2,
 		kvflowControllerV1: kvflowControllerV1,
 		kvflowControllerV2: kvflowControllerV2,
+		storeLiveness:      storeLiveness,
 	}
 	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
 	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
 	mux.Handle("/inspectz/v2/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandlesV2))
 	mux.Handle("/inspectz/v2/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowControllerV2))
+	mux.Handle(
+		"/inspectz/storeliveness/supportFrom",
+		server.makeStoreLivenessHandler(server.StoreLivenessSupportFrom),
+	)
+	mux.Handle(
+		"/inspectz/storeliveness/supportFor",
+		server.makeStoreLivenessHandler(server.StoreLivenessSupportFor),
+	)
 
 	return server
 }
@@ -103,6 +116,24 @@ func (s *Server) makeKVFlowControllerHandler(
 	}
 }
 
+func (s *Server) makeStoreLivenessHandler(
+	impl func(ctx context.Context, request *slpb.InspectStoreLivenessRequest) (
+		*slpb.InspectStoreLivenessResponse, error,
+	),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+		req := &slpb.InspectStoreLivenessRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
+}
+
 // KVFlowController implements the InspectzServer interface.
 func (s *Server) KVFlowController(
 	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
@@ -129,6 +160,26 @@ func (s *Server) KVFlowHandlesV2(
 	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
 ) (*kvflowinspectpb.HandlesResponse, error) {
 	return kvFlowHandles(ctx, request, s.handlesV2)
+}
+
+// StoreLivenessSupportFrom implements the InspectzServer interface.
+func (s *Server) StoreLivenessSupportFrom(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
+	resp := &slpb.InspectStoreLivenessResponse{}
+	support, err := s.storeLiveness.InspectAllSupportFrom()
+	resp.SupportStatesPerStore = support
+	return resp, err
+}
+
+// StoreLivenessSupportFor implements the InspectzServer interface.
+func (s *Server) StoreLivenessSupportFor(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
+	resp := &slpb.InspectStoreLivenessResponse{}
+	support, err := s.storeLiveness.InspectAllSupportFor()
+	resp.SupportStatesPerStore = support
+	return resp, err
 }
 
 // ServeHTTP serves various tools under the /debug endpoint.
