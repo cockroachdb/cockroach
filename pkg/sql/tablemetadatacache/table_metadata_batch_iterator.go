@@ -7,13 +7,15 @@ package tablemetadatacache
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -31,10 +33,10 @@ const (
 	schemaNameIdx
 	columnCountIdx
 	indexCountIdx
-	spanStatsIdx
 	tableTypeIdx
 	autoStatsEnabledIdx
 	statsLastUpdatedIdx
+	spanIdx
 
 	// iterCols is the number of columns returned by the batch iterator.
 	iterCols
@@ -57,7 +59,7 @@ type tableMetadataIterRow struct {
 	schemaName       string
 	columnCount      int
 	indexCount       int
-	spanStatsJSON    []byte
+	spanStats        roachpb.SpanStats
 	tableType        string
 	autoStatsEnabled *bool
 	statsLastUpdated *time.Time
@@ -70,15 +72,17 @@ type tableMetadataBatchIterator struct {
 	// The current batch of rows.
 	batchRows []tableMetadataIterRow
 	// query statement to use for retrieving batches
-	queryStatement string
+	queryStatement   string
+	spanStatsFetcher spanStatsFetcher
 }
 
 func newTableMetadataBatchIterator(
-	ie isql.Executor, aostClause string,
+	ie isql.Executor, spanStatsFetcher spanStatsFetcher, aostClause string,
 ) *tableMetadataBatchIterator {
 	return &tableMetadataBatchIterator{
-		ie:        ie,
-		batchRows: make([]tableMetadataIterRow, 0, tableBatchSize),
+		ie:               ie,
+		spanStatsFetcher: spanStatsFetcher,
+		batchRows:        make([]tableMetadataIterRow, 0, tableBatchSize),
 		lastID: paginationKey{
 			parentID: 1,
 			schemaID: 1,
@@ -106,18 +110,22 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 
 	// fetch-table-metadata-batch is a query that fetches a batch of rows
 	// from the system.namespace table according to the pagination key.
-	// We collect the table spans for the tables in the batch and issue
-	// a single SpanStats rpc via crdb_internal.tenant_span_stats to get the
-	// span stats for all the tables in the batch.
 	// Rows are then joined with the system.descirptor table to get the
 	// table descriptor metadata.
+	//
+	// We collect the table spans for the tables in the batch and issue
+	// a single SpanStats rpc via the spanStatsFetcher to get the span
+	// stats for all the tables in the batch.
+	var spans roachpb.Spans
 	for {
 		it, err := batchIter.ie.QueryIteratorEx(
 			ctx,
 			"fetch-table-metadata-batch",
 			nil, /* txn */
-			sessiondata.NodeUserWithBulkLowPriSessionDataOverride, batchIter.queryStatement,
-			batchIter.lastID.parentID, batchIter.lastID.schemaID, batchIter.lastID.name, batchSize,
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+			batchIter.queryStatement,
+			batchIter.lastID.parentID, batchIter.lastID.schemaID, batchIter.lastID.name,
+			batchSize,
 		)
 		if err != nil {
 			return false, err
@@ -152,16 +160,15 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 			}
 
 			iterRow := tableMetadataIterRow{
-				tableID:       int(tree.MustBeDInt(row[idIdx])),
-				tableName:     string(tree.MustBeDString(row[tableNameIdx])),
-				dbID:          int(tree.MustBeDInt(row[parentIDIdx])),
-				dbName:        string(tree.MustBeDString(row[databaseNameIdx])),
-				schemaID:      int(tree.MustBeDInt(row[schemaIDIdx])),
-				schemaName:    string(tree.MustBeDString(row[schemaNameIdx])),
-				columnCount:   int(tree.MustBeDInt(row[columnCountIdx])),
-				indexCount:    int(tree.MustBeDInt(row[indexCountIdx])),
-				spanStatsJSON: []byte(tree.MustBeDJSON(row[spanStatsIdx]).JSON.String()),
-				tableType:     string(tree.MustBeDString(row[tableTypeIdx])),
+				tableID:     int(tree.MustBeDInt(row[idIdx])),
+				tableName:   string(tree.MustBeDString(row[tableNameIdx])),
+				dbID:        int(tree.MustBeDInt(row[parentIDIdx])),
+				dbName:      string(tree.MustBeDString(row[databaseNameIdx])),
+				schemaID:    int(tree.MustBeDInt(row[schemaIDIdx])),
+				schemaName:  string(tree.MustBeDString(row[schemaNameIdx])),
+				columnCount: int(tree.MustBeDInt(row[columnCountIdx])),
+				indexCount:  int(tree.MustBeDInt(row[indexCountIdx])),
+				tableType:   string(tree.MustBeDString(row[tableTypeIdx])),
 			}
 
 			if row[autoStatsEnabledIdx] != tree.DNull {
@@ -174,6 +181,12 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 				iterRow.statsLastUpdated = &t.Time
 			}
 
+			dSpan := tree.MustBeDArray(row[spanIdx]).Array
+			spans = append(spans, roachpb.Span{
+				Key:    []byte(tree.MustBeDBytes(dSpan[0])),
+				EndKey: []byte(tree.MustBeDBytes(dSpan[1])),
+			})
+
 			batchIter.batchRows = append(batchIter.batchRows, iterRow)
 		}
 
@@ -184,6 +197,33 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 		}
 	}
 
+	// Collect the span stats for the tables in the batch.
+	res, err := batchIter.spanStatsFetcher.SpanStats(ctx, &roachpb.SpanStatsRequest{
+		Spans:  spans,
+		NodeID: "0", // Fan out.
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	if len(res.Errors) > 0 {
+		errMsg := strings.Join(res.Errors, " ; ")
+		// For now we won't write partial results to the cache.
+		return len(batchIter.batchRows) > 0, errors.Newf("%s", errMsg)
+	}
+
+	if res.SpanToStats != nil {
+		for i, row := range batchIter.batchRows {
+			spanStats := res.SpanToStats[spans[i].String()]
+			if spanStats == nil {
+				continue
+			}
+			row.spanStats = *spanStats
+			batchIter.batchRows[i] = row
+		}
+	}
+
 	return len(batchIter.batchRows) > 0, nil
 }
 
@@ -191,45 +231,47 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 // system.table_metadata.
 func newBatchQueryStatement(aostClause string) string {
 	return fmt.Sprintf(`
-WITH tables AS (SELECT n.id,
-                       n.name,
-                       n."parentID",
-                       n."parentSchemaID",
-                       d.descriptor,
-                       crdb_internal.table_span(n.id) as span
-                FROM system.namespace n
-                JOIN system.descriptor d ON n.id = d.id
-								%[1]s
-                WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) AND n."parentSchemaID" != 0
-                ORDER BY (n."parentID", n."parentSchemaID", n.name)
-                LIMIT $4),
-span_array AS (SELECT array_agg((span[1], span[2])) as all_spans FROM tables),
-span_stats AS (SELECT stats, t.id FROM crdb_internal.tenant_span_stats((SELECT all_spans FROM span_array)) s
-               JOIN tables t on t.span[1] = s.start_key and t.span[2] = s.end_key)
+WITH tables AS (
+    SELECT n.id,
+           n.name,
+           n."parentID",
+           n."parentSchemaID",
+           d.descriptor,
+           crdb_internal.table_span(n.id) as span
+    FROM system.namespace n
+    JOIN system.descriptor d ON n.id = d.id
+		%[1]s
+    WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) AND n."parentSchemaID" != 0
+    ORDER BY (n."parentID", n."parentSchemaID", n.name)
+    LIMIT $4
+)
 SELECT t.id,
        t.name,
        t."parentID",
-       db_name.name,
+       db_name.name as db_name,
        t."parentSchemaID",
-       schema_name.name,
+       schema_name.name as schema_name,
        json_array_length(d -> 'table' -> 'columns') as columns,
-       COALESCE(json_array_length(d -> 'table' -> 'indexes'), 0),
-       s.stats,
-			 CASE
-			 		WHEN d->'table'->>'isMaterializedView' = 'true' THEN 'MATERIALIZED_VIEW'
-			 		WHEN d->'table'->>'viewQuery' IS NOT NULL THEN 'VIEW'
-			 		WHEN d->'table'->'sequenceOpts' IS NOT NULL THEN 'SEQUENCE'
-			 		ELSE 'TABLE'
-			 END as table_type,
-			(d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
-			ts.last_updated as stats_last_updated
+       COALESCE(json_array_length(d -> 'table' -> 'indexes'), 0) as indexes,
+       CASE
+           WHEN d->'table'->>'isMaterializedView' = 'true' THEN 'MATERIALIZED_VIEW'
+           WHEN d->'table'->>'viewQuery' IS NOT NULL THEN 'VIEW'
+           WHEN d->'table'->'sequenceOpts' IS NOT NULL THEN 'SEQUENCE'
+           ELSE 'TABLE'
+           END as table_type,
+       (d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
+       ts.last_updated as stats_last_updated,
+       t.span as span
 FROM tables t
-LEFT JOIN span_stats s ON t.id = s.id
-LEFT JOIN (select "tableID", max("createdAt") as last_updated from system.table_statistics group by "tableID") ts ON ts."tableID" = t.id
-LEFT JOIN system.namespace db_name ON t."parentID" = db_name.id
-LEFT JOIN system.namespace schema_name ON t."parentSchemaID" = schema_name.id,
+LEFT JOIN (
+    SELECT "tableID", max("createdAt") as last_updated 
+    FROM system.table_statistics 
+    GROUP BY "tableID"
+) ts ON ts."tableID" = t.id
+LEFT JOIN system.namespace db_name ON t."parentID" = db_name.id AND db_name."parentID" = 0
+LEFT JOIN system.namespace schema_name ON t."parentSchemaID" = schema_name.id AND schema_name."parentID" = t."parentID",
 crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', t.descriptor) AS d
 %[1]s
-ORDER BY (t."parentID", t."parentSchemaID", t.name)
+ORDER BY (t."parentID", t."parentSchemaID", t.name);
 `, aostClause)
 }
