@@ -33,8 +33,8 @@ type tracked struct {
 	index, term uint64
 }
 
-func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
-	*dt = Tracker{
+func (t *Tracker) Init(stream kvflowcontrol.Stream) {
+	*t = Tracker{
 		tracked: [raftpb.NumPriorities][]tracked{},
 		stream:  stream,
 	}
