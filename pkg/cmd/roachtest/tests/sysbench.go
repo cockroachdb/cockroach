@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -148,16 +147,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err := c.Install(ctx, t.L(), c.WorkloadNode(), "haproxy"); err != nil {
 			t.Fatal(err)
 		}
-		// cockroach gen haproxy does not support specifying a non root user
-		pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
-			External: true,
-			Auth:     install.AuthRootCert,
-			Secure:   c.IsSecure(),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach gen haproxy --url {pgurl:1}")
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), "haproxy -f haproxy.cfg -D")
 	}
 
