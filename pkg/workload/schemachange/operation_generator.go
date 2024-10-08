@@ -1260,9 +1260,12 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
+	opt := randgen.TableOptAllowPartiallyVisibleIndex
+	if databaseHasMultiRegion {
+		opt |= randgen.TableOptMultiRegion
+	}
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
-		ctx, og.params.rng, "table", tableIdx, databaseHasMultiRegion,
-		true /* allowPartiallyVisibleIndex */, og.newUniqueSeqNumSuffix,
+		ctx, og.params.rng, "table", tableIdx, opt, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
