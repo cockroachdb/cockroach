@@ -204,26 +204,6 @@ func TestLint(t *testing.T) {
 	t.Run("TestCopyrightHeaders", func(t *testing.T) {
 		t.Parallel()
 
-		bslHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-`)
-
-		cclHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License \(the "License"\); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-`)
-
 		cslHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
@@ -284,20 +264,15 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isCCL := strings.Contains(filename, "ccl/")
 			isApache := strings.HasPrefix(filename, "obsservice")
 			switch {
-			case isCCL:
-				if cclHeader.Find(data) == nil && cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected CCL or CSL license header in %s", filename)
-				}
 			case isApache:
 				if apacheHeader.Find(data) == nil {
 					t.Errorf("did not find expected Apache license header in %s", filename)
 				}
 			default:
-				if bslHeader.Find(data) == nil && cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected BSL or CSL license header in %s", filename)
+				if cslHeader.Find(data) == nil {
+					t.Errorf("did not find expected CSL license header in %s", filename)
 				}
 			}
 		}); err != nil {
