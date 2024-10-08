@@ -9,13 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,8 +32,20 @@ func TestUpdateTableMetadataCacheJobRunsOnRPCTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	jobCompleteCh := make(chan struct{})
 	ctx := context.Background()
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				TableMetadata: &tablemetadatacacheutil.TestingKnobs{
+					TableMetadataUpdater: &noopUpdater{},
+					OnJobComplete: func() {
+						jobCompleteCh <- struct{}{}
+					},
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(context.Background())
 
 	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -63,25 +73,20 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		return nil
 	})
 
-	metrics := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().
-		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
-	testutils.SucceedsSoon(t, func() error {
-		if metrics.NumRuns.Count() != 1 {
-			return errors.New("job hasn't run yet")
-		}
-		row := conn.Query(t,
-			`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
-			jobs.UpdateTableMetadataCacheJobID)
-		if !row.Next() {
-			return errors.New("last_run_time not updated")
-		}
-		var runningStatus string
-		require.NoError(t, row.Scan(&runningStatus))
-		if !strings.Contains(runningStatus, "Job completed at") {
-			return errors.New("running_status not updated")
-		}
-		return nil
-	})
+	// Wait for the job to complete.
+	t.Log("waiting for job to complete")
+	<-jobCompleteCh
+	t.Log("job completed")
+
+	row := conn.Query(t,
+		`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
+		jobs.UpdateTableMetadataCacheJobID)
+	if !row.Next() {
+		t.Fatal("last_run_time not updated")
+	}
+	var runningStatus string
+	require.NoError(t, row.Scan(&runningStatus))
+	require.Containsf(t, runningStatus, "Job completed at", "running_status not updated: %s", runningStatus)
 }
 
 // TestUpdateTableMetadataCacheAutomaticUpdates tests that:
@@ -96,7 +101,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	jobRunCh := make(chan struct{})
-	updater := mockUpdater{jobRunCh: jobRunCh}
+	updater := mockUpdaterWithSignal{jobRunCh: jobRunCh}
 
 	waitForJobRuns := func(count int, timeout time.Duration) error {
 		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
@@ -167,15 +172,26 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	})
 }
 
-type mockUpdater struct {
+// mockUpdaterWithSignal is a mock implementation of ITableMetadataUpdater that
+// records the time of each call to RunUpdater and signals when the job
+// is complete.
+type mockUpdaterWithSignal struct {
 	mockCalls []time.Time
 	jobRunCh  chan struct{}
 }
 
-func (t *mockUpdater) RunUpdater(ctx context.Context) error {
+func (t *mockUpdaterWithSignal) RunUpdater(_ctx context.Context) error {
 	t.mockCalls = append(t.mockCalls, time.Now())
 	t.jobRunCh <- struct{}{}
 	return nil
 }
 
-var _ tablemetadatacacheutil.ITableMetadataUpdater = &mockUpdater{}
+var _ tablemetadatacacheutil.ITableMetadataUpdater = &mockUpdaterWithSignal{}
+
+type noopUpdater struct{}
+
+func (nu *noopUpdater) RunUpdater(_ctx context.Context) error {
+	return nil
+}
+
+var _ tablemetadatacacheutil.ITableMetadataUpdater = &noopUpdater{}
