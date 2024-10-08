@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -40,6 +41,11 @@ import (
 // prepends the database ID, since the same descriptor ID is reused across
 // databases.
 type StableID uint64
+
+// DefaultStableID is the uninitialized stable ID, used to represent an
+// invalid or default state for catalog objects. GlobalPrivilege objects
+// always return this value as their ID.
+const DefaultStableID = StableID(catid.InvalidDescID)
 
 // SchemaName is an alias for tree.ObjectNamePrefix, since it consists of the
 // catalog + schema name.
@@ -160,18 +166,18 @@ type Catalog interface {
 	// ResolveFunctionByOID resolves a function overload by OID.
 	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (*tree.RoutineName, *tree.Overload, error)
 
-	// CheckPrivilege verifies that the current user has the given privilege on
+	// CheckPrivilege verifies that the given user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
-	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
+	CheckPrivilege(ctx context.Context, o Object, user username.SQLUsername, priv privilege.Kind) error
 
 	// CheckAnyPrivilege verifies that the current user has any privilege on
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
-	// CheckExecutionPrivilege verifies that the current user has execution
+	// CheckExecutionPrivilege verifies that the given user has execution
 	// privileges for the UDF with the given OID. If not, then CheckPrivilege
 	// returns an error.
-	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error
+	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid, user username.SQLUsername) error
 
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
@@ -200,4 +206,11 @@ type Catalog interface {
 	// Optimizer returns the query Optimizer used to optimize SQL statements
 	// referencing objects in this catalog, if any.
 	Optimizer() interface{}
+
+	// GetCurrentUser returns the username.SQLUsername of the current session.
+	GetCurrentUser() username.SQLUsername
+
+	// GetRoutineOwner returns the username.SQLUsername of the routine's
+	// (specified by routineOid) owner.
+	GetRoutineOwner(ctx context.Context, routineOid oid.Oid) (username.SQLUsername, error)
 }

@@ -398,15 +398,17 @@ func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	if o.ID() == 0 {
-		return oc.planner.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv)
+func (oc *optCatalog) CheckPrivilege(
+	ctx context.Context, o cat.Object, user username.SQLUsername, priv privilege.Kind,
+) error {
+	if o.ID() == cat.DefaultStableID {
+		return oc.planner.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, priv, user)
 	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, priv)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, user)
 }
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
@@ -419,12 +421,14 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (oc *optCatalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, user username.SQLUsername,
+) error {
 	desc, err := oc.planner.FunctionDesc(ctx, oid)
 	if err != nil {
 		return errors.WithAssertionFailure(err)
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, user)
 }
 
 // HasAdminRole is part of the cat.Catalog interface.
@@ -497,6 +501,22 @@ func (oc *optCatalog) Optimizer() interface{} {
 	}
 	plannerInterface := eval.Planner(oc.planner)
 	return plannerInterface.Optimizer()
+}
+
+// GetCurrentUser is part of the cat.Catalog interface.
+func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
+	return oc.planner.User()
+}
+
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (oc *optCatalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	fnDesc, err := oc.planner.FunctionDesc(ctx, routineOid)
+	if err != nil {
+		return username.EmptyRoleName(), err
+	}
+	return fnDesc.FuncDesc().Privileges.Owner(), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
