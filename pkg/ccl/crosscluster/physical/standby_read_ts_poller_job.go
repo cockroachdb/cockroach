@@ -125,6 +125,7 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			ticker.Reset(standbyReadTSPollInterval.Get(&execCfg.Settings.SV))
 			tenantInfoAccessor := execCfg.UpgradeJobDeps.SystemDeps().TenantInfoAccessor
 			if tenantInfoAccessor == nil {
 				return errors.AssertionFailedf("tenant info accessor cannot be nil")

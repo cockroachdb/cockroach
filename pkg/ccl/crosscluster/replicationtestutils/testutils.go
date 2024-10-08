@@ -208,6 +208,14 @@ func (c *TenantStreamingClusters) ConnectToReaderTenant(
 		TenantName:  roachpb.TenantName(tenantName),
 		UseDatabase: "defaultdb",
 	})
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING bulkio.stream_ingestion.standby_read_ts_poll_interval = '500ms'`, tenantName)
+
+	// Attempt to keep the reader tenant's historical aost close to the present.
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`, tenantName)
+
 	require.NoError(c.T, err)
 	c.ReaderTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T,
 		serverutils.DBName("cluster:"+tenantName+"/defaultdb"))
@@ -554,6 +562,7 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
+	now := timeutil.Now()
 	testutils.SucceedsSoon(t, func() error {
 		err := requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
 		if err == nil {
@@ -571,6 +580,7 @@ func WaitUntilReplicatedTime(
 		}
 		return err
 	})
+	t.Logf("waited for %s to advance to %s", timeutil.Since(now), targetTime)
 }
 
 func requireReplicatedTime(targetTime hlc.Timestamp, progress *jobspb.Progress) error {
@@ -626,6 +636,8 @@ var defaultSrcClusterSetting = map[string]string{
 	// Large timeout makes test to not fail with unexpected timeout failures.
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
+	// Finer grain checkpoints to keep replicated time close to present.
+	`physical_replication.producer.timestamp_granularity`: `'100ms'`,
 	// Make all AddSSTable operation to trigger AddSSTable events.
 	`kv.bulk_io_write.small_write_size`: `'1'`,
 	`jobs.registry.interval.adopt`:      `'1s'`,
