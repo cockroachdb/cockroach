@@ -58,23 +58,20 @@ func (t *Tracker) Empty() bool {
 	return true
 }
 
-// Track token deductions of the given priority with the given raft log index and term.
+// Track registers a token deduction of the given priority for the given raft
+// entry. Entries must be registered in the increasing order of log index.
 func (t *Tracker) Track(
 	ctx context.Context, id entryID, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
 ) bool {
+	// TODO(pav-kv): pass in the leader term, and check that it matches the term
+	// of the leader whose Tracker this is.
 	if len(t.tracked[pri]) >= 1 {
 		last := t.tracked[pri][len(t.tracked[pri])-1].id
 		// Tracker exists in the context of a single replicaSendStream, which cannot
-		// span the leader losing leadership and regaining it. So the indices must
+		// span the leader losing leadership and regaining it. So the entry IDs must
 		// advance.
-		if last.index >= id.index {
-			log.Fatalf(ctx, "expected in order tracked log indexes (%d < %d)",
-				last.index, id.index)
-			return false
-		}
-		if last.term > id.term {
-			log.Fatalf(ctx, "expected in order tracked leader terms (%d < %d)",
-				last.term, id.term)
+		if id.index <= last.index || id.term < last.term {
+			log.Fatalf(ctx, "expected in order tracked log entries: last=%+v, entry=%+v", last, id)
 			return false
 		}
 	}
@@ -94,6 +91,9 @@ func (t *Tracker) Track(
 func (t *Tracker) Untrack(
 	av AdmittedVector, evalTokensGEIndex uint64,
 ) (returnedSend, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens) {
+	// TODO(pav-kv): the logic below is not correct. We need to check av.Term to
+	// be the same as this leader's term. If it's below, ignore. If above, release
+	// all tokens. If same, release a prefix up to the given index.
 	for pri, uptoIndex := range av.Admitted {
 		var untracked int
 		for n := len(t.tracked[pri]); untracked < n; untracked++ {
