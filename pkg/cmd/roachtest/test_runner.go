@@ -1109,6 +1109,10 @@ func (r *testRunner) runTest(
 	// deferred function below that a Side-Eye snapshot was taken for a timed out
 	// test.
 	sideEyeTimeoutSnapshotURL := ""
+	// preemptedVMCh listens for preempted VMs found by monitorForPreemptedVMs
+	// which actively polls for VM preemptions.
+	preemptedVMChBuf := max(c.spec.NodeCount, 1) // make sure buffer is at least 1 for unit tests
+	preemptedVMCh := make(chan vm.PreemptedVM, preemptedVMChBuf)
 	defer func() {
 		t.end = timeutil.Now()
 		if err := c.removeLabels([]string{VmLabelTestName, VmLabelTestOwner}); err != nil {
@@ -1152,7 +1156,7 @@ func (r *testRunner) runTest(
 			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 			if t.Failed() {
 				failureMsg := t.failureMsg()
-				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
+				preemptedVMNames := getPreemptedVMNames(ctx, c, l, preemptedVMCh)
 				if preemptedVMNames != "" {
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
@@ -1301,6 +1305,9 @@ func (r *testRunner) runTest(
 		}()
 
 		grafanaAnnotateTestStart(runCtx, t, c)
+		// Actively poll for VM preemptions, so we can bail out of tests early and
+		// avoid situations where a test times out and the flake assignment logic fails.
+		preemptionMonitor(runCtx, t, c, l, preemptedVMCh)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
 	}()
@@ -1424,13 +1431,24 @@ func getVMNames(fullVMNames []string) string {
 	return strings.Join(vmNames, ", ")
 }
 
-// getPreemptedVMNames returns a comma separated list of preempted VM
-// names, or an empty string if no VM was preempted or an error was found.
-func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
-	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
-	if err != nil {
-		l.Printf("failed to check preempted VMs:\n%+v", err)
-		return ""
+// getPreemptedVMNames returns a comma separated list of preempted VM names,
+// or an empty string if no VM was preempted or an error was found. It first
+// checks to see if any preemptions were found during polling. If none were found,
+// it checks again with the cloud providers.
+func getPreemptedVMNames(
+	ctx context.Context, c *clusterImpl, l *logger.Logger, preemptedVMCh chan vm.PreemptedVM,
+) string {
+	var preemptedVMs []vm.PreemptedVM
+	for m := range preemptedVMCh {
+		preemptedVMs = append(preemptedVMs, m)
+	}
+
+	if len(preemptedVMs) == 0 {
+		var err error
+		preemptedVMs, err = c.GetPreemptedVMs(ctx, l)
+		if err != nil {
+			l.Printf("failed to check for preempted VMs:\n%+v", err)
+		}
 	}
 
 	var preemptedVMNames []string
@@ -2115,4 +2133,48 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 	}
 
 	return clusterParams
+}
+
+// PollPreemptionInterval is how often to poll for preempted VMs.
+var PollPreemptionInterval = 5 * time.Minute
+
+var preemptionMonitor = monitorForPreemptedVMs
+
+func monitorForPreemptedVMs(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	l *logger.Logger,
+	preemptedVMCh chan vm.PreemptedVM,
+) {
+	if c.IsLocal() || !c.Spec().UseSpotVMs {
+		close(preemptedVMCh)
+		return
+	}
+
+	go func() {
+		pollCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer close(preemptedVMCh)
+
+		for {
+			select {
+			case <-pollCtx.Done():
+				return
+			case <-time.After(PollPreemptionInterval):
+				preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
+				if err != nil {
+					l.Printf("monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
+					continue
+				}
+
+				if len(preemptedVMs) != 0 {
+					for _, m := range preemptedVMs {
+						preemptedVMCh <- m
+					}
+					t.Errorf("monitorForPreemptedVMs: Preempted VMs detected: %s", preemptedVMs)
+				}
+			}
+		}
+	}()
 }
