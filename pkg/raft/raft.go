@@ -1658,6 +1658,7 @@ func stepLeader(r *raft, m pb.Message) error {
 					CurConfig:                         &r.config,
 					Applied:                           r.raftLog.applied,
 					PendingConfIndex:                  r.pendingConfIndex,
+					LeadSupportSafe:                   r.fortificationTracker.ConfigChangeSafe(),
 					DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
 				}
 				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
