@@ -288,7 +288,7 @@ DROP SCHEMA bar;
 `)
 	tdb.Exec(t, `BACKUP DATABASE foo INTO 'nodelocal://1/'`)
 
-	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH new_db_name = '%s'",
+	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM '%s' WITH new_db_name = '%s'",
 		dbName, fromDir, restoredDBName))
 	query := fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] WHERE database_name = '%s'", restoredDBName)
 	tdb.CheckQueryResults(t, query, [][]string{{restoredDBName}})
