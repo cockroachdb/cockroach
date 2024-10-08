@@ -327,12 +327,28 @@ SHOW TYPES -- literals removed
 SHOW TYPES -- identifiers removed
 
 parse
+SHOW TYPES WITH COMMENT
+----
+SHOW TYPES WITH COMMENT
+SHOW TYPES WITH COMMENT -- fully parenthesized
+SHOW TYPES WITH COMMENT -- literals removed
+SHOW TYPES WITH COMMENT -- identifiers removed
+
+parse
 EXPLAIN SHOW TYPES
 ----
 EXPLAIN SHOW TYPES
 EXPLAIN SHOW TYPES -- fully parenthesized
 EXPLAIN SHOW TYPES -- literals removed
 EXPLAIN SHOW TYPES -- identifiers removed
+
+parse
+EXPLAIN SHOW TYPES WITH COMMENT
+----
+EXPLAIN SHOW TYPES WITH COMMENT
+EXPLAIN SHOW TYPES WITH COMMENT -- fully parenthesized
+EXPLAIN SHOW TYPES WITH COMMENT -- literals removed
+EXPLAIN SHOW TYPES WITH COMMENT -- identifiers removed
 
 parse
 SHOW SCHEMAS

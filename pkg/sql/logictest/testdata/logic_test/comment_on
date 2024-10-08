@@ -345,6 +345,15 @@ type  object_id  sub_id  comment
 
 skipif config local-legacy-schema-changer
 skipif config local-mixed-24.1
+query TTTT colnames,rowsort
+SHOW TYPES WITH COMMENT
+----
+schema  name             owner  comment
+public  roach_dwellings  root   First-CRDB-comment-on-types-again
+public  roach_legs       root   Second-CRDB-comment-on-types-again
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS NULL;
 
@@ -352,6 +361,15 @@ skipif config local-legacy-schema-changer
 skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS NULL;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+query TTTT colnames,rowsort
+SHOW TYPES WITH COMMENT
+----
+schema  name             owner  comment
+public  roach_dwellings  root   NULL
+public  roach_legs       root   NULL
 
 skipif config local-legacy-schema-changer
 skipif config local-mixed-24.1
