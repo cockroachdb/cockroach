@@ -23,6 +23,10 @@ if [[ "${cmd}" ]]; then
   shift
 fi
 
+function user_domain_suffix() {
+  gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.\-]/_/g'
+}
+
 function start_and_wait() {
     gcloud compute instances start "${1}"
     if [ -z "${GCEWORKER_NO_FIREWALL_WARNING-}" ]; then
@@ -44,7 +48,7 @@ EOF
 function refresh_ssh_config() {
     IP=$($0 ip)
     if ! grep -q "${FQNAME}" ~/.ssh/config; then
-      USER_DOMAIN_SUFFIX=$(gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.]/_/g')
+      USER_DOMAIN_SUFFIX="$(user_domain_suffix)"
       echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one for ${USER_DOMAIN_SUFFIX} now with the instance external ip."
       echo "Host ${FQNAME}
   HostName ${IP}
@@ -195,7 +199,7 @@ case "${cmd}" in
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)
-    mosh "${FQNAME}"
+      mosh "$(user_domain_suffix)@${FQNAME}"
     ;;
     gcloud)
     gcloud "$@"
