@@ -37,9 +37,6 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 
 
--- (Wait for range to quiesce.)
-
-
 -- (Allow below-raft admission to proceed. We've disabled the fallback token
 -- dispatch mechanism so no tokens are returned yet -- quiesced ranges don't
 -- use the piggy-backed token return mechanism since there's no raft traffic.)
@@ -111,6 +108,9 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.regular.returned                        | 0 B      
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Wait for range to quiesce.)
 ----
 ----
 
