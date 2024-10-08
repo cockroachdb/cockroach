@@ -109,6 +109,18 @@ func (ssh *supporterStateHandler) getNumSupportFor() int {
 	return len(ssh.supporterState.supportFor)
 }
 
+// exportAllSupportFor exports a copy of all SupportStates from the
+// supporterState.supportFor map.
+func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.SupportState {
+	ssh.mu.RLock()
+	defer ssh.mu.RUnlock()
+	supportStates := make([]slpb.SupportState, len(ssh.supporterState.supportFor))
+	for _, ss := range ssh.supporterState.supportFor {
+		supportStates = append(supportStates, ss)
+	}
+	return supportStates
+}
+
 // Functions for handling supporterState updates.
 
 // assertMeta ensures the meta in the inProgress view does not regress any of
