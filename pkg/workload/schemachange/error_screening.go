@@ -1033,7 +1033,9 @@ SELECT count(*) FROM %s
 	if err != nil {
 		rbkErr := joinTx.Rollback(ctx)
 		// UndefinedFunction errors mean that the column type is not comparable.
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			((pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction) ||
+				(pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn)) {
 			return false, rbkErr
 		}
 		return false, errors.WithSecondaryError(err, rbkErr)
@@ -1196,7 +1198,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 				for name, idx := range columnNameToIndexMap {
 					columnsToValues[name] = rowToInsert[idx]
 				}
-				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[parentColInfo.ordinal], columnsToValues)
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, *parentColInfo, columnsToValues)
 				if err != nil {
 					return false, err
 				}
