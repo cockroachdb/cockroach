@@ -573,6 +573,15 @@ func (r *Replica) hasPendingProposalQuotaRLocked() bool {
 	return !r.mu.proposalQuota.Full()
 }
 
+// hasSendTokensRaftMuLocked is part of the quiescer interface. It returns true
+// if RACv2 holds any send tokens for this range.
+//
+// We can't quiesce while any send tokens are held because this could lead to
+// never releasing them. Tokens must be released.
+func (r *Replica) hasSendTokensRaftMuLocked() bool {
+	return r.flowControlV2.HoldsSendTokensRaftMuLocked()
+}
+
 // ticksSinceLastProposalRLocked returns the number of ticks since the last
 // proposal.
 func (r *Replica) ticksSinceLastProposalRLocked() int {

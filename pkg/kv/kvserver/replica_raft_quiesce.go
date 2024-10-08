@@ -212,6 +212,9 @@ type quiescer interface {
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
+	// TODO(pav-kv): this method is a one-off holding raftMu. It should be able to
+	// do its job with only Replica.mu held.
+	hasSendTokensRaftMuLocked() bool
 	ticksSinceLastProposalRLocked() int
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
@@ -330,6 +333,16 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		}
 		return nil, nil, false
 	}
+	// Likewise, do not quiesce if any RACv2 send tokens are held. Quiescing would
+	// terminate MsgApp pings which make sure the admitted state converges, and
+	// send tokens are eventually released.
+	if q.hasSendTokensRaftMuLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: holds RACv2 send tokens")
+		}
+		return nil, nil, false
+	}
+
 	if q.mergeInProgressRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: merge in progress")
@@ -382,8 +395,6 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.
-	// TODO(pav-kv): we also need all RACv2 tokens released, i.e. all admitted
-	// indices converged to the last index.
 	if status.Applied != status.Commit {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",

@@ -329,6 +329,11 @@ type Processor interface {
 	//
 	// raftMu is held.
 	MaybeSendPingsRaftMuLocked()
+	// HoldsSendTokensRaftMuLocked returns true if the replica is the leader using
+	// RACv2, and holds any send tokens. Used to prevent replica quiescence.
+	//
+	// raftMu is held.
+	HoldsSendTokensRaftMuLocked() bool
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -1084,6 +1089,15 @@ func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
 	if rc := p.leader.rc; rc != nil {
 		rc.MaybeSendPingsRaftMuLocked()
 	}
+}
+
+// HoldsSendTokensRaftMuLocked implements Processor.
+func (p *processorImpl) HoldsSendTokensRaftMuLocked() bool {
+	p.opts.Replica.RaftMuAssertHeld()
+	if rc := p.leader.rc; rc != nil {
+		return rc.HoldsSendTokensRaftMuLocked()
+	}
+	return false
 }
 
 // AdmitForEval implements Processor.
