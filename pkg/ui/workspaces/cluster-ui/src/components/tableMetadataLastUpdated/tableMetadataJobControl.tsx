@@ -82,6 +82,7 @@ export const TableMetadataJobControl: React.FC<
     // Force refresh.
     triggerUpdateTableMetaJob(false);
   };
+  const durationText = jobStatus?.lastCompletedTime?.fromNow();
 
   const isRunning = jobStatus?.currentStatus === TableMetadataJobStatus.RUNNING;
   return (
@@ -98,6 +99,7 @@ export const TableMetadataJobControl: React.FC<
             time={jobStatus?.lastCompletedTime}
             fallback={"Never"}
           />{" "}
+          {durationText && `(${durationText})`}
         </Tooltip>
       </Skeleton>
       <Tooltip placement="top" title={"Refresh data"}>
