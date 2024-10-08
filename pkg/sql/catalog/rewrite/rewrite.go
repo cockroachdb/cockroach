@@ -767,6 +767,23 @@ func rewriteSchemaChangerState(
 			data.SchemaID = rewrite.ParentSchemaID
 			continue
 		}
+
+		// maybeRemoveMissingReference potentially removes and element based on
+		// missing references, when it is safe to do so.
+		maybeRemoveMissingReference := func(element scpb.Element, missingID descpb.ID) (removed bool) {
+			switch e := element.(type) {
+			case *scpb.SequenceOwner:
+				if e.SequenceID == missingID {
+					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+					state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+					state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+					i--
+					return true
+				}
+			}
+			return false
+		}
+
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
 			if *id == descpb.InvalidID {
 				// Some descriptor ID fields in elements may be deliberately unset.
@@ -775,6 +792,13 @@ func rewriteSchemaChangerState(
 			}
 			rewrite, ok := descriptorRewrites[*id]
 			if !ok {
+				// If the reference was removed, no rewrite is needed
+				// and we are done.
+				if maybeRemoveMissingReference(t.Element(), *id) {
+					return nil
+				}
+				// Otherwise, something is gravely wrong and the state cannot
+				// be repaired.
 				return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
 			}
 			*id = rewrite.ID
