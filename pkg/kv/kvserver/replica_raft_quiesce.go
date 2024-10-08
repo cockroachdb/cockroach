@@ -137,17 +137,17 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		r.mu.internalRaftGroup != nil
 }
 
-// maybeQuiesceRaftMuLockedReplicaMuLocked checks to see if the replica is
-// quiescable and initiates quiescence if it is. Returns true if the replica has
+// maybeQuiesceRaftMuLockedReplicaMuLocked checks to see if the replica can be
+// quiesced, and initiates quiescence if so. Returns true if the replica has
 // been quiesced and false otherwise.
 //
 // A quiesced range is not ticked and thus doesn't create MsgHeartbeat requests
 // or cause elections. The Raft leader for a range checks various
-// pre-conditions: no pending raft commands, no pending raft ready, all of the
-// followers are up to date, etc. Quiescence is initiated by a special
+// pre-conditions: no pending raft commands, no pending raft ready, all the
+// followers are up-to-date, etc. Quiescence is initiated by a special
 // MsgHeartbeat that is tagged as Quiesce. Upon receipt (see
 // Store.processRaftRequestWithReplica), the follower checks to see if the
-// term/commit matches and marks the local replica as quiescent. If the
+// term/commit matches, and marks the local replica as quiescent. If the
 // term/commit do not match the MsgHeartbeat is passed through to Raft which
 // will generate a MsgHeartbeatResp that will unquiesce the sender.
 //
@@ -164,26 +164,26 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // while the leader is quiesced.
 //
 // Note that both the quiesce and wake-the-leader messages can be dropped or
-// reordered by the transport. The wake-the-leader message is termless so it
+// reordered by the transport. The wake-the-leader message is term-less, so it
 // won't affect elections and, while it triggers reproprosals that won't cause
-// problems on reordering. If the wake-the-leader message is dropped the leader
-// won't be woken and the follower will eventually call an election.
+// problems on reordering. If the wake-the-leader message is dropped, the leader
+// won't be woken, and the follower will eventually call an election.
 //
-// If the quiesce message is dropped the follower which missed it will not
+// If the quiesce message is dropped, the follower which missed it will not
 // quiesce and will eventually cause an election. The quiesce message is tagged
-// with the current term and commit index. If the quiesce message is reordered
-// it will either still apply to the recipient or the recipient will have moved
+// with the current term and commit index. If the quiesce message is reordered,
+// it will either still apply to the recipient, or the recipient will have moved
 // forward and the quiesce message will fall back to being a heartbeat.
 //
 // The supplied livenessMap maps from node ID to a boolean indicating liveness.
 // A range may be quiesced in the presence of non-live replicas if the remaining
-// live replicas all meet the quiesce requirements. When a node considered
+// live replicas all meet the quiescence requirements. When a node considered
 // non-live becomes live, the node liveness instance invokes a callback which
 // causes all nodes to wake up any ranges containing replicas owned by the
 // newly-live node that were out-of-date at the time of quiescence, allowing the
 // out-of-date replicas to be brought back up to date. If livenessMap is nil,
 // liveness data will not be used, meaning no range will quiesce if any replicas
-// are behind, whether or not they are live. If any entry in the livenessMap is
+// are behind, whether they are live or not. If any entry in the livenessMap is
 // nil, then the missing node ID is treated as live and will prevent the range
 // from quiescing.
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
@@ -253,10 +253,10 @@ func (s laggingReplicaSet) Len() int           { return len(s) }
 func (s laggingReplicaSet) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeID }
 
-// shouldReplicaQuiesce determines if a replica should be quiesced. All of the
-// access to Replica internals are gated by the quiescer interface to
-// facilitate testing. Returns the raft.Status and true on success, and (nil,
-// false) on failure.
+// shouldReplicaQuiesce determines if a replica should be quiesced. All the
+// access to Replica internals is gated by the quiescer interface to facilitate
+// testing. Returns the raft.Status and true on success, and (nil, false) on
+// failure.
 //
 // Deciding to quiesce can race with requests being evaluated and their
 // proposals. Any proposal happening after the range has quiesced will
@@ -289,6 +289,7 @@ func shouldReplicaQuiesce(
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raft.SparseStatus, laggingReplicaSet, bool) {
+	// TODO(pav-kv): should check StateLeader rather than leaderID == replicaID.
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
@@ -352,6 +353,7 @@ func shouldReplicaQuiesce(
 		return nil, nil, false
 	}
 
+	// TODO(pav-kv): this allocates? return (status, ok) by value.
 	status := q.raftSparseStatusRLocked()
 	if status == nil {
 		if log.V(4) {
@@ -383,6 +385,8 @@ func shouldReplicaQuiesce(
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.
+	// TODO(pav-kv): we also need all RACv2 tokens released, i.e. all admitted
+	// indices converged to the last index.
 	if status.Applied != status.Commit {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
