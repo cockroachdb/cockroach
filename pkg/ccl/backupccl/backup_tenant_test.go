@@ -145,7 +145,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 
 	// tenant now has a fully ingested, paused import, so back them up.
 	const dst = "userfile:///t"
-	if _, err := sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO $1`, dst); err != nil {
+	if _, err := sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 INTO $1`, dst); err != nil {
 		t.Fatal(err)
 	}
 	// Destroy the tenant, then restore it.
@@ -156,7 +156,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	if _, err := sqlDB.DB.ExecContext(ctx, "DROP TENANT [10] IMMEDIATE"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM $1", dst); err != nil {
+	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM LATEST IN $1", dst); err != nil {
 		t.Fatal(err)
 	}
 
