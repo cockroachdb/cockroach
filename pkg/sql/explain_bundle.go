@@ -620,10 +620,12 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].FQString(), err), &buf)
 		}
 	}
-	// Get all user-defined types. If redaction is a
-	blankLine()
-	if err := c.PrintCreateEnum(&buf, b.flags.RedactValues); err != nil {
-		b.printError(fmt.Sprintf("-- error getting schema for enums: %v", err), &buf)
+	// Get all relevant user-defined types.
+	for _, t := range mem.Metadata().AllUserDefinedTypes() {
+		blankLine()
+		if err := c.PrintCreateUDT(&buf, t.Oid(), b.flags.RedactValues); err != nil {
+			b.printError(fmt.Sprintf("-- error getting schema for type %s: %v", t.SQLStringForError(), err), &buf)
+		}
 	}
 	if mem.Metadata().HasUserDefinedRoutines() {
 		// Get all relevant user-defined routines.
@@ -1008,13 +1010,13 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error {
-	qry := "SELECT create_statement FROM [SHOW CREATE ALL TYPES]"
+func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues bool) error {
+	descID := catid.UserDefinedOIDToID(id)
+	query := fmt.Sprintf("SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_id = %d", descID)
 	if redactValues {
-		qry = "SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [SHOW CREATE ALL TYPES]"
-
+		query = fmt.Sprintf("SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
-	createStatement, err := c.queryRows(qry)
+	createStatement, err := c.queryRows(query)
 	if err != nil {
 		return err
 	}
