@@ -323,6 +323,7 @@ func (s *testingRCState) getOrInitRange(
 		}
 
 		init := RangeControllerInitState{
+			Term:          1,
 			ReplicaSet:    r.replicas(),
 			Leaseholder:   r.localReplicaID,
 			NextRaftIndex: r.nextRaftIndex,
