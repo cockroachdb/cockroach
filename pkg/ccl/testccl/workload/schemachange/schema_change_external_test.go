@@ -92,7 +92,7 @@ func TestWorkload(t *testing.T) {
 				FROM system.descriptor
 				LEFT JOIN system.namespace ON namespace.id = descriptor.id
 		`))
-		tdb.Exec(t, "BACKUP DATABASE schemachange TO 'nodelocal://1/backup'")
+		tdb.Exec(t, "BACKUP DATABASE schemachange INTO 'nodelocal://1/backup'")
 		t.Logf("backup, tracing data, and system table dumps in %s", dir)
 	}()
 
