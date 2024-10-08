@@ -1136,8 +1136,10 @@ func (r *raft) tickHeartbeat() {
 
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
-		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
-			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+		if !r.fortificationTracker.FortificationEnabled() {
+			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
+				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+			}
 		}
 
 		// Mark fortifying followers as recently active. We disable heartbeats when
