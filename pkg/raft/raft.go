@@ -342,7 +342,7 @@ type raft struct {
 	config               quorum.Config
 	trk                  tracker.ProgressTracker
 	electionTracker      tracker.ElectionTracker
-	fortificationTracker tracker.FortificationTracker
+	fortificationTracker *tracker.FortificationTracker
 	lazyReplication      bool
 
 	state StateType
@@ -478,7 +478,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
-	r.fortificationTracker = tracker.MakeFortificationTracker(&r.config, r.storeLiveness)
+	r.fortificationTracker = tracker.NewFortificationTracker(&r.config, r.storeLiveness, r.logger)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -851,13 +851,10 @@ func (r *raft) sendDeFortify(to pb.PeerID) {
 	if to == r.id {
 		// We handle the case where the leader is trying to de-fortify itself
 		// specially. Doing so avoids a self-addressed message.
-		// TODO(arul): Same comment as below. This r.Term is incorrect.
-		r.deFortify(r.id, r.Term)
+		r.deFortify(r.id, r.fortificationTracker.Term())
 		return
 	}
-	// TODO(arul): instead of the current term, we need to freeze it when the
-	// leader steps down and copy that over here instead.
-	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.Term})
+	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.fortificationTracker.Term()})
 }
 
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
@@ -1004,12 +1001,6 @@ func (r *raft) reset(term uint64) {
 		r.Vote = None
 		r.lead = None
 		r.leadEpoch = 0
-		// TODO(arul): We'll only want to reset the fortification tracker when we're
-		// stepping up to become the leader again. This allows us to de-fortify any
-		// followers that may still be providing us support once we've stepped down,
-		// as the state of who to de-fortify, when to de-fortify, and which term to
-		// de-fortify for will be stored in the fortificationTracker.
-		r.fortificationTracker.Reset()
 	}
 
 	r.electionElapsed = 0
@@ -1173,6 +1164,7 @@ func (r *raft) tickHeartbeat() {
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
+	r.fortificationTracker.OnLeaderStepDown()
 	r.tick = r.tickElection
 	r.lead = lead
 	r.state = StateFollower
@@ -1223,6 +1215,11 @@ func (r *raft) becomeLeader() {
 	}
 	r.step = stepLeader
 	r.reset(r.Term)
+	// NB: The fortificationTracker holds state from a peer's leadership stint
+	// that's acted upon after it has stepped down. We reset it right before
+	// stepping up to become leader again, but not when stepping down as leader
+	// and not even when learning of a leader in a later term.
+	r.fortificationTracker.Reset(r.Term)
 	r.tick = r.tickHeartbeat
 	r.lead = r.id
 	r.state = StateLeader
@@ -1607,11 +1604,12 @@ func stepLeader(r *raft, m pb.Message) error {
 		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
-			// the LeadSupportUntil is in the past. This means that the leader can safely call a
-			// new election or vote for a different peer without regressing LeadSupportUntil.
-			// We don't need to/want to give this any special treatment -- instead, we
-			// handle this like the general step down case by simply remembering the
-			// term/lead information from our stint as the leader.
+			// the LeadSupportUntil is in the past. This means that the leader can
+			// safely call a new election or vote for a different peer without
+			// regressing LeadSupportUntil. We don't need to/want to give this any
+			// special treatment -- instead, we handle this like the general step down
+			// case by simply remembering the term/lead information from our stint as
+			// the leader.
 			r.becomeFollower(r.Term, r.id)
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
