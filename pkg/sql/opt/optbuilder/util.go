@@ -505,7 +505,7 @@ func (b *Builder) resolveSchemaForCreate(
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
 		panic(err)
 	}
 
@@ -705,7 +705,7 @@ func (b *Builder) resolveDataSourceRef(
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
 		if err != nil {
 			panic(err)
 		}

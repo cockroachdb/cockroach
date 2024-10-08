@@ -8,6 +8,7 @@ package optbuilder
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -50,7 +51,7 @@ func (b *Builder) buildUDF(
 	// Check for execution privileges for user-defined overloads. Built-in
 	// overloads do not need to be checked.
 	if o.Type == tree.UDFRoutine {
-		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
 			panic(err)
 		}
 	}
@@ -186,7 +187,7 @@ func (b *Builder) resolveProcedureDefinition(
 	}
 
 	// Check for execution privileges.
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
 		panic(err)
 	}
 	return f, def
@@ -342,18 +343,34 @@ func (b *Builder) buildRoutine(
 	// for the schema changer we only need depth 1. Also keep track of when
 	// we have are executing inside a UDF, and whether the routine is used as a
 	// data source (this could be nested, so we need to track the previous state).
-	defer func(trackSchemaDeps, insideUDF, insideDataSource, insideSQLRoutine bool) {
+	defer func(
+		trackSchemaDeps,
+		insideUDF,
+		insideDataSource,
+		insideSQLRoutine bool,
+		checkPrivilegeUser username.SQLUsername,
+	) {
 		b.trackSchemaDeps = trackSchemaDeps
 		b.insideUDF = insideUDF
 		b.insideDataSource = insideDataSource
 		b.insideSQLRoutine = insideSQLRoutine
-	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource, b.insideSQLRoutine)
+		b.checkPrivilegeUser = checkPrivilegeUser
+	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource, b.insideSQLRoutine, b.checkPrivilegeUser)
 	oldInsideDataSource := b.insideDataSource
 	b.insideDataSource = false
 	b.trackSchemaDeps = false
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
+	// If this is a user-defined routine that has a security mode of DEFINER, we
+	// need to override our checkPrivilegeUser to be the owner of the routine.
+	if o.Type != tree.BuiltinRoutine && o.SecurityMode == tree.RoutineDefiner {
+		checkPrivUser, err := b.catalog.GetRoutineOwner(b.ctx, o.Oid)
+		if err != nil {
+			panic(err)
+		}
+		b.checkPrivilegeUser = checkPrivUser
+	}
 
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr

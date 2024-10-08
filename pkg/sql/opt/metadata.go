@@ -504,7 +504,7 @@ func (md *Metadata) CheckDependencies(
 		return false, err
 	}
 	for _, dep := range md.udfDeps {
-		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, optCatalog.GetCurrentUser()); err != nil {
 			return false, err
 		}
 	}
@@ -544,7 +544,7 @@ func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog ca
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err := optCatalog.CheckPrivilege(ctx, dataSource, priv); err != nil {
+				if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
 					return err
 				}
 			}

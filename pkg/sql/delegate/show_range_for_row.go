@@ -23,7 +23,7 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 		return nil, err
 	}
 	// Basic requirement is SELECT privileges
-	if err = d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
+	if err = d.catalog.CheckPrivilege(d.ctx, idx.Table(), d.catalog.GetCurrentUser(), privilege.SELECT); err != nil {
 		return nil, err
 	}
 	if idx.Table().IsVirtualTable() {

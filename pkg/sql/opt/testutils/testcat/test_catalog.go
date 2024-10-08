@@ -261,7 +261,9 @@ func (tc *Catalog) ResolveIndex(
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+func (tc *Catalog) CheckPrivilege(
+	ctx context.Context, o cat.Object, user username.SQLUsername, priv privilege.Kind,
+) error {
 	return tc.CheckAnyPrivilege(ctx, o)
 }
 
@@ -293,7 +295,9 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (tc *Catalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, user username.SQLUsername,
+) error {
 	if tc.revokedUDFOids.Contains(int(oid)) {
 		return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to execute function with OID %d", oid)
 	}
@@ -325,6 +329,18 @@ func (tc *Catalog) CheckRoleExists(ctx context.Context, role username.SQLUsernam
 // Optimizer is part of the cat.Catalog interface.
 func (tc *Catalog) Optimizer() interface{} {
 	return nil
+}
+
+// GetCurrentUser is part of the cat.Catalog interface.
+func (tc *Catalog) GetCurrentUser() username.SQLUsername {
+	return username.EmptyRoleName()
+}
+
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (tc *Catalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	return tc.GetCurrentUser(), nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
