@@ -137,7 +137,7 @@ func (b *Builder) buildRoutine(
 	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, returnType *types.T, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
-	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
+	b.factory.Metadata().AddUserDefinedRoutine(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change
