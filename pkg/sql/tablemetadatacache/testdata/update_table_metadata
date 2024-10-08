@@ -1,3 +1,6 @@
+set-time unixSecs=1610000000
+----
+
 query
 SELECT * FROM system.table_metadata
 ----
@@ -42,7 +45,7 @@ success
 
 update-cache
 ----
-updated 64 table(s)
+updatedTables: 64, errors: 0, run #: 1, duration > 0: true
 
 
 # We're omitting the following columns since they are not deterministic.
@@ -64,74 +67,75 @@ SELECT
   details->'auto_stats_enabled',
   store_ids,
   total_ranges,
+  last_updated,
   last_update_error
 FROM system.table_metadata
 ORDER BY (db_name, table_name)
 ----
-autostats_disabled defaultdb public 100 107 2 0 TABLE false {1} 1 <nil>
-autostats_enabled defaultdb public 100 106 2 0 TABLE true {1} 1 <nil>
-mymaterializedview defaultdb public 100 109 4 0 MATERIALIZED_VIEW null {1} 1 <nil>
-myseq defaultdb public 100 110 1 0 SEQUENCE null {1} 1 <nil>
-mytable defaultdb public 100 104 3 0 TABLE null {1} 1 <nil>
-mytable2 defaultdb public 100 105 4 0 TABLE null {1} 1 <nil>
-myview defaultdb public 100 108 3 0 VIEW null {1} 1 <nil>
-comments system public 1 24 4 0 TABLE null {1} 1 <nil>
-database_role_settings system public 1 44 4 1 TABLE null {1} 1 <nil>
-descriptor system public 1 3 2 0 TABLE null {1} 1 <nil>
-descriptor_id_seq system public 1 7 1 0 SEQUENCE null {1} 1 <nil>
-eventlog system public 1 12 6 0 TABLE null {1} 1 <nil>
-external_connections system public 1 53 7 0 TABLE null {1} 1 <nil>
-job_info system public 1 54 4 0 TABLE null {1} 1 <nil>
-jobs system public 1 15 12 4 TABLE null {1} 1 <nil>
-join_tokens system public 1 41 3 0 TABLE null {1} 1 <nil>
-lease system public 1 11 5 0 TABLE null {1} 1 <nil>
-locations system public 1 21 4 0 TABLE null {1} 1 <nil>
-migrations system public 1 40 5 0 TABLE null {1} 1 <nil>
-mvcc_statistics system public 1 64 6 0 TABLE null {1} 1 <nil>
-namespace system public 1 30 4 0 TABLE null {1} 1 <nil>
-privileges system public 1 52 5 2 TABLE null {1} 1 <nil>
-protected_ts_meta system public 1 31 5 0 TABLE null {1} 1 <nil>
-protected_ts_records system public 1 32 8 0 TABLE null {1} 1 <nil>
-rangelog system public 1 13 7 0 TABLE null {1} 1 <nil>
-region_liveness system public 1 9 2 0 TABLE null {1} 1 <nil>
-replication_constraint_stats system public 1 25 7 0 TABLE null {1} 1 <nil>
-replication_critical_localities system public 1 26 5 0 TABLE null {1} 1 <nil>
-replication_stats system public 1 27 7 0 TABLE null {1} 1 <nil>
-reports_meta system public 1 28 2 0 TABLE null {1} 1 <nil>
-role_id_seq system public 1 48 1 0 SEQUENCE null {1} 1 <nil>
-role_members system public 1 23 5 5 TABLE null {1} 1 <nil>
-role_options system public 1 33 4 1 TABLE null {1} 1 <nil>
-scheduled_jobs system public 1 37 10 1 TABLE null {1} 1 <nil>
-settings system public 1 6 4 0 TABLE null {1} 1 <nil>
-span_configurations system public 1 47 3 0 TABLE null {1} 1 <nil>
-span_count system public 1 51 2 0 TABLE null {1} 1 <nil>
-span_stats_buckets system public 1 56 5 1 TABLE null {1} 1 <nil>
-span_stats_samples system public 1 57 2 1 TABLE null {1} 1 <nil>
-span_stats_tenant_boundaries system public 1 58 2 0 TABLE null {1} 1 <nil>
-span_stats_unique_keys system public 1 55 2 1 TABLE null {1} 1 <nil>
-sql_instances system public 1 46 8 0 TABLE null {1} 1 <nil>
-sqlliveness system public 1 39 3 0 TABLE null {1} 1 <nil>
-statement_activity system public 1 61 17 7 TABLE null {1} 1 <nil>
-statement_bundle_chunks system public 1 34 3 0 TABLE null {1} 1 <nil>
-statement_diagnostics system public 1 36 7 0 TABLE null {1} 1 <nil>
-statement_diagnostics_requests system public 1 35 11 1 TABLE null {1} 1 <nil>
-statement_execution_insights system public 1 66 29 4 TABLE null {1} 1 <nil>
-statement_statistics system public 1 42 19 8 TABLE null {1} 1 <nil>
-table_metadata system public 1 67 18 10 TABLE null {1} 1 <nil>
-table_statistics system public 1 20 12 0 TABLE null {1} 1 <nil>
-task_payloads system public 1 59 8 0 TABLE null {1} 1 <nil>
-tenant_id_seq system public 1 63 1 0 SEQUENCE null {1} 1 <nil>
-tenant_settings system public 1 50 6 0 TABLE null {1} 1 <nil>
-tenant_tasks system public 1 60 7 0 TABLE null {1} 1 <nil>
-tenant_usage system public 1 45 14 0 TABLE null {1} 1 <nil>
-tenants system public 1 8 6 2 TABLE null {1} 1 <nil>
-transaction_activity system public 1 62 14 7 TABLE null {1} 1 <nil>
-transaction_execution_insights system public 1 65 23 2 TABLE null {1} 1 <nil>
-transaction_statistics system public 1 43 14 7 TABLE null {1} 1 <nil>
-ui system public 1 14 3 0 TABLE null {1} 1 <nil>
-users system public 1 4 4 1 TABLE null {1} 1 <nil>
-web_sessions system public 1 19 9 4 TABLE null {1} 1 <nil>
-zones system public 1 5 2 0 TABLE null {1} 1 <nil>
+autostats_disabled defaultdb public 100 107 2 0 TABLE false {1} 1 2021-01-07 06:13:20 +0000 UTC 
+autostats_enabled defaultdb public 100 106 2 0 TABLE true {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mymaterializedview defaultdb public 100 109 4 0 MATERIALIZED_VIEW null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+myseq defaultdb public 100 110 1 0 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mytable defaultdb public 100 104 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mytable2 defaultdb public 100 105 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+myview defaultdb public 100 108 3 0 VIEW null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+comments system public 1 24 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+database_role_settings system public 1 44 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+descriptor system public 1 3 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+descriptor_id_seq system public 1 7 1 0 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+eventlog system public 1 12 6 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+external_connections system public 1 53 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_info system public 1 54 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+jobs system public 1 15 12 4 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+join_tokens system public 1 41 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+lease system public 1 11 5 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+locations system public 1 21 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+migrations system public 1 40 5 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mvcc_statistics system public 1 64 6 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+namespace system public 1 30 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+privileges system public 1 52 5 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+protected_ts_meta system public 1 31 5 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+protected_ts_records system public 1 32 8 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+rangelog system public 1 13 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+region_liveness system public 1 9 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_constraint_stats system public 1 25 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_critical_localities system public 1 26 5 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_stats system public 1 27 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+reports_meta system public 1 28 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_id_seq system public 1 48 1 0 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_members system public 1 23 5 5 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_options system public 1 33 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+scheduled_jobs system public 1 37 10 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+settings system public 1 6 4 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_configurations system public 1 47 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_count system public 1 51 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_buckets system public 1 56 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_samples system public 1 57 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_tenant_boundaries system public 1 58 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_unique_keys system public 1 55 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+sql_instances system public 1 46 8 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+sqlliveness system public 1 39 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_activity system public 1 61 17 7 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_bundle_chunks system public 1 34 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_diagnostics system public 1 36 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_diagnostics_requests system public 1 35 11 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_execution_insights system public 1 66 29 4 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_statistics system public 1 42 19 8 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+table_metadata system public 1 67 18 10 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+table_statistics system public 1 20 12 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+task_payloads system public 1 59 8 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_id_seq system public 1 63 1 0 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_settings system public 1 50 6 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_tasks system public 1 60 7 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_usage system public 1 45 14 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenants system public 1 8 6 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_activity system public 1 62 14 7 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_execution_insights system public 1 65 23 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_statistics system public 1 43 14 7 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+ui system public 1 14 3 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+users system public 1 4 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+web_sessions system public 1 19 9 4 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+zones system public 1 5 2 0 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 
 query
 SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
