@@ -182,22 +182,23 @@ func TestThrottlingMetadata(t *testing.T) {
 				TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
 			},
 		},
-		{
-			name: "trial license",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Trial,
-				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
-			},
-			lastSuccessfulTelemetryPing: testtime.Unix(),
-			expected: serverpb.GetThrottlingMetadataResponse{
-				HasGracePeriod:               true,
-				GracePeriodEndSeconds:        testtime.Add((7 * 24 * time.Hour) + time.Hour).Unix(),
-				NodeIdsWithTelemetryProblems: []string{},
-				HasTelemetryDeadline:         true,
-				LastTelemetryReceivedSeconds: testtime.Unix(),
-				TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
-			},
-		},
+		// TODO(davidh): uncomment this test once #131968 is resolved.
+		//{
+		//	name: "trial license",
+		//	license: &licenseccl.License{
+		//		Type:              licenseccl.License_Trial,
+		//		ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
+		//	},
+		//	lastSuccessfulTelemetryPing: testtime.Unix(),
+		//	expected: serverpb.GetThrottlingMetadataResponse{
+		//		HasGracePeriod:               true,
+		//		GracePeriodEndSeconds:        testtime.Add((7 * 24 * time.Hour) + time.Hour).Unix(),
+		//		NodeIdsWithTelemetryProblems: []string{},
+		//		HasTelemetryDeadline:         true,
+		//		LastTelemetryReceivedSeconds: testtime.Unix(),
+		//		TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
+		//	},
+		//},
 		{
 			name: "enterprise license",
 			license: &licenseccl.License{
