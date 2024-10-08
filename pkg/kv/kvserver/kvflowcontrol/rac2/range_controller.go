@@ -1776,8 +1776,8 @@ func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
-	returnedSend, returnedEval := rss.mu.tracker.Untrack(
-		av.Term, av.Admitted, rss.mu.nextRaftIndexInitial)
+	returnedSend, returnedEval := rss.mu.tracker.Untrack(av,
+		rss.mu.nextRaftIndexInitial)
 	rss.returnSendTokens(ctx, returnedSend, false /* disconnect */)
 	rss.returnEvalTokensLocked(ctx, returnedEval)
 }

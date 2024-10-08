@@ -100,11 +100,10 @@ func TestTokenTracker(t *testing.T) {
 			return buf.String()
 
 		case "untrack":
-			var term uint64
-			d.ScanArgs(t, "term", &term)
+			var av AdmittedVector
+			d.ScanArgs(t, "term", &av.Term)
 			var evalTokensGEIndex uint64
 			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
-			var admitted [raftpb.NumPriorities]uint64
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -117,9 +116,9 @@ func TestTokenTracker(t *testing.T) {
 				pri := AdmissionToRaftPriority(parsePriority(t, priStr))
 				index, err := strconv.ParseUint(indexStr, 10, 64)
 				require.NoError(t, err)
-				admitted[pri] = index
+				av.Admitted[pri] = index
 			}
-			returnedSend, returnedEval := tracker.Untrack(term, admitted, evalTokensGEIndex)
+			returnedSend, returnedEval := tracker.Untrack(av, evalTokensGEIndex)
 			return fmt.Sprintf("%s%s", formatUntracked("send", returnedSend),
 				formatUntracked("eval", returnedEval))
 
