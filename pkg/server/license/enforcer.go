@@ -83,9 +83,10 @@ type Enforcer struct {
 	// are bypassed. This is typically used to disable enforcement for single-node deployments.
 	isDisabled atomic.Bool
 
-	// trialUsageCount keeps track of the number of times a free trial license has
-	// been used on this cluster.
-	trialUsageCount atomic.Int64
+	// trialUsageExpiry records the expiration timestamp, in seconds, of any
+	// trial license on this cluster (past or present). A value of 0 indicates
+	// that no trial license has ever been installed.
+	trialUsageExpiry atomic.Int64
 
 	// db is a pointer to the database for use for KV read/writes. This is only
 	// set for the system tenant.
@@ -262,17 +263,18 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 	e.db = options.db
 
 	return options.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// Cache the current trial usage count.
-		trialUsageCount, err := txn.KV().Get(ctx, keys.TrialLicenseUsageCount)
+		// Cache the current trial license expiry
+		trialUsageCount, err := txn.KV().Get(ctx, keys.TrialLicenseExpiry)
 		if err != nil {
 			return err
 		}
 		if trialUsageCount.Value == nil {
-			e.trialUsageCount.Store(0)
+			e.trialUsageExpiry.Store(0)
 		} else {
-			e.trialUsageCount.Store(trialUsageCount.ValueInt())
+			e.trialUsageExpiry.Store(trialUsageCount.ValueInt())
 		}
-		log.Infof(ctx, "trial license usage count initialized to %d", e.trialUsageCount.Load())
+		log.Infof(ctx, "trial license expiry initialized to %s",
+			timeutil.Unix(e.trialUsageExpiry.Load(), 0))
 
 		// Cache and maybe set the cluster init grace period timestamp. This is the
 		// grace period we will use if the cluster does not have a license installed.
@@ -506,63 +508,60 @@ func (e *Enforcer) RefreshForLicenseChange(
 	log.Infof(ctx, "%s", sb.String())
 }
 
-// CalculateTrialUsageCount returns the number of times a trial license has
-// been used, including the current trial license if a new one is being applied.
-// This function increments the count if the current license is changing and is a trial.
-func (e *Enforcer) CalculateTrialUsageCount(
-	ctx context.Context, currentLicense LicType, isLicenseChange bool,
-) (int64, error) {
+// UpdateTrialLicenseExpiry returns the expiration timestamp of any trial license
+// used on the cluster, including the new trial license if a change is being applied.
+// This function updates the expiry if the current license is changing and is a trial.
+func (e *Enforcer) UpdateTrialLicenseExpiry(
+	ctx context.Context, currentLicense LicType, isLicenseChange bool, expiry int64,
+) (curExpiry int64, err error) {
 	// If we aren't setting a new trial license, return the cached copy. The e.db
 	// check is necessary as that's needed to read/write to the KV. This will be
 	// set for the system tenant, which is where the license can ever be set anyway.
 	if currentLicense != LicTypeTrial || !isLicenseChange || e.db == nil {
-		return e.trialUsageCount.Load(), nil
+		return e.trialUsageExpiry.Load(), nil
 	}
 
-	return e.SetTrialUsageCount(ctx, e.trialUsageCount.Load()+1, true)
-}
-
-// SetTrialUsageCount is an API to set the trial usage count in the enforcer and
-// in the KV. The value in the enforcer is always updated. If checkOldCount is
-// true, the update to the KV is conditional on the old value matching trialUsageCount.
-func (e *Enforcer) SetTrialUsageCount(
-	ctx context.Context, newCount int64, checkOldCount bool,
-) (cnt int64, err error) {
-	if e.db == nil {
-		return 0, errors.AssertionFailedf("no database set")
-	}
 	err = e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// If checking the old count, we only do the update in the KV if the
-		// existing value for trialUsageCount matches what's in the KV already
-		// (a missing key is treated as 0). This is necessary to ensure a license
-		// change to use the trial license will only increase the count by 1 when
-		// this function is called for each node.
-		if checkOldCount {
-			oldVal, err := txn.KV().Get(ctx, keys.TrialLicenseUsageCount)
-			if err != nil {
-				return err
-			}
-			if oldVal.Value == nil && e.trialUsageCount.Load() != 0 {
-				e.trialUsageCount.Store(0)
-				return nil
-			} else if oldVal.Value != nil && oldVal.ValueInt() != e.trialUsageCount.Load() {
-				e.trialUsageCount.Store(oldVal.ValueInt())
-				return nil
-			}
-		}
-		err = txn.KV().Put(ctx, keys.TrialLicenseUsageCount, newCount)
+		// We only allow a single trial license to be installed. If one is
+		// already set in the KV, exit and return that expiry value.
+		oldVal, err := txn.KV().Get(ctx, keys.TrialLicenseExpiry)
 		if err != nil {
 			return err
 		}
-		e.trialUsageCount.Store(newCount)
+		if oldVal.Value != nil && oldVal.ValueInt() > 0 {
+			e.trialUsageExpiry.Store(oldVal.ValueInt())
+			return nil
+		}
+		err = txn.KV().Put(ctx, keys.TrialLicenseExpiry, expiry)
+		if err != nil {
+			return err
+		}
+		e.trialUsageExpiry.Store(expiry)
 		return nil
 	})
 	if err != nil {
 		return
 	}
-	cnt = e.trialUsageCount.Load()
-	log.Infof(ctx, "trial license usage count is %d", cnt)
+	curExpiry = e.trialUsageExpiry.Load()
+	log.Infof(ctx, "trial license expiry timestamp is %s", timeutil.Unix(curExpiry, 0))
 	return
+}
+
+// TestingResetTrialUsage is an API to clear the license expiry in the KV. This is only used
+// for test purposes.
+func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
+	if e.db == nil {
+		return errors.AssertionFailedf("no database set")
+	}
+	return e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		err := txn.KV().Put(ctx, keys.TrialLicenseExpiry, 0)
+		if err != nil {
+			return err
+		}
+		e.trialUsageExpiry.Store(0)
+		log.Infof(ctx, "trial license expiry was reset")
+		return nil
+	})
 }
 
 // Disable turns off all license enforcement for the lifetime of this object.
