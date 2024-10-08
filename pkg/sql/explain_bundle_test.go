@@ -379,6 +379,68 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			"distsql.html vec-v.txt vec.txt")
 	})
 
+	t.Run("different schema UDF", func(t *testing.T) {
+		r.Exec(t, "CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE FUNCTION s.foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT s.foo();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.foo", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("s.foo")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.foo' function in schema.sql")
+					}
+					reg = regexp.MustCompile("^foo")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("found irrelevant function 'foo' in schema.sql")
+					}
+					reg = regexp.MustCompile("s.a")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
+	})
+
+	t.Run("different schema procedure", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE PROCEDURE s.bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL s.bar();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.bar", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("s.bar")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.bar' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile("^bar")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'bar' in schema.sql")
+					}
+					reg = regexp.MustCompile("s.a")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
+	})
+
 	t.Run("permission error", func(t *testing.T) {
 		r.Exec(t, "CREATE USER test")
 		r.Exec(t, "SET ROLE test")
