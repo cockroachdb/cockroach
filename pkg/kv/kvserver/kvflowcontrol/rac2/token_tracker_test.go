@@ -28,7 +28,7 @@ func formatTrackerState(t *Tracker) string {
 			result.WriteString(fmt.Sprintf("%v:\n", raftpb.Priority(pri)))
 			for _, tr := range tracked {
 				result.WriteString(fmt.Sprintf("  term=%d index=%-2d tokens=%-3d\n",
-					tr.term, tr.index, tr.tokens))
+					tr.id.term, tr.id.index, tr.tokens))
 			}
 		}
 	}

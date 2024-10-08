@@ -15,22 +15,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// entryID is the ID of a raft log entry. Should not be confused with LogMark.
+// TODO(pav-kv): export raft.entryID and use it here.
+type entryID struct {
+	index uint64
+	term  uint64
+}
+
 // Tracker tracks flow token deductions for a replicaSendStream. Tokens are
-// deducted for an in-flight log entry identified by its raft log index and
-// term with a given RaftPriority.
+// deducted for an in-flight log entry identified by its raft entryID, with
+// a given priority.
 type Tracker struct {
-	// tracked entries are stored in increasing order of (term, index), per
-	// priority.
+	// tracked contains the per-priority tracked log entries ordered by log index.
 	tracked [raftpb.NumPriorities][]tracked
 
 	stream kvflowcontrol.Stream // used for logging only
 }
 
-// tracked represents tracked flow tokens; they're tracked with respect to a
-// raft log index and term.
+// tracked represents a flow token deduction, identified by the raft entry ID.
 type tracked struct {
-	tokens      kvflowcontrol.Tokens
-	index, term uint64
+	id     entryID
+	tokens kvflowcontrol.Tokens
 }
 
 func (t *Tracker) Init(stream kvflowcontrol.Stream) {
@@ -58,7 +63,7 @@ func (t *Tracker) Track(
 	ctx context.Context, term uint64, index uint64, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
 ) bool {
 	if len(t.tracked[pri]) >= 1 {
-		last := t.tracked[pri][len(t.tracked[pri])-1]
+		last := t.tracked[pri][len(t.tracked[pri])-1].id
 		// Tracker exists in the context of a single replicaSendStream, which cannot
 		// span the leader losing leadership and regaining it. So the indices must
 		// advance.
@@ -75,9 +80,8 @@ func (t *Tracker) Track(
 	}
 
 	t.tracked[pri] = append(t.tracked[pri], tracked{
+		id:     entryID{index: index, term: term},
 		tokens: tokens,
-		index:  index,
-		term:   term,
 	})
 
 	if log.V(1) {
@@ -98,11 +102,12 @@ func (t *Tracker) Untrack(
 		var untracked int
 		for n := len(t.tracked[pri]); untracked < n; untracked++ {
 			deduction := t.tracked[pri][untracked]
-			if deduction.term > av.Term || (deduction.term == av.Term && deduction.index > uptoIndex) {
+			if deduction.id.term > av.Term ||
+				deduction.id.term == av.Term && deduction.id.index > uptoIndex {
 				break
 			}
 			returnedSend[pri] += deduction.tokens
-			if deduction.index >= evalTokensGEIndex {
+			if deduction.id.index >= evalTokensGEIndex {
 				returnedEval[pri] += deduction.tokens
 			}
 		}
@@ -134,8 +139,8 @@ func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 			res = append(res, kvflowinspectpb.TrackedDeduction{
 				Tokens: int64(deduction.tokens),
 				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
-					Index: deduction.index,
-					Term:  deduction.term,
+					Index: deduction.id.index,
+					Term:  deduction.id.term,
 				},
 				Priority: int32(RaftToAdmissionPriority(raftpb.Priority(pri))),
 			})
