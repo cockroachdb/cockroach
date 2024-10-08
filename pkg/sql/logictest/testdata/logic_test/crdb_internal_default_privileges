@@ -1106,3 +1106,134 @@ test2          NULL         testuser  false          routines     public    EXEC
 test2          NULL         NULL      true           tables       foo       SELECT          false
 test2          NULL         NULL      true           types        public    USAGE           false
 test2          NULL         NULL      true           routines     public    EXECUTE         false
+
+subtest corrupt_default_privilege
+
+statement ok
+CREATE ROLE roach_a;
+CREATE ROLE roach_b;
+SET ROLE roach_b;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE roach_b GRANT SELECT ON TABLES TO roach_a;
+
+statement ok
+SET ROLE root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO roach_a;
+
+statement ok
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT INSERT ON TABLES TO roach_a;
+
+# Create some descriptor corruptions with an orphaned role that is being granted
+# a default privilege.
+statement ok
+DELETE FROM system.users WHERE username = 'roach_a';
+
+query TTTBTTTB colnames
+SELECT * FROM crdb_internal.default_privileges WHERE grantee = 'roach_a'
+ORDER BY role;
+----
+database_name  schema_name  role     for_all_roles  object_type  grantee  privilege_type  is_grantable
+test2          NULL         NULL     true           tables       roach_a  SELECT          false
+test2          NULL         roach_b  false          tables       roach_a  SELECT          false
+test2          public       root     false          tables       roach_a  INSERT          false
+
+statement ok
+CREATE ROLE roach_c;
+CREATE ROLE roach_d;
+SET ROLE roach_d;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE roach_d GRANT SELECT ON TABLES TO roach_b;
+
+statement ok
+SET ROLE roach_c;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE roach_c GRANT SELECT ON TABLES TO roach_d;
+
+statement ok
+SET ROLE root;
+
+# Create a descriptor corruption with an orphaned role that is granting a
+# default privilege.
+statement ok
+DELETE FROM system.users WHERE username = 'roach_d';
+
+# Create a descriptor corruption with all orphaned roles.
+statement ok
+DELETE FROM system.users WHERE username = 'roach_c';
+
+# We see that roach_c and roach_d still exist in our default privileges on our
+# database descriptor.
+query TT colnames
+WITH t AS (
+   SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)
+     -> 'database'
+     -> 'defaultPrivileges'
+     -> 'defaultPrivilegesPerRole') AS default_privs_per_role
+   FROM system.descriptor
+   WHERE id = (SELECT oid FROM pg_database WHERE datname = 'test2')
+) SELECT
+  default_privs_per_role->'defaultPrivilegesPerObject'->'1'->'users' AS grantees,
+  default_privs_per_role->'explicitRole'->'userProto' AS role
+ FROM t
+ORDER BY role;
+----
+grantees                                                                                  role
+[{"privileges": "32", "userProto": "foo"}, {"privileges": "32", "userProto": "roach_a"}]  NULL
+[{"privileges": "32", "userProto": "roach_a"}]                                            "roach_b"
+[{"privileges": "32", "userProto": "roach_d"}]                                            "roach_c"
+[{"privileges": "32", "userProto": "roach_b"}]                                            "roach_d"
+[{"privileges": "1032", "userProto": "foo", "withGrantOption": "1032"}]                   "root"
+
+# Invalidate the role membership cache (validation uses the cache).
+statement ok
+CREATE ROLE invalidate;
+
+query TTTT colnames
+SELECT database_name, schema_name, obj_name, error FROM crdb_internal.invalid_objects
+ORDER BY schema_name;
+----
+database_name  schema_name  obj_name  error
+test2          ·            ·         a default privilege exists for a role "roach_a" that doesn't exist
+test2          public       ·         a default privilege exists for a role "roach_a" that doesn't exist
+
+query TT colnames
+SELECT name, corruption FROM crdb_internal.kv_repairable_catalog_corruptions
+ORDER BY name;
+----
+name    corruption
+public  descriptor
+test2   descriptor
+
+statement ok
+SELECT crdb_internal.repair_catalog_corruption(id, corruption) FROM "".crdb_internal.kv_repairable_catalog_corruptions;
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+# Our default privileges are now properly cleaned up.
+query TT colnames
+WITH t AS (
+   SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)
+     -> 'database'
+     -> 'defaultPrivileges'
+     -> 'defaultPrivilegesPerRole') AS default_privs_per_role
+   FROM system.descriptor
+   WHERE id = (SELECT oid FROM pg_database WHERE datname = 'test2')
+) SELECT
+  default_privs_per_role->'defaultPrivilegesPerObject'->'1'->'users' AS grantees,
+  default_privs_per_role->'explicitRole'->'userProto' AS role
+ FROM t
+ORDER BY role;
+----
+grantees                                                                 role
+[{"privileges": "32", "userProto": "foo"}]                               NULL
+[{"privileges": "1032", "userProto": "foo", "withGrantOption": "1032"}]  "root"
+
+subtest end
