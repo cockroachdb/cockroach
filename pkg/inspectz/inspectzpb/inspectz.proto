@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb";
 
 import "google/api/annotations.proto";
 import "kv/kvserver/kvflowcontrol/kvflowinspectpb/kvflowinspect.proto";
+import "kv/kvserver/storeliveness/storelivenesspb/service.proto";
 
 // Inspectz exposes in-memory state of various CRDB components.
 //
@@ -37,6 +38,18 @@ service Inspectz {
   // housed under /inspectz/v2/kvflowhandles.
   rpc KVFlowHandlesV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
       returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
+
+  // StoreLivenessSupportFrom exposes the in-memory state of all stores'
+  // storeliveness.SupportManagers' views of support provided from other stores.
+  // It's housed under /inspectz/storeliveness/supportFrom.
+  rpc StoreLivenessSupportFrom(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessResponse) {}
+
+  // StoreLivenessSupportFor exposes the in-memory state of all stores'
+  // storeliveness.SupportManagers' views of support provided for other stores.
+  // It's housed under /inspectz/storeliveness/supportFor.
+  rpc StoreLivenessSupportFor(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessResponse) {}
 
 }
 

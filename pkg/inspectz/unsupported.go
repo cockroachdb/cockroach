@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
@@ -44,5 +45,19 @@ func (u Unsupported) KVFlowControllerV2(
 func (u Unsupported) KVFlowHandlesV2(
 	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
 ) (*kvflowinspectpb.HandlesResponse, error) {
+	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+}
+
+// StoreLivenessSupportFrom is part of the inspectzpb.InspectzServer interface.
+func (u Unsupported) StoreLivenessSupportFrom(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
+	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+}
+
+// StoreLivenessSupportFor is part of the inspectzpb.InspectzServer interface.
+func (u Unsupported) StoreLivenessSupportFor(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
 	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }
