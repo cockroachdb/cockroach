@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -78,6 +80,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
 	for _, name := range req.TableNames {
 		uon, err := parser.ParseTableName(name)
 		if err != nil {
@@ -90,6 +94,10 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs[name] = td.TableDescriptor
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
+		if err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
 	}
 
 	registry := execConfig.JobRegistry
@@ -124,7 +132,44 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
 		TableDescriptors:     tableDescs,
+		TypeDescriptors:      typeDescriptors,
 	}, nil
+}
+
+func getUDTs(
+	ctx context.Context,
+	txn descs.Txn,
+	typeDescriptors []descpb.TypeDescriptor,
+	foundTypeDescriptors map[descpb.ID]struct{},
+	td *tabledesc.Mutable,
+) ([]descpb.TypeDescriptor, map[descpb.ID]struct{}, error) {
+	descriptors := txn.Descriptors()
+	dbDesc, err := descriptors.MutableByID(txn.KV()).Database(ctx, td.GetParentID())
+	if err != nil {
+		return nil, nil, err
+	}
+	typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
+		func(id descpb.ID) (catalog.TypeDescriptor, error) {
+
+			return descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+		})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "resolving type descriptors")
+	}
+	for _, typeID := range typeIDs {
+		if _, ok := foundTypeDescriptors[typeID]; ok {
+			continue
+		}
+		foundTypeDescriptors[typeID] = struct{}{}
+
+		typeDesc, err := descriptors.MutableByID(txn.KV()).Type(ctx, typeID)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
+	}
+	return typeDescriptors, nil, nil
 }
 
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
@@ -137,13 +182,22 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 
 	spans := make([]roachpb.Span, 0, len(req.TableIDs))
 	tableDescs := make([]descpb.TableDescriptor, 0, len(req.TableIDs))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
+	descriptors := r.txn.Descriptors()
 	for _, requestedTableID := range req.TableIDs {
-		td, err := r.txn.Descriptors().MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
+
+		td, err := descriptors.MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
 		if err != nil {
 			return nil, err
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs = append(tableDescs, td.TableDescriptor)
+
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
+		if err != nil {
+			return nil, err
+		}
 	}
 	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
 	if err != nil {
@@ -151,6 +205,7 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	}
 	spec.TableDescriptors = tableDescs
 	spec.TableSpans = spans
+	spec.TypeDescriptors = typeDescriptors
 	return spec, nil
 }
 
