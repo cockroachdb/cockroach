@@ -169,7 +169,7 @@ func (rn *RawNode) SetLazyReplication(lazy bool) {
 	}
 	// The lazy mode was disabled. We need to check whether any replication flows
 	// are unblocked and can be saturated.
-	if r.state == StateLeader {
+	if r.state == pb.StateLeader {
 		// TODO(pav-kv): this sends at most one MsgApp message per peer. It may not
 		// completely saturate the flow. Consider looping while maybeSendAppend()
 		// returns true.

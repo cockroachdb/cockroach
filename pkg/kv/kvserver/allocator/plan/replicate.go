@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -534,7 +535,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 			lastReplAdded = 0
 		}
 		raftStatus := repl.RaftStatus()
-		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+		if raftStatus == nil || raftStatus.RaftState != raftpb.StateLeader {
 			// If requested, assume all replicas are up-to-date.
 			if rp.knobs.AllowVoterRemovalWhenNotLeader {
 				candidates = allocatorimpl.FilterUnremovableReplicasWithoutRaftStatus(

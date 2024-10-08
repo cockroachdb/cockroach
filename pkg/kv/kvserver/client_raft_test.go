@@ -780,7 +780,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 						if status == nil {
 							return errors.New("raft status not initialized")
 						}
-						if status.RaftState == raft.StateLeader {
+						if status.RaftState == raftpb.StateLeader {
 							hasLeader = true
 						}
 						if term == 0 {
@@ -2010,7 +2010,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			case <-ticker:
 				// Verify that the leader is node 0.
 				status := leaderRepl.RaftStatus()
-				if status == nil || status.RaftState != raft.StateLeader {
+				if status == nil || status.RaftState != raftpb.StateLeader {
 					t.Fatalf("raft leader should be node 0, but got status %+v", status)
 				}
 
@@ -2822,7 +2822,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 
 	status := leaderRepl.RaftStatus()
-	if status.SoftState.RaftState != raft.StateLeader {
+	if status.SoftState.RaftState != raftpb.StateLeader {
 		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderRepl.NodeID(), status.SoftState.RaftState)
 	}
 	if status.Term != initialTerm {
@@ -2879,7 +2879,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Ensure that the leadership has not changed, to confirm that heartbeats
 	// are sent to the store with a functioning transport.
 	status := leaderRepl.RaftStatus()
-	if status.SoftState.RaftState != raft.StateLeader {
+	if status.SoftState.RaftState != raftpb.StateLeader {
 		t.Errorf("expected node %d to be leader after sleeping but was %s", leaderRepl.NodeID(), status.SoftState.RaftState)
 	}
 	if status.Term != initialTerm {
@@ -2915,7 +2915,7 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 			for idx := range tc.Servers {
 				repl := tc.GetFirstStoreFromServer(t, idx).LookupReplica(roachpb.RKey(key))
 				require.NotNil(t, repl)
-				if repl.RaftStatus().SoftState.RaftState == raft.StateLeader {
+				if repl.RaftStatus().SoftState.RaftState == raftpb.StateLeader {
 					leaderIdx = idx
 					leaderRepl = repl
 					return nil
@@ -4335,7 +4335,7 @@ func TestRangeQuiescence(t *testing.T) {
 	waitForQuiescence(roachpb.RKey(key))
 
 	// The leadership should not have changed.
-	if state := leader.RaftStatus().SoftState.RaftState; state != raft.StateLeader {
+	if state := leader.RaftStatus().SoftState.RaftState; state != raftpb.StateLeader {
 		t.Fatalf("%s should be the leader: %s", leader, state)
 	}
 }
@@ -4472,7 +4472,7 @@ func TestFailedConfChange(t *testing.T) {
 				i, l, repl.Desc())
 		}
 		status := repl.RaftStatus()
-		if status.RaftState != raft.StateLeader {
+		if status.RaftState != raftpb.StateLeader {
 			return errors.Errorf("store %d: expected StateLeader, was %s", i, status.RaftState)
 		}
 		// In issue #13506, the Progress map would be updated as if the
@@ -4496,7 +4496,7 @@ func TestFailedConfChange(t *testing.T) {
 			return err
 		}
 		status := repl.RaftStatus()
-		if status.RaftState != raft.StateLeader {
+		if status.RaftState != raftpb.StateLeader {
 			return errors.Errorf("store %d: expected StateLeader, was %s", 1, status.RaftState)
 		}
 		return nil
@@ -6038,7 +6038,7 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	// Make sure n1 is leader.
 	initialStatus := repl1.RaftStatus()
-	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 	logStatus(initialStatus)
 	t.Logf("n1 is leader")
 
@@ -6050,7 +6050,7 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 	require.Eventually(t, func() bool {
 		status := repl3.RaftStatus()
 		logStatus(status)
-		return status.RaftState == raft.StateFollower
+		return status.RaftState == raftpb.StateFollower
 	}, 10*time.Second, 500*time.Millisecond)
 	t.Logf("n3 reverted to follower")
 
@@ -6059,9 +6059,9 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 		st := repl.RaftStatus()
 		logStatus(st)
 		if st.ID == 1 {
-			require.Equal(t, raft.StateLeader, st.RaftState)
+			require.Equal(t, raftpb.StateLeader, st.RaftState)
 		} else {
-			require.Equal(t, raft.StateFollower, st.RaftState)
+			require.Equal(t, raftpb.StateFollower, st.RaftState)
 		}
 		require.Equal(t, initialStatus.Term, st.Term)
 	}
@@ -6119,7 +6119,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	// Make sure n1 is leader.
 	initialStatus := repl1.RaftStatus()
-	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 	logStatus(initialStatus)
 	t.Logf("n1 is leader in term %d", initialStatus.Term)
 
@@ -6136,7 +6136,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 			if st.Term <= initialStatus.Term {
 				return false
 			}
-			if st.RaftState == raft.StateLeader {
+			if st.RaftState == raftpb.StateLeader {
 				leaderStatus = st
 			}
 		}
@@ -6284,7 +6284,7 @@ func TestRaftPreVote(t *testing.T) {
 					var lastChanged time.Time
 					require.Eventually(t, func() bool {
 						status := repl1.RaftStatus()
-						require.Equal(t, raft.StateLeader, status.RaftState)
+						require.Equal(t, raftpb.StateLeader, status.RaftState)
 						if i := status.Progress[1].Match; i > lastIndex {
 							t.Logf("n1 last index changed: %d -> %d", lastIndex, i)
 							lastIndex, lastChanged = i, time.Now()
@@ -6313,7 +6313,7 @@ func TestRaftPreVote(t *testing.T) {
 
 				// Fetch the leader's initial status.
 				initialStatus := repl1.RaftStatus()
-				require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+				require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 				logStatus(initialStatus)
 
 				// Unquiesce n3 if necessary.
@@ -6329,7 +6329,7 @@ func TestRaftPreVote(t *testing.T) {
 				require.Eventually(t, func() bool {
 					status := repl3.RaftStatus()
 					logStatus(status)
-					return status.RaftState == raft.StatePreCandidate
+					return status.RaftState == raftpb.StatePreCandidate
 				}, 10*time.Second, 500*time.Millisecond)
 				t.Logf("n3 became pre-candidate")
 
@@ -6339,7 +6339,7 @@ func TestRaftPreVote(t *testing.T) {
 				require.Never(t, func() bool {
 					status := repl3.RaftStatus()
 					logStatus(status)
-					return status.RaftState != raft.StatePreCandidate
+					return status.RaftState != raftpb.StatePreCandidate
 				}, 3*time.Second, time.Second)
 				t.Logf("n3 is still pre-candidate")
 
@@ -6349,7 +6349,7 @@ func TestRaftPreVote(t *testing.T) {
 				// due to the prevote received by n2 which will wake the leader.
 				leaderStatus := repl1.RaftStatus()
 				logStatus(leaderStatus)
-				require.Equal(t, raft.StateLeader, leaderStatus.RaftState)
+				require.Equal(t, raftpb.StateLeader, leaderStatus.RaftState)
 				require.Equal(t, initialStatus.Term, leaderStatus.Term)
 				if !quiesce {
 					require.Equal(t, initialStatus.Commit, leaderStatus.Commit)
@@ -6367,14 +6367,14 @@ func TestRaftPreVote(t *testing.T) {
 				require.Eventually(t, func() bool {
 					status := repl3.RaftStatus()
 					logStatus(status)
-					return status.RaftState == raft.StateFollower
+					return status.RaftState == raftpb.StateFollower
 				}, 10*time.Second, 500*time.Millisecond)
 				t.Logf("n3 became follower")
 
 				// Make sure the leader and term are still the same.
 				leaderStatus = repl1.RaftStatus()
 				logStatus(leaderStatus)
-				require.Equal(t, raft.StateLeader, leaderStatus.RaftState)
+				require.Equal(t, raftpb.StateLeader, leaderStatus.RaftState)
 				require.Equal(t, initialStatus.Term, leaderStatus.Term)
 				t.Logf("n1 is still leader")
 
@@ -6387,7 +6387,7 @@ func TestRaftPreVote(t *testing.T) {
 				// Make sure the leader and term are still the same.
 				leaderStatus = repl1.RaftStatus()
 				logStatus(leaderStatus)
-				require.Equal(t, raft.StateLeader, leaderStatus.RaftState)
+				require.Equal(t, raftpb.StateLeader, leaderStatus.RaftState)
 				require.Equal(t, initialStatus.Term, leaderStatus.Term)
 				t.Logf("n1 is still leader")
 			})
@@ -6501,7 +6501,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 
 			// Fetch the leader's initial status.
 			initialStatus := repl1.RaftStatus()
-			require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+			require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 			logStatus(initialStatus)
 
 			// Unquiesce the leader if necessary. We have to do so by submitting an
@@ -6520,7 +6520,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Eventually(t, func() bool {
 				status := repl1.RaftStatus()
 				logStatus(status)
-				return status.RaftState == raft.StatePreCandidate
+				return status.RaftState == raftpb.StatePreCandidate
 			}, 10*time.Second, 500*time.Millisecond)
 			t.Logf("n1 became pre-candidate")
 
@@ -6536,7 +6536,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Eventually(t, func() bool {
 				for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
 					logStatus(status)
-					if status.RaftState == raft.StateLeader {
+					if status.RaftState == raftpb.StateLeader {
 						leaderStatus = status
 						return true
 					}
@@ -6550,7 +6550,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Never(t, func() bool {
 				status := repl1.RaftStatus()
 				logStatus(status)
-				return status.RaftState != raft.StatePreCandidate
+				return status.RaftState != raftpb.StatePreCandidate
 			}, 3*time.Second, 500*time.Millisecond)
 			t.Logf("n1 remains pre-candidate")
 
@@ -6558,7 +6558,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 			var finalStatus *raft.Status
 			for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
 				logStatus(status)
-				if status.RaftState == raft.StateLeader {
+				if status.RaftState == raftpb.StateLeader {
 					finalStatus = status
 					break
 				}
@@ -6655,7 +6655,7 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 
 	// Make sure n1 is still leader.
 	st := repl1.RaftStatus()
-	require.Equal(t, raft.StateLeader, st.RaftState)
+	require.Equal(t, raftpb.StateLeader, st.RaftState)
 	logStatus(st)
 
 	// Remove n1 and wait for n3 to become leader.
@@ -6668,7 +6668,7 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	require.Eventually(t, func() bool {
 		logStatus(repl2.RaftStatus())
 		logStatus(repl3.RaftStatus())
-		if repl3.RaftStatus().RaftState == raft.StateLeader {
+		if repl3.RaftStatus().RaftState == raftpb.StateLeader {
 			t.Logf("n3 is leader")
 			return true
 		}
@@ -6764,7 +6764,7 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 
 	// Make sure n1 is still leader.
 	initialStatus := repl1.RaftStatus()
-	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 	logStatus(initialStatus)
 	t.Logf("n1 leader")
 
@@ -6778,7 +6778,7 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 
 	status := repl1.RaftStatus()
 	logStatus(status)
-	require.Equal(t, raft.StateLeader, status.RaftState)
+	require.Equal(t, raftpb.StateLeader, status.RaftState)
 	require.Equal(t, initialStatus.Term, status.Term)
 	require.Equal(t, initialStatus.Progress[1].Match, status.Progress[1].Match)
 	t.Logf("n1 still leader with no new proposals at log index %d", status.Progress[1].Match)
@@ -6900,7 +6900,7 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 
 	// Fetch the leader's initial status.
 	initialStatus := repl1.RaftStatus()
-	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	require.Equal(t, raftpb.StateLeader, initialStatus.RaftState)
 	logStatus(initialStatus)
 
 	// Unquiesce n2. This should cause it to see n1 as dead and immediately
@@ -6917,7 +6917,7 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	require.Eventually(t, func() bool {
 		status := repl2.RaftStatus()
 		logStatus(status)
-		return status.RaftState == raft.StateLeader
+		return status.RaftState == raftpb.StateLeader
 	}, 5*time.Second, 500*time.Millisecond)
 	t.Logf("n2 is leader")
 }

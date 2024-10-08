@@ -26,10 +26,6 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
-func (st StateType) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%q", st.String())), nil
-}
-
 var isLocalMsg = [...]bool{
 	pb.MsgHup:               true,
 	pb.MsgBeat:              true,

@@ -473,7 +473,7 @@ func TestRawNodeStart(t *testing.T) {
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
-		SoftState:        &SoftState{RaftState: StateLeader},
+		SoftState:        &SoftState{RaftState: pb.StateLeader},
 		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
@@ -582,7 +582,7 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, uint64(1), rawNode.raft.Term)
 	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
 	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
-	assert.True(t, rawNode.raft.state == StateFollower)
+	assert.True(t, rawNode.raft.state == pb.StateFollower)
 	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
@@ -592,7 +592,7 @@ func TestRawNodeRestart(t *testing.T) {
 		rawNode.raft.leadEpoch = 0
 		rawNode.raft.tick()
 	}
-	assert.Equal(t, StateCandidate, rawNode.raft.state)
+	assert.Equal(t, pb.StateCandidate, rawNode.raft.state)
 	assert.Equal(t, uint64(2), rawNode.raft.Term) // this should in-turn bump the term
 }
 
@@ -643,7 +643,7 @@ func TestRawNodeStatus(t *testing.T) {
 	rn.Advance(rd)
 	status := rn.Status()
 	require.Equal(t, pb.PeerID(1), status.Lead)
-	require.Equal(t, StateLeader, status.RaftState)
+	require.Equal(t, pb.StateLeader, status.RaftState)
 	require.Equal(t, *rn.raft.trk.Progress(1), status.Progress[1])
 
 	expCfg := quorum.Config{Voters: quorum.JointConfig{
