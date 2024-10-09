@@ -25,9 +25,10 @@ func TestLowPriOverrideState(t *testing.T) {
 	lposString := func() string {
 		var b strings.Builder
 		fmt.Fprintf(&b, "leader-term: %d", lpos.leaderTerm)
-		if len(lpos.intervals) > 0 {
+		if n := lpos.intervals.Length(); n > 0 {
 			fmt.Fprintf(&b, "\nintervals:")
-			for _, i := range lpos.intervals {
+			for j := 0; j < n; j++ {
+				i := lpos.intervals.At(j)
 				fmt.Fprintf(&b, "\n [%3d, %3d] => %t", i.first, i.last, i.lowPriOverride)
 			}
 		}
