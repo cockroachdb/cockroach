@@ -242,7 +242,7 @@ var _ = [...]interface{}{
 	BootstrapVersionKey,             // "bootstrap-version"
 	LegacyDescIDGenerator,           // "desc-idgen"
 	ClusterInitGracePeriodTimestamp, // "lic-gpi-ts"
-	TrialLicenseUsageCount,          // "lic-tluc"
+	TrialLicenseExpiry,              // "lic-tle"
 	NodeIDGenerator,                 // "node-idgen"
 	RangeIDGenerator,                // "range-idgen"
 	StatusPrefix,                    // "status-"

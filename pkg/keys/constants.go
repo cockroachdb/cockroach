@@ -286,9 +286,8 @@ var (
 	// set during cluster initialization, by which a license must be installed to avoid
 	// throttling. The value is stored as the number of seconds since the Unix epoch.
 	ClusterInitGracePeriodTimestamp = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-gpi-ts")))
-	// TrialLicenseUsageCount is used to keep track of the number of times a trial
-	// license was installed on the cluster.
-	TrialLicenseUsageCount = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-tluc")))
+	// TrialLicenseExpiry is used to track the expiry of any trial license (past or present)
+	TrialLicenseExpiry = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-tle")))
 	//
 	// LegacyDescIDGenerator is the legacy global descriptor ID generator sequence
 	// used for table and namespace IDs for the system tenant in clusters <23.1.
