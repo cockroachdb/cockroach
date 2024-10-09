@@ -243,13 +243,14 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	setupSQL := `
 CREATE DATABASE t;
@@ -307,13 +308,15 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
+
 	setupSQL := `
 CREATE DATABASE t;
 CREATE TABLE t.test (
@@ -510,8 +513,6 @@ func TestMergeProcessor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	defer lease.TestingDisableTableLeases()()
-
 	params, _ := createTestServerParams()
 
 	type TestCase struct {
@@ -610,6 +611,7 @@ func TestMergeProcessor(t *testing.T) {
 	run := func(t *testing.T, test TestCase) {
 		server, tdb, kvDB := serverutils.StartServer(t, params)
 		defer server.Stopper().Stop(context.Background())
+		defer lease.TestingDisableTableLeases()()
 
 		// Run the initial setupSQL.
 		if _, err := tdb.Exec(test.setupSQL); err != nil {

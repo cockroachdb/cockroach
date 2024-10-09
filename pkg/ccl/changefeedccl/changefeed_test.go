@@ -5190,17 +5190,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
 	)
 
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	sqlDB.ExpectErrWithTimeout(
-		t, `CHANGEFEED requires an enterprise license`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-	)
-	sqlDB.ExpectErrWithTimeout(
-		t, `use of AS SELECT requires an enterprise license`,
-		`CREATE CHANGEFEED AS SELECT * FROM foo`,
-	)
-	enableEnterprise()
-
 	// Watching system.jobs would create a cycle, since the resolved timestamp
 	// high-water mark is saved in it.
 	sqlDB.ExpectErrWithTimeout(

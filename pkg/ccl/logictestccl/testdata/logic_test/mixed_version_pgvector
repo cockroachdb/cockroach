@@ -56,8 +56,5 @@ SELECT crdb_internal.is_at_least_version('24.1-02')
 ----
 true
 
-# Note: the following statement would succeed if there cluster had an enterprise
-# license, but the mixed version logic framework doesn't support adding one.
-# This is tested normally in the vector ccl logic test.
-statement error pgcode XXC02 use of vector datatype requires an enterprise license
+statement ok
 CREATE TABLE t (v VECTOR(1))
