@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
@@ -21,9 +23,17 @@ import (
 func checkForPostUpgradeThrottlePreCond(
 	_ context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
-	// Allow upgrades if the license enforcer is disabled, such as in valid cases
-	// like single-node setups, since no throttling restrictions apply.
-	if deps.LicenseEnforcer.GetIsDisabled() {
+	// Skip the upgrade check in the following cases:
+	// - The license enforcer is disabled, such as in valid scenarios like single-node setups
+	//   where no throttling restrictions apply.
+	// - Running a unit test, as most tests don't have a license installed. This behavior can
+	//   be overridden using a testing knob for unit tests that need to specifically validate
+	//   this check.
+	// - The `COCKROACH_UPGRADE_SKIP_LICENSE_CHECK` environment variable is set. This can be used
+	//   by acceptance tests that lack a license installation.
+	if deps.LicenseEnforcer.GetIsDisabled() ||
+		(buildutil.CrdbTestBuild && (deps.TestingKnobs == nil || !deps.TestingKnobs.ForceCheckLicenseViolation)) ||
+		envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_SKIP_LICENSE_CHECK", false) {
 		return nil
 	}
 

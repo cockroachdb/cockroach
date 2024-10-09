@@ -47,7 +47,6 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable:            true,
 				OverrideStartTime: &ts1,
 			},
 		},
@@ -60,7 +59,6 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	ts2End := ts2.Add(7 * 24 * time.Hour) // Calculate the end of the grace period
 	enforcer := license.NewEnforcer(
 		&license.TestingKnobs{
-			Enable:            true,
 			OverrideStartTime: &ts2,
 		})
 	// Ensure request for the grace period init ts1 before start just returns the start
@@ -92,7 +90,6 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable:            true,
 				OverrideStartTime: &ts1,
 			},
 		},
@@ -112,7 +109,6 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			enforcer := license.NewEnforcer(
 				&license.TestingKnobs{
-					Enable:                            true,
 					OverrideStartTime:                 &ts1,
 					OverwriteClusterInitGracePeriodTS: true,
 				})
@@ -133,7 +129,6 @@ func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
 				license.WithDB(db),
 				license.WithSystemTenant(true),
 				license.WithTestingKnobs(&license.TestingKnobs{
-					Enable:                            true,
 					OverrideStartTime:                 &ts1,
 					OverwriteClusterInitGracePeriodTS: true,
 				}),
@@ -167,7 +162,6 @@ func TestClusterInitGracePeriod_DelayedTenantConnector(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable:            true,
 				OverrideStartTime: &ts0,
 			},
 		},
@@ -181,7 +175,6 @@ func TestClusterInitGracePeriod_DelayedTenantConnector(t *testing.T) {
 	// Start up the enforcer for the secondary tenant using a metadata accessor
 	// that has not yet received the cluster init grace period timestamp.
 	enforcer := license.NewEnforcer(&license.TestingKnobs{
-		Enable:                    true,
 		OverrideStartTime:         &ts1d,
 		OverrideThrottleCheckTime: &ts9d,
 	})
@@ -279,7 +272,6 @@ func TestThrottle(t *testing.T) {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
 			e := license.NewEnforcer(
 				&license.TestingKnobs{
-					Enable:                    true,
 					OverrideStartTime:         &tc.gracePeriodInit,
 					OverrideThrottleCheckTime: &tc.checkTs,
 				})
@@ -345,7 +337,6 @@ func TestThrottleErrorMsg(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable: true,
 				// The mock server we bring up is single-node, which disables all
 				// throttling checks. We need to avoid that for this test to verify
 				// the throttle message.

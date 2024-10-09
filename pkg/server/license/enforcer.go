@@ -105,14 +105,6 @@ type Enforcer struct {
 }
 
 type TestingKnobs struct {
-	// Enable controls whether the enforcer writes the grace period end time to KV
-	// and performs throttle checks. This is currently opt-in to allow for a gradual
-	// rollout of these changes. It will be removed or changed to opt-out as we near
-	// the final stages of the CockroachDB core licensing deprecation.
-	// TODO(spilchen): Update or remove this knob closer to the completion of the
-	// core licensing deprecation work (CRDB-41758).
-	Enable bool
-
 	// SkipDisable makes the Disable() function a no-op. This is separate from Enable
 	// because we perform additional checks during server startup that may automatically
 	// disable enforcement based on configuration (e.g., for single-node instances).
@@ -162,10 +154,6 @@ func NewEnforcer(tk *TestingKnobs) *Enforcer {
 		throttleLogger: log.Every(5 * time.Minute),
 		testingKnobs:   tk,
 	}
-	// Start is disabled by default unless overridden by testing knobs.
-	if tk == nil || !tk.Enable {
-		e.isDisabled.Store(true)
-	}
 	return e
 }
 
@@ -202,14 +190,11 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	// incomplete, but the server will continue to start. To ensure stability in
 	// that case, we leave throttling disabled.
 	e.isDisabled.Store(true)
-	startDisabled := e.getInitialIsDisabledValue()
 
 	e.maybeLogActiveOverrides(ctx)
 
-	if !startDisabled {
-		if err := e.initClusterMetadata(ctx, options); err != nil {
-			return err
-		}
+	if err := e.initClusterMetadata(ctx, options); err != nil {
+		return err
 	}
 
 	// Initialize assuming there is no license. This seeds necessary values. It
@@ -224,7 +209,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	RegisterCallbackOnLicenseChange(ctx, st, e)
 
 	// This should be the final step after all error checks are completed.
-	e.isDisabled.Store(startDisabled)
+	e.isDisabled.Store(false)
 	e.mu.setupComplete = true
 
 	return nil
@@ -657,21 +642,6 @@ func (e *Enforcer) maybeLogActiveOverrides(ctx context.Context) {
 	if curTelemetryInterval != defaultMaxTelemetryInterval {
 		log.Infof(ctx, "max telemetry interval has changed to %v", curTelemetryInterval)
 	}
-}
-
-// getInitialIsDisabledValue returns bool indicating what the initial value
-// should be for e.isDisabled
-func (e *Enforcer) getInitialIsDisabledValue() bool {
-	// The enforcer is currently opt-in. This will change as we approach the
-	// final stages of CockroachDB core license deprecation.
-	// TODO(spilchen): Enable the enforcer by default in CRDB-41758.
-	tk := e.GetTestingKnobs()
-	if tk == nil {
-		// TODO(spilchen): In CRDB-41758, remove the use of an environment variable
-		// as we want to avoid providing an easy way to disable the enforcer.
-		return !envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LICENSE_ENFORCER", false)
-	}
-	return !tk.Enable
 }
 
 // getIsNewClusterEstimate is a helper to determine if the cluster is a newly
