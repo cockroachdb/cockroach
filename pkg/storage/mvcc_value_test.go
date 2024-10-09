@@ -395,7 +395,7 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 							var ok bool
 							res, ok, err = tryDecodeSimpleMVCCValue(buf)
 							if !ok && err == nil {
-								res, err = decodeExtendedMVCCValue(buf)
+								res, err = decodeExtendedMVCCValue(buf, true)
 							}
 						} else {
 							res, err = DecodeMVCCValue(buf)

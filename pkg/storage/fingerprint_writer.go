@@ -288,10 +288,7 @@ func FingerprintRangekeys(
 			if err := fw.hashTimestamp(v.Timestamp); err != nil {
 				return 0, err
 			}
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
-			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(v.Value)
-			}
+			mvccValue, err := decodeMVCCValueIgnoringHeader(v.Value)
 			if err != nil {
 				return 0, errors.Wrapf(err, "decoding mvcc value %s", v.Value)
 			}

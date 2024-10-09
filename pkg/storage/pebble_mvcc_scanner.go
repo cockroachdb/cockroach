@@ -403,6 +403,10 @@ type pebbleMVCCScanner struct {
 	// allowEmpty is false, and the partial row is the first row in the result,
 	// the row will instead be completed by fetching additional KV pairs.
 	wholeRows bool
+	// decodeMVCCHeaders is set by callers who expect to be able
+	// to read the full MVCCValueHeader off of
+	// curUnsafeValue. Used by mvccGet.
+	decodeMVCCHeaders bool
 	// Stop adding intents and abort scan once maxLockConflicts threshold is
 	// reached. This limit is only applicable to consistent scans since they
 	// return intents as an error.
@@ -818,7 +822,13 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		if !valid {
 			return false, false
 		}
-		if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
+
+		uncertaintyCheckRequired := p.checkUncertainty && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
+		if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
+			if !p.decodeCurrentValueIgnoringHeader(v) {
+				return false, false
+			}
+		} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 			return false, false
 		} else if extended {
 			if !p.decodeCurrentValueExtended(v) {
@@ -1344,7 +1354,7 @@ func (p *pebbleMVCCScanner) addSynthetic(
 	var simple bool
 	value, simple, p.err = tryDecodeSimpleMVCCValue(version.Value)
 	if !simple && p.err == nil {
-		value, p.err = decodeExtendedMVCCValue(version.Value)
+		value, p.err = decodeExtendedMVCCValue(version.Value, p.decodeMVCCHeaders)
 	}
 	if p.err != nil {
 		return false, false
@@ -1393,14 +1403,19 @@ func (p *pebbleMVCCScanner) seekVersion(
 			if !valid {
 				return false, false
 			}
-			if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
+			uncertaintyCheckRequired := uncertaintyCheck && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
+			if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
+				if !p.decodeCurrentValueIgnoringHeader(v) {
+					return false, false
+				}
+			} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 				return false, false
 			} else if extended {
 				if !p.decodeCurrentValueExtended(v) {
 					return false, false
 				}
 			}
-			if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
+			if !uncertaintyCheckRequired {
 				if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
 					return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 				}
@@ -1435,14 +1450,20 @@ func (p *pebbleMVCCScanner) seekVersion(
 		if !valid {
 			return false, false
 		}
-		if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
+
+		uncertaintyCheckRequired := uncertaintyCheck && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
+		if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
+			if !p.decodeCurrentValueIgnoringHeader(v) {
+				return false, false
+			}
+		} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 			return false, false
 		} else if extended {
 			if !p.decodeCurrentValueExtended(v) {
 				return false, false
 			}
 		}
-		if !uncertaintyCheck || p.curUnsafeKey.Timestamp.LessEq(p.ts) {
+		if !uncertaintyCheckRequired {
 			if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
 				return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 			}
@@ -1555,7 +1576,7 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 					var simple bool
 					value, simple, p.err = tryDecodeSimpleMVCCValue(version.Value)
 					if !simple && p.err == nil {
-						value, p.err = decodeExtendedMVCCValue(version.Value)
+						value, p.err = decodeExtendedMVCCValue(version.Value, true)
 					}
 					if p.err != nil {
 						return false
@@ -1636,8 +1657,26 @@ func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
 	return true
 }
 
+// mvccHeaderRequired returns true if the caller should fully
+// unmarshal the MVCCValueHeader when parsing an MVCCValue.
+//
+// The passed bool indicates whether the caller needs the
+// MVCCValueHeader because they are going to do an uncertainty check,
+// which may require the LocalTimestamp stored in the MVCCValueHeader
+//
 //gcassert:inline
-func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple(v []byte) (extended, valid bool) {
+func (p *pebbleMVCCScanner) mvccHeaderRequired(uncertaintyCheckRequired bool) bool {
+	return uncertaintyCheckRequired || p.decodeMVCCHeaders
+}
+
+//gcassert:inline
+func (p *pebbleMVCCScanner) decodeCurrentValueIgnoringHeader(v []byte) bool {
+	p.curUnsafeValue, p.err = decodeMVCCValueIgnoringHeader(v)
+	return p.err == nil
+}
+
+//gcassert:inline
+func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple(v []byte) (extended bool, valid bool) {
 	var simple bool
 	p.curUnsafeValue, simple, p.err = tryDecodeSimpleMVCCValue(v)
 	return !simple, p.err == nil
@@ -1645,7 +1684,7 @@ func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple(v []byte) (extended, val
 
 //gcassert:inline
 func (p *pebbleMVCCScanner) decodeCurrentValueExtended(v []byte) bool {
-	p.curUnsafeValue, p.err = decodeExtendedMVCCValue(v)
+	p.curUnsafeValue, p.err = decodeExtendedMVCCValue(v, true)
 	return p.err == nil
 }
 

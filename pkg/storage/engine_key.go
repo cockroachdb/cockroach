@@ -391,10 +391,7 @@ func (key *EngineKey) Verify(value []byte) error {
 // decodeMVCCValueAndVerify will try to decode the value as
 // MVCCValue and then verify the checksum.
 func decodeMVCCValueAndVerify(key roachpb.Key, value []byte) error {
-	mvccValue, ok, err := tryDecodeSimpleMVCCValue(value)
-	if !ok && err == nil {
-		mvccValue, err = decodeExtendedMVCCValue(value)
-	}
+	mvccValue, err := decodeMVCCValueIgnoringHeader(value)
 	if err != nil {
 		return err
 	}
