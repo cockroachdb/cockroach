@@ -17,6 +17,7 @@ import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegi
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
+import { AUTO_STATS_COLLECTION_HELP } from "src/constants/tooltipMessages";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -31,12 +32,7 @@ import {
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { Timestamp } from "src/timestamp";
 import { StoreID } from "src/types/clusterTypes";
-import {
-  Bytes,
-  DATE_WITH_SECONDS_FORMAT_24_TZ,
-  tabAttr,
-  tableStatsClusterSetting,
-} from "src/util";
+import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
@@ -141,17 +137,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
     },
     {
       title: (
-        <Tooltip
-          title={
-            <div>
-              Automatic statistics can help improve query performance. Learn how
-              to{" "}
-              <a href={tableStatsClusterSetting} target="_blank">
-                manage statistics collection.
-              </a>
-            </div>
-          }
-        >
+        <Tooltip title={AUTO_STATS_COLLECTION_HELP}>
           {TableColName.AUTO_STATS_ENABLED}
         </Tooltip>
       ),
