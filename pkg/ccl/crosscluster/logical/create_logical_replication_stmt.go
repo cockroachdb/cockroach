@@ -129,6 +129,8 @@ func createLogicalReplicationStreamPlanHook(
 			switch m {
 			case "ttl-deletes":
 				discard = jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
+			case "all-deletes":
+				discard = jobspb.LogicalReplicationDetails_DiscardAllDeletes
 			default:
 				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
 			}

@@ -170,6 +170,7 @@ func newLogicalReplicationWriterProcessor(
 			rp:       rp,
 			settings: flowCtx.Cfg.Settings,
 			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
+			spec:     spec,
 		}
 	}
 
@@ -309,7 +310,9 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		int32(lrw.FlowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
 		token,
 		lrw.spec.InitialScanTimestamp, lrw.frontier,
-		streamclient.WithFiltering(lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes),
+		streamclient.WithFiltering(
+			lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes ||
+				lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes),
 		streamclient.WithDiff(true),
 	)
 	if err != nil {
@@ -965,6 +968,7 @@ type txnBatch struct {
 	rp       RowProcessor
 	settings *cluster.Settings
 	sd       *sessiondata.SessionData
+	spec     execinfrapb.LogicalReplicationWriterSpec
 }
 
 var useImplicitTxns = settings.RegisterBoolSetting(
@@ -983,6 +987,9 @@ func (t *txnBatch) HandleBatch(
 	stats := batchStats{}
 	var err error
 	if len(batch) == 1 {
+		if t.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(batch[0].KeyValue.Value.RawBytes) == 0 {
+			return stats, nil
+		}
 		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
 		if err != nil {
 			return stats, err
@@ -991,6 +998,9 @@ func (t *txnBatch) HandleBatch(
 	} else {
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, kv := range batch {
+				if t.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(kv.KeyValue.Value.RawBytes) == 0 {
+					continue
+				}
 				s, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
 				if err != nil {
 					return err
