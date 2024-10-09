@@ -75,10 +75,11 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
-		numRows      int
-		numVersions  int
-		valueSize    int
-		numRangeKeys int
+		numRows       int
+		numVersions   int
+		valueSize     int
+		numRangeKeys  int
+		includeHeader bool
 	}
 	var testCases []testCase
 	for _, numRows := range []int{1, 10, 100, 1000, 10000, 50000} {
@@ -105,18 +106,27 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 		}
 	}
 
+	testCases = append(testCases, testCase{
+		numRows:       1000,
+		numVersions:   2,
+		valueSize:     64,
+		numRangeKeys:  0,
+		includeHeader: true,
+	})
+
 	for _, tc := range testCases {
 		name := fmt.Sprintf(
-			"rows=%d/versions=%d/valueSize=%d/numRangeKeys=%d",
-			tc.numRows, tc.numVersions, tc.valueSize, tc.numRangeKeys,
+			"rows=%d/versions=%d/valueSize=%d/numRangeKeys=%d/headers=%v",
+			tc.numRows, tc.numVersions, tc.valueSize, tc.numRangeKeys, tc.includeHeader,
 		)
 		b.Run(name, func(b *testing.B) {
 			ctx := context.Background()
 			runMVCCScan(ctx, b, benchScanOptions{
 				mvccBenchData: mvccBenchData{
-					numVersions:  tc.numVersions,
-					valueBytes:   tc.valueSize,
-					numRangeKeys: tc.numRangeKeys,
+					numVersions:   tc.numVersions,
+					valueBytes:    tc.valueSize,
+					numRangeKeys:  tc.numRangeKeys,
+					includeHeader: tc.includeHeader,
 				},
 				numRows: tc.numRows,
 				reverse: false,

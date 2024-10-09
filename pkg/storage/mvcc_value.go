@@ -252,7 +252,7 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 	if ok || err != nil {
 		return v, err
 	}
-	return decodeExtendedMVCCValue(buf)
+	return decodeExtendedMVCCValue(buf, true)
 }
 
 // DecodeValueFromMVCCValue decodes and MVCCValue and returns the
@@ -260,6 +260,8 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 //
 // NB: Caller assumes that this function does not copy or re-allocate
 // the underlying byte slice.
+//
+//gcassert:inline
 func DecodeValueFromMVCCValue(buf []byte) (roachpb.Value, error) {
 	if len(buf) == 0 {
 		// Tombstone with no header.
@@ -317,17 +319,40 @@ func tryDecodeSimpleMVCCValue(buf []byte) (MVCCValue, bool, error) {
 	return MVCCValue{}, false, nil
 }
 
-func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
+//gcassert:inline
+func decodeMVCCValueIgnoringHeader(buf []byte) (MVCCValue, error) {
+	if len(buf) == 0 {
+		return MVCCValue{}, nil
+	}
+	if len(buf) <= tagPos {
+		return MVCCValue{}, errMVCCValueMissingTag
+	}
+	if buf[tagPos] != extendedEncodingSentinel {
+		return MVCCValue{Value: roachpb.Value{RawBytes: buf}}, nil
+	}
+
+	// Extended encoding
+	headerLen := binary.BigEndian.Uint32(buf)
+	headerSize := extendedPreludeSize + headerLen
+	if len(buf) < int(headerSize) {
+		return MVCCValue{}, errMVCCValueMissingHeader
+	}
+	return MVCCValue{Value: roachpb.Value{RawBytes: buf[headerSize:]}}, nil
+}
+
+func decodeExtendedMVCCValue(buf []byte, unmarshalHeader bool) (MVCCValue, error) {
 	headerLen := binary.BigEndian.Uint32(buf)
 	headerSize := extendedPreludeSize + headerLen
 	if len(buf) < int(headerSize) {
 		return MVCCValue{}, errMVCCValueMissingHeader
 	}
 	var v MVCCValue
-	// NOTE: we don't use protoutil to avoid passing header through an interface,
-	// which would cause a heap allocation and incur the cost of dynamic dispatch.
-	if err := v.MVCCValueHeader.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
-		return MVCCValue{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
+	if unmarshalHeader {
+		// NOTE: we don't use protoutil to avoid passing header through an interface,
+		// which would cause a heap allocation and incur the cost of dynamic dispatch.
+		if err := v.MVCCValueHeader.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
+			return MVCCValue{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
+		}
 	}
 	v.Value.RawBytes = buf[headerSize:]
 	return v, nil

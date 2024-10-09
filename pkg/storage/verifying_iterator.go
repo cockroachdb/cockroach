@@ -36,10 +36,7 @@ func (i *verifyingMVCCIterator) saveAndVerify() {
 	if i.hasPoint {
 		i.value, _ = i.pebbleIterator.UnsafeValue()
 		if i.key.IsValue() {
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(i.value)
-			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(i.value)
-			}
+			mvccValue, err := decodeMVCCValueIgnoringHeader(i.value)
 			if err == nil {
 				err = mvccValue.Value.Verify(i.key.Key)
 			}

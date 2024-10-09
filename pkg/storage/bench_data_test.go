@@ -199,6 +199,10 @@ type mvccBenchData struct {
 	// mode simulates data that has been RESTOREd or is old enough to have been
 	// fully compacted.
 	transactional bool
+
+	// When includeHeader is set, values will be written with
+	// non-empty MVCCValueHeaders.
+	includeHeader bool
 }
 
 var _ initialState = mvccBenchData{}
@@ -218,6 +222,9 @@ func (d mvccBenchData) Key() []string {
 	}
 	if d.transactional {
 		key = append(key, fmt.Sprintf("transactional_%t", d.transactional))
+	}
+	if d.includeHeader {
+		key = append(key, fmt.Sprintf("headers_%t", d.includeHeader))
 	}
 	return key
 }
@@ -316,7 +323,11 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn})
+		originID := uint32(0)
+		if d.includeHeader {
+			originID = 1
+		}
+		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn, OriginID: originID})
 		require.NoError(b, err)
 	}
 
