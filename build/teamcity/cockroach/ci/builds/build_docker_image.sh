@@ -27,7 +27,7 @@ cp upstream_artifacts/cockroach\
    upstream_artifacts/libgeos_c.so \
    build/deploy
 
-cp -r licenses build/deploy/
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt build/deploy/
 
 chmod 755 build/deploy/cockroach
 
