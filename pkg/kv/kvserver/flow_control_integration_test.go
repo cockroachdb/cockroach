@@ -2210,6 +2210,7 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 func TestFlowControlBasicV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2304,6 +2305,7 @@ ORDER BY streams DESC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2418,6 +2420,7 @@ ORDER BY streams DESC;
 func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2519,6 +2522,7 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2669,6 +2673,7 @@ ORDER BY streams DESC;
 func TestFlowControlCrashedNodeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2773,6 +2778,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	const numServers int = 5
 
@@ -3038,6 +3044,7 @@ SELECT store_id,
 func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3170,6 +3177,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3306,6 +3314,7 @@ ORDER BY streams DESC;
 func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3395,6 +3404,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 func TestFlowControlQuiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3530,6 +3540,7 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3671,6 +3682,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 func TestFlowControlTransferLeaseV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3759,6 +3771,7 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3871,6 +3884,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -4741,7 +4755,7 @@ func (h *flowControlTestHelper) waitForAllTokensAvailable(
 	})
 }
 
-// checkTokensAvailableIs checks that the expected number of tokens are available
+// checkTokensAvailable checks that the expected number of tokens are available
 // across all streams. The expected number of streams and protocol level is
 // passed in as an argument, in order to allow switching between v1 and v2 flow
 // control.
