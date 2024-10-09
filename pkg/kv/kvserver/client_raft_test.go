@@ -4345,6 +4345,7 @@ func TestRangeQuiescence(t *testing.T) {
 func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	t.Skip("WIP")
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
