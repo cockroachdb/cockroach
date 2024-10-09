@@ -78,6 +78,7 @@ type NodesStatusServer interface {
 //
 // It is available for all tenants.
 type TenantStatusServer interface {
+	Ranges(context.Context, *RangesRequest) (*RangesResponse, error)
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 	HotRangesV2(context.Context, *HotRangesRequest) (*HotRangesResponseV2, error)
