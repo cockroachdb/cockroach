@@ -4644,6 +4644,7 @@ func newFlowControlTestHelperV1(t testing.TB, tc *testcluster.TestCluster) *flow
 func newFlowControlTestHelperV2(
 	t testing.TB, tc *testcluster.TestCluster, level kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) *flowControlTestHelper {
+	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 	return newFlowControlTestHelper(t,
 		tc,
 		"flow_control_integration_v2", /* testdata */
