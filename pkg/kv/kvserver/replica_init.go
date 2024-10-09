@@ -216,14 +216,18 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
-	r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
-		(*replicaFlowControl)(r),
-		makeStoreFlowControlHandleFactory(r.store),
-		r.store.TestingKnobs().FlowControlTestingKnobs,
-	)
 	r.mu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
+	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
+		r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
+	} else {
+		r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
+			(*replicaFlowControl)(r),
+			makeStoreFlowControlHandleFactory(r.store),
+			r.store.TestingKnobs().FlowControlTestingKnobs,
+		)
+	}
 	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
 	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
