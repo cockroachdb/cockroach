@@ -78,6 +78,9 @@ func TestFlowControlBasic(t *testing.T) {
 					Store: &kvserver.StoreTestingKnobs{
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
+							OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+								return kvflowcontrol.V2NotEnabledWhenLeader
+							},
 						},
 					},
 					AdmissionControl: &admission.TestingKnobs{
@@ -226,6 +229,9 @@ func TestFlowControlRangeSplitMerge(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 			},
@@ -345,6 +351,9 @@ func TestFlowControlBlockedAdmission(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -454,6 +463,9 @@ func TestFlowControlAdmissionPostSplitMerge(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -599,6 +611,9 @@ func TestFlowControlCrashedNode(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 						V1: kvflowcontrol.TestingKnobsV1{
 							MaintainStreamsForBrokenRaftTransport: func() bool {
 								return maintainStreamsForBrokenRaftTransport.Load()
@@ -718,6 +733,9 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test makes use of (small) increment
 							// requests, but wants to see large token
@@ -994,6 +1012,9 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 						V1: kvflowcontrol.TestingKnobsV1{
 							MaintainStreamsForInactiveFollowers: func() bool {
 								return maintainStreamsForInactiveFollowers.Load()
@@ -1098,6 +1119,9 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 					UseOnlyForScratchRanges: true,
+					OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+						return kvflowcontrol.V2NotEnabledWhenLeader
+					},
 					OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 						// This test asserts on the exact values of tracked
 						// tokens. In non-test code, the tokens deducted are
@@ -1231,6 +1255,9 @@ func TestFlowControlRaftMembership(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -1379,6 +1406,9 @@ func TestFlowControlRaftMembershipRemoveSelf(t *testing.T) {
 					Store: &kvserver.StoreTestingKnobs{
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
+							OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+								return kvflowcontrol.V2NotEnabledWhenLeader
+							},
 						},
 					},
 					AdmissionControl: &admission.TestingKnobs{
@@ -1484,6 +1514,9 @@ func TestFlowControlClassPrioritization(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -1580,6 +1613,9 @@ func TestFlowControlQuiescedRange(t *testing.T) {
 							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 						},
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -1718,6 +1754,9 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 						},
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 						V1: kvflowcontrol.TestingKnobsV1{
 							MaintainStreamsForInactiveFollowers: func() bool {
 								// This test deals with quiesced ranges where
@@ -1851,6 +1890,9 @@ func TestFlowControlTransferLease(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -1940,6 +1982,9 @@ func TestFlowControlLeaderNotLeaseholder(t *testing.T) {
 					DisableLeaderFollowsLeaseholder: true,
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 					},
 				},
 				AdmissionControl: &admission.TestingKnobs{
@@ -2066,6 +2111,9 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
+						OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
+							return kvflowcontrol.V2NotEnabledWhenLeader
+						},
 						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
 							// This test asserts on the exact values of tracked
 							// tokens. In non-test code, the tokens deducted are
@@ -4568,10 +4616,11 @@ func (h *flowControlTestHelper) checkAllTokensReturned(
 		typName string,
 	) error {
 		if actualTokens != expTokens {
-			return fmt.Errorf("expected %v of %s flow tokens for %v, got %v [%+v]",
+			return fmt.Errorf("expected %v of %s flow tokens for %v, got %v [level=%+v %+v]",
 				humanize.IBytes(uint64(expTokens)), typName, stream,
 				humanize.IBytes(uint64(actualTokens)),
 				level,
+				streams,
 			)
 		}
 		return nil
