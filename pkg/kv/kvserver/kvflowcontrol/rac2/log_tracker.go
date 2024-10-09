@@ -109,7 +109,7 @@ type LogTracker struct {
 	//	- waiting[pri][i].Term <= last.Term
 	//	- waiting[pri][i].Index < waiting[pri][i+1].Index
 	//	- waiting[pri][i].Term <= waiting[pri][i+1].Term
-	waiting [raftpb.NumPriorities][]LogMark
+	waiting [raftpb.NumPriorities]CircularBuffer[LogMark]
 }
 
 // NewLogTracker returns a LogTracker initialized to the given log mark. The
@@ -137,10 +137,10 @@ func (l *LogTracker) Stable() LogMark {
 //   - indices converge to the stable index which converges to the last index.
 func (l *LogTracker) Admitted() AdmittedVector {
 	a := AdmittedVector{Term: l.last.Term}
-	for pri, marks := range l.waiting {
+	for pri := range l.waiting {
 		index := l.stable
-		if len(marks) != 0 {
-			index = min(index, marks[0].Index-1)
+		if l.waiting[pri].Length() != 0 {
+			index = min(index, l.waiting[pri].At(0).Index-1)
 		}
 		a.Admitted[pri] = index
 	}
@@ -203,8 +203,8 @@ func (l *LogTracker) Append(ctx context.Context, after uint64, to LogMark) bool 
 	// This happens when a new leader overwrites a suffix of the log.
 	l.stable = min(l.stable, after)
 	// Entries at index > after.Index from previous terms are now obsolete.
-	for pri, marks := range l.waiting {
-		l.waiting[pri] = truncate(marks, after)
+	for pri := range l.waiting {
+		truncate(&l.waiting[pri], after)
 	}
 	// The leader term was bumped, so the admitted vector is new for this term,
 	// and is considered "changed".
@@ -225,12 +225,12 @@ func (l *LogTracker) Register(ctx context.Context, at LogMark, pri raftpb.Priori
 		l.errorf(ctx, "admission register %+v [pri=%v] out of order", at, pri)
 		return
 	}
-	ln := len(l.waiting[pri])
-	if ln != 0 && at.Index <= l.waiting[pri][ln-1].Index {
+	ln := l.waiting[pri].Length()
+	if ln != 0 && at.Index <= l.waiting[pri].At(ln-1).Index {
 		l.errorf(ctx, "admission register %+v [pri=%v] out of order", at, pri)
 		return
 	}
-	l.waiting[pri] = append(l.waiting[pri], at)
+	l.waiting[pri].Push(at)
 }
 
 // LogSynced informs the tracker that the log up to the given LogMark has been
@@ -256,12 +256,13 @@ func (l *LogTracker) LogSynced(ctx context.Context, stable LogMark) bool {
 	l.stable = stable.Index
 	// The admitted index at a priority has advanced if its queue was empty or
 	// leading the stable index by more than one.
-	for _, marks := range l.waiting {
+	for pri := range l.waiting {
+		marks := &l.waiting[pri]
 		// Example: stable index was 5 before this call. If marks[0].Index <= 6 then
 		// we can't advance past 5 even if stable index advances to a higher value.
 		// But if marks[0].Index >= 7 we can advance to marks[0].Index-1 which is
 		// greater than the old stable index.
-		if len(marks) == 0 || marks[0].Index > maybeAdmitted {
+		if marks.Length() == 0 || marks.At(0).Index > maybeAdmitted {
 			return true
 		}
 	}
@@ -289,25 +290,26 @@ func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Pri
 		l.errorf(ctx, "admitting mark %+v before appending it", at)
 		return false
 	}
-	waiting := l.waiting[pri]
+	waiting := &l.waiting[pri]
+	ln := waiting.Length()
 	// There is nothing to admit, or it's a stale admission.
-	if len(waiting) == 0 || waiting[0].After(at) {
+	if ln == 0 || waiting.At(0).After(at) {
 		return false
 	}
 	// At least one waiting entry can be admitted. The admitted index was at
 	// min(l.stable, waiting[0].Index-1). If waiting[0].Index-1 < l.stable, the
 	// min increases after the first entry is removed from the queue.
-	updated := waiting[0].Index <= l.stable
+	updated := waiting.At(0).Index <= l.stable
 	// Remove all entries up to the admitted mark. Due to invariants, this is
 	// always a prefix of the queue.
-	for i, ln := 1, len(waiting); i < ln; i++ {
-		if waiting[i].After(at) {
-			l.waiting[pri] = waiting[i:]
+	for i := 1; i < ln; i++ {
+		if waiting.At(i).After(at) {
+			waiting.Pop(i)
 			return updated
 		}
 	}
 	// The entire queue is admitted, clear it.
-	l.waiting[pri] = waiting[len(waiting):]
+	waiting.Prefix(0)
 	return updated
 }
 
@@ -326,13 +328,15 @@ func (l *LogTracker) SafeFormat(w redact.SafePrinter, _ rune) {
 func (l *LogTracker) DebugString() string {
 	var b strings.Builder
 	fmt.Fprint(&b, l.String())
-	for pri, marks := range l.waiting {
-		if len(marks) == 0 {
+	for pri := range l.waiting {
+		marks := &l.waiting[pri]
+		n := marks.Length()
+		if n == 0 {
 			continue
 		}
 		fmt.Fprintf(&b, "\n%s:", raftpb.Priority(pri))
-		for _, mark := range marks {
-			fmt.Fprintf(&b, " %+v", mark)
+		for i := 0; i < n; i++ {
+			fmt.Fprintf(&b, " %+v", marks.At(i))
 		}
 	}
 	return b.String()
@@ -348,13 +352,15 @@ func (l *LogTracker) errorf(ctx context.Context, format string, args ...any) {
 	}
 }
 
-// truncate returns a prefix of the ordered log marks slice, with all marks at
-// index > after removed from it.
-func truncate(marks []LogMark, after uint64) []LogMark {
-	for i := len(marks); i > 0; i-- {
-		if marks[i-1].Index <= after {
-			return marks[:i]
+// truncate updates the slice to be a prefix of the ordered log marks slice,
+// with all marks at index > after removed from it.
+func truncate(marks *CircularBuffer[LogMark], after uint64) {
+	n := marks.Length()
+	for i := n; i > 0; i-- {
+		if marks.At(i-1).Index <= after {
+			marks.Prefix(i)
+			return
 		}
 	}
-	return marks[:0]
+	marks.Prefix(0)
 }

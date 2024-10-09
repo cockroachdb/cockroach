@@ -5,7 +5,10 @@
 
 package replica_rac2
 
-import "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 // lowPriOverrideState records which raft log entries have their priority
 // overridden to be raftpb.LowPri. Used at follower replicas.
@@ -66,7 +69,7 @@ type lowPriOverrideState struct {
 	//
 	// A call to getEffectivePriority for index i causes a prefix of indices <=
 	// i to be discarded.
-	intervals []interval
+	intervals rac2.CircularBuffer[interval]
 	// Highest term observed so far.
 	leaderTerm uint64
 }
@@ -97,32 +100,35 @@ func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 	if leaderTerm < p.leaderTerm {
 		return false
 	}
-	n := len(p.intervals)
+	n := p.intervals.Length()
 	if leaderTerm > p.leaderTerm {
 		p.leaderTerm = leaderTerm
 		// Drop all intervals starting at or after the first index. Do it from the
 		// back, so that the append-only case is the fast path. When a suffix of
 		// entries is overwritten, the cost of this loop is an amortized O(1).
-		for ; n > 0 && p.intervals[n-1].first >= first; n-- {
+		for ; n > 0 && p.intervals.At(n-1).first >= first; n-- {
 		}
-		p.intervals = p.intervals[:n]
+		p.intervals.Prefix(n)
 		// INVARIANT: n > 0 => p.intervals[n-1].first < first.
 
 		// Adjust the last interval if it overlaps with the one being added.
-		if n > 0 && p.intervals[n-1].last >= first {
+		if n > 0 && p.intervals.At(n-1).last >= first {
+			lastInterval := p.intervals.At(n - 1)
 			// Truncate the last interval.
-			p.intervals[n-1].last = first - 1
+			lastInterval.last = first - 1
+			p.intervals.SetLast(lastInterval)
 		}
 	} else {
 		// Common case: existing leader.
 		if n > 0 {
-			if p.intervals[n-1].last >= last {
+			lastInterval := p.intervals.At(n - 1)
+			if lastInterval.last >= last {
 				return true
 			}
-			// INVARIANT: p.intervals[n-1].last < last, so p.intervals[n-1].last + 1 <= last.
-			if p.intervals[n-1].last >= first {
+			// INVARIANT: lastInterval.last < last, so lastInterval.last + 1 <= last.
+			if lastInterval.last >= first {
 				// Adjust first to not overlap with the last interval.
-				first = p.intervals[n-1].last + 1
+				first = lastInterval.last + 1
 			}
 		}
 	}
@@ -132,14 +138,16 @@ func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 	// - The last interval, if any, does not overlap with [first,last].
 
 	// Append to, or extend the existing last interval
-	if n > 0 && p.intervals[n-1].lowPriOverride == lowPriOverride &&
-		p.intervals[n-1].last+1 >= first {
-		// Extend the last interval.
-		p.intervals[n-1].last = last
-		return true
+	if n > 0 {
+		lastInterval := p.intervals.At(n - 1)
+		if lastInterval.lowPriOverride == lowPriOverride && lastInterval.last+1 >= first {
+			// Extend the last interval.
+			lastInterval.last = last
+			p.intervals.SetLast(lastInterval)
+			return true
+		}
 	}
-	p.intervals = append(p.intervals,
-		interval{first: first, last: last, lowPriOverride: lowPriOverride})
+	p.intervals.Push(interval{first: first, last: last, lowPriOverride: lowPriOverride})
 	return true
 }
 
@@ -149,7 +157,7 @@ func (p *lowPriOverrideState) sideChannelForV1Leader(leaderTerm uint64) bool {
 		return false
 	}
 	p.leaderTerm = leaderTerm
-	p.intervals = p.intervals[:0]
+	p.intervals.Prefix(0)
 	return true
 }
 
@@ -158,25 +166,30 @@ func (p *lowPriOverrideState) getEffectivePriority(
 ) raftpb.Priority {
 	// Garbage collect intervals ending before the given index.
 	drop := 0
-	for n := len(p.intervals); drop < n && p.intervals[drop].last < index; drop++ {
+	for n := p.intervals.Length(); drop < n && p.intervals.At(drop).last < index; drop++ {
 	}
-	p.intervals = p.intervals[drop:]
-	n := len(p.intervals)
+	p.intervals.Pop(drop)
+	n := p.intervals.Length()
 	// INVARIANT: if n > 0, p.intervals[0].last >= index.
 
 	// If there is no interval containing the index, return the original
 	// priority. We need to tolerate this since this may be case C1, and this is
 	// index 9, so we ignored when sideChannelForLowPriOverride provided
 	// information for 9.
-	if n == 0 || p.intervals[0].first > index {
+	if n == 0 {
 		return pri
 	}
-	lowPriOverride := p.intervals[0].lowPriOverride
+	firstInterval := p.intervals.At(0)
+	if firstInterval.first > index {
+		return pri
+	}
+	lowPriOverride := firstInterval.lowPriOverride
 	// Remove the prefix of indices <= index.
-	if p.intervals[0].last > index {
-		p.intervals[0].first = index + 1
+	if firstInterval.last > index {
+		firstInterval.first = index + 1
+		p.intervals.SetFirst(firstInterval)
 	} else {
-		p.intervals = p.intervals[1:]
+		p.intervals.Pop(1)
 	}
 	if lowPriOverride {
 		return raftpb.LowPri

@@ -24,9 +24,10 @@ import (
 func formatTrackerState(t *Tracker) string {
 	var result strings.Builder
 	for pri, tracked := range t.tracked {
-		if len(tracked) > 0 {
+		if n := tracked.Length(); n > 0 {
 			result.WriteString(fmt.Sprintf("%v:\n", raftpb.Priority(pri)))
-			for _, tr := range tracked {
+			for i := 0; i < n; i++ {
+				tr := tracked.At(i)
 				result.WriteString(fmt.Sprintf("  term=%d index=%-2d tokens=%-3d\n",
 					tr.term, tr.index, tr.tokens))
 			}

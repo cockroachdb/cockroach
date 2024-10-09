@@ -21,7 +21,7 @@ import (
 type Tracker struct {
 	// tracked entries are stored in increasing order of (term, index), per
 	// priority.
-	tracked [raftpb.NumPriorities][]tracked
+	tracked [raftpb.NumPriorities]CircularBuffer[tracked]
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -33,9 +33,9 @@ type tracked struct {
 	index, term uint64
 }
 
-func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
-	*dt = Tracker{
-		tracked: [raftpb.NumPriorities][]tracked{},
+func (t *Tracker) Init(stream kvflowcontrol.Stream) {
+	*t = Tracker{
+		tracked: [raftpb.NumPriorities]CircularBuffer[tracked]{},
 		stream:  stream,
 	}
 }
@@ -46,7 +46,7 @@ func (t *Tracker) Empty() bool {
 	// possible to make it atomic and avoid locking the mutex in replicaSendStream
 	// when calling this.
 	for pri := range t.tracked {
-		if len(t.tracked[pri]) != 0 {
+		if t.tracked[pri].Length() != 0 {
 			return false
 		}
 	}
@@ -57,8 +57,8 @@ func (t *Tracker) Empty() bool {
 func (t *Tracker) Track(
 	ctx context.Context, term uint64, index uint64, pri raftpb.Priority, tokens kvflowcontrol.Tokens,
 ) bool {
-	if len(t.tracked[pri]) >= 1 {
-		last := t.tracked[pri][len(t.tracked[pri])-1]
+	if length := t.tracked[pri].Length(); length >= 1 {
+		last := t.tracked[pri].At(length - 1)
 		// Tracker exists in the context of a single replicaSendStream, which cannot
 		// span the leader losing leadership and regaining it. So the indices must
 		// advance.
@@ -74,7 +74,7 @@ func (t *Tracker) Track(
 		}
 	}
 
-	t.tracked[pri] = append(t.tracked[pri], tracked{
+	t.tracked[pri].Push(tracked{
 		tokens: tokens,
 		index:  index,
 		term:   term,
@@ -97,8 +97,8 @@ func (t *Tracker) Untrack(
 	for pri := range admitted {
 		uptoIndex := admitted[pri]
 		var untracked int
-		for n := len(t.tracked[pri]); untracked < n; untracked++ {
-			deduction := t.tracked[pri][untracked]
+		for n := t.tracked[pri].Length(); untracked < n; untracked++ {
+			deduction := t.tracked[pri].At(untracked)
 			if deduction.term > term || (deduction.term == term && deduction.index > uptoIndex) {
 				break
 			}
@@ -107,7 +107,9 @@ func (t *Tracker) Untrack(
 				returnedEval[pri] += deduction.tokens
 			}
 		}
-		t.tracked[pri] = t.tracked[pri][untracked:]
+		if untracked > 0 {
+			t.tracked[pri].Pop(untracked)
+		}
 	}
 
 	return returnedSend, returnedEval
@@ -116,12 +118,13 @@ func (t *Tracker) Untrack(
 // UntrackAll iterates through all tracked token deductions, untracking all of them
 // and returning the sum of tokens for each priority.
 func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
-	for pri, deductions := range t.tracked {
-		for _, deduction := range deductions {
-			returned[pri] += deduction.tokens
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			returned[pri] += t.tracked[pri].At(i).tokens
 		}
 	}
-	t.tracked = [raftpb.NumPriorities][]tracked{}
+	t.tracked = [raftpb.NumPriorities]CircularBuffer[tracked]{}
 
 	return returned
 }
@@ -130,8 +133,10 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 // power /inspectz-style debugging pages.
 func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 	var res []kvflowinspectpb.TrackedDeduction
-	for pri, deductions := range t.tracked {
-		for _, deduction := range deductions {
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			deduction := t.tracked[pri].At(i)
 			res = append(res, kvflowinspectpb.TrackedDeduction{
 				Tokens: int64(deduction.tokens),
 				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
@@ -143,4 +148,97 @@ func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 		}
 	}
 	return res
+}
+
+// CircularBuffer provides functionality akin to a []T, for cases that usually
+// push to the back and pop from the front, and would like to reduce
+// allocations. The assumption made here is that the capacity needed for
+// holding the live entries is somewhat stable. The circular buffer will grow
+// as needed, and over time will shrink. Liveness of shrinking depends on new
+// entries being pushed.
+type CircularBuffer[T any] struct {
+	// len(buf) == cap(buf) == cap.
+	buf []T
+	cap int
+	// first is in [0, cap).
+	first int
+	// len is in [0, cap].
+	len int
+	// pushesSinceCheck counts the number of a push calls since the last time we
+	// considered shrinking the buffer.
+	pushesSinceCheck int
+	// maxObservedLen is the maximum observed len value since the last time we
+	// considered shrinking the buffer.
+	maxObservedLen int
+}
+
+// Push is used to push an entry onto the end.
+func (cb *CircularBuffer[T]) Push(a T) {
+	needed := cb.len + 1
+	const minSize = 40
+	if needed > cb.cap {
+		size := cb.cap*2 + 1
+		if size < minSize {
+			size = minSize
+		}
+		cb.replace(size)
+	} else if cb.pushesSinceCheck > 10*cb.cap {
+		cb.pushesSinceCheck = 0
+		cb.maxObservedLen = 0
+		if cb.cap > 2*minSize && cb.cap > 3*cb.maxObservedLen && cb.cap/2 > needed {
+			// Shrink.
+			size := cb.cap / 2
+			cb.replace(size)
+		}
+	}
+	cb.buf[(cb.first+cb.len)%cb.cap] = a
+	cb.len++
+	cb.pushesSinceCheck++
+	if cb.maxObservedLen < cb.len {
+		cb.maxObservedLen = cb.len
+	}
+}
+
+// Pop removes the first num entries.
+func (cb *CircularBuffer[T]) Pop(num int) {
+	if num == 0 {
+		return
+	}
+	cb.len -= num
+	cb.first = (cb.first + num) % cb.cap
+}
+
+// Prefix shrinks the buffer to retain the first num entries.
+func (cb *CircularBuffer[T]) Prefix(num int) {
+	cb.len = num
+}
+
+// At returns the entry at index.
+func (cb *CircularBuffer[T]) At(index int) T {
+	return cb.buf[(cb.first+index)%cb.cap]
+}
+
+// SetLast overwrites the last entry.
+func (cb *CircularBuffer[T]) SetLast(a T) {
+	cb.buf[(cb.first+cb.len-1)%cb.cap] = a
+}
+
+// SetFirst overwrites the first entry.
+func (cb *CircularBuffer[T]) SetFirst(a T) {
+	cb.buf[cb.first] = a
+}
+
+// Length returns the current length.
+func (cb *CircularBuffer[T]) Length() int {
+	return cb.len
+}
+
+func (cb *CircularBuffer[T]) replace(size int) {
+	buf := make([]T, size)
+	for i := 0; i < cb.len; i++ {
+		buf[i] = cb.buf[(cb.first+i)%cb.cap]
+	}
+	cb.first = 0
+	cb.cap = size
+	cb.buf = buf
 }
