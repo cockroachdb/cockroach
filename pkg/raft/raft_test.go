@@ -676,7 +676,20 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCannotCommitWithoutNewTermEntry(t, storeLivenessEnabled)
+		})
+}
+
+func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
+	var cfg func(c *Config) = nil
+	if !storeLivenessEnabled {
+		cfg = fortificationDisabledConfig
+	}
+
+	tt := newNetworkWithConfig(cfg, nil, nil, nil, nil, nil)
+
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -695,8 +708,23 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	// avoid committing ChangeTerm proposal
 	tt.ignore(pb.MsgApp)
 
-	// elect 2 as the new leader with term 2
+	// Elect 2 as the new leader with term 2.
+	if storeLivenessEnabled {
+		// We need to withdraw support of the current leader. This will prevent it
+		// from attempting to refortify the peers.
+		tt.allWithdrawSupportForAndFromPeer(1)
+
+		// Bumping all epochs will make all followers stop supporting the current
+		// fortified leader.
+		tt.bumpAllEpochs()
+	}
+
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// Revert the support state to normal.
+		tt.allGrantSupportForAndFromPeer(1)
+	}
 
 	// no log entries from previous term should be committed
 	sm = tt.peers[2].(*raft)
