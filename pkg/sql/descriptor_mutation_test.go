@@ -163,14 +163,14 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -223,15 +223,16 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	ctx := context.Background()
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -491,13 +492,13 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// The descriptor changes made must have an immediate effect.
-	defer lease.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	// The descriptor changes made must have an immediate effect.
+	defer lease.TestingDisableTableLeases()()
 
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
@@ -658,14 +659,14 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
@@ -873,9 +874,6 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -888,6 +886,9 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	if _, err := sqlDB.Exec(`
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
