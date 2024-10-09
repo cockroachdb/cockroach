@@ -106,21 +106,23 @@ table_name NOT IN (
 	'predefined_comments',
 	'session_trace',
 	'session_variables',
-  'table_spans',
+	'table_spans',
 	'tables',
 	'cluster_statement_statistics',
-  'statement_activity',
+	'statement_activity',
 	'statement_statistics_persisted',
 	'statement_statistics_persisted_v22_2',
+	'store_liveness_support_for',
+	'store_liveness_support_from',
 	'cluster_transaction_statistics',
 	'statement_statistics',
-  'transaction_activity',
+	'transaction_activity',
 	'transaction_statistics_persisted',
 	'transaction_statistics_persisted_v22_2',
 	'transaction_statistics',
 	'tenant_usage_details',
-  'pg_catalog_table_is_implemented',
-  'fully_qualified_names'
+	'pg_catalog_table_is_implemented',
+	'fully_qualified_names'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)

@@ -486,6 +486,8 @@ crdb_internal       statement_activity
 crdb_internal       statement_statistics
 crdb_internal       statement_statistics_persisted
 crdb_internal       statement_statistics_persisted_v22_2
+crdb_internal       store_liveness_support_for
+crdb_internal       store_liveness_support_from
 crdb_internal       super_regions
 crdb_internal       system_jobs
 crdb_internal       table_columns
@@ -848,6 +850,8 @@ statement_activity
 statement_statistics
 statement_statistics_persisted
 statement_statistics_persisted_v22_2
+store_liveness_support_for
+store_liveness_support_from
 super_regions
 system_jobs
 table_columns
@@ -1492,6 +1496,8 @@ system         public              statement_statistics                         
 system         crdb_internal       statement_statistics_persisted               SYSTEM VIEW  NO
 system         crdb_internal       statement_statistics_persisted_v22_2         SYSTEM VIEW  NO
 system         information_schema  statistics                                   SYSTEM VIEW  NO
+system         crdb_internal       store_liveness_support_for                   SYSTEM VIEW  NO
+system         crdb_internal       store_liveness_support_from                  SYSTEM VIEW  NO
 system         crdb_internal       super_regions                                SYSTEM VIEW  NO
 system         crdb_internal       system_jobs                                  SYSTEM VIEW  NO
 system         crdb_internal       table_columns                                SYSTEM VIEW  NO
@@ -4026,6 +4032,8 @@ NULL     public   system         crdb_internal       statement_activity         
 NULL     public   system         crdb_internal       statement_statistics                         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted               SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted_v22_2         SELECT          NO            YES
+NULL     public   system         crdb_internal       store_liveness_support_for                   SELECT          NO            YES
+NULL     public   system         crdb_internal       store_liveness_support_from                  SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                                SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                                  SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                                SELECT          NO            YES
@@ -4748,6 +4756,8 @@ NULL     public   system         crdb_internal       statement_activity         
 NULL     public   system         crdb_internal       statement_statistics                         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted               SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted_v22_2         SELECT          NO            YES
+NULL     public   system         crdb_internal       store_liveness_support_for                   SELECT          NO            YES
+NULL     public   system         crdb_internal       store_liveness_support_from                  SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                                SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                                  SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                                SELECT          NO            YES
