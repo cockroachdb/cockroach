@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -86,6 +87,9 @@ const (
 	ddArchiveQuery           = "-*" // will make sure to not archive any live logs
 	ddArchiveBucketName      = "debugzip-archives"
 	ddArchiveDefaultClient   = "datadog-archive" // TODO(arjunmahishi): make this a flag also
+
+	// GCS target path time format
+	gcsPathTimeFormat = "dt=20060102/hour=15"
 )
 
 var debugZipUploadOpts = struct {
@@ -99,10 +103,8 @@ var debugZipUploadOpts = struct {
 	from, to             timestampValue
 	logFormat            string
 	maxConcurrentUploads int
-	reporter             *zipUploadReporter
 }{
-	maxConcurrentUploads: system.NumCPU(),
-	reporter:             newReporter(os.Stderr),
+	maxConcurrentUploads: system.NumCPU() * 4,
 }
 
 // This is the list of all supported artifact types. The "possible values" part
@@ -315,10 +317,12 @@ func newProfileUploadReq(
 	return req, nil
 }
 
-func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) error {
+func logReaderPool(
+	size int, debugDirPath, uploadID string, uploadFn func(gcsWorkerSig),
+) (func() (time.Time, time.Time), error) {
 	paths, err := expandPatterns([]string{path.Join(debugDirPath, zippedLogsPattern)})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	filePattern := regexp.MustCompile(logFilePattern)
@@ -326,74 +330,155 @@ func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) er
 		paths, filePattern, nil, groupIndex(filePattern, "program"),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// chunkMap holds the mapping of target path names to the chunks of log lines
-	chunkMap := make(map[string][][]byte)
-	firstEventTime, lastEventTime := time.Time{}, time.Time{}
-	gcsPathPrefix := path.Join(debugZipUploadOpts.clusterName, uploadID)
+	filesChan := make(chan fileInfo, len(files))
+	wg := sync.WaitGroup{}
 	for _, file := range files {
-		pathParts := strings.Split(strings.TrimPrefix(file.path, debugDirPath), "/")
-		inputEditMode := log.SelectEditMode(false /* redactable */, false /* redactInput */)
-		stream, err := newFileLogStream(
-			file, time.Time(debugZipUploadOpts.from), time.Time(debugZipUploadOpts.to),
-			inputEditMode, debugZipUploadOpts.logFormat,
-		)
-		if err != nil {
-			return err
-		}
+		filesChan <- file
+	}
+	wg.Add(len(files))
 
-		for e, ok := stream.peek(); ok; e, ok = stream.peek() {
-			if firstEventTime.IsZero() {
-				firstEventTime = timeutil.Unix(0, e.Time) // from the first log entry
+	// the overallTimestamps and the below mutex will only be used after all the
+	// reads are complete. So, this will not cause any contention during the
+	// reads.
+	timestampMu, timestampWg := syncutil.Mutex{}, sync.WaitGroup{}
+	overallMinTimestamp, overallMaxTimestamp := time.Time{}, time.Time{}
+	timestampWg.Add(size)
+
+	for i := 0; i < size; i++ {
+		go func() {
+			// maintain a local copy of the min and max timestamps. This will later
+			// be consolidated across workers to get the overall min and max
+			// timestamps.
+			localMinTimestamp, localMaxTimestamp := time.Time{}, time.Time{}
+
+			for file := range filesChan {
+				var (
+					pathParts     = strings.Split(strings.TrimPrefix(file.path, debugDirPath), "/")
+					inputEditMode = log.SelectEditMode(false /* redactable */, false /* redactInput */)
+					nodeID        = pathParts[2]
+					fileName      = path.Base(file.path)
+				)
+
+				stream, err := newFileLogStream(
+					file, time.Time(debugZipUploadOpts.from), time.Time(debugZipUploadOpts.to),
+					inputEditMode, debugZipUploadOpts.logFormat,
+				)
+				if err != nil {
+					fmt.Println("Failed to upload logs:", err)
+					wg.Done()
+					continue
+				}
+
+				logBuffer := &bytes.Buffer{}
+				prevTargetPath := ""
+				for e, ok := stream.peek(); ok; e, ok = stream.peek() {
+					if localMinTimestamp.IsZero() {
+						localMinTimestamp = timeutil.Unix(0, e.Time)
+					}
+					localMaxTimestamp = timeutil.Unix(0, e.Time)
+
+					// The target path is constructed like this:
+					// <cluster-name>/<upload-id>/dt=20210901/hour=15/<node_id>/<filename>
+					currTargetPath := path.Join(
+						debugZipUploadOpts.clusterName, uploadID,
+						timeutil.Unix(0, e.Time).Format(gcsPathTimeFormat), nodeID, fileName,
+					)
+
+					if prevTargetPath != "" && prevTargetPath != currTargetPath {
+						// we've found a new hour, so we need to send the logs of the
+						// previous hour for upload
+						uploadFn(gcsWorkerSig{
+							key:    prevTargetPath,
+							nodeID: nodeID,
+							data:   logBuffer.Bytes(),
+						})
+
+						logBuffer.Reset()
+					}
+
+					rawLine, err := logEntryToJSON(e, appendUserTags(
+						append(
+							defaultDDTags, makeDDTag(uploadIDTag, uploadID), makeDDTag(nodeIDTag, nodeID),
+							makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
+						), // system generated tags
+						debugZipUploadOpts.tags..., // user provided tags
+					))
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+
+					_, err = logBuffer.Write(append(rawLine, []byte("\n")...))
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+
+					stream.pop()
+					prevTargetPath = currTargetPath
+				}
+
+				// upload the remaining logs
+				if logBuffer.Len() > 0 {
+					uploadFn(gcsWorkerSig{
+						key:    prevTargetPath,
+						data:   logBuffer.Bytes(),
+						nodeID: nodeID,
+					})
+					logBuffer.Reset()
+				}
+
+				wg.Done()
 			}
-			lastEventTime = timeutil.Unix(0, e.Time) // from the last log entry
 
-			// The target path is constructed like this: <cluster-name>/<upload-id>/dt=20210901/hour=15
-			targetPath := path.Join(
-				gcsPathPrefix, timeutil.Unix(0, e.Time).Format("dt=20060102/hour=15"),
-			)
-			rawLine, err := logEntryToJSON(e, appendUserTags(
-				append(
-					defaultDDTags, makeDDTag(uploadIDTag, uploadID), makeDDTag(nodeIDTag, pathParts[2]),
-					makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
-				), // system generated tags
-				debugZipUploadOpts.tags..., // user provided tags
-			))
-			if err != nil {
-				return err
+			// consolidate the min and max timestamps across all the workers
+			timestampMu.Lock()
+			defer timestampMu.Unlock()
+			defer timestampWg.Done()
+
+			if overallMinTimestamp.IsZero() || localMinTimestamp.Before(overallMinTimestamp) {
+				overallMinTimestamp = localMinTimestamp
 			}
 
-			if _, ok := chunkMap[targetPath]; !ok {
-				chunkMap[targetPath] = [][]byte{}
+			if localMaxTimestamp.After(overallMaxTimestamp) {
+				overallMaxTimestamp = localMaxTimestamp
 			}
-
-			// TODO(arjunmahishi): Can this map hold all the data? We might be able
-			// to start the upload here itself. So that we don't have to keep
-			// everything in memory. But since we are running this on our mac books
-			// for now, we can afford to keep everything in memory.
-			chunkMap[targetPath] = append(chunkMap[targetPath], rawLine)
-			stream.pop()
-		}
-
-		if err := stream.error(); err != nil {
-			if err.Error() == "EOF" {
-				continue
-			}
-			return err
-		}
+		}()
 	}
 
-	if err := writeLogsToGCS(ctx, chunkMap); err != nil {
+	wait := func() (time.Time, time.Time) {
+		wg.Wait() // wait for all the reads to complete
+		close(filesChan)
+		timestampWg.Wait() // wait for all the timestamps to be consolidated
+		return overallMinTimestamp, overallMaxTimestamp
+	}
+
+	return wait, nil
+}
+
+func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) error {
+	queueForUpload, waitForWrites := gcsWriterPool(debugZipUploadOpts.maxConcurrentUploads)
+	waitForReads, err := logReaderPool(debugZipUploadOpts.maxConcurrentUploads, debugDirPath, uploadID, queueForUpload)
+	if err != nil {
 		return err
 	}
 
-	if err := setupDDArchive(ctx, gcsPathPrefix, uploadID); err != nil {
-		return errors.Wrap(err, "failed to setup datadog archive")
-	}
+	// block until all the logs queued for upload
+	firstEventTime, lastEventTime := waitForReads()
 
-	printRehydrationSteps(uploadID, uploadID, firstEventTime, lastEventTime)
+	// block until all the logs are uploaded
+	if waitForWrites() != 0 {
+		if err := setupDDArchive(
+			ctx, path.Join(debugZipUploadOpts.clusterName, uploadID), uploadID,
+		); err != nil {
+			return errors.Wrap(err, "failed to setup datadog archive")
+		}
+
+		printRehydrationSteps(uploadID, uploadID, firstEventTime, lastEventTime)
+	}
 	return nil
 }
 
@@ -467,90 +552,110 @@ func setupDDArchive(ctx context.Context, pathPrefix, archiveName string) error {
 }
 
 type gcsWorkerSig struct {
-	key  string
-	data []byte
+	key    string
+	nodeID string
+	data   []byte
 }
 
-// writeLogsToGCS is a function that concurrently writes the logs to GCS.
-// The chunkMap is expected to be a map of time-base paths to luist of log lines.
+type gcsUploadStatus struct {
+	err        error
+	uploadSize int
+	nodeID     string
+}
+
+// gcsWriterPool creates a worker pool that can concurrently write the logs to
+// GCS. This function only orchestrates the upload process.
+func gcsWriterPool(size int) (func(gcsWorkerSig), func() int) {
+	workChan := make(chan gcsWorkerSig, size*2) // keep some work in the buffer
+	wg := sync.WaitGroup{}
+
+	// doneChan is a proxy to fan-in the upload status from the workers. This is
+	// used to log the errors from the workers, log the progress and also call
+	// done on the wait group. This should be a fast moving channel without much
+	// blocking.
+	doneChan := make(chan gcsUploadStatus, size*2)
+	totalSize := 0
+	nodeLookup := make(map[string]struct{})
+	go func() {
+		for sig := range doneChan {
+			if _, ok := nodeLookup[sig.nodeID]; !ok {
+				nodeLookup[sig.nodeID] = struct{}{}
+				fmt.Fprintf(os.Stderr, "Uploading logs for node %s\n", sig.nodeID)
+			}
+
+			if sig.err != nil {
+				fmt.Fprintln(os.Stderr, "error while uploading logs:", sig.err)
+			} else {
+				totalSize += sig.uploadSize
+			}
+
+			wg.Done()
+		}
+	}()
+
+	for i := 0; i < size; i++ {
+		go func() {
+			for sig := range workChan {
+				doneChan <- gcsUploadStatus{
+					err:        writeLogsToGCS(context.Background(), sig),
+					uploadSize: len(sig.data),
+					nodeID:     sig.nodeID,
+				}
+			}
+		}()
+	}
+
+	addFunc := func(chunk gcsWorkerSig) {
+		wg.Add(1)
+		workChan <- chunk
+	}
+
+	// wait wraps the Wait call and closes the workChan after all the workers are
+	// done. This will make sure that there are no lingering goroutines.
+	wait := func() int {
+		wg.Wait()
+		close(workChan)
+		close(doneChan)
+		fmt.Fprintf(os.Stderr, "Upload complete! Total size: %s\n", humanReadableSize(totalSize))
+		return totalSize
+	}
+
+	return addFunc, wait
+}
+
+// writeLogsToGCS is a function that writes the logs to GCS.
+// The key in the gcsWorkerSig is the target path where the logs should be
+// uploaded.
 //
-//	Example: {
-//	  "dt=20210901/hour=15": [[]byte, []byte, ...],
-//	}
+//	Example: "<cluster-name>/<upload-id>/dt=20210901/hour=15/<node_id>/<filename>"
 //
 // Each path will be uploaded as a separate file. The final file name will be
-// randomly generated just be for uploading.
-var writeLogsToGCS = func(ctx context.Context, chunkMap map[string][][]byte) error {
+// randomly generated just be for uploading. This function only does the actual
+// writing to GCS. The concurrency has to be handled by the caller.
+var writeLogsToGCS = func(ctx context.Context, sig gcsWorkerSig) error {
 	gcsClient, closeGCSClient, err := newGCSClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer closeGCSClient()
 
-	// The concurrency can be easily managed with something like sync/errors.Group
-	// But using channels gives us two advantages:
-	// 1. We can fail fast i.e exit as soon as one upload fails
-	// 2. We can monitor the progress as the uploads happen and report it to the
-	// CLI user (this seem like a non-feature but this is super useful when the
-	// upload times are long)
-	workChan := make(chan gcsWorkerSig, len(chunkMap))
-	doneChan := make(chan error, len(chunkMap))
-	for key, lines := range chunkMap {
-		workChan <- gcsWorkerSig{key, bytes.Join(lines, []byte("\n"))}
+	filename := path.Join(sig.key, fmt.Sprintf(
+		"archive_%s_%s_%s.json.gz",
+		newRandStr(6, true /* numericOnly */), newRandStr(4, true), newRandStr(22, false),
+	))
+
+	objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
+	w := gzip.NewWriter(objectWriter)
+	_, err = w.Write(sig.data)
+	if err != nil {
+		return err
 	}
 
-	// we can aggressively schedule the number of workers. Because this is a
-	// network IO bound workload. We will be waiting for the GCS API to complete
-	// the upload most of the time
-	noOfWorkers := min(system.NumCPU()*4, len(chunkMap))
-	for i := 0; i < noOfWorkers; i++ {
-		go func() {
-			for sig := range workChan {
-				filename := path.Join(sig.key, fmt.Sprintf(
-					"archive_%s_%s_%s.json.gz",
-					newRandStr(6, true /* numericOnly */), newRandStr(4, true), newRandStr(22, false),
-				))
-
-				objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
-				w := gzip.NewWriter(objectWriter)
-				_, err := w.Write(sig.data)
-				if err != nil {
-					doneChan <- err
-					return
-				}
-
-				if err := w.Close(); err != nil {
-					doneChan <- err
-					return
-				}
-
-				if err := objectWriter.Close(); err != nil {
-					doneChan <- err
-					return
-				}
-
-				doneChan <- nil
-			}
-		}()
+	if err := w.Close(); err != nil {
+		return err
 	}
 
-	report := newReporter(os.Stderr).newReport("logs")
-	doneCount := 0.0
-	for i := 0; i < len(chunkMap); i++ {
-		if err := <-doneChan; err != nil {
-			// stop everything and return the error
-			close(workChan)
-			close(doneChan)
-			return err
-		}
-
-		doneCount++
-		report((doneCount / float64(len(chunkMap))) * 100)
-	}
-
-	close(workChan)
-	close(doneChan)
-	return nil
+	return objectWriter.Close()
 }
 
 func newGCSClient(ctx context.Context) (*storage.Client, func(), error) {
@@ -767,67 +872,17 @@ func makeDDURL(tmpl string) string {
 	return fmt.Sprintf(tmpl, ddSiteToHostMap[debugZipUploadOpts.ddSite])
 }
 
-// zipUploadReporter is a simple concurrency-safe logger that can be used to
-// report the progress on the upload of each artifact type in the debug zip.
-// The log printed by this is updated in-place as the progress changes.
-// Usage pattern:
-//
-//	reporter := newReporter(os.Stderr)
-//	report := reporter.newReport("profiles")
-//	report(50) // 50% progress
-//	report(75) // 50% progress
-//	report(100) // 100% progress
-type zipUploadReporter struct {
-	syncutil.RWMutex
-	reports   map[string]float64
-	output    string
-	logWriter io.Writer
-}
-
-func (r *zipUploadReporter) print() {
-	r.RLock()
-	defer r.RUnlock()
-
-	// move the cursor to the top
-	currentLines := strings.Count(r.output, "\n")
-	if currentLines > 0 {
-		fmt.Fprintf(r.logWriter, "\033[%dA", currentLines)
+// humanReadableSize converts the given number of bytes to a human readable
+// format. Lowest unit is bytes and the highest unit is petabytes.
+func humanReadableSize(bytes int) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
 	}
-
-	reports := []string{}
-	for name := range r.reports {
-		reports = append(reports, name)
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
 	}
-	sort.Strings(reports)
-
-	var outputBuilder strings.Builder
-	for _, name := range reports {
-		progress := r.reports[name]
-		outputBuilder.WriteString(fmt.Sprintf("%s upload progress: %.2f%%\n", name, progress))
-	}
-
-	r.output = outputBuilder.String()
-	fmt.Fprint(r.logWriter, r.output)
-}
-
-func (r *zipUploadReporter) newReport(name string) func(float64) {
-	r.Lock()
-	defer r.print()
-	defer r.Unlock()
-
-	r.reports[name] = 0
-	return func(progress float64) {
-		r.Lock()
-		defer r.print()
-		defer r.Unlock()
-
-		r.reports[name] = progress
-	}
-}
-
-func newReporter(logWriter io.Writer) *zipUploadReporter {
-	return &zipUploadReporter{
-		reports:   make(map[string]float64),
-		logWriter: logWriter,
-	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
