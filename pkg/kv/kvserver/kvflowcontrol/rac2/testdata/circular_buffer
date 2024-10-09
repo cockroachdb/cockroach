@@ -1,0 +1,178 @@
+init
+----
+
+# Grows to capacity of 64. Note that [5, 54] represents a sequence of integers
+# 5 ... 54 in the buffer.
+push entry=5 count=50
+----
+buf: [5, 54]
+first: 0 len: 50 cap: 64 pushes: 50, max-len: 50
+
+# Regarding the notation below in the output, the buffer contains 90, 6, 7,
+# ..., 54.
+set-first entry=90
+----
+buf: 90 [6, 54]
+first: 0 len: 50 cap: 64 pushes: 50, max-len: 50
+
+set-last entry=2
+----
+buf: 90 [6, 53] 2
+first: 0 len: 50 cap: 64 pushes: 50, max-len: 50
+
+pop num=5
+----
+buf: [10, 53] 2
+first: 5 len: 45 cap: 64 pushes: 50, max-len: 50
+
+shrink-to-prefix num=30
+----
+buf: [10, 39]
+first: 5 len: 30 cap: 64 pushes: 50, max-len: 50
+
+push entry=50 count=34
+----
+buf: [10, 39] [50, 83]
+first: 5 len: 64 cap: 64 pushes: 84, max-len: 64
+
+# Grows from 64 to 128 to ... 512.
+push entry=90 count=200
+----
+buf: [10, 39] [50, 83] [90, 289]
+first: 0 len: 264 cap: 512 pushes: 284, max-len: 264
+
+pop num=10
+----
+buf: [20, 39] [50, 83] [90, 289]
+first: 10 len: 254 cap: 512 pushes: 284, max-len: 264
+
+shrink-to-prefix num=100
+----
+buf: [20, 39] [50, 83] [90, 135]
+first: 10 len: 100 cap: 512 pushes: 284, max-len: 264
+
+shrink-to-prefix num=0
+----
+buf: empty
+first: 10 len: 0 cap: 512 pushes: 284, max-len: 264
+
+# Push and pop entries. The max-len of 264 prevents it from shrinking when we
+# cross the threshold of 4096 pushes. But now that the threshold is crossed
+# and the push count reset, the max-len drops to 1.
+push entry=100 count=4000 pop-after-each-push-except-last
+----
+buf: 4099
+first: 425 len: 1 cap: 512 pushes: 187, max-len: 1
+
+# The max-len grows again.
+push entry=100 count=160
+----
+buf: 4099 [100, 259]
+first: 425 len: 161 cap: 512 pushes: 347, max-len: 161
+
+# Push and pop entries. The max-len is small enough that after the threshold
+# of 4096 pushes is crossed, the buffer shrinks to a capacity of 256. Shrinks
+# from 512 to 256.
+push entry=100 count=4000 pop-after-each-push-except-last
+----
+buf: [3938, 4099]
+first: 249 len: 162 cap: 256 pushes: 250, max-len: 162
+
+shrink-to-prefix num=100
+----
+buf: [3938, 4037]
+first: 249 len: 100 cap: 256 pushes: 250, max-len: 162
+
+# The max-len is too high to shrink.
+push entry=100 count=2000 pop-after-each-push-except-last
+----
+buf: [1999, 2099]
+first: 200 len: 101 cap: 256 pushes: 201, max-len: 101
+
+pop num=20
+----
+buf: [2019, 2099]
+first: 220 len: 81 cap: 256 pushes: 201, max-len: 101
+
+# Push and pop entries. When the threshold of 2048 pushes is crossed, the
+# buffer does not shrink since the previous max-len of 101 was too high. But
+# the new max-len shrinks to 82.
+push entry=100 count=2000 pop-after-each-push-except-last
+----
+buf: [2018, 2099]
+first: 171 len: 82 cap: 256 pushes: 152, max-len: 82
+
+# Push and pop entries. The buffer shrinks to 128.
+push entry=100 count=2000 pop-after-each-push-except-last
+----
+buf: [2017, 2099]
+first: 102 len: 83 cap: 128 pushes: 103, max-len: 83
+
+pop num=63
+----
+buf: [2080, 2099]
+first: 37 len: 20 cap: 128 pushes: 103, max-len: 83
+
+push entry=100 count=1000 pop-after-each-push-except-last
+----
+buf: [1079, 1099]
+first: 12 len: 21 cap: 128 pushes: 78, max-len: 21
+
+# Push and pop entries. After the threshold of 1024 pushes is crossed, the
+# buffer shrinks to a capacity of 64.
+push entry=100 count=2000 pop-after-each-push-except-last
+----
+buf: [2078, 2099]
+first: 28 len: 22 cap: 64 pushes: 27, max-len: 22
+
+pop num=14
+----
+buf: [2092, 2099]
+first: 42 len: 8 cap: 64 pushes: 27, max-len: 22
+
+push entry=100 count=500 pop-after-each-push-except-last
+----
+buf: [591, 599]
+first: 29 len: 9 cap: 64 pushes: 14, max-len: 9
+
+# Push and pop entries. The buffer shrinks to a capacity of 32.
+push entry=100 count=500 pop-after-each-push-except-last
+----
+buf: [590, 599]
+first: 0 len: 10 cap: 32 pushes: 1, max-len: 10
+
+# Noop pop.
+pop num=0
+----
+buf: [590, 599]
+first: 0 len: 10 cap: 32 pushes: 1, max-len: 10
+
+# Pop everything.
+pop num=10
+----
+buf: empty
+first: 10 len: 0 cap: 32 pushes: 1, max-len: 10
+
+# Noop pop.
+pop num=0
+----
+buf: empty
+first: 10 len: 0 cap: 32 pushes: 1, max-len: 10
+
+# Noop shrink-to-prefix.
+shrink-to-prefix num=0
+----
+buf: empty
+first: 10 len: 0 cap: 32 pushes: 1, max-len: 10
+
+# Push and pop entries. The buffer cannot shrink below a capacity of 32.
+push entry=100 count=300 pop-after-each-push-except-last
+----
+buf: 399
+first: 21 len: 1 cap: 32 pushes: 44, max-len: 1
+
+# Push and pop entries. The buffer cannot shrink below a capacity of 32.
+push entry=100 count=500 pop-after-each-push-except-last
+----
+buf: [598, 599]
+first: 8 len: 2 cap: 32 pushes: 30, max-len: 2
