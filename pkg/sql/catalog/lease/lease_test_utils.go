@@ -5,19 +5,21 @@
 
 package lease
 
+import "sync/atomic"
+
 // TestingTableLeasesAreDisabled returns true if table leases have been
 // disabled.
 func TestingTableLeasesAreDisabled() bool {
-	return testDisableTableLeases
+	return testDisableTableLeases.Load()
 }
 
-var testDisableTableLeases bool
+var testDisableTableLeases atomic.Bool
 
 // TestingDisableTableLeases disables table leases and returns
 // a function that can be used to enable it.
 func TestingDisableTableLeases() func() {
-	testDisableTableLeases = true
+	testDisableTableLeases.Store(true)
 	return func() {
-		testDisableTableLeases = false
+		testDisableTableLeases.Store(false)
 	}
 }
