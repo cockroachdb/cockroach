@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
@@ -112,7 +113,7 @@ func TestMsgAppFlowControl(t *testing.T) {
 		func(t *testing.T, storeLivenessEnabled bool) {
 			testOptions := emptyTestConfigModifierOpt()
 			if !storeLivenessEnabled {
-				testOptions = withFortificationDisabled()
+				testOptions = withStoreLiveness(raftstoreliveness.Disabled{})
 			}
 
 			r := newTestRaft(1, 5, 1,
