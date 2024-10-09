@@ -534,6 +534,7 @@ func (a TokenAdjustFlag) String() string {
 func (a TokenAdjustFlag) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch a {
 	case AdjNormal:
+		w.Print("normal")
 	case AdjDisconnect:
 		w.Print("disconnect")
 	case AdjForceFlush:
