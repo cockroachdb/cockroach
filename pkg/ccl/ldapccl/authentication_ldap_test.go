@@ -7,7 +7,6 @@ package ldapccl
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"testing"
 
@@ -27,9 +26,10 @@ func TestLDAPFetchUser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+	_, newMockLDAPUtil := LDAPMocks()
 	defer testutils.TestingHook(
 		&NewLDAPUtil,
-		NewMockLDAPUtil)()
+		newMockLDAPUtil)()
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -129,11 +129,10 @@ func TestLDAPAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+	_, newMockLDAPUtil := LDAPMocks()
 	defer testutils.TestingHook(
 		&NewLDAPUtil,
-		func(ctx context.Context, conf ldapConfig) (ILDAPUtil, error) {
-			return &mockLDAPUtil{tlsConfig: &tls.Config{}}, nil
-		})()
+		newMockLDAPUtil)()
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
