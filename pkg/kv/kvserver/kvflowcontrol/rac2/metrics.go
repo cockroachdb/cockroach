@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // Aliases to make the code below slightly easier to read.
@@ -157,7 +156,7 @@ var (
 // annotateMetricTemplateWithWorkClass uses the given metric template to build
 // one suitable for the specific token type and work class.
 func annotateMetricTemplateWithWorkClassAndType(
-	wc admissionpb.WorkClass, tmpl metric.Metadata, t flowControlMetricType,
+	wc admissionpb.WorkClass, tmpl metric.Metadata, t TokenType,
 ) metric.Metadata {
 	rv := tmpl
 	rv.Name = fmt.Sprintf(tmpl.Name, t, wc)
@@ -176,33 +175,9 @@ func annotateMetricTemplateWithWorkClass(
 	return rv
 }
 
-type flowControlMetricType int
-
-const (
-	flowControlEvalMetricType flowControlMetricType = iota
-	flowControlSendMetricType
-	numFlowControlMetricTypes
-)
-
-func (f flowControlMetricType) String() string {
-	return redact.StringWithoutMarkers(f)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (f flowControlMetricType) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch f {
-	case flowControlEvalMetricType:
-		p.SafeString("eval")
-	case flowControlSendMetricType:
-		p.SafeString("send")
-	default:
-		panic("unknown flowControlMetricType")
-	}
-}
-
 type TokenMetrics struct {
-	CounterMetrics [numFlowControlMetricTypes]*TokenCounterMetrics
-	StreamMetrics  [numFlowControlMetricTypes]*TokenStreamMetrics
+	CounterMetrics [NumTokenTypes]*TokenCounterMetrics
+	StreamMetrics  [NumTokenTypes]*TokenStreamMetrics
 }
 
 var _ metric.Struct = &TokenMetrics{}
@@ -212,9 +187,9 @@ func (m *TokenMetrics) MetricStruct() {}
 
 func NewTokenMetrics() *TokenMetrics {
 	m := &TokenMetrics{}
-	for _, typ := range []flowControlMetricType{
-		flowControlEvalMetricType,
-		flowControlSendMetricType,
+	for _, typ := range []TokenType{
+		EvalToken,
+		SendToken,
 	} {
 		m.CounterMetrics[typ] = newTokenCounterMetrics(typ)
 		m.StreamMetrics[typ] = newTokenStreamMetrics(typ)
@@ -239,7 +214,7 @@ var _ metric.Struct = &TokenCounterMetrics{}
 // TokenCounterMetrics implements the metric.Struct interface.
 func (m *TokenCounterMetrics) MetricStruct() {}
 
-func newTokenCounterMetrics(t flowControlMetricType) *TokenCounterMetrics {
+func newTokenCounterMetrics(t TokenType) *TokenCounterMetrics {
 	m := &TokenCounterMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
@@ -258,7 +233,7 @@ func newTokenCounterMetrics(t flowControlMetricType) *TokenCounterMetrics {
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDisconnectReturn, t),
 		)
 	}
-	if t == flowControlSendMetricType {
+	if t == SendToken {
 		// SendQueueTokenMetrics is only used for the send flow control metric type.
 		m.SendQueue[0] = newSendQueueTokenMetrics()
 	}
@@ -368,7 +343,7 @@ var _ metric.Struct = &TokenStreamMetrics{}
 // TokenCounterMetrics implements the metric.Struct interface.
 func (m *TokenStreamMetrics) MetricStruct() {}
 
-func newTokenStreamMetrics(t flowControlMetricType) *TokenStreamMetrics {
+func newTokenStreamMetrics(t TokenType) *TokenStreamMetrics {
 	m := &TokenStreamMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
