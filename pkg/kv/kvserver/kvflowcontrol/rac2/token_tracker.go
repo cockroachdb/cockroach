@@ -31,7 +31,7 @@ type Tracker struct {
 	term uint64
 	// tracked contains the per-priority tracked log entries ordered by log index.
 	// All the tracked entries are in the term's leader log.
-	tracked [raftpb.NumPriorities][]tracked
+	tracked [raftpb.NumPriorities]CircularBuffer[tracked]
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -45,7 +45,7 @@ type tracked struct {
 func (t *Tracker) Init(term uint64, stream kvflowcontrol.Stream) {
 	*t = Tracker{
 		term:    term,
-		tracked: [raftpb.NumPriorities][]tracked{},
+		tracked: [raftpb.NumPriorities]CircularBuffer[tracked]{},
 		stream:  stream,
 	}
 }
@@ -56,7 +56,7 @@ func (t *Tracker) Empty() bool {
 	// possible to make it atomic and avoid locking the mutex in replicaSendStream
 	// when calling this.
 	for pri := range t.tracked {
-		if len(t.tracked[pri]) != 0 {
+		if t.tracked[pri].Length() != 0 {
 			return false
 		}
 	}
@@ -70,8 +70,8 @@ func (t *Tracker) Track(
 ) bool {
 	// TODO(pav-kv): pass in the leader term, and check that it matches the term
 	// of the leader whose Tracker this is.
-	if len(t.tracked[pri]) >= 1 {
-		last := t.tracked[pri][len(t.tracked[pri])-1].id
+	if length := t.tracked[pri].Length(); length >= 1 {
+		last := t.tracked[pri].At(length - 1).id
 		// Tracker exists in the context of a single replicaSendStream, which cannot
 		// span the leader losing leadership and regaining it. So the entry IDs must
 		// advance.
@@ -80,7 +80,7 @@ func (t *Tracker) Track(
 			return false
 		}
 	}
-	t.tracked[pri] = append(t.tracked[pri], tracked{id: id, tokens: tokens})
+	t.tracked[pri].Push(tracked{id: id, tokens: tokens})
 
 	if log.V(1) {
 		log.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
@@ -109,8 +109,8 @@ func (t *Tracker) Untrack(
 
 	for pri, uptoIndex := range av.Admitted {
 		var untracked int
-		for n := len(t.tracked[pri]); untracked < n; untracked++ {
-			deduction := t.tracked[pri][untracked]
+		for n := t.tracked[pri].Length(); untracked < n; untracked++ {
+			deduction := t.tracked[pri].At(untracked)
 			if deduction.id.index > uptoIndex {
 				break
 			}
@@ -119,7 +119,9 @@ func (t *Tracker) Untrack(
 				returnedEval[pri] += deduction.tokens
 			}
 		}
-		t.tracked[pri] = t.tracked[pri][untracked:]
+		if untracked > 0 {
+			t.tracked[pri].Pop(untracked)
+		}
 	}
 
 	return returnedSend, returnedEval
@@ -128,12 +130,13 @@ func (t *Tracker) Untrack(
 // UntrackAll removes all tracked deductions, and returns the total amount of
 // previously tracked tokens for each priority.
 func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
-	for pri, deductions := range t.tracked {
-		for _, deduction := range deductions {
-			returned[pri] += deduction.tokens
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			returned[pri] += t.tracked[pri].At(i).tokens
 		}
 	}
-	t.tracked = [raftpb.NumPriorities][]tracked{}
+	t.tracked = [raftpb.NumPriorities]CircularBuffer[tracked]{}
 	return returned
 }
 
@@ -141,8 +144,10 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 // power /inspectz-style debugging pages.
 func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 	var res []kvflowinspectpb.TrackedDeduction
-	for pri, deductions := range t.tracked {
-		for _, deduction := range deductions {
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			deduction := t.tracked[pri].At(i)
 			res = append(res, kvflowinspectpb.TrackedDeduction{
 				Tokens: int64(deduction.tokens),
 				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
