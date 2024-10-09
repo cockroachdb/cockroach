@@ -10,7 +10,6 @@ go_library(
     },
     deps = [
         "//pkg/build",
-        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/settings",
         "//pkg/util/envutil",
         "//pkg/util/log",
