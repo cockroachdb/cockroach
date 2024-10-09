@@ -4285,6 +4285,37 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// withdrawSupportForAndFromAllPeers makes all nodes withdraw support for and
+// from the given peer.
+func (nw *network) withdrawSupportForAndFromAllPeers(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).WithdrawSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).WithdrawSupportFor(id)
+	}
+}
+
+// grantSupportForAndFromAllPeers makes all nodes grant support for and from the
+// given peer.
+func (nw *network) grantSupportForAndFromAllPeers(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).GrantSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).GrantSupportFor(id)
+	}
+}
+
+// bumpSupportEpochForAndFromAllPeers bumps the supportFor and supportFrom
+// epochs for all peers.
+func (nw *network) bumpSupportEpochForAndFromAllPeers() {
+	for p1 := range nw.peers {
+		for p2 := range nw.peers {
+			nw.peers[p1].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).
+				BumpSupportForEpoch(p2)
+			nw.peers[p2].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).
+				BumpSupportFromEpoch(p1)
+		}
+	}
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
