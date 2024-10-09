@@ -399,6 +399,41 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 	require.Regexp(t, sm.HandleMessage(heartbeat), "store liveness receive queue is full")
 }
 
+// TestSupportManagerHeartbeatNewStore tests that when a store is added (in the
+// first call of SupportFrom), heartbeats are sent to it immediately, before a
+// heartbeat interval has expired.
+func TestSupportManagerHeartbeatNewStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	// Set a very large heartbeat interval to ensure heartbeats for new stores are
+	// sent out before the heartbeat ticker is signalled.
+	options.HeartbeatInterval = time.Hour
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	require.NoError(t, sm.Start(ctx))
+
+	// Start sending heartbeats to the remote store by calling SupportFrom.
+	sm.SupportFrom(remoteStore)
+
+	testutils.SucceedsSoon(
+		t, func() error {
+			if sm.metrics.HeartbeatSuccesses.Count() == int64(0) {
+				return errors.New("heartbeat not sent yet")
+			}
+			return nil
+		},
+	)
+}
+
 func ensureHeartbeats(t *testing.T, sender *testMessageSender, expectedNum int) []slpb.Message {
 	var msgs []slpb.Message
 	testutils.SucceedsSoon(
