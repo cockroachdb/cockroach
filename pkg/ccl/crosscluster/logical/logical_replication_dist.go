@@ -32,7 +32,7 @@ func constructLogicalReplicationWriterSpecs(
 	tableMetadataByDestID map[int32]execinfrapb.TableReplicationMetadata,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
-	ignoreCDCIgnoredTTLDeletes bool,
+	discard jobspb.LogicalReplicationDetails_Discard,
 	mode jobspb.LogicalReplicationDetails_ApplyMode,
 	metricsLabel string,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
@@ -45,7 +45,7 @@ func constructLogicalReplicationWriterSpecs(
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
 		TableMetadataByDestID:       tableMetadataByDestID,
-		IgnoreCDCIgnoredTTLDeletes:  ignoreCDCIgnoredTTLDeletes,
+		Discard:                     discard,
 		Mode:                        mode,
 		MetricsLabel:                metricsLabel,
 	}
