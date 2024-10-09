@@ -31,7 +31,7 @@ import (
 // that have been installed on this cluster (past or present).
 var trialLicenseExpiryTimestamp atomic.Int64
 
-var enterpriseLicense = func() *settings.StringSetting {
+var EnterpriseLicense = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		settings.TenantWritable,
 		"enterprise.license",
@@ -225,7 +225,7 @@ func checkEnterpriseEnabledAt(
 // to cache the decoded license (if any). The returned license must not be
 // modified by the caller.
 func GetLicense(st *cluster.Settings) (*licenseccl.License, error) {
-	str := enterpriseLicense.Get(&st.SV)
+	str := EnterpriseLicense.Get(&st.SV)
 	if str == "" {
 		return nil, nil
 	}
@@ -381,7 +381,7 @@ func RegisterCallbackOnLicenseChange(
 		trialLicenseExpiryTimestamp.Store(expiry)
 	}
 	// Install the hook so that we refresh license details when the license changes.
-	enterpriseLicense.SetOnChange(&st.SV,
+	EnterpriseLicense.SetOnChange(&st.SV,
 		func(ctx context.Context) { refreshFunc(ctx, true /* isChange */) })
 	// Call the refresh function for the current license.
 	refreshFunc(ctx, false /* isChange */)
