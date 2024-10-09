@@ -7779,6 +7779,181 @@ project
  └── projections
       └── CASE WHEN COALESCE("?column?":18, "?column?":23) IS NOT NULL THEN 1 ELSE 0 END [as=case:26]
 
+# Case with multiple projections.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT 1, 2 FROM xy WHERE x = k UNION SELECT 3, 4 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:23
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":18
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12 v:15 "?column?":18
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":12 x:8
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: x:8
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":12]
+ │    │    │    └── filters
+ │    │    │         └── x:8 = k:1
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":18 v:15
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:15
+ │    │    │    └── projections
+ │    │    │         └── 3 [as="?column?":18]
+ │    │    └── filters
+ │    │         └── v:15 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":18]
+ │         │    └── "?column?":18
+ │         ├── const-agg [as="?column?":12]
+ │         │    └── "?column?":12
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE("?column?":12, "?column?":18) IS NOT NULL THEN 1 ELSE 0 END [as=case:23]
+
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT x + 10 FROM xy WHERE x = k UNION SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:20
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12 v:14 "?column?":17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 "?column?":12
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":12 x:8
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: x:8
+ │    │    │    │    └── projections
+ │    │    │    │         └── x:8 + 10 [as="?column?":12]
+ │    │    │    └── filters
+ │    │    │         └── x:8 = k:1
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":17 v:14
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:14
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":17]
+ │    │    └── filters
+ │    │         └── v:14 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":17]
+ │         │    └── "?column?":17
+ │         ├── const-agg [as="?column?":12]
+ │         │    └── "?column?":12
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE("?column?":12, "?column?":17) IS NOT NULL THEN 1 ELSE 0 END [as=case:20]
+
+# Case with a projected variable.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT x FROM xy WHERE x = k UNION SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:19
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8 "?column?":16
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8 v:13 "?column?":16
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── scan xy
+ │    │    │    │    └── columns: xy.x:8
+ │    │    │    └── filters
+ │    │    │         └── xy.x:8 = k:1
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":16 v:13
+ │    │    │    ├── scan uv
+ │    │    │    │    └── columns: v:13
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":16]
+ │    │    └── filters
+ │    │         └── v:13 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as="?column?":16]
+ │         │    └── "?column?":16
+ │         ├── const-agg [as=xy.x:8]
+ │         │    └── xy.x:8
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE(xy.x:8, "?column?":16) IS NOT NULL THEN 1 ELSE 0 END [as=case:19]
+
+# Case with multiple projected variables/expressions.
+norm expect=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT x, y, x * y FROM xy WHERE x = k UNION SELECT u, v, u + v FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:22
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8 u:13
+ │    ├── grouping columns: k:1
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8 u:13 v:14
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 xy.x:8
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    │    ├── scan xy
+ │    │    │    │    └── columns: xy.x:8
+ │    │    │    └── filters
+ │    │    │         └── xy.x:8 = k:1
+ │    │    ├── scan uv
+ │    │    │    └── columns: u:13 v:14
+ │    │    └── filters
+ │    │         └── v:14 = k:1
+ │    └── aggregations
+ │         ├── any-not-null-agg [as=u:13]
+ │         │    └── u:13
+ │         ├── const-agg [as=xy.x:8]
+ │         │    └── xy.x:8
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN COALESCE(xy.x:8, u:13) IS NOT NULL THEN 1 ELSE 0 END [as=case:22]
+
 # No-op because there is no Union.
 norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
 SELECT *, CASE WHEN EXISTS (SELECT 1 FROM xy WHERE x = k) THEN 1 ELSE 0 END FROM a;
@@ -7897,3 +8072,60 @@ inner-join (cross)
  │         └── projections
  │              └── 1 [as="?column?":17]
  └── filters (true)
+
+# No-op because there is a Project in between the ScalarGroupBy and the Union.
+# TODO(drewk): decorrelate this case as well.
+norm expect-not=TryDecorrelateUnion format=(hide-all,show-columns)
+SELECT *, CASE WHEN EXISTS (SELECT x + y FROM xy WHERE x = k UNION SELECT 1 FROM uv WHERE v = k) THEN 1 ELSE 0 END FROM a;
+----
+project
+ ├── columns: k:1 i:2 f:3 s:4 j:5 case:20
+ ├── group-by (hash)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 canary_agg:22
+ │    ├── grouping columns: k:1
+ │    ├── left-join-apply
+ │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 canary:21
+ │    │    ├── scan a
+ │    │    │    └── columns: k:1 i:2 f:3 s:4 j:5
+ │    │    ├── project
+ │    │    │    ├── columns: canary:21
+ │    │    │    ├── union
+ │    │    │    │    ├── columns: "?column?":18
+ │    │    │    │    ├── left columns: "?column?":12
+ │    │    │    │    ├── right columns: "?column?":17
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: "?column?":12
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: x:8 y:9
+ │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    └── columns: x:8 y:9
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── x:8 = k:1
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── x:8 + y:9 [as="?column?":12]
+ │    │    │    │    └── project
+ │    │    │    │         ├── columns: "?column?":17
+ │    │    │    │         ├── select
+ │    │    │    │         │    ├── columns: v:14
+ │    │    │    │         │    ├── scan uv
+ │    │    │    │         │    │    └── columns: v:14
+ │    │    │    │         │    └── filters
+ │    │    │    │         │         └── v:14 = k:1
+ │    │    │    │         └── projections
+ │    │    │    │              └── 1 [as="?column?":17]
+ │    │    │    └── projections
+ │    │    │         └── true [as=canary:21]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── const-not-null-agg [as=canary_agg:22]
+ │         │    └── canary:21
+ │         ├── const-agg [as=i:2]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4]
+ │         │    └── s:4
+ │         └── const-agg [as=j:5]
+ │              └── j:5
+ └── projections
+      └── CASE WHEN canary_agg:22 IS NOT NULL THEN 1 ELSE 0 END [as=case:20]
