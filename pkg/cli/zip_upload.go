@@ -25,9 +25,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -223,21 +225,32 @@ func uploadZipProfiles(ctx context.Context, uploadID string, debugDirPath string
 		pathsByNode[nodeID] = append(pathsByNode[nodeID], path)
 	}
 
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 5
+
+	var req *http.Request
 	for nodeID, paths := range pathsByNode {
-		req, err := newProfileUploadReq(
-			ctx, paths, appendUserTags(
-				append(
-					defaultDDTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uploadIDTag, uploadID),
-					makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
-				), // system generated tags
-				debugZipUploadOpts.tags..., // user provided tags
-			),
-		)
-		if err != nil {
-			return err
+
+		for retry := retry.Start(retryOpts); retry.Next(); {
+			req, err = newProfileUploadReq(
+				ctx, paths, appendUserTags(
+					append(
+						defaultDDTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uploadIDTag, uploadID),
+						makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
+					), // system generated tags
+					debugZipUploadOpts.tags..., // user provided tags
+				),
+			)
+			if err != nil {
+				continue
+			}
+			_, err = doUploadReq(req)
+			if err == nil {
+				break
+			}
 		}
 
-		if _, err := doUploadReq(req); err != nil {
+		if err != nil {
 			return fmt.Errorf("failed to upload profiles of node %s: %w", nodeID, err)
 		}
 
@@ -499,6 +512,8 @@ var writeLogsToGCS = func(ctx context.Context, chunkMap map[string][][]byte) err
 		workChan <- gcsWorkerSig{key, bytes.Join(lines, []byte("\n"))}
 	}
 
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 5
 	// we can aggressively schedule the number of workers. Because this is a
 	// network IO bound workload. We will be waiting for the GCS API to complete
 	// the upload most of the time
@@ -511,25 +526,30 @@ var writeLogsToGCS = func(ctx context.Context, chunkMap map[string][][]byte) err
 					newRandStr(6, true /* numericOnly */), newRandStr(4, true), newRandStr(22, false),
 				))
 
-				objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
-				w := gzip.NewWriter(objectWriter)
-				_, err := w.Write(sig.data)
-				if err != nil {
-					doneChan <- err
-					return
+				uploadfunc := func() error {
+					objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
+					w := gzip.NewWriter(objectWriter)
+					_, err = w.Write(sig.data)
+					if err != nil {
+						return err
+					}
+					if err = w.Close(); err != nil {
+						return err
+					}
+					if err = objectWriter.Close(); err != nil {
+						return err
+					}
+					return nil
 				}
 
-				if err := w.Close(); err != nil {
-					doneChan <- err
-					return
+				for retry := retry.Start(retryOpts); retry.Next(); {
+					err = uploadfunc()
+					if err == nil {
+						break
+					}
 				}
 
-				if err := objectWriter.Close(); err != nil {
-					doneChan <- err
-					return
-				}
-
-				doneChan <- nil
+				doneChan <- err
 			}
 		}()
 	}
