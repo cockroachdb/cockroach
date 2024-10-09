@@ -19,9 +19,9 @@ package raft
 
 import (
 	"context"
-	"errors"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 type SnapshotStatus int

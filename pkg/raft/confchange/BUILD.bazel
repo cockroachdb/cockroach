@@ -12,6 +12,7 @@ go_library(
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -28,5 +29,6 @@ go_test(
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

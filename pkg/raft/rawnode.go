@@ -18,10 +18,9 @@
 package raft
 
 import (
-	"errors"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrStepLocalMsg is returned when try to step a local raft message

@@ -18,9 +18,8 @@
 package raft
 
 import (
-	"errors"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // Bootstrap initializes the RawNode for first use by appending configuration
