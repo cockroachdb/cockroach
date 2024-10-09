@@ -12,6 +12,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/jwtauthccl",
         "//pkg/ccl/ldapccl",
+        "//pkg/security/distinguishedname",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

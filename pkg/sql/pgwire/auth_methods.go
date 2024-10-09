@@ -1002,53 +1002,54 @@ func AuthLDAP(
 		return nil
 	})
 
-	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
-		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
+	if entry.GetOption("ldapgrouplistfilter") != "" {
+		b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
+			c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
 
-		// Verify that the systemIdentity is what we expect.
-		if ldapUserDN.String() != systemIdentity {
-			err := errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
-			return err
-		}
-
-		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
-			ctx, execCfg.Settings, ldapUserDN, sessionUser, entry, identMap,
-		); authError != nil {
-			errForLog := errors.Wrapf(authError, "LDAP authorization: error retrieving ldap groups for authorization")
-			if detailedErrors != "" {
-				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
-			}
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, errForLog)
-			return authError
-		} else {
-			c.LogAuthInfof(ctx, redact.Sprintf("LDAP authorization sync succeeded; attempting to assign roles for LDAP groups: %s", ldapGroups))
-			// Parse and apply transformation to LDAP group DNs for roles granter.
-			sqlRoles := make([]username.SQLUsername, 0, len(ldapGroups))
-			for _, ldapGroup := range ldapGroups {
-				// Extract the CN from the LDAP group DN to use as the SQL role.
-				sqlRole, found, err := distinguishedname.ExtractCNAsSQLUsername(ldapGroup)
-				if err != nil {
-					err := errors.Wrapf(err, "LDAP authorization: error finding matching SQL role for group %s", ldapGroup.String())
-					c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
-					return err
-				}
-				if !found {
-					c.LogAuthInfof(ctx, redact.Sprintf("skipping role assignment for group %s since there is no common name", ldapGroup.String()))
-					continue
-				}
-				sqlRoles = append(sqlRoles, sqlRole)
-			}
-
-			// Assign roles to the user.
-			if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, sessionUser, sqlRoles); err != nil {
-				err = errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", sessionUser)
+			// Verify that the systemIdentity is what we expect.
+			if ldapUserDN.String() != systemIdentity {
+				err := errors.Newf("LDAP user DN mismatch, expected user DN: %s, obtained systemIdentity: %s", ldapUserDN.String(), systemIdentity)
 				c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
 				return err
 			}
-			return nil
-		}
-	})
 
+			if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
+				ctx, execCfg.Settings, ldapUserDN, sessionUser, entry, identMap,
+			); authError != nil {
+				errForLog := errors.Wrapf(authError, "LDAP authorization: error retrieving ldap groups for authorization")
+				if detailedErrors != "" {
+					errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+				}
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, errForLog)
+				return authError
+			} else {
+				c.LogAuthInfof(ctx, redact.Sprintf("LDAP authorization sync succeeded; attempting to assign roles for LDAP groups: %s", ldapGroups))
+				// Parse and apply transformation to LDAP group DNs for roles granter.
+				sqlRoles := make([]username.SQLUsername, 0, len(ldapGroups))
+				for _, ldapGroup := range ldapGroups {
+					// Extract the CN from the LDAP group DN to use as the SQL role.
+					sqlRole, found, err := distinguishedname.ExtractCNAsSQLUsername(ldapGroup)
+					if err != nil {
+						err := errors.Wrapf(err, "LDAP authorization: error finding matching SQL role for group %s", ldapGroup.String())
+						c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+						return err
+					}
+					if !found {
+						c.LogAuthInfof(ctx, redact.Sprintf("skipping role assignment for group %s since there is no common name", ldapGroup.String()))
+						continue
+					}
+					sqlRoles = append(sqlRoles, sqlRole)
+				}
+
+				// Assign roles to the user.
+				if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, sessionUser, sqlRoles); err != nil {
+					err = errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", sessionUser)
+					c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
+					return err
+				}
+				return nil
+			}
+		})
+	}
 	return b, nil
 }
