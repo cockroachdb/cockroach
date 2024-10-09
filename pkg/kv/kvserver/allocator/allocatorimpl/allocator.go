@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -2015,7 +2016,7 @@ func (a *Allocator) ValidLeaseTargets(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2080,7 +2081,7 @@ func (a *Allocator) ValidLeaseTargets(
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
 			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
 		candidates = excludeReplicasInNeedOfCatchup(
-			ctx, leaseRepl.SendStreamStats(), candidates)
+			ctx, leaseRepl.SendStreamStats, candidates)
 	}
 
 	// Determine which store(s) is preferred based on user-specified preferences.
@@ -2189,7 +2190,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
@@ -2223,7 +2224,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		preferred = excludeReplicasInNeedOfSnapshots(
 			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
 		preferred = excludeReplicasInNeedOfCatchup(
-			ctx, leaseRepl.SendStreamStats(), preferred)
+			ctx, leaseRepl.SendStreamStats, preferred)
 	}
 	if len(preferred) == 0 {
 		return false
@@ -2282,7 +2283,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2651,7 +2652,7 @@ func (a *Allocator) ShouldTransferLease(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		SendStreamStats() rac2.RangeSendStreamStats
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
@@ -3054,12 +3055,20 @@ func excludeReplicasInNeedOfSnapshots(
 	return replicas[:filled]
 }
 
+// sendStreamStatsPool is a pool of RangeSendStreamStats objects, used to avoid
+// churning memory when computing lease transfer decisions.
+var sendStreamStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &rac2.RangeSendStreamStats{}
+	},
+}
+
 // excludeReplicasInNeedOfCatchup filters out the `replicas` that may be in
 // need of a catchup messages before able to apply the lease, based on the
 // provided RangeSendStreamStats.
 func excludeReplicasInNeedOfCatchup(
 	ctx context.Context,
-	sendStreamStats rac2.RangeSendStreamStats,
+	sendStreamStats func(*rac2.RangeSendStreamStats),
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if sendStreamStats == nil {
@@ -3069,9 +3078,13 @@ func excludeReplicasInNeedOfCatchup(
 		// recently became one (concurrent to the lease transfer decision).
 		return replicas
 	}
+	stats := sendStreamStatsPool.Get().(*rac2.RangeSendStreamStats)
+	stats.Clear()
+	defer sendStreamStatsPool.Put(stats)
+	sendStreamStats(stats)
 	filled := 0
 	for _, repl := range replicas {
-		if stats, ok := sendStreamStats[repl.ReplicaID]; ok &&
+		if stats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID); ok &&
 			(!stats.IsStateReplicate || stats.HasSendQueue) {
 			log.KvDistribution.VEventf(ctx, 5,
 				"not considering %s as a potential candidate for a lease transfer "+

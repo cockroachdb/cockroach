@@ -2597,11 +2597,17 @@ func (r *Replica) maybeEnqueueProblemRange(
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 }
 
-// SendStreamStats returns the range's flow control send stream stats iff the
-// replica is the raft leader and RACv2 is enabled, otherwise nil.
-func (r *Replica) SendStreamStats() rac2.RangeSendStreamStats {
-	if r.flowControlV2 == nil {
-		return nil
+// SendStreamStats sets the stats for the replica send streams that belong to
+// the range controller. It is only populated on the leader. The stats struct
+// is provided by the caller and should be empty, it is then populated before
+// returning.
+//
+// NOTE: The send queue size and count are populated but have bounded
+// staleness, up to sendQueueStatRefreshInterval (5s). On each call,
+// IsStateReplicate and HasSendQueue is recomputed for each
+// ReplicaSendStreamStats.
+func (r *Replica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
+	if r.flowControlV2 != nil {
+		r.flowControlV2.SendStreamStats(stats)
 	}
-	return r.flowControlV2.SendStreamStats()
 }

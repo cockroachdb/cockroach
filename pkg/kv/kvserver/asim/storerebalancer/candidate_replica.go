@@ -110,9 +110,7 @@ func (sr *simulatorReplica) AdminTransferLease(
 	return nil
 }
 
-func (sr *simulatorReplica) SendStreamStats() rac2.RangeSendStreamStats {
-	return rac2.RangeSendStreamStats{}
-}
+func (sr *simulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {}
 
 // Replica returns the underlying kvserver replica, however when called from
 // the simulator it only returns nil.

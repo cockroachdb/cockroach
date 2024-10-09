@@ -629,7 +629,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
 	sendTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{})
 	evalWaitMetrics := rac2.NewEvalWaitMetrics()
+	rangeControllerMetrics := rac2.NewRangeControllerMetrics()
 	nodeRegistry.AddMetricStruct(evalWaitMetrics)
+	nodeRegistry.AddMetricStruct(rangeControllerMetrics)
 	nodeRegistry.AddMetricStruct(streamTokenCounterProvider.Metrics())
 
 	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
@@ -893,6 +895,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
 		KVFlowSendTokenWatcher:       sendTokenWatcher,
 		KVFlowEvalWaitMetrics:        evalWaitMetrics,
+		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

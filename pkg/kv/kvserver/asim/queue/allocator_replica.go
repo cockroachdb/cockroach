@@ -159,6 +159,5 @@ func (sr *SimulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 	return sr.usage
 }
 
-func (sr *SimulatorReplica) SendStreamStats() rac2.RangeSendStreamStats {
-	return nil
+func (sr *SimulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 }

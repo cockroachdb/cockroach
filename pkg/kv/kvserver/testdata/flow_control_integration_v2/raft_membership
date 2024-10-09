@@ -12,26 +12,29 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available    | 21 MiB   
-  kvflowcontrol.tokens.eval.elastic.deducted     | 3.0 MiB  
-  kvflowcontrol.tokens.eval.elastic.disconnected | 0 B      
-  kvflowcontrol.tokens.eval.elastic.returned     | 0 B      
-  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B      
-  kvflowcontrol.tokens.eval.regular.available    | 45 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted     | 3.0 MiB  
-  kvflowcontrol.tokens.eval.regular.disconnected | 0 B      
-  kvflowcontrol.tokens.eval.regular.returned     | 0 B      
-  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B      
-  kvflowcontrol.tokens.send.elastic.available    | 21 MiB   
-  kvflowcontrol.tokens.send.elastic.deducted     | 3.0 MiB  
-  kvflowcontrol.tokens.send.elastic.disconnected | 0 B      
-  kvflowcontrol.tokens.send.elastic.returned     | 0 B      
-  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B      
-  kvflowcontrol.tokens.send.regular.available    | 45 MiB   
-  kvflowcontrol.tokens.send.regular.deducted     | 3.0 MiB  
-  kvflowcontrol.tokens.send.regular.disconnected | 0 B      
-  kvflowcontrol.tokens.send.regular.returned     | 0 B      
-  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B      
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 45 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 45 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 
 
 -- (Adding a voting replica on n4.)
@@ -114,26 +117,29 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available    | 40 MiB   
-  kvflowcontrol.tokens.eval.elastic.deducted     | 11 MiB   
-  kvflowcontrol.tokens.eval.elastic.disconnected | 2.0 MiB  
-  kvflowcontrol.tokens.eval.elastic.returned     | 11 MiB   
-  kvflowcontrol.tokens.eval.elastic.unaccounted  | 0 B      
-  kvflowcontrol.tokens.eval.regular.available    | 80 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted     | 11 MiB   
-  kvflowcontrol.tokens.eval.regular.disconnected | 2.0 MiB  
-  kvflowcontrol.tokens.eval.regular.returned     | 11 MiB   
-  kvflowcontrol.tokens.eval.regular.unaccounted  | 0 B      
-  kvflowcontrol.tokens.send.elastic.available    | 40 MiB   
-  kvflowcontrol.tokens.send.elastic.deducted     | 11 MiB   
-  kvflowcontrol.tokens.send.elastic.disconnected | 2.0 MiB  
-  kvflowcontrol.tokens.send.elastic.returned     | 11 MiB   
-  kvflowcontrol.tokens.send.elastic.unaccounted  | 0 B      
-  kvflowcontrol.tokens.send.regular.available    | 80 MiB   
-  kvflowcontrol.tokens.send.regular.deducted     | 11 MiB   
-  kvflowcontrol.tokens.send.regular.disconnected | 2.0 MiB  
-  kvflowcontrol.tokens.send.regular.returned     | 11 MiB   
-  kvflowcontrol.tokens.send.regular.unaccounted  | 0 B      
+  kvflowcontrol.tokens.eval.elastic.available                       | 40 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 11 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 11 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 2.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 80 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 11 MiB   
+  kvflowcontrol.tokens.eval.regular.returned                        | 11 MiB   
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 2.0 MiB  
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 40 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 11 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 11 MiB   
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 2.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 80 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 11 MiB   
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 11 MiB   
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 2.0 MiB  
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 ----
 ----
 
