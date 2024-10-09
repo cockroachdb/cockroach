@@ -32,6 +32,8 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
+import { getNodesByRegionString } from "../databases";
+
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
 import { rawDatabaseMetadataToDatabaseRows } from "./utils";
@@ -89,15 +91,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     ),
     render: (db: DatabaseRow) => (
       <Skeleton loading={db.nodesByRegion.isLoading}>
-        <div>
-          {Object.entries(db.nodesByRegion?.data).map(([region, nodes]) => (
-            <RegionNodesLabel
-              key={region}
-              nodes={nodes}
-              region={{ label: region, code: region }}
-            />
-          ))}
-        </div>
+        <RegionNodesLabel nodesByRegion={db.nodesByRegion?.data} />
       </Skeleton>
     ),
   },
