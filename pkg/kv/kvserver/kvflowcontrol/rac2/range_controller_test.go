@@ -326,6 +326,7 @@ func (s *testingRCState) getOrInitRange(
 		}
 
 		init := RangeControllerInitState{
+			Term:          1,
 			ReplicaSet:    r.replicas(),
 			Leaseholder:   r.localReplicaID,
 			NextRaftIndex: r.nextRaftIndex,
@@ -1414,8 +1415,7 @@ func TestGetEntryFCState(t *testing.T) {
 				tokens: 100,
 			},
 			expectedFCState: entryFCState{
-				term:            1,
-				index:           1,
+				id:              entryID{index: 1, term: 1},
 				pri:             raftpb.LowPri,
 				usesFlowControl: true,
 				tokens:          100,
@@ -1432,8 +1432,7 @@ func TestGetEntryFCState(t *testing.T) {
 				tokens: 200,
 			},
 			expectedFCState: entryFCState{
-				term:            2,
-				index:           2,
+				id:              entryID{index: 2, term: 2},
 				pri:             raftpb.LowPri,
 				usesFlowControl: true,
 				tokens:          200,
@@ -1448,8 +1447,7 @@ func TestGetEntryFCState(t *testing.T) {
 				tokens: 300,
 			},
 			expectedFCState: entryFCState{
-				term:            3,
-				index:           3,
+				id:              entryID{index: 3, term: 3},
 				usesFlowControl: false,
 				tokens:          300,
 			},
@@ -1465,8 +1463,7 @@ func TestGetEntryFCState(t *testing.T) {
 				tokens: 400,
 			},
 			expectedFCState: entryFCState{
-				term:            4,
-				index:           4,
+				id:              entryID{index: 4, term: 4},
 				pri:             raftpb.NormalPri,
 				usesFlowControl: true,
 				tokens:          400,
@@ -1483,8 +1480,7 @@ func TestGetEntryFCState(t *testing.T) {
 				tokens: 500,
 			},
 			expectedFCState: entryFCState{
-				term:            5,
-				index:           5,
+				id:              entryID{index: 5, term: 5},
 				pri:             raftpb.AboveNormalPri,
 				usesFlowControl: true,
 				tokens:          500,
@@ -1642,8 +1638,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 		var entries []entryFCState
 		for i := 0; i < n; i++ {
 			entries = append(entries, entryFCState{
-				term:            startingTerm,
-				index:           startingIndex + uint64(i),
+				id:              entryID{index: startingIndex + uint64(i), term: startingTerm},
 				usesFlowControl: defaultUseFC,
 				tokens:          kvflowcontrol.Tokens((i + 1) * tokenMult),
 				pri:             defaultPri,
@@ -1860,8 +1855,8 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			name: "msgapps with entries before new entries",
 			raftEventAppendState: raftEventAppendState{
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 12, term: 1}, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{id: entryID{index: 13, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
 				},
 				rewoundNextRaftIndex: 12,
 			},
@@ -1890,8 +1885,8 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				},
 				nextRaftIndex: 12,
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 12, term: 1}, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{id: entryID{index: 13, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
 				},
 				sendingEntries:     makeEntryFCStates(t, 4),
 				recreateSendStream: false,
@@ -1902,9 +1897,9 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 			name: "msgapps with entries before new entries and send-queue after sending",
 			raftEventAppendState: raftEventAppendState{
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
-					{index: 14, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 12, term: 1}, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{id: entryID{index: 13, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 14, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
 				},
 				rewoundNextRaftIndex: 12,
 			},
@@ -1933,9 +1928,9 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 				},
 				nextRaftIndex: 12,
 				newEntries: []entryFCState{
-					{index: 12, term: 1, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
-					{index: 13, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
-					{index: 14, term: 1, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 12, term: 1}, usesFlowControl: true, tokens: 300, pri: raftpb.NormalPri},
+					{id: entryID{index: 13, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
+					{id: entryID{index: 14, term: 1}, usesFlowControl: true, tokens: 400, pri: raftpb.NormalPri},
 				},
 				sendingEntries:     makeEntryFCStates(t, 4),
 				recreateSendStream: false,
