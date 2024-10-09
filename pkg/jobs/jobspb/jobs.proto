@@ -254,7 +254,7 @@ message LogicalReplicationDetails {
   }
   DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
 
-  bool ignore_cdc_ignored_ttl_deletes = 8 [(gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
+  reserved 8;
 
   enum ApplyMode {
     Immediate = 0;
@@ -265,7 +265,14 @@ message LogicalReplicationDetails {
 
   string metrics_label = 10;
 
-  // Next ID: 11.
+  enum Discard {
+    DiscardNothing = 0;
+    DiscardCDCIgnoredTTLDeletes = 1;
+  }
+
+  Discard discard = 11;
+
+  // Next ID: 12.
 }
 
 message LogicalReplicationProgress {

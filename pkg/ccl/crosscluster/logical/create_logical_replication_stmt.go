@@ -124,6 +124,16 @@ func createLogicalReplicationStreamPlanHook(
 			mode = jobspb.LogicalReplicationDetails_Validated
 		}
 
+		discard := jobspb.LogicalReplicationDetails_DiscardNothing
+		if m, ok := options.Discard(); ok {
+			switch m {
+			case "ttl-deletes":
+				discard = jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
+			}
+		}
+
 		var (
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
@@ -262,16 +272,16 @@ func createLogicalReplicationStreamPlanHook(
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
-				StreamID:                   uint64(spec.StreamID),
-				SourceClusterID:            spec.SourceClusterID,
-				ReplicationStartTime:       replicationStartTime,
-				SourceClusterConnStr:       string(streamAddress),
-				ReplicationPairs:           repPairs,
-				TableNames:                 srcTableNames,
-				DefaultConflictResolution:  defaultConflictResolution,
-				IgnoreCDCIgnoredTTLDeletes: options.IgnoreCDCIgnoredTTLDeletes(),
-				Mode:                       mode,
-				MetricsLabel:               options.metricsLabel,
+				StreamID:                  uint64(spec.StreamID),
+				SourceClusterID:           spec.SourceClusterID,
+				ReplicationStartTime:      replicationStartTime,
+				SourceClusterConnStr:      string(streamAddress),
+				ReplicationPairs:          repPairs,
+				TableNames:                srcTableNames,
+				DefaultConflictResolution: defaultConflictResolution,
+				Discard:                   discard,
+				Mode:                      mode,
+				MetricsLabel:              options.metricsLabel,
 			},
 			Progress: progress,
 		}
@@ -313,9 +323,9 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.DefaultFunction,
 			stmt.Options.Mode,
 			stmt.Options.MetricsLabel,
+			stmt.Options.Discard,
 		},
 		exprutil.Bools{
-			stmt.Options.IgnoreCDCIgnoredTTLDeletes,
 			stmt.Options.SkipSchemaCheck,
 		},
 	}
@@ -333,10 +343,10 @@ type resolvedLogicalReplicationOptions struct {
 	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
-	userFunctions              map[string]int32
-	ignoreCDCIgnoredTTLDeletes bool
-	skipSchemaCheck            bool
-	metricsLabel               string
+	userFunctions   map[string]int32
+	discard         string
+	skipSchemaCheck bool
+	metricsLabel    string
 }
 
 func evalLogicalReplicationOptions(
@@ -418,8 +428,12 @@ func evalLogicalReplicationOptions(
 		}
 	}
 
-	if options.IgnoreCDCIgnoredTTLDeletes == tree.DBoolTrue {
-		r.ignoreCDCIgnoredTTLDeletes = true
+	if options.Discard != nil {
+		discard, err := eval.String(ctx, options.Discard)
+		if err != nil {
+			return nil, err
+		}
+		r.discard = discard
 	}
 	if options.SkipSchemaCheck == tree.DBoolTrue {
 		r.skipSchemaCheck = true
@@ -476,11 +490,11 @@ func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32
 	return r.userFunctions, true
 }
 
-func (r *resolvedLogicalReplicationOptions) IgnoreCDCIgnoredTTLDeletes() bool {
-	if r == nil {
-		return false
+func (r *resolvedLogicalReplicationOptions) Discard() (string, bool) {
+	if r == nil || r.discard == "" {
+		return "", false
 	}
-	return r.ignoreCDCIgnoredTTLDeletes
+	return r.discard, true
 }
 
 func (r *resolvedLogicalReplicationOptions) SkipSchemaCheck() bool {
