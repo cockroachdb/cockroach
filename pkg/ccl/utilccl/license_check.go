@@ -8,6 +8,7 @@ package utilccl
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,11 +43,36 @@ var enterpriseLicense = func() *settings.StringSetting {
 			if err != nil {
 				return err
 			}
+			if l == nil {
+				return nil
+			}
 			if l != nil && l.Type == licenseccl.License_Trial && trialLicenseUsageCount.Load() > 0 {
 				return errors.WithHint(errors.Newf("a trial license has previously been installed on this cluster"),
 					"Please install a non-trial license to continue")
 			}
-			return err
+
+			reportingSetting, ok := settings.LookupForLocalAccess("diagnostics.reporting.enabled", true /* forSystemTenant */)
+			if !ok {
+				log.Warning(context.Background(), "unable to find setting for diagnostic reporting")
+				return nil
+			}
+			reportingStr, err := reportingSetting.DecodeToString(reportingSetting.Encoded(sv))
+			if err != nil {
+				return err
+			}
+
+			reporting, err := strconv.ParseBool(reportingStr)
+			if err != nil {
+				return err
+			}
+
+			// if the cluster license is limited and the reporting value passed in is
+			// disabled, then do not allow diagnostics to be set.
+			isLimited := l != nil && l.Type == licenseccl.License_Free || l.Type == licenseccl.License_Trial
+			if !reporting && isLimited {
+				return errors.New("diagnostics.reporting.enabled must be true to use this license")
+			}
+			return nil
 		},
 	)
 	// Even though string settings are non-reportable by default, we
@@ -163,7 +189,7 @@ var GetLicenseTTL = func(
 	st *cluster.Settings,
 	ts timeutil.TimeSource,
 ) int64 {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		log.Errorf(ctx, "unable to find license: %v", err)
 		return 0
@@ -185,7 +211,7 @@ func checkEnterpriseEnabledAt(
 	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return err
 	}
@@ -216,10 +242,10 @@ func checkEnterpriseEnabledAt(
 	return nil
 }
 
-// getLicense fetches the license from the given settings, using Settings.Cache
+// GetLicense fetches the license from the given settings, using Settings.Cache
 // to cache the decoded license (if any). The returned license must not be
 // modified by the caller.
-func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
+func GetLicense(st *cluster.Settings) (*licenseccl.License, error) {
 	str := enterpriseLicense.Get(&st.SV)
 	if str == "" {
 		return nil, nil
@@ -237,7 +263,7 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 }
 
 func GetLicenseType(st *cluster.Settings) (string, error) {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
@@ -344,7 +370,7 @@ func RegisterCallbackOnLicenseChange(
 	// The isChange parameter indicates whether the license is actually being updated,
 	// as opposed to merely refreshing the current license.
 	refreshFunc := func(ctx context.Context, isChange bool) {
-		lic, err := getLicense(st)
+		lic, err := GetLicense(st)
 		if err != nil {
 			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
 			return

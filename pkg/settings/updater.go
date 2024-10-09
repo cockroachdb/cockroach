@@ -123,8 +123,7 @@ func (u updater) Set(ctx context.Context, key string, value EncodedValue) error 
 		if err != nil {
 			return err
 		}
-		setting.set(ctx, u.sv, b)
-		return nil
+		return setting.set(ctx, u.sv, b)
 	case numericSetting:
 		i, err := setting.DecodeValue(value.Value)
 		if err != nil {
