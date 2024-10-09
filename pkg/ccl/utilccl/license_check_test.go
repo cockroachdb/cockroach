@@ -386,7 +386,6 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable:            true,
 				SkipDisable:       true,
 				OverrideStartTime: &ts1,
 			},
