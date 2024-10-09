@@ -17,9 +17,14 @@ go_proto_library(
 
 go_library(
     name = "kvflowinspectpb",
+    srcs = ["kvflowinspect.go"],
     embed = [":kvflowinspectpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
 
 proto_library(
