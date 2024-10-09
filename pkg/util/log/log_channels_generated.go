@@ -6513,3 +6513,344 @@ func (loggerKvDistribution) VEventf(ctx context.Context, level Level, format str
 func (loggerKvDistribution) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_DISTRIBUTION, format, args...)
 }
+
+// loggerLiveness is the logger type for the LIVENESS channel.
+type loggerLiveness struct{}
+
+// Liveness is a logger that logs to the LIVENESS channel.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+var Liveness loggerLiveness
+
+// Liveness and loggerLiveness implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Liveness
+
+// Infof logs to the LIVENESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerLiveness) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.LIVENESS, format, args...)
+}
+
+// VInfof logs to the LIVENESS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerLiveness) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.LIVENESS, format, args...)
+	}
+}
+
+// Info logs to the LIVENESS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerLiveness) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.LIVENESS, msg)
+}
+
+// InfofDepth logs to the LIVENESS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerLiveness) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.LIVENESS, format, args...)
+}
+
+// Warningf logs to the LIVENESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerLiveness) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.LIVENESS, format, args...)
+}
+
+// VWarningf logs to the LIVENESS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerLiveness) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.LIVENESS, format, args...)
+	}
+}
+
+// Warning logs to the LIVENESS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerLiveness) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.LIVENESS, msg)
+}
+
+// WarningfDepth logs to the LIVENESS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerLiveness) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.LIVENESS, format, args...)
+}
+
+// Errorf logs to the LIVENESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerLiveness) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.LIVENESS, format, args...)
+}
+
+// VErrorf logs to the LIVENESS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerLiveness) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.LIVENESS, format, args...)
+	}
+}
+
+// Error logs to the LIVENESS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerLiveness) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.LIVENESS, msg)
+}
+
+// ErrorfDepth logs to the LIVENESS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerLiveness) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.LIVENESS, format, args...)
+}
+
+// Fatalf logs to the LIVENESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerLiveness) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.LIVENESS, format, args...)
+}
+
+// VFatalf logs to the LIVENESS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerLiveness) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.LIVENESS, format, args...)
+	}
+}
+
+// Fatal logs to the LIVENESS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerLiveness) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.LIVENESS, msg)
+}
+
+// FatalfDepth logs to the LIVENESS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerLiveness) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.LIVENESS, format, args...)
+}
+
+// Shout logs to channel LIVENESS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+func (loggerLiveness) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.LIVENESS, msg)
+}
+
+// Shoutf logs to channel LIVENESS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+func (loggerLiveness) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.LIVENESS, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+func (loggerLiveness) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.LIVENESS, "%s", msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+func (loggerLiveness) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.LIVENESS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `LIVENESS` channel is used for logging any node and store liveness events, such as
+// failed node liveness heartbeats and store liveness support withdrawals.
+// These can be due to disk stalls/slowness, poor connectivity, and are some
+// of the key indicators of cluster health problems.
+func (loggerLiveness) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.LIVENESS, format, args...)
+}
