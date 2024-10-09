@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -226,7 +227,7 @@ func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
 	}
 
 	fmt.Printf(
-		"tsdump datadog upload: sending payload containing %d series including %s\n",
+		"\033[G\033[Ktsdump datadog upload: uploading metrics containing %d series including %s",
 		len(data),
 		data[0].Metric,
 	)
@@ -253,8 +254,9 @@ func (d *datadogWriter) flush(data []DatadogSeries) error {
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 5
+	var req *http.Request
 	for retry := retry.Start(retryOpts); retry.Next(); {
-		req, err := http.NewRequest("POST", d.targetURL, &zipBuf)
+		req, err = http.NewRequest("POST", d.targetURL, &zipBuf)
 		if err != nil {
 			return err
 		}
@@ -300,13 +302,14 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	var wg sync.WaitGroup
 	ch := make(chan []DatadogSeries, 4000)
-
+	var errorsInDDUpload []string
 	for i := 0; i < 1000; i++ {
 		go func() {
 			for data := range ch {
 				err := d.emitDataDogMetrics(data)
 				if err != nil {
-					fmt.Printf("retries exhausted for datadog upload containing series %s with error %v", data[0].Metric, err)
+					errorsInDDUpload = append(errorsInDDUpload,
+						fmt.Sprintf("retries exhausted for datadog upload for series %s with error %v", data[0].Metric, err))
 					wg.Done()
 					return
 				}
@@ -334,8 +337,12 @@ func (d *datadogWriter) upload(fileName string) error {
 	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
 	dashboardLink := fmt.Sprintf(datadogDashboardURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID, fromUnixTimestamp, toUnixTimestamp)
 
-	fmt.Println("upload id:", d.uploadID)
+	if len(errorsInDDUpload) != 0 {
+		fmt.Printf("\n%d upload errors occurred:\n%s\n", len(errorsInDDUpload), strings.Join(errorsInDDUpload, "\n"))
+	}
+	fmt.Println("\nupload id:", d.uploadID)
 	fmt.Printf("datadog dashboard link: %s\n", dashboardLink)
+
 	close(ch)
 	return nil
 }
