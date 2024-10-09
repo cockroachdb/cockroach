@@ -131,7 +131,7 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 			}
 		}
 		paths = append(paths, path, pathSQL)
-		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "LICENSE.txt"))
+		paths = append(paths, filepath.Join(r.pkgDir, "LICENSE"))
 		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"))
 		ext := release.SharedLibraryExtensionFromPlatform(platform)
 		if platform != release.PlatformMacOSArm && platform != release.PlatformWindows {
