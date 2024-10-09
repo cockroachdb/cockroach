@@ -4350,7 +4350,7 @@ func newTestConfig(
 	if modifiers.testingDisableFortification {
 		storeLiveness = raftstoreliveness.Disabled{}
 	} else {
-		storeLiveness = raftstoreliveness.AlwaysLive{}
+		storeLiveness = raftstoreliveness.NewMockStoreLiveness()
 	}
 	return &Config{
 		ID:              id,
