@@ -220,6 +220,8 @@ const (
 	CrdbInternalPCRStreamCheckpointsTableID
 	CrdbInternalLDRProcessorTableID
 	CrdbInternalFullyQualifiedNamesViewID
+	CrdbInternalStoreLivenessSupportFrom
+	CrdbInternalStoreLivenessSupportFor
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

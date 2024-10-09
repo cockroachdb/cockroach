@@ -108,6 +108,8 @@ crdb_internal  statement_activity                           view   node  NULL  N
 crdb_internal  statement_statistics                         view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted               view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted_v22_2         view   node  NULL  NULL
+crdb_internal  store_liveness_support_for                   table  node  NULL  NULL
+crdb_internal  store_liveness_support_from                  table  node  NULL  NULL
 crdb_internal  super_regions                                table  node  NULL  NULL
 crdb_internal  system_jobs                                  table  node  NULL  NULL
 crdb_internal  table_columns                                table  node  NULL  NULL
