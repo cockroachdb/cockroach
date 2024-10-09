@@ -8,7 +8,6 @@ package utilccl
 import (
 	"context"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -16,14 +15,11 @@ import (
 	licenseserver "github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // trialLicenseExpiryTimestamp tracks the expiration timestamp of any trial licenses
@@ -82,102 +78,46 @@ var enterpriseLicense = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
-// enterpriseStatus determines whether the cluster is enabled
-// for enterprise features or if enterprise status depends on the license.
-var enterpriseStatus int32 = deferToLicense
-
-const (
-	deferToLicense    = 0
-	enterpriseEnabled = 1
-)
-
-// errEnterpriseRequired is returned by check() when the caller does
-// not request detailed errors.
-var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
-	"a valid enterprise license is required")
-
 // licenseCacheKey is used to cache licenses in cluster.Settings.Cache,
 // keeping the entries private.
 type licenseCacheKey string
 
-// TestingEnableEnterprise allows overriding the license check in tests.
+// TestingEnableEnterprise allows overriding the license check in tests. This
+// function was deprecated when the core license was removed. We no longer
+// distinguish between features enabled only for enterprise. All features are
+// enabled, and if a license policy is violated, we throttle connections.
+// Callers can safely remove any reference to this function.
 //
-// Prefer using ccl.TestingEnableEnterprise instead when that's possible without
-// introducing a dependency cycle. This function is useful for packages that
-// can't import `ccl` without introducing a dependency cycle. However, it panics
-// if package `ccl` (which, in turn, imports all the other ccl/... packages)
-// wasn't linked into the binary. In tests, generally the right thing to do is
-// to import `ccl` from a file in the `foo_test` pkg (for example,
-// main_test.go). Frequently, calling ccl.TestingEnableEnterprise in TestMain is
-// used to enable the license for the tests in a whole package, so this
-// utilccl.TestingEnableEnterprise is not frequently used. Even if this function
-// didn't panic, CheckEnterpriseEnabled will panic if not all the CCL code is
-// linked in, so callers of this function would likely just have the panic
-// kicked down the road to the check call.
+// Deprecated
 func TestingEnableEnterprise() func() {
-	if !AllCCLCodeImported {
-		panic("not all ccl code imported")
-	}
-	before := atomic.LoadInt32(&enterpriseStatus)
-	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
-	return func() {
-		atomic.StoreInt32(&enterpriseStatus, before)
-	}
+	return func() {}
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
+//
+// See description in TestingEnableEnterprise for rationale about deprecation.
+//
+// Deprecated
 func TestingDisableEnterprise() func() {
-	before := atomic.LoadInt32(&enterpriseStatus)
-	atomic.StoreInt32(&enterpriseStatus, deferToLicense)
-	return func() {
-		atomic.StoreInt32(&enterpriseStatus, before)
-	}
+	return func() {}
 }
 
-// ApplyTenantLicense verifies the COCKROACH_TENANT_LICENSE environment variable
-// and enables enterprise features for the process. This is a bit of a hack and
-// should be replaced once it is possible to read the host cluster's
-// enterprise.license setting.
-func ApplyTenantLicense() error {
-	license, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
-	if !ok {
-		return nil
-	}
-	if _, err := decode(license); err != nil {
-		return errors.Wrap(err, "COCKROACH_TENANT_LICENSE encoding is invalid")
-	}
-	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
+// CheckEnterpriseEnabled previously returned a non-nil error if the requested enterprise
+// feature was not enabled. It is now deprecated and always returns nil. Callers should
+// remove any usage of this function.
+//
+// Deprecated
+func CheckEnterpriseEnabled(*cluster.Settings, string) error {
 	return nil
 }
 
-// CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
-// feature is not enabled, including information or a link explaining how to
-// enable it.
+// IsEnterpriseEnabled previously returned whether the requested enterprise
+// feature was enabled. It is now deprecated and always returns true. Callers
+// should remove usage of this function.
 //
-// This should not be used in hot paths, since an unavailable feature will
-// result in a new error being instantiated for every call -- use
-// IsEnterpriseEnabled() instead.
-//
-// The ClusterID argument should be the tenant-specific logical
-// cluster ID.
-// `feature` is not used for the check itself; it is merely embedded
-// in the URL displayed in the error message.
-func CheckEnterpriseEnabled(st *cluster.Settings, feature string) error {
-	return checkEnterpriseEnabledAt(st, timeutil.Now(), feature, true /* withDetails */)
-}
-
-// IsEnterpriseEnabled returns whether the requested enterprise feature is
-// enabled. It is faster than CheckEnterpriseEnabled, since it does not return
-// details about why the feature is unavailable, and can therefore be used in
-// hot paths.
-//
-// The ClusterID argument should be the tenant-specific logical
-// cluster ID.
-// `feature` is not used for the check itself; it is merely embedded
-// in the URL displayed in the error message.
-func IsEnterpriseEnabled(st *cluster.Settings, feature string) bool {
-	return checkEnterpriseEnabledAt(
-		st, timeutil.Now(), feature, false /* withDetails */) == nil
+// Deprecated
+func IsEnterpriseEnabled(*cluster.Settings, string) bool {
+	return true
 }
 
 // GetLicenseTTL is a function which returns the TTL for the active cluster.
@@ -198,47 +138,6 @@ var GetLicenseTTL = func(
 	}
 	sec := timeutil.Unix(license.ValidUntilUnixSec, 0).Sub(ts.Now()).Seconds()
 	return int64(sec)
-}
-
-// AllCCLCodeImported is set by the `ccl` pkg in an init(), thereby
-// demonstrating that we're in a binary that has all off the CCL code linked in.
-var AllCCLCodeImported = false
-
-func checkEnterpriseEnabledAt(
-	st *cluster.Settings, at time.Time, feature string, withDetails bool,
-) error {
-	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
-		return nil
-	}
-	license, err := GetLicense(st)
-	if err != nil {
-		return err
-	}
-	org := sql.ClusterOrganization.Get(&st.SV)
-	if err := check(license, at, org, feature, withDetails); err != nil {
-		return err
-	}
-
-	// Make sure all CCL code was imported.
-	if !AllCCLCodeImported {
-		// In production, this shouldn't happen: a binary that has `utilccl` linked
-		// in will also have `ccl` linked in - which imports all the other ccl/...
-		// packages and sets AllCCLCodeImported. However, in tests, one can write a
-		// test that imports `utilccl`, without the broader `ccl`. In that case, we
-		// panic here, forcing the test to link `ccl` in the binary (for example,
-		// through importing `ccl` in the `foo_test` pkg, perhaps in
-		// `main_test.go`). Declaring that "enterprise is enabled" when some CCL
-		// functionality is not linked in would be very confusing - the server code
-		// can try to use CCL features that are not available.
-		//
-		// Since this function cannot be used if `ccl` was not imported, the
-		// function should arguably live in the `ccl` pkg. However, `ccl` imports
-		// everything, and this function must be used from different packages that,
-		// thus, cannot depend on `ccl`. AllCCLCodeImported is used to break the
-		// dependency cycle.
-		panic("not all ccl imported, but license checked")
-	}
-	return nil
 }
 
 // GetLicense fetches the license from the given settings, using Settings.Cache
@@ -291,59 +190,6 @@ func decode(s string) (*licenseccl.License, error) {
 		return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}
 	return lic, nil
-}
-
-// check returns an error if the license is empty or not currently valid. If
-// withDetails is false, a generic error message is returned for performance.
-func check(l *licenseccl.License, at time.Time, org, feature string, withDetails bool) error {
-	if l == nil {
-		if !withDetails {
-			return errEnterpriseRequired
-		}
-		// TODO(dt): link to some stable URL that then redirects to a helpful page
-		// that explains what to do here.
-		link := "https://cockroachlabs.com/pricing"
-		return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-			"use of %s requires an enterprise license. "+
-				"see %s for details on how to enable enterprise features",
-			errors.Safe(feature),
-			link,
-		)
-	}
-
-	// We extend some grace period to enterprise license holders rather than
-	// suddenly throwing errors at them.
-	if l.ValidUntilUnixSec > 0 && l.Type != licenseccl.License_Enterprise {
-		if expiration := timeutil.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
-			if !withDetails {
-				return errEnterpriseRequired
-			}
-			licensePrefix := redact.SafeString("")
-			switch l.Type {
-			case licenseccl.License_NonCommercial:
-				licensePrefix = "non-commercial "
-			case licenseccl.License_Evaluation:
-				licensePrefix = "evaluation "
-			}
-			return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-				"Use of %s requires an enterprise license. Your %slicense expired on %s. If you're "+
-					"interested in getting a new license, please contact subscriptions@cockroachlabs.com "+
-					"and we can help you out.",
-				errors.Safe(feature),
-				licensePrefix,
-				expiration.Format("January 2, 2006"),
-			)
-		}
-	}
-
-	if strings.EqualFold(l.OrganizationName, org) {
-		return nil
-	}
-	if !withDetails {
-		return errEnterpriseRequired
-	}
-	return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-		"license valid only for %q", l.OrganizationName)
 }
 
 // RegisterCallbackOnLicenseChange will register a callback to update the

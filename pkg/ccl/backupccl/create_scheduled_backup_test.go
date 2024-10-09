@@ -280,57 +280,57 @@ CREATE TABLE other_db.t1(a int);
 		{
 			name:               "fully-qualified-table-name",
 			query:              "CREATE SCHEDULE FOR BACKUP mydb.public.t1 INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "schema-qualified-table-name",
 			query:              "CREATE SCHEDULE FOR BACKUP public.t1 INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "uds-qualified-table-name",
 			query:              "CREATE SCHEDULE FOR BACKUP myschema.mytbl INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.myschema.mytbl INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.myschema.mytbl INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "db-qualified-table-name",
 			query:              "CREATE SCHEDULE FOR BACKUP mydb.t1 INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "unqualified-table-name",
 			query:              "CREATE SCHEDULE FOR BACKUP t1 INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1 INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "unqualified-table-name-with-symbols",
 			query:              `CREATE SCHEDULE FOR BACKUP "my.tbl" INTO $1 RECURRING '@hourly'`,
-			expectedBackupStmt: `BACKUP TABLE mydb.public."my.tbl" INTO '%s' WITH OPTIONS (detached)`,
+			expectedBackupStmt: `BACKUP TABLE mydb.public."my.tbl" INTO %s'%s' WITH OPTIONS (detached)`,
 		},
 		{
 			name:               "table-names-from-different-db",
 			query:              "CREATE SCHEDULE FOR BACKUP t1, other_db.t1 INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.t1, other_db.public.t1 INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.t1, other_db.public.t1 INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "unqualified-all-tables-selectors",
 			query:              "CREATE SCHEDULE FOR BACKUP * INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.* INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.* INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "all-tables-selectors-with-user-defined-schema",
 			query:              "CREATE SCHEDULE FOR BACKUP myschema.* INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.myschema.* INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.myschema.* INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "partially-qualified-all-tables-selectors-with-different-db",
 			query:              "CREATE SCHEDULE FOR BACKUP other_db.* INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE other_db.public.* INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE other_db.public.* INTO %s'%s' WITH OPTIONS (detached)",
 		},
 		{
 			name:               "fully-qualified-all-tables-selectors-with-multiple-dbs",
 			query:              "CREATE SCHEDULE FOR BACKUP *, other_db.* INTO $1 RECURRING '@hourly'",
-			expectedBackupStmt: "BACKUP TABLE mydb.public.*, other_db.public.* INTO '%s' WITH OPTIONS (detached)",
+			expectedBackupStmt: "BACKUP TABLE mydb.public.*, other_db.public.* INTO %s'%s' WITH OPTIONS (detached)",
 		},
 	}
 
@@ -343,9 +343,13 @@ CREATE TABLE other_db.t1(a int);
 			schedules, err := th.createBackupSchedule(t, tc.query, destination)
 			require.NoError(t, err)
 
-			for _, s := range schedules {
+			for i, s := range schedules {
+				var latest string
+				if i == 0 {
+					latest = "LATEST IN "
+				}
 				stmt := getScheduledBackupStatement(t, s.ExecutionArgs())
-				require.Equal(t, fmt.Sprintf(tc.expectedBackupStmt, destination), stmt)
+				require.Equal(t, fmt.Sprintf(tc.expectedBackupStmt, latest, destination), stmt, "schedule %d", i)
 			}
 		})
 	}
@@ -387,10 +391,20 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH OPTIONS (detached)",
-					shownStmt:  "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (detached)",
-					period:     time.Hour,
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH OPTIONS (detached)",
+					shownStmt:                     "BACKUP INTO LATEST IN 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (detached)",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
+				},
+				{
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH OPTIONS (detached)",
+					shownStmt:                     "BACKUP INTO 'nodelocal://1/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (detached)",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -400,9 +414,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
-					period:     time.Hour,
+					nameRe:                        "my-backup",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH OPTIONS (detached)",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
+				},
+				{
+					nameRe:                        "my-backup",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -564,24 +587,6 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					chainProtectedTimestampRecord: true,
 				},
 			},
-		},
-		{
-			name:   "enterprise-license-required-for-incremental",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' RECURRING '@hourly' FULL BACKUP '@weekly'",
-			user:   freeUser,
-			errMsg: "use of BACKUP INTO LATEST requires an enterprise license",
-		},
-		{
-			name:   "enterprise-license-required-for-revision-history",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history RECURRING '@hourly'",
-			user:   freeUser,
-			errMsg: "use of BACKUP with revision_history requires an enterprise license",
-		},
-		{
-			name:   "enterprise-license-required-for-encryption",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup'  WITH encryption_passphrase = 'secret' RECURRING '@hourly'",
-			user:   freeUser,
-			errMsg: "use of BACKUP with encryption requires an enterprise license",
 		},
 		{
 			name:      "full-cluster-with-name-arg",

@@ -579,7 +579,7 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	db.Exec(t, "CREATE TENANT t1")
-	db.Exec(t, "BACKUP TENANT 3 TO 'nodelocal://1/t'")
+	db.Exec(t, "BACKUP TENANT 3 INTO 'nodelocal://1/t'")
 
 	afterBackup := srv.Clock().Now()
 	enforcedGC.Lock()
@@ -589,7 +589,7 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	u, cleanupURLA := sqlutils.PGUrl(t, srv.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLA()
 
-	db.Exec(t, "RESTORE TENANT 3 FROM 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
+	db.Exec(t, "RESTORE TENANT 3 FROM LATEST IN 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
 	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())
 	srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 

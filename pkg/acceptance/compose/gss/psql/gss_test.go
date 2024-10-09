@@ -74,12 +74,12 @@ func TestGSS(t *testing.T) {
 		{
 			conf:   `host all all all gss include_realm=0`,
 			user:   "tester",
-			gssErr: `GSS authentication requires an enterprise license`,
+			gssErr: "",
 		},
 		{
 			conf:   `host all tester all gss include_realm=0`,
 			user:   "tester",
-			gssErr: `GSS authentication requires an enterprise license`,
+			gssErr: "",
 		},
 		{
 			conf:   `host all nope all gss include_realm=0`,
@@ -89,7 +89,7 @@ func TestGSS(t *testing.T) {
 		{
 			conf:   `host all all all gss include_realm=0 krb_realm=MY.EX`,
 			user:   "tester",
-			gssErr: `GSS authentication requires an enterprise license`,
+			gssErr: "",
 		},
 		{
 			conf:   `host all all all gss include_realm=0 krb_realm=NOPE.EX`,
@@ -99,7 +99,7 @@ func TestGSS(t *testing.T) {
 		{
 			conf:   `host all all all gss include_realm=0 krb_realm=NOPE.EX krb_realm=MY.EX`,
 			user:   "tester",
-			gssErr: `GSS authentication requires an enterprise license`,
+			gssErr: "",
 		},
 		// Validate that we can use the "map" option to strip the realm
 		// data. Note that the system-identity value will have been
@@ -108,7 +108,7 @@ func TestGSS(t *testing.T) {
 			conf:     `host all all all gss map=demo`,
 			identMap: `demo /^(.*)@my.ex$ \1`,
 			user:     "tester",
-			gssErr:   `GSS authentication requires an enterprise license`,
+			gssErr:   "",
 		},
 		// Verify case-sensitivity.
 		{
@@ -129,7 +129,7 @@ func TestGSS(t *testing.T) {
 			conf:     `host all all all gss include_realm=0 map=demo`,
 			identMap: `demo tester remapped`,
 			user:     "remapped",
-			gssErr:   `GSS authentication requires an enterprise license`,
+			gssErr:   "",
 		},
 	}
 	for i, tc := range tests {
@@ -179,7 +179,7 @@ func TestGSS(t *testing.T) {
 				if !IsError(err, tc.gssErr) {
 					t.Errorf("expected err %v, got %v", tc.gssErr, err)
 				}
-				if tc.gsErr == "" {
+				if tc.gssErr == "" {
 					if !strings.Contains(string(out), "gss") {
 						t.Errorf("expected authentication_method=gss, got %s", out)
 					}
@@ -214,7 +214,7 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		fmt.Println(i, time.Since(start))
 		out, err := exec.Command("psql", "-c", "SELECT 1", "-U", user).CombinedOutput()
-		if IsError(err, "GSS authentication requires an enterprise license") {
+		if err != nil {
 			t.Log(string(out))
 			t.Fatal(err)
 		}
