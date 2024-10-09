@@ -555,6 +555,7 @@ type rangeController struct {
 		// to call into the replicaSendStreams that have asked to be scheduled.
 		replicas map[roachpb.ReplicaID]struct{}
 	}
+	entryFCStateScratch []entryFCState
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -623,7 +624,8 @@ func (rc *rangeController) WaitForEval(
 	if wc == admissionpb.ElasticWorkClass {
 		waitForAllReplicateHandles = true
 	}
-	var handles []tokenWaitingHandleInfo
+	var handlesScratch [5]tokenWaitingHandleInfo
+	handles := handlesScratch[:]
 	var scratch []reflect.SelectCase
 
 	rc.opts.EvalWaitMetrics.OnWaiting(wc)
@@ -926,7 +928,11 @@ func constructRaftEventForReplica(
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
 	// Compute the flow control state for each new entry. We do this once
 	// here, instead of decoding each entry multiple times for all replicas.
-	newEntries := make([]entryFCState, len(e.Entries))
+	numEntries := len(e.Entries)
+	if cap(rc.entryFCStateScratch) < numEntries {
+		rc.entryFCStateScratch = make([]entryFCState, 0, 2*numEntries)
+	}
+	newEntries := rc.entryFCStateScratch[:numEntries:numEntries]
 	// needsTokens tracks which classes need tokens for the new entries. This
 	// informs first-pass decision-making on replicas that don't have
 	// send-queues, in MsgAppPull mode, and therefore can potentially send the
@@ -2222,6 +2228,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				event.sendingEntries[0].index, rss.mu.sendQueue.indexToSend))
 		}
 		rss.mu.sendQueue.indexToSend = event.sendingEntries[n-1].index + 1
+		var sendTokensToDeduct [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 		for _, entry := range event.sendingEntries {
 			if !entry.usesFlowControl {
 				continue
@@ -2251,12 +2258,17 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] -= tokens
 				rss.mu.sendQueue.preciseSizeSum -= tokens
 			}
-			flag := AdjNormal
-			if directive.preventSendQNoForceFlush {
-				flag = AdjPreventSendQueue
-			}
-			rss.parent.sendTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), tokens, flag)
 			rss.mu.tracker.Track(ctx, entry.term, entry.index, pri, tokens)
+			sendTokensToDeduct[WorkClassFromRaftPriority(pri)] += tokens
+		}
+		flag := AdjNormal
+		if directive.preventSendQNoForceFlush {
+			flag = AdjPreventSendQueue
+		}
+		for wc, tokens := range sendTokensToDeduct {
+			if tokens != 0 {
+				rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, flag)
+			}
 		}
 		if directive.preventSendQNoForceFlush {
 			rss.parent.parent.opts.RangeControllerMetrics.SendQueue.PreventionCount.Inc(1)
@@ -2268,6 +2280,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				event.newEntries[0].index, rss.mu.sendQueue.nextRaftIndex))
 		}
 		rss.mu.sendQueue.nextRaftIndex = event.newEntries[n-1].index + 1
+		var evalTokensToDeduct [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 		for _, entry := range event.newEntries {
 			if !entry.usesFlowControl {
 				continue
@@ -2303,8 +2316,13 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] += tokens
 			}
 			wc := WorkClassFromRaftPriority(pri)
-			rss.parent.evalTokenCounter.Deduct(ctx, wc, tokens, AdjNormal)
+			evalTokensToDeduct[wc] += tokens
 			rss.mu.eval.tokensDeducted[wc] += tokens
+		}
+		for wc, tokens := range evalTokensToDeduct {
+			if tokens != 0 {
+				rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, AdjNormal)
+			}
 		}
 	}
 
