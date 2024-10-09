@@ -1323,7 +1323,11 @@ func TestRangeController(t *testing.T) {
 					var sizeCount, sizeBytes int64
 					for _, rcState := range state.ranges {
 						stats := RangeSendStreamStats{}
-						rcState.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+						func() {
+							rcState.rc.mu.Lock()
+							defer rcState.rc.mu.Unlock()
+							rcState.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+						}()
 						rcState.rc.SendStreamStats(&stats)
 						count, bytes := stats.SumSendQueues()
 						sizeCount += count
@@ -1367,7 +1371,11 @@ func TestRangeController(t *testing.T) {
 
 				r := state.ranges[roachpb.RangeID(rangeID)]
 				if refresh {
-					r.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+					func() {
+						r.rc.mu.Lock()
+						defer r.rc.mu.Unlock()
+						r.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
+					}()
 				}
 				stats := RangeSendStreamStats{}
 				r.rc.SendStreamStats(&stats)
