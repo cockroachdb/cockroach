@@ -646,6 +646,8 @@ statement_activity                           NULL
 statement_statistics                         NULL
 statement_statistics_persisted               NULL
 statement_statistics_persisted_v22_2         NULL
+store_liveness_support_for                   NULL
+store_liveness_support_from                  NULL
 super_regions                                NULL
 system_jobs                                  NULL
 table_columns                                NULL
