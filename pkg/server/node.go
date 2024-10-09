@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -409,6 +410,9 @@ type Node struct {
 		encodedVersion string
 		updateCh       chan struct{}
 	}
+
+	// licenseEnforcer is used to enforce license policies on the cluster
+	licenseEnforcer *license.Enforcer
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -556,6 +560,7 @@ func NewNode(
 	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
+	licenseEnforcer *license.Enforcer,
 ) *Node {
 	n := &Node{
 		storeCfg:              cfg,
@@ -573,6 +578,7 @@ func NewNode(
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
+		licenseEnforcer:       licenseEnforcer,
 	}
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -2271,6 +2277,9 @@ func (n *Node) TenantSettings(
 			// between the protobufs.
 			ServiceMode: uint32(tInfo.ServiceMode),
 			DataState:   uint32(tInfo.DataState),
+			// Flow the cluster init grace period end ts. Secondary tenant cannot
+			// access the KV location where this is stored.
+			ClusterInitGracePeriodEndTS: n.licenseEnforcer.GetClusterInitGracePeriodEndTS().Unix(),
 		})
 	}
 
