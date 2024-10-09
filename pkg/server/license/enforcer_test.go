@@ -161,10 +161,8 @@ func TestClusterInitGracePeriod_DelayedTenantConnector(t *testing.T) {
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				LicenseTestingKnobs: license.TestingKnobs{
-					OverrideStartTime: &ts0,
-				},
+			LicenseTestingKnobs: &license.TestingKnobs{
+				OverrideStartTime: &ts0,
 			},
 		},
 	})

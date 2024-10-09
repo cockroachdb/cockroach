@@ -101,6 +101,29 @@ type Reporter struct {
 	LastSuccessfulTelemetryPing atomic.Int64
 }
 
+// shouldReportDiagnostics determines using the diagnostics report setting in
+// addition to the license value to determine whether to send telemetry data.
+// If the reporting value is true, or the cluster is on a Trial or Free license
+// it returns true.
+func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
+	if logcrash.DiagnosticsReportingEnabled.Get(&st.SV) {
+		return true
+	}
+
+	license, err := utilccl.GetLicense(st)
+	// If we cannot fetch the license, we do not send the report.
+	if err != nil {
+		log.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
+		return false
+	}
+	if license == nil {
+		return false
+	}
+	isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
+
+	return isLimited
+}
+
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
@@ -117,7 +140,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 			// TODO(dt): we should allow tuning the reset and report intervals separately.
 			// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 			// stat reset periods for reporting.
-			if logcrash.DiagnosticsReportingEnabled.Get(&r.Settings.SV) {
+			if shouldReportDiagnostics(ctx, r.Settings) {
 				r.ReportDiagnostics(ctx)
 			}
 
