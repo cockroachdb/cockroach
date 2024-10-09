@@ -6,10 +6,10 @@
 package tablemetadatacache
 
 import (
-	"errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
 )
 
 const defaultDataValidDuration = time.Minute * 20

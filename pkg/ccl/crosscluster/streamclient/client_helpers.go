@@ -11,9 +11,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
 	"github.com/jackc/pgx/v4"
-	"github.com/pkg/errors"
 )
 
 func subscribeInternal(

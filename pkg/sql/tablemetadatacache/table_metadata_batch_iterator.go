@@ -7,13 +7,13 @@ package tablemetadatacache
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 const (

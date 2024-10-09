@@ -18,13 +18,13 @@
 package rafttest
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func (env *InteractionEnv) handleProcessAppendThread(t *testing.T, d datadriven.TestData) error {
