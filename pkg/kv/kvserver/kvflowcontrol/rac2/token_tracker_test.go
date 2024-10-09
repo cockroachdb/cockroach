@@ -28,7 +28,7 @@ func formatTrackerState(t *Tracker) string {
 			result.WriteString(fmt.Sprintf("%v:\n", raftpb.Priority(pri)))
 			for _, tr := range tracked {
 				result.WriteString(fmt.Sprintf("  term=%d index=%-2d tokens=%-3d\n",
-					tr.term, tr.index, tr.tokens))
+					tr.id.term, tr.id.index, tr.tokens))
 			}
 		}
 	}
@@ -52,7 +52,6 @@ func TestTokenTracker(t *testing.T) {
 
 	ctx := context.Background()
 	tracker := &Tracker{}
-	tracker.Init(kvflowcontrol.Stream{})
 
 	// Used to marshal the output of the Inspect() method into a human-readable
 	// formatted JSON string. See case "inspect" below.
@@ -63,6 +62,12 @@ func TestTokenTracker(t *testing.T) {
 	}
 	datadriven.RunTest(t, "testdata/token_tracker", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
+		case "init":
+			var term uint64
+			d.ScanArgs(t, "term", &term)
+			tracker.Init(term, kvflowcontrol.Stream{})
+			return "ok"
+
 		case "track":
 			var buf strings.Builder
 			for _, line := range strings.Split(d.Input, "\n") {
@@ -93,18 +98,18 @@ func TestTokenTracker(t *testing.T) {
 				parts[3] = strings.TrimPrefix(parts[3], "pri=")
 				pri := AdmissionToRaftPriority(parsePriority(t, parts[3]))
 
-				tracker.Track(ctx, term, index, pri, kvflowcontrol.Tokens(tokens))
+				tracker.Track(ctx, entryID{index: index, term: term}, pri,
+					kvflowcontrol.Tokens(tokens))
 				buf.WriteString(fmt.Sprintf("tracked: term=%d index=%-2d tokens=%-3d pri=%v\n",
 					term, index, tokens, pri))
 			}
 			return buf.String()
 
 		case "untrack":
-			var term uint64
-			d.ScanArgs(t, "term", &term)
+			var av AdmittedVector
+			d.ScanArgs(t, "term", &av.Term)
 			var evalTokensGEIndex uint64
 			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
-			var admitted [raftpb.NumPriorities]uint64
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -117,9 +122,9 @@ func TestTokenTracker(t *testing.T) {
 				pri := AdmissionToRaftPriority(parsePriority(t, priStr))
 				index, err := strconv.ParseUint(indexStr, 10, 64)
 				require.NoError(t, err)
-				admitted[pri] = index
+				av.Admitted[pri] = index
 			}
-			returnedSend, returnedEval := tracker.Untrack(term, admitted, evalTokensGEIndex)
+			returnedSend, returnedEval := tracker.Untrack(av, evalTokensGEIndex)
 			return fmt.Sprintf("%s%s", formatUntracked("send", returnedSend),
 				formatUntracked("eval", returnedEval))
 

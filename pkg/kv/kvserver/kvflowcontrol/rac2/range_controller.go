@@ -503,6 +503,9 @@ type RangeControllerOptions struct {
 
 // RangeControllerInitState is the initial state at the time of creation.
 type RangeControllerInitState struct {
+	// Term is the raft term of the leader who runs this RangeController. It does
+	// not change during the lifetime of the RangeController.
+	Term uint64
 	// Must include RangeControllerOptions.ReplicaID.
 	ReplicaSet ReplicaSet
 	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
@@ -515,7 +518,10 @@ type RangeControllerInitState struct {
 
 // rangeController is tied to a single leader term.
 type rangeController struct {
-	opts       RangeControllerOptions
+	opts RangeControllerOptions
+	// term is the raft term of the leader who runs this range controller. The
+	// term does not change during the lifetime of the range controller.
+	term       uint64
 	replicaSet ReplicaSet
 	// leaseholder can be NoReplicaID or not be in ReplicaSet, i.e., it is
 	// eventually consistent with the set of replicas.
@@ -596,6 +602,7 @@ func NewRangeController(
 	}
 	rc := &rangeController{
 		opts:          o,
+		term:          init.Term,
 		leaseholder:   init.Leaseholder,
 		nextRaftIndex: init.NextRaftIndex,
 		replicaMap:    make(map[roachpb.ReplicaID]*replicaState),
@@ -791,8 +798,8 @@ func constructRaftEventForReplica(
 ) (_ raftEventForReplica, scratch []entryFCState) {
 	firstNewEntryIndex, lastNewEntryIndex := uint64(math.MaxUint64), uint64(math.MaxUint64)
 	if n := len(raftEventAppendState.newEntries); n > 0 {
-		firstNewEntryIndex = raftEventAppendState.newEntries[0].index
-		lastNewEntryIndex = raftEventAppendState.newEntries[n-1].index + 1
+		firstNewEntryIndex = raftEventAppendState.newEntries[0].id.index
+		lastNewEntryIndex = raftEventAppendState.newEntries[n-1].id.index + 1
 		// The rewoundNextRaftIndex + newEntries should never lag behind Next.
 		if latestReplicaStateInfo.Next > lastNewEntryIndex {
 			panic(errors.AssertionFailedf("unexpected next=%v > last_new_entry_index=%v",
@@ -1776,8 +1783,8 @@ func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
-	returnedSend, returnedEval := rss.mu.tracker.Untrack(
-		av.Term, av.Admitted, rss.mu.nextRaftIndexInitial)
+	returnedSend, returnedEval := rss.mu.tracker.Untrack(av,
+		rss.mu.nextRaftIndexInitial)
 	rss.returnSendTokens(ctx, returnedSend, false /* disconnect */)
 	rss.returnEvalTokensLocked(ctx, returnedEval)
 }
@@ -1812,7 +1819,7 @@ func (rs *replicaState) createReplicaSendStream(
 		parent: rs,
 	}
 	rss := rs.sendStream
-	rss.mu.tracker.Init(rs.stream)
+	rss.mu.tracker.Init(rs.parent.term, rs.stream)
 	rss.mu.closed = false
 	rss.changeConnectedStateLocked(replicate, rs.parent.opts.Clock.PhysicalTime())
 	rss.mu.mode = mode
@@ -1848,7 +1855,7 @@ func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ b
 }
 
 type entryFCState struct {
-	term, index     uint64
+	id              entryID
 	usesFlowControl bool
 	tokens          kvflowcontrol.Tokens
 	pri             raftpb.Priority
@@ -1871,8 +1878,7 @@ func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCStat
 	}
 
 	return entryFCState{
-		index:           entry.Index,
-		term:            entry.Term,
+		id:              entryID{index: entry.Index, term: entry.Term},
 		usesFlowControl: enc.UsesAdmissionControl(),
 		tokens:          kvflowcontrol.Tokens(len(entry.Data)),
 		pri:             pri,
@@ -2217,18 +2223,18 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 	// Common behavior for updating state using sendingEntries and newEntries
 	// for MsgAppPush and MsgAppPull.
 	if n := len(event.sendingEntries); n > 0 {
-		if event.sendingEntries[0].index != rss.mu.sendQueue.indexToSend {
+		if event.sendingEntries[0].id.index != rss.mu.sendQueue.indexToSend {
 			panic(errors.AssertionFailedf("first send entry %d does not match indexToSend %d",
-				event.sendingEntries[0].index, rss.mu.sendQueue.indexToSend))
+				event.sendingEntries[0].id.index, rss.mu.sendQueue.indexToSend))
 		}
-		rss.mu.sendQueue.indexToSend = event.sendingEntries[n-1].index + 1
+		rss.mu.sendQueue.indexToSend = event.sendingEntries[n-1].id.index + 1
 		for _, entry := range event.sendingEntries {
 			if !entry.usesFlowControl {
 				continue
 			}
 			var pri raftpb.Priority
 			inSendQueue := false
-			if entry.index >= rss.mu.sendQueue.nextRaftIndex {
+			if entry.id.index >= rss.mu.sendQueue.nextRaftIndex {
 				// Was never in the send-queue.
 				pri = entry.pri
 			} else {
@@ -2246,7 +2252,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 					tokens = fn(tokens)
 				}
 			}
-			if inSendQueue && entry.index >= rss.mu.nextRaftIndexInitial {
+			if inSendQueue && entry.id.index >= rss.mu.nextRaftIndexInitial {
 				// Was in send-queue and had eval tokens deducted for it.
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] -= tokens
 				rss.mu.sendQueue.preciseSizeSum -= tokens
@@ -2256,25 +2262,25 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				flag = AdjPreventSendQueue
 			}
 			rss.parent.sendTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), tokens, flag)
-			rss.mu.tracker.Track(ctx, entry.term, entry.index, pri, tokens)
+			rss.mu.tracker.Track(ctx, entry.id, pri, tokens)
 		}
 		if directive.preventSendQNoForceFlush {
 			rss.parent.parent.opts.RangeControllerMetrics.SendQueue.PreventionCount.Inc(1)
 		}
 	}
 	if n := len(event.newEntries); n > 0 {
-		if event.newEntries[0].index != rss.mu.sendQueue.nextRaftIndex {
+		if event.newEntries[0].id.index != rss.mu.sendQueue.nextRaftIndex {
 			panic(errors.AssertionFailedf("append %d does not match nextRaftIndex %d",
-				event.newEntries[0].index, rss.mu.sendQueue.nextRaftIndex))
+				event.newEntries[0].id.index, rss.mu.sendQueue.nextRaftIndex))
 		}
-		rss.mu.sendQueue.nextRaftIndex = event.newEntries[n-1].index + 1
+		rss.mu.sendQueue.nextRaftIndex = event.newEntries[n-1].id.index + 1
 		for _, entry := range event.newEntries {
 			if !entry.usesFlowControl {
 				continue
 			}
 			var pri raftpb.Priority
 			inSendQueue := false
-			if entry.index >= rss.mu.sendQueue.indexToSend {
+			if entry.id.index >= rss.mu.sendQueue.indexToSend {
 				// Being added to the send-queue.
 				inSendQueue = true
 				if event.mode == MsgAppPush {
@@ -2298,7 +2304,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 					tokens = fn(tokens)
 				}
 			}
-			if inSendQueue && entry.index >= rss.mu.nextRaftIndexInitial {
+			if inSendQueue && entry.id.index >= rss.mu.nextRaftIndexInitial {
 				// Is in send-queue and will have eval tokens deducted for it.
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] += tokens
 			}
@@ -2312,7 +2318,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 		// NB: this will not do IO since everything here is in the unstable log
 		// (see raft.LogSnapshot.unstable).
 		slice, err := event.logSnapshot.LogSlice(
-			event.sendingEntries[0].index, event.sendingEntries[n-1].index+1, math.MaxInt64)
+			event.sendingEntries[0].id.index, event.sendingEntries[n-1].id.index+1, math.MaxInt64)
 		if err != nil {
 			return false, err
 		}
@@ -2395,17 +2401,17 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	var tokensNeeded kvflowcontrol.Tokens
 	for _, entry := range msg.Entries {
 		entryState := getEntryFCStateOrFatal(ctx, entry)
-		if entryState.index != rss.mu.sendQueue.indexToSend {
+		if entryState.id.index != rss.mu.sendQueue.indexToSend {
 			panic(errors.AssertionFailedf("index %d != indexToSend %d",
-				entryState.index, rss.mu.sendQueue.indexToSend))
+				entryState.id.index, rss.mu.sendQueue.indexToSend))
 		}
-		if entryState.index >= rss.mu.sendQueue.nextRaftIndex {
-			panic(errors.AssertionFailedf("index %d >= nextRaftIndex %d", entryState.index,
+		if entryState.id.index >= rss.mu.sendQueue.nextRaftIndex {
+			panic(errors.AssertionFailedf("index %d >= nextRaftIndex %d", entryState.id.index,
 				rss.mu.sendQueue.nextRaftIndex))
 		}
 		rss.mu.sendQueue.indexToSend++
 		if entryState.usesFlowControl {
-			if entryState.index >= rss.mu.nextRaftIndexInitial {
+			if entryState.id.index >= rss.mu.nextRaftIndexInitial {
 				rss.mu.sendQueue.preciseSizeSum -= entryState.tokens
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entryState.pri)] -=
 					entryState.tokens
@@ -2413,7 +2419,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 			// TODO(sumeer): use knowledge from entries < nextRaftIndexInitial to
 			// adjust approxMeanSizeBytes.
 			tokensNeeded += entryState.tokens
-			rss.mu.tracker.Track(ctx, entryState.term, entryState.index, raftpb.LowPri, entryState.tokens)
+			rss.mu.tracker.Track(ctx, entryState.id, raftpb.LowPri, entryState.tokens)
 		}
 	}
 	if !rss.mu.sendQueue.forceFlushScheduled {
