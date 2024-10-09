@@ -8,6 +8,7 @@ import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
+import { useClusterSettings } from "src/api/clusterSettingsApi";
 import {
   DatabaseMetadataRequest,
   DatabaseSortOptions,
@@ -19,6 +20,7 @@ import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated
 import { Tooltip } from "src/components/tooltip";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { BooleanSetting } from "src/settings";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 import { Search } from "src/sharedFromCloud/search";
@@ -32,9 +34,13 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
+import { AUTO_STATS_COLLECTION_HELP } from "../constants/tooltipMessages";
+
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
 import { rawDatabaseMetadataToDatabaseRows } from "./utils";
+
+const AUTO_STATS_ENABLED_CS = "sql.stats.automatic_collection.enabled";
 
 const COLUMNS: (TableColumnProps<DatabaseRow> & {
   sortKey?: DatabaseSortOptions;
@@ -141,6 +147,9 @@ export const DatabasesPageV2 = () => {
     createDatabaseMetadataRequestFromParams(params),
   );
   const nodesResp = useNodeStatuses();
+  const { settingValues, isLoading: settingsLoading } = useClusterSettings({
+    names: [AUTO_STATS_ENABLED_CS],
+  });
 
   const onNodeRegionsChange = (storeIDs: StoreID[]) => {
     setFilters({
@@ -194,7 +203,18 @@ export const DatabasesPageV2 = () => {
 
   return (
     <PageLayout>
-      <PageHeader title="Databases" />
+      <PageHeader
+        title="Databases"
+        actions={
+          <Skeleton loading={settingsLoading}>
+            <BooleanSetting
+              text={"Auto stats collection"}
+              enabled={settingValues[AUTO_STATS_ENABLED_CS].value === "true"}
+              tooltipText={AUTO_STATS_COLLECTION_HELP}
+            />
+          </Skeleton>
+        }
+      />
       <PageSection>
         <PageConfig>
           <PageConfigItem>
