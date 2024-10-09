@@ -396,8 +396,11 @@ ORDER BY
 		// All non virtual tables contain implicit system columns.
 		for i := range colinfo.AllSystemColumnDescs {
 			col := &colinfo.AllSystemColumnDescs[i]
-			if s.postgres && col.ID == colinfo.MVCCTimestampColumnID {
-				continue
+			if s.postgres {
+				switch col.ID {
+				case colinfo.MVCCTimestampColumnID, colinfo.OriginTimestampColumnID, colinfo.OriginIDColumnID:
+					continue
+				}
 			}
 			currentCols = append(currentCols, &tree.ColumnTableDef{
 				Name:   tree.Name(col.Name),
