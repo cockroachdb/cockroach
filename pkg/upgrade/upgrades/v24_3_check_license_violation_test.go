@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,8 +51,10 @@ func TestCheckLicenseViolations(t *testing.T) {
 				ClusterVersionOverride:         v1,
 			},
 			LicenseTestingKnobs: &license.TestingKnobs{
-				Enable:      true,
 				SkipDisable: true,
+			},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				ForceCheckLicenseViolation: true,
 			},
 			// Make the upgrade faster by accelerating jobs.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
