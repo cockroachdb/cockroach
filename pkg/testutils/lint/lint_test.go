@@ -1866,11 +1866,18 @@ func TestLint(t *testing.T) {
 			pkgs, err := packages.Load(
 				&packages.Config{
 					Mode: packages.NeedImports | packages.NeedName,
+					Dir:  crdbDir,
 				},
 				pkgPath,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "error loading package %s", pkgPath)
+			}
+			// NB: if no packages were found, this API confusingly
+			// returns no error, so we need to explicitly check that
+			// something was returned.
+			if len(pkgs) == 0 {
+				return errors.Newf("could not list packages under %s", pkgPath)
 			}
 			for _, pkg := range pkgs {
 				for _, s := range pkg.Imports {
@@ -1891,6 +1898,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/build/bazel/util/tinystringer: errors$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/build/engflow: github\.com/golang/protobuf/proto$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/build/engflow: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/grpcutil: github\.com/cockroachdb\/errors\/errbase$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/future: github\.com/cockroachdb\/errors\/errbase$`),
 			stream.GrepNot(`cockroach/pkg/roachprod/install: syscall$`), // TODO: switch to sysutil
@@ -1904,6 +1912,10 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroachdb/cockroach/pkg/kv/kvpb/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/log/gen: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
+			// See #132262.
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/raft/raftlogger: log$`),
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/raft/rafttest: log$`),
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/workload/debug: log$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
 			importingPkg, importedPkg := pkgStr[0], pkgStr[1]
