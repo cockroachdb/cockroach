@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -181,6 +182,12 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 		}
 		defer cleanup()
 
+		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+		mockLDAP, newMockLDAPUtil := ldapccl.LDAPMocks()
+		if strings.Contains(path, "ldap") {
+			defer testutils.TestingHook(&ldapccl.NewLDAPUtil, newMockLDAPUtil)()
+		}
+
 		srv, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{
 				DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
@@ -204,13 +211,6 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 		sv := &s.ClusterSettings().SV
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
-		}
-
-		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
-		if strings.Contains(path, "ldap") {
-			defer testutils.TestingHook(
-				&ldapccl.NewLDAPUtil,
-				ldapccl.NewMockLDAPUtil)()
 		}
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
@@ -289,6 +289,11 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 				case "sql":
 					_, err := conn.ExecContext(context.Background(), td.Input)
 					return "ok", err
+
+				case "query_row":
+					var query_output string
+					err := conn.QueryRow(td.Input).Scan(&query_output)
+					return query_output, err
 
 				case "connect", "connect_unix":
 					if td.Cmd == "connect_unix" && runtime.GOOS == "windows" {
@@ -476,6 +481,26 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					return string(body), nil
+
+				case "ldap_mock":
+					for _, a := range td.CmdArgs {
+						switch a.Key {
+						case "set_groups":
+							if len(a.Vals) < 2 {
+								t.Fatalf("too few argumenets to ldap_mock set_groups: %d", len(a.Vals))
+							}
+							user := a.Vals[0]
+							groups := a.Vals[1:]
+							for idx := range groups {
+								if _, err := distinguishedname.ParseDN(groups[idx]); err != nil {
+									t.Fatalf("invalid ldap group provided to ldap_mock set_groups: %s", groups[idx])
+								}
+							}
+							mockLDAP.SetGroups(mockLDAP.GetLdapDN(user), groups)
+						default:
+							t.Fatalf("unknown ldap_mock operation: %s", a.Key)
+						}
+					}
 
 				default:
 					td.Fatalf(t, "unknown command: %s", td.Cmd)

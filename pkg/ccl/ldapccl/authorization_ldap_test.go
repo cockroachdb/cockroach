@@ -7,7 +7,6 @@ package ldapccl
 
 import (
 	"context"
-	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -29,12 +28,10 @@ func TestLDAPAuthorization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
-	mockLDAP := &mockLDAPUtil{}
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
 	defer testutils.TestingHook(
 		&NewLDAPUtil,
-		func(ctx context.Context, conf ldapConfig) (ILDAPUtil, error) {
-			return mockLDAP, nil
-		})()
+		newMockLDAPUtil)()
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -102,7 +99,7 @@ func TestLDAPAuthorization(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d: testName:%v hbConfOpts:%v user:%v", i, tc.testName, tc.hbaConfLDAPOpts, tc.user), func(t *testing.T) {
-			mockLDAP.setGroups(tc.ldapGroups)
+			mockLDAP.SetGroups(tc.user, tc.ldapGroups)
 			hbaEntry := constructHBAEntry(t, hbaEntryBase, hbaConfLDAPDefaultOpts, tc.hbaConfLDAPOpts)
 			userDN, err := distinguishedname.ParseDN(tc.user)
 			if err != nil {
@@ -133,12 +130,10 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
-	mockLDAP := &mockLDAPUtil{tlsConfig: &tls.Config{}}
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
 	defer testutils.TestingHook(
 		&NewLDAPUtil,
-		func(ctx context.Context, conf ldapConfig) (ILDAPUtil, error) {
-			return mockLDAP, nil
-		})()
+		newMockLDAPUtil)()
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -185,7 +180,7 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	defer fooDB.Close()
 
 	// Add one parent role, connect, and check the parent roles.
-	mockLDAP.setGroups([]string{"cn=foo_parent_1"})
+	mockLDAP.SetGroups(mockLDAP.GetLdapDN("foo"), []string{"cn=foo_parent_1"})
 	_, err = fooDB.Conn(ctx)
 	require.NoError(t, err)
 	err = db.QueryRow("SELECT pg_has_role('foo', 'foo_parent_1', 'MEMBER')").Scan(&hasRole)
@@ -196,7 +191,7 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	require.False(t, hasRole)
 
 	// Add a new parent role, reconnect, and verify the role was added.
-	mockLDAP.setGroups([]string{"cn=foo_parent_1", "cn=foo_parent_2"})
+	mockLDAP.SetGroups(mockLDAP.GetLdapDN("foo"), []string{"cn=foo_parent_1", "cn=foo_parent_2"})
 	_, err = fooDB.Conn(ctx)
 	require.NoError(t, err)
 	err = db.QueryRow("SELECT pg_has_role('foo', 'foo_parent_1', 'MEMBER')").Scan(&hasRole)
@@ -207,7 +202,7 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	require.True(t, hasRole)
 
 	// Remove one of the parent role, reconnect, and verify the role was revoked.
-	mockLDAP.setGroups([]string{"cn=foo_parent_2"})
+	mockLDAP.SetGroups(mockLDAP.GetLdapDN("foo"), []string{"cn=foo_parent_2"})
 	_, err = fooDB.Conn(ctx)
 	require.NoError(t, err)
 	err = db.QueryRow("SELECT pg_has_role('foo', 'foo_parent_1', 'MEMBER')").Scan(&hasRole)
@@ -218,7 +213,7 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	require.True(t, hasRole)
 
 	// Verify that a group without a CN does not prevent login.
-	mockLDAP.setGroups([]string{"cn=foo_parent_1", "o=irrelevant_field"})
+	mockLDAP.SetGroups("cn=foo", []string{"cn=foo_parent_1", "o=irrelevant_field"})
 	_, err = fooDB.Conn(ctx)
 	require.NoError(t, err)
 	err = db.QueryRow("SELECT pg_has_role('foo', 'foo_parent_1', 'MEMBER')").Scan(&hasRole)
@@ -243,7 +238,7 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 
 	// Add a group that does not have a corresponding CRDB role, and verify that
 	// the user cannot login.
-	mockLDAP.setGroups([]string{"cn=foo_parent_2", "cn=nonexistent_role"})
+	mockLDAP.SetGroups("cn=foo", []string{"cn=foo_parent_2", "cn=nonexistent_role"})
 	_, err = fooDB.Conn(ctx)
 	require.ErrorContains(t, err, "LDAP authorization: error assigning roles to user foo: EnsureUserOnlyBelongsToRoles-grant: role/user \"nonexistent_role\" does not exist")
 }
