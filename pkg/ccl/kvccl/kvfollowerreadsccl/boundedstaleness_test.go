@@ -73,13 +73,15 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 		},
 	}
 
+	// With the deprecation of the core license, disabling the enterprise
+	// license has no effect. All commands should now work as intended.
 	defer ccl.TestingDisableEnterprise()()
 	t.Run("disabled", func(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				_, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "use of bounded staleness requires an enterprise license")
+				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
+				require.NoError(t, err)
+				require.NoError(t, r.Close())
 			})
 		}
 	})
