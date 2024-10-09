@@ -118,6 +118,12 @@ func TestUploadZipEndToEnd(t *testing.T) {
 		return "a1b2c3"
 	})()
 
+	origConc := debugZipUploadOpts.maxConcurrentUploads
+	debugZipUploadOpts.maxConcurrentUploads = 2
+	defer func() {
+		debugZipUploadOpts.maxConcurrentUploads = origConc
+	}()
+
 	defer testutils.TestingHook(&doUploadReq,
 		func(req *http.Request) ([]byte, error) {
 			defer req.Body.Close()
@@ -322,14 +328,10 @@ func setupDDArchiveHook(t *testing.T, req *http.Request) ([]byte, error) {
 	return []byte("200 OK"), nil
 }
 
-func writeLogsToGCSHook(ctx context.Context, chunkMap map[string][][]byte) error {
+func writeLogsToGCSHook(ctx context.Context, sig logUploadSig) error {
 	out := strings.Builder{}
-	for k, v := range chunkMap {
-		out.WriteString(fmt.Sprintf("%s:\n", k))
-		for _, chunk := range v {
-			out.WriteString(fmt.Sprintf("%s\n", string(chunk)))
-		}
-	}
+	out.WriteString(fmt.Sprintf("%s:\n", sig.key))
+	out.WriteString(fmt.Sprintf("%s\n", string(sig.data)))
 
 	// print the logs so that it gets captured as a part of RunWithCapture
 	fmt.Println(out.String())
@@ -365,4 +367,25 @@ func TestLogEntryToJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log(string(raw))
+}
+
+func TestHumanReadableSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tt := []struct {
+		size     int
+		expected string
+	}{
+		{size: 0, expected: "0 B"},
+		{size: 1, expected: "1 B"},
+		{size: 1024, expected: "1.0 KB"},
+		{size: 1024 * 1024, expected: "1.0 MB"},
+		{size: 1024 * 1024 * 1024, expected: "1.0 GB"},
+		{size: 1024 * 1024 * 1024 * 1024, expected: "1.0 TB"},
+		{size: 1024 * 1024 * 1024 * 1024 * 1024, expected: "1.0 PB"},
+	}
+
+	for _, tc := range tt {
+		assert.Equal(t, tc.expected, humanReadableSize(tc.size))
+	}
 }

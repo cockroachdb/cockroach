@@ -311,7 +311,7 @@ func (d *datadogWriter) upload(fileName string) error {
 				err := d.emitDataDogMetrics(data)
 				if err != nil {
 					errorsInDDUpload = append(errorsInDDUpload,
-						fmt.Sprintf("retries exhausted for datadog upload for series %s with error %v", data[0].Metric, err))
+						fmt.Sprintf("retries exhausted for datadog upload for series %s with error %v\n", data[0].Metric, err))
 					wg.Done()
 					return
 				}
