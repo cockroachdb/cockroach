@@ -117,6 +117,8 @@ table_name NOT IN (
   'statement_activity',
 	'statement_statistics_persisted',
 	'statement_statistics_persisted_v22_2',
+	'store_liveness_support_for',
+  'store_liveness_support_from',
 	'cluster_transaction_statistics',
 	'statement_statistics',
   'transaction_activity',

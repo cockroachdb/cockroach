@@ -206,7 +206,7 @@ project
  │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments
  │    │    │    │    │    │         │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:176!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.objsubid:178!null crdb_internal.kv_catalog_comments.description:179!null
  │    │    │    │    │    │         │    │    └── filters
- │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:176 != 4294967081 [outer=(176), constraints=(/176: (/NULL - /4294967080] [/4294967082 - ]; tight)]
+ │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:176 != 4294967079 [outer=(176), constraints=(/176: (/NULL - /4294967078] [/4294967080 - ]; tight)]
  │    │    │    │    │    │         │    └── projections
  │    │    │    │    │    │         │         └── crdb_internal.kv_catalog_comments.objsubid:178::INT8 [as=objsubid:185, outer=(178), immutable]
  │    │    │    │    │    │         └── filters
