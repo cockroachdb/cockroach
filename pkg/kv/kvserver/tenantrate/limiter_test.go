@@ -709,6 +709,16 @@ func (ts *testState) HasNodelocalStorageCapability(
 	}
 }
 
+func (ts *testState) HasNetworkConnectivityCapability(
+	_ context.Context, tenID roachpb.TenantID,
+) error {
+	if ts.capabilities[tenID].CanViewNetworkInfo {
+		return nil
+	} else {
+		return errors.New("unauthorized")
+	}
+}
+
 func (ts *testState) IsExemptFromRateLimiting(_ context.Context, tenID roachpb.TenantID) bool {
 	return ts.capabilities[tenID].ExemptFromRateLimiting
 }
@@ -814,5 +824,11 @@ func (fakeAuthorizer) HasCapabilityForBatch(
 func (fakeAuthorizer) BindReader(tenantcapabilities.Reader) {}
 
 func (fakeAuthorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return nil
+}
+
+func (fakeAuthorizer) HasNetworkConnectivityCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
 	return nil
 }
