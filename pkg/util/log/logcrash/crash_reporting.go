@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,47 +50,9 @@ var (
 	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"diagnostics.reporting.enabled",
-		"enable reporting diagnostic metrics to cockroach labs",
+		"enable reporting diagnostic metrics to cockroach labs, but is ignored for Trial or Free licenses",
 		true,
 		settings.WithPublic,
-		settings.WithValidateBool(func(sv *settings.Values, b bool) error {
-			// If the user wants to turn on diagnostics, no validation is needed.
-			if b {
-				return nil
-			}
-
-			// The validator looks for a valid license, but fails gracefully if one is
-			// not found. It's possible at this point one is not set, and because
-			// failure will panic on startup, we allow the setting of any value.
-			licenseSetting, ok, _ := settings.LookupForLocalAccess("enterprise.license", true /* forSystemTenant */)
-			if !ok {
-				log.Warning(context.Background(), "unable to find license configuring diagnostic reporting")
-				return nil
-			}
-			lic, err := licenseSetting.DecodeToString(licenseSetting.Encoded(sv))
-			if err != nil {
-				log.Errorf(context.Background(), "error configuring diagnostics: %s", err)
-				return nil
-			}
-
-			license, err := licenseccl.Decode(lic)
-			if err != nil {
-				log.Errorf(context.Background(), "error configuring diagnostics: %s", err)
-				return nil
-			}
-			if license == nil {
-				log.Warning(context.Background(), "unable to read license while setting diagnostics.reporting.enabled")
-				return nil
-			}
-
-			// If the license is limited and diagnostics are off, we prevent the user
-			// from disabling diagnostics reporting.
-			isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
-			if isLimited {
-				return fmt.Errorf("unable to disable diagnostics with license type %s", license.Type)
-			}
-			return nil
-		}),
 	)
 
 	// CrashReports wraps "diagnostics.reporting.send_crash_reports.enabled".

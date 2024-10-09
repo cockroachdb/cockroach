@@ -8,7 +8,6 @@ package utilccl
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -57,108 +56,6 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		}
 		err := CheckEnterpriseEnabled(st, "")
 		require.NoError(t, err)
-	}
-}
-
-// test setting a license with a specific diagnostics setting.
-func TestSetLicenseWithDiagnosticsReporting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	t0 := timeutil.Unix(0, 0)
-	updater := st.MakeUpdater()
-	var enterpriseLicense, err = (&licenseccl.License{
-		Type:              licenseccl.License_Enterprise,
-		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-	}).Encode()
-	require.NoError(t, err)
-
-	resetLicense := func() {
-		err = setLicense(ctx, updater, enterpriseLicense)
-		require.NoError(t, err)
-	}
-
-	for _, tc := range []struct {
-		lit         licenseccl.License_Type
-		diagnostics bool
-		err         string
-	}{
-		{licenseccl.License_Free, false, "diagnostics.reporting.enabled must be true to use this license"},
-		{licenseccl.License_Free, true, ""},
-		{licenseccl.License_Trial, false, "diagnostics.reporting.enabled must be true to use this license"},
-		{licenseccl.License_Trial, true, ""},
-		{licenseccl.License_NonCommercial, false, ""},
-		{licenseccl.License_NonCommercial, true, ""},
-		{licenseccl.License_Enterprise, false, ""},
-		{licenseccl.License_Enterprise, true, ""},
-		{licenseccl.License_Evaluation, false, ""},
-		{licenseccl.License_Evaluation, true, ""},
-	} {
-		// First set the license to enterprise so that we can change the diagnostics setting.
-		resetLicense()
-		// Then, set the diagnostics value for the test.
-		if err := setDiagnosticsReporting(ctx, updater, tc.diagnostics); err != nil {
-			t.Fatal(err)
-		}
-		// Finally, verify that trying to set the license gives the appropriate validation response.
-		lic, _ := (&licenseccl.License{
-			Type:              tc.lit,
-			ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-		}).Encode()
-		if err := setLicense(ctx, updater, lic); !testutils.IsError(
-			err, tc.err,
-		) {
-			t.Fatalf("%s %t: expected err %q, got %v", tc.lit, tc.diagnostics, tc.err, err)
-		}
-
-	}
-}
-
-// test setting the diagnostics setting with a specific license.
-func TestSetDiagnosticsReportingWithLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	t0 := timeutil.Unix(0, 0)
-	updater := st.MakeUpdater()
-
-	resetDiagnostics := func() {
-		err := setDiagnosticsReporting(ctx, updater, true)
-		require.NoError(t, err)
-	}
-
-	for _, tc := range []struct {
-		lit         licenseccl.License_Type
-		diagnostics bool
-		err         string
-	}{
-		{licenseccl.License_Free, false, "unable to disable diagnostics with license type Free"},
-		{licenseccl.License_Free, true, ""},
-		{licenseccl.License_Trial, false, "unable to disable diagnostics with license type Trial"},
-		{licenseccl.License_Trial, true, ""},
-		{licenseccl.License_NonCommercial, false, ""},
-		{licenseccl.License_NonCommercial, true, ""},
-		{licenseccl.License_Enterprise, false, ""},
-		{licenseccl.License_Enterprise, true, ""},
-		{licenseccl.License_Evaluation, false, ""},
-		{licenseccl.License_Evaluation, true, ""},
-	} {
-		// First set the diagnostics to true so that we can change the license
-		resetDiagnostics()
-		// Then change the license value for the test.
-		lic, _ := (&licenseccl.License{
-			Type:              tc.lit,
-			ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-		}).Encode()
-		if err := setLicense(ctx, updater, lic); err != nil {
-			t.Fatal(err)
-		}
-		// Finally, verify that trying to set the diagnostics value gives the appropriate validation response.
-		if err := setDiagnosticsReporting(ctx, updater, tc.diagnostics); !testutils.IsError(
-			err, tc.err,
-		) {
-			t.Fatalf("%s %t: expected err %q, got %v", tc.lit, tc.diagnostics, tc.err, err)
-		}
 	}
 }
 
@@ -314,13 +211,6 @@ func setLicense(ctx context.Context, updater settings.Updater, val string) error
 	return updater.Set(ctx, "enterprise.license", settings.EncodedValue{
 		Value: val,
 		Type:  "s",
-	})
-}
-
-func setDiagnosticsReporting(ctx context.Context, updater settings.Updater, val bool) error {
-	return updater.Set(ctx, "diagnostics.reporting.enabled", settings.EncodedValue{
-		Value: strconv.FormatBool(val),
-		Type:  "b",
 	})
 }
 

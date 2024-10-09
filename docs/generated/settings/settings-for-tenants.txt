@@ -63,7 +63,7 @@ debug.zip.redact_addresses.enabled	boolean	false	enables the redaction of hostna
 diagnostics.active_query_dumps.enabled	boolean	true	experimental: enable dumping of anonymized active queries to disk when node is under memory pressure	system-visible
 diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	application
 diagnostics.memory_monitoring_dumps.enabled	boolean	true	enable dumping of memory monitoring state at the same time as heap profiles are taken	system-visible
-diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	application
+diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs, but is ignored for Trial or Free licenses	application
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	application
 enterprise.license	string		the encoded cluster license	system-visible
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	application
