@@ -1317,7 +1317,7 @@ func TestRangeController(t *testing.T) {
 					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(), rcMetrics.Count.Value())
 				case "send_queue":
 					sendQueueMetrics := state.rcMetrics.SendQueue
-					sendQueueTokenMetrics := state.ssTokenCounter.tokenMetrics.CounterMetrics[flowControlSendMetricType].SendQueue[0]
+					sendQueueTokenMetrics := state.ssTokenCounter.tokenMetrics.CounterMetrics[SendToken].SendQueue[0]
 					// We need to aggregate these ourselves, since this is normally done
 					// in kvserver.updateReplicationGauges.
 					var sizeCount, sizeBytes int64
