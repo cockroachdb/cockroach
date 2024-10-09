@@ -560,15 +560,6 @@ func (t *tokenCounter) adjust(
 		t.adjustLocked(ctx, class, delta, now, flag)
 	}()
 
-	if log.V(2) {
-		func() {
-			t.mu.RLock()
-			defer t.mu.RUnlock()
-
-			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-				class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
-		}()
-	}
 }
 
 func (t *tokenCounter) adjustLocked(
@@ -600,6 +591,12 @@ func (t *tokenCounter) adjustLocked(
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
+	}
+	if log.V(2) {
+		func() {
+			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+				class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
+		}()
 	}
 }
 
