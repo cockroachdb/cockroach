@@ -63,19 +63,33 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	return rn, nil
 }
 
-// Tick advances the internal logical clock by a single tick.
+// Tick advances the internal logical clock by a single tick. Election timeouts
+// and heartbeat timeouts are in units of ticks.
 func (rn *RawNode) Tick() {
 	rn.raft.tick()
 }
 
-// Campaign causes this RawNode to transition to candidate state.
+// Campaign causes this RawNode to transition to candidate state and start
+// campaigning to become leader.
 func (rn *RawNode) Campaign() error {
 	return rn.raft.Step(pb.Message{
 		Type: pb.MsgHup,
 	})
 }
 
-// Propose proposes data be appended to the raft log.
+// Propose proposes an entry with the given data to be appended to the raft log.
+//
+// Returns ErrProposalDropped if the proposal could not be made. A few reasons
+// why this can happen:
+//
+//   - the RawNode is not the leader, and DisableProposalForwarding is true
+//   - the RawNode is transferring the leadership away
+//   - the proposal overflows the internal size limits
+//   - the proposal is incorrect for other reasons
+//
+// If the proposal is submitted, it can still be lost or not committed, e.g. due
+// to a racing leader change. As such, the user may need to retry the proposal
+// even if no error is returned here.
 func (rn *RawNode) Propose(data []byte) error {
 	return rn.raft.Step(pb.Message{
 		Type: pb.MsgProp,
@@ -85,8 +99,16 @@ func (rn *RawNode) Propose(data []byte) error {
 		}})
 }
 
-// ProposeConfChange proposes a config change. See (Node).ProposeConfChange for
-// details.
+// ProposeConfChange proposes a config change. Like any proposal, the config
+// change may be dropped with or without an error being returned (see the
+// Propose() method). In addition, config changes are dropped unless the leader
+// has certainty that there is no prior unapplied config change in its log.
+//
+// The method accepts either a pb.ConfChange (deprecated) or pb.ConfChangeV2
+// message. The latter allows arbitrary config changes via joint consensus,
+// notably including replacing a voter. Passing a ConfChangeV2 is only allowed
+// if all nodes participating in the cluster run a version of this library aware
+// of the V2 API. See pb.ConfChangeV2 for usage details and semantics.
 func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 	m, err := confChangeToMsg(cc)
 	if err != nil {
@@ -95,9 +117,13 @@ func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 	return rn.raft.Step(m)
 }
 
-// ApplyConfChange applies a config change to the local node. The app must call
-// this when it applies a configuration change, except when it decides to reject
-// the configuration change, in which case no call must take place.
+// ApplyConfChange applies a config change to this node. This must be called
+// whenever a config change is observed in Ready.CommittedEntries, except when
+// the app decides to reject / no-op this change.
+//
+// Returns an opaque non-nil ConfState protobuf which must be recorded in
+// snapshots.
+// TODO(pav-kv): we don't use the returned value, see if it can be removed.
 func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
 	cs := rn.raft.applyConfChange(cc.AsV2())
 	return &cs
@@ -186,9 +212,12 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice logSlice) (pb.Message, bool) {
 }
 
 // Ready returns the outstanding work that the application needs to handle. This
-// includes appending and applying entries or a snapshot, updating the HardState,
-// and sending messages. The returned Ready() *must* be handled and subsequently
-// passed back via Advance().
+// includes appending entries to the log, applying committed entries or a
+// snapshot, updating the HardState, and sending messages. See comments in the
+// Ready struct for the specification on how the updates must be handled.
+//
+// The returned Ready struct *must* be handled and subsequently passed back via
+// Advance(), unless async storage writes are enabled.
 func (rn *RawNode) Ready() Ready {
 	rd := rn.readyWithoutAccept()
 	rn.acceptReady(rd)
@@ -504,11 +533,12 @@ func (rn *RawNode) HasReady() bool {
 	return false
 }
 
-// Advance notifies the RawNode that the application has applied and saved progress in the
-// last Ready results.
+// Advance notifies the RawNode that the application has applied all the updates
+// from the last Ready() call. It prepares the node to the next Ready handling
+// iteration.
 //
-// NOTE: Advance must not be called when using AsyncStorageWrites. Response messages from
-// the local append and apply threads take its place.
+// Advance must not be called when using AsyncStorageWrites. Response messages
+// from the local append and apply threads take its place.
 func (rn *RawNode) Advance(_ Ready) {
 	// The actions performed by this function are encoded into stepsOnAdvance in
 	// acceptReady. In earlier versions of this library, they were computed from
@@ -605,7 +635,22 @@ func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
 }
 
-// ReportSnapshot reports the status of the sent snapshot.
+// ReportSnapshot reports the status of the snapshot sent to the given peer.
+//
+// Any failure in sending a snapshot (e.g. while streaming it from leader to
+// follower) must be reported to the leader with SnapshotFailure.
+//
+// When the leader sends a snapshot to a peer, it pauses log replication until
+// this peer can apply the snapshot and advance its state. If the peer can't do
+// that, e.g. due to a crash, it could end up in a limbo, never getting any
+// updates from the leader. Therefore, it is crucial that the app catches any
+// failure in sending a snapshot and reports it back to the leader, so that the
+// log replication probing can resume. In case of uncertainty, the app must err
+// on the side of reporting SnapshotFailure.
+//
+// A successful snapshot must be reported with SnapshotFinish or a MsgAppResp
+// from the peer. It is advisory to report SnapshotFinish in success cases,
+// regardless of the MsgAppResp.
 func (rn *RawNode) ReportSnapshot(id pb.PeerID, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
@@ -617,8 +662,27 @@ func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
 }
 
-// ForgetLeader forgets a follower's current leader, changing it to None.
-// See (Node).ForgetLeader for details.
+// ForgetLeader forgets a follower's current leader, changing it to None. It
+// remains a leaderless follower in the current term, without campaigning.
+//
+// This is useful with PreVote+CheckQuorum, where followers will normally not
+// grant pre-votes if they've heard from the leader in the past election timeout
+// interval. Leaderless followers can grant pre-votes immediately, so if a
+// quorum of followers have strong reason to believe the leader is dead (for
+// example via a side-channel or external failure detector) and forget it then
+// they can elect a new leader immediately, without waiting out the election
+// timeout. They will also revert to normal followers if they hear from the
+// leader again, or transition to candidates on an election timeout.
+//
+// For example, consider a three-node cluster where 1 is the leader and 2+3 have
+// just received a heartbeat from it. If 2 and 3 believe the leader has now died
+// (maybe they know that an orchestration system shut down 1's VM), we can
+// instruct 2 to forget the leader and 3 to campaign. 2 will then be able to
+// grant 3's pre-vote and elect 3 as leader immediately (normally 2 would reject
+// the vote until an election timeout passes because it has heard from the
+// leader recently). However, 3 can not campaign unilaterally, a quorum have to
+// agree that the leader is dead, which avoids disrupting the leader if
+// individual nodes are wrong about it being dead.
 func (rn *RawNode) ForgetLeader() error {
 	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
 }
