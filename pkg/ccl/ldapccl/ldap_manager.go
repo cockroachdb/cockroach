@@ -32,8 +32,9 @@ var (
 	// ldapSearchRe performs a regex match for ldap search options provided in HBA
 	// configuration. This generally adheres to the format "(key=value)" with
 	// interleaved spaces but could be more flexible as value field could be
-	// provided as a regex string(mail=*@example.com), a key-value distinguished
-	// name(memberOf="CN=test") or a combination of both(memberOf="CN=Sh*").
+	// provided as a wildcard match string(mail=*@example.com), a key-value
+	// distinguished name("memberOf=CN=test") or a combination of
+	// both("memberOf=CN=Sh*").
 	//
 	// The regex string is kept generic as search options could also contain
 	// multiple search entries like "(key1=value1)(key2=value2)".
