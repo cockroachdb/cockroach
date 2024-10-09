@@ -8,7 +8,7 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -29,14 +29,14 @@ FROM
 LEFT JOIN
 	(
 		SELECT 
-			object_id, type, comment
+			objoid, description as comment
 		FROM
-			system.comments
+			"".crdb_internal.kv_catalog_comments c
 		WHERE
-			type = %d
+			classoid = %d
 	) c
 ON
-	c.object_id = d.id`, catalogkeys.DatabaseCommentType)
+	c.objoid = d.id`, catconstants.PgCatalogDatabaseTableID)
 	}
 
 	query += `
