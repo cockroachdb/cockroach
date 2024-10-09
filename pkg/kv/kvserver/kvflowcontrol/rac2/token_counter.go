@@ -289,7 +289,7 @@ func (t *tokenCounter) TokensAvailable(
 // token count is available, partial tokens are returned corresponding to this
 // partial amount.
 func (t *tokenCounter) TryDeduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
 	t.mu.Lock()
@@ -301,7 +301,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, false /* disconnect */)
+	t.adjustLocked(ctx, wc, -adjust, now, flag)
 	return adjust
 }
 
@@ -309,9 +309,9 @@ func (t *tokenCounter) TryDeduct(
 // there are not enough available tokens, the token counter will go into debt
 // (negative available count) and still issue the requested number of tokens.
 func (t *tokenCounter) Deduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) {
-	t.adjust(ctx, wc, -tokens, false /* disconnect */)
+	t.adjust(ctx, wc, -tokens, flag)
 }
 
 // Return returns flow tokens for the given work class. When disconnect is
@@ -319,9 +319,9 @@ func (t *tokenCounter) Deduct(
 // specific request, rather the leader returning tracked tokens for a replica
 // it doesn't expect to hear from again.
 func (t *tokenCounter) Return(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, disconnect bool,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) {
-	t.adjust(ctx, wc, tokens, disconnect)
+	t.adjust(ctx, wc, tokens, flag)
 }
 
 // waitHandle is a handle for waiting for tokens to become available from a
@@ -507,16 +507,57 @@ func WaitForEval(
 	return WaitSuccess, scratch
 }
 
+// TokenAdjustFlag are used to inform token adjustments about the context in
+// which they are being made. Currently used for observability.
+type TokenAdjustFlag uint8
+
+const (
+	AdjNormal TokenAdjustFlag = iota
+	// AdjDisconnect is set when (regular|elastic) tokens are being returned without
+	// corresponding admission. This is used to track tokens that are being
+	// returned for a replica that is not expected to reply anymore.
+	AdjDisconnect
+	// AdjForceFlush is set when elastic send tokens are being deducted without
+	// waiting for them to be available, due to force flush.
+	AdjForceFlush
+	// AdjPreventSendQueue is set when not enough (regular|elastic) send tokens
+	// are available but being deducted anyway (negative balance) to prevent a
+	// delay in quorum by forming a send queue.
+	AdjPreventSendQueue
+)
+
+func (a TokenAdjustFlag) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (a TokenAdjustFlag) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch a {
+	case AdjNormal:
+	case AdjDisconnect:
+		w.Print("disconnect")
+	case AdjForceFlush:
+		w.Print("force_flush")
+	case AdjPreventSendQueue:
+		w.Print("prevent_send_queue")
+	default:
+		panic("unknown token_adjust_flag")
+	}
+}
+
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
 func (t *tokenCounter) adjust(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, disconnect bool,
+	ctx context.Context,
+	class admissionpb.WorkClass,
+	delta kvflowcontrol.Tokens,
+	flag TokenAdjustFlag,
 ) {
 	now := t.clock.PhysicalTime()
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, disconnect)
+		t.adjustLocked(ctx, class, delta, now, flag)
 	}()
 
 	if log.V(2) {
@@ -524,8 +565,8 @@ func (t *tokenCounter) adjust(
 			t.mu.RLock()
 			defer t.mu.RUnlock()
 
-			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v): regular=%v elastic=%v",
-				class, t.stream, delta, t.tokensLocked(regular), t.tokensLocked(elastic))
+			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+				class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
 		}()
 	}
 }
@@ -535,7 +576,7 @@ func (t *tokenCounter) adjustLocked(
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
 	now time.Time,
-	disconnect bool,
+	flag TokenAdjustFlag,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -555,7 +596,7 @@ func (t *tokenCounter) adjustLocked(
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
 	if adjustment.regular != 0 || adjustment.elastic != 0 {
-		t.metrics.onTokenAdjustment(adjustment, disconnect)
+		t.metrics.onTokenAdjustment(adjustment, flag)
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
