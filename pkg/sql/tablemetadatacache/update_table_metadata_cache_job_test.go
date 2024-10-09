@@ -98,19 +98,6 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	jobRunCh := make(chan struct{})
 	updater := mockUpdater{jobRunCh: jobRunCh}
 
-	waitForJobRuns := func(count int, timeout time.Duration) error {
-		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		for i := 0; i < count; i++ {
-			select {
-			case <-jobRunCh:
-			case <-ctxWithCancel.Done():
-				return fmt.Errorf("timed out waiting for job run %d", i+1)
-			}
-		}
-		return nil
-	}
-
 	// Server setup.
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -123,6 +110,23 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 
 	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
 
+	waitForJobRuns := func(count int, timeout time.Duration) error {
+		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		for i := 0; i < count; i++ {
+			select {
+			case <-jobRunCh:
+			case <-ctxWithCancel.Done():
+				var enabled bool
+				var duration string
+				conn.QueryRow(t, "SHOW CLUSTER SETTING obs.tablemetadata.data_valid_duration").Scan(&duration)
+				conn.QueryRow(t, "SHOW CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled").Scan(&enabled)
+				return fmt.Errorf("timed out waiting for job run %d. auto_updates_enabled:%t, data_valid_duration: %s",
+					i+1, enabled, duration)
+			}
+		}
+		return nil
+	}
 	// Wait for the job to be claimed by a node.
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.Query(t, `
@@ -136,6 +140,12 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 		return nil
 	})
 
+	// Since this test explicitly calls DataValidDurationSetting.Override instead of using `SET CLUSTER SETTING`,
+	// there are no logs emitted when the setting  changes. This callback will do that logging.
+	DataValidDurationSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+		log.Infof(ctx, "Updating data valid duration setting to %s",
+			DataValidDurationSetting.Get(&s.ClusterSettings().SV))
+	})
 	require.Zero(t, len(updater.mockCalls), "Job should not run automatically by default")
 
 	t.Run("AutomaticUpdatesEnabled", func(t *testing.T) {
@@ -172,9 +182,11 @@ type mockUpdater struct {
 	jobRunCh  chan struct{}
 }
 
-func (t *mockUpdater) RunUpdater(ctx context.Context) error {
-	t.mockCalls = append(t.mockCalls, time.Now())
-	t.jobRunCh <- struct{}{}
+func (m *mockUpdater) RunUpdater(ctx context.Context) error {
+	log.Info(ctx, "mockUpdater.RunUpdater started")
+	m.mockCalls = append(m.mockCalls, time.Now())
+	m.jobRunCh <- struct{}{}
+	log.Info(ctx, "mockUpdater.RunUpdater completed")
 	return nil
 }
 
