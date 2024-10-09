@@ -4301,6 +4301,40 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// withdrawSupportAllPeers calls withdrawSupport for all peers in the network.
+func (nw *network) withdrawSupportAllPeers() {
+	for id := range nw.peers {
+		nw.withdrawSupport(id)
+	}
+}
+
+// withdrawSupport causes the peer with the given ID to stop supporting and
+// getting support from all stores.
+func (nw *network) withdrawSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+	p.(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupport()
+}
+
+// grantSupportAllPeers calls grantSupport for all peers in the network.
+func (nw *network) grantSupportAllPeers() {
+	for id := range nw.peers {
+		nw.grantSupport(id)
+	}
+}
+
+// grantSupport causes the peer with the given ID to start supporting and
+// getting support from all stores.
+func (nw *network) grantSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+	p.(*raft).storeLiveness.(*mockStoreLiveness).GrantSupport()
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
