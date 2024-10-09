@@ -4386,6 +4386,34 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// allWithdrawSupportForAndFromPeer makes all nodes withdraw support for and
+// from the given peer.
+func (nw *network) allWithdrawSupportForAndFromPeer(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupportFor(id)
+	}
+}
+
+// allGrantSupportForAndFromPeer makes all nodes grant support for and from the
+// given peer.
+func (nw *network) allGrantSupportForAndFromPeer(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*mockStoreLiveness).GrantSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*mockStoreLiveness).GrantSupportFor(id)
+	}
+}
+
+// bumpAllEpochs bumps the supportFor and supportFrom epochs for all peers.
+func (nw *network) bumpAllEpochs() {
+	for p1 := range nw.peers {
+		for p2 := range nw.peers {
+			nw.peers[p1].(*raft).storeLiveness.(*mockStoreLiveness).BumpSupportForEpoch(p2)
+			nw.peers[p2].(*raft).storeLiveness.(*mockStoreLiveness).BumpSupportFromEpoch(p1)
+		}
+	}
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
