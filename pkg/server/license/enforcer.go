@@ -91,6 +91,17 @@ type Enforcer struct {
 	// db is a pointer to the database for use for KV read/writes. This is only
 	// set for the system tenant.
 	db isql.DB
+
+	// metadataAccessor is a pointer to a tenant connector that has the latest
+	// cluster init grace period timestamp. This is only set when this is
+	// initialized by the secondary tenant.
+	metadataAccessor atomic.Pointer[MetadataAccessor]
+
+	// continueToPollMetadataAccessor indicates whether requests for the cluster
+	// init grace period timestamp should continue polling for the latest value
+	// in the metadata accessor. This is set to true during initialization if the
+	// latest timestamp was not received.
+	continueToPollMetadataAccessor atomic.Bool
 }
 
 type TestingKnobs struct {
@@ -131,6 +142,14 @@ type TelemetryStatusReporter interface {
 	// GetLastSuccessfulTelemetryPing returns the time of the last time the
 	// telemetry data got back an acknowledgement from Cockroach Labs.
 	GetLastSuccessfulTelemetryPing() time.Time
+}
+
+// MetadataAccessor is the interface to access license metadata stored in the KV.
+type MetadataAccessor interface {
+	// GetClusterInitGracePeriodTS returns the grace period end time for clusters
+	// without a license installed. The timestamp is represented as the number of
+	// seconds since the Unix epoch.
+	GetClusterInitGracePeriodTS() int64
 }
 
 // NewEnforcer creates a new Enforcer object.
@@ -185,7 +204,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	e.maybeLogActiveOverrides(ctx)
 
 	if !startDisabled {
-		if err := e.readClusterMetadata(ctx, options); err != nil {
+		if err := e.initClusterMetadata(ctx, options); err != nil {
 			return err
 		}
 	}
@@ -208,22 +227,31 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	return nil
 }
 
-// readClusterMetadata will read, and maybe write, cluster metadata for license
+// initClusterMetadata will read, and maybe write, cluster metadata for license
 // enforcement. The metadata is stored in the KV system keyspace.
-func (e *Enforcer) readClusterMetadata(ctx context.Context, options options) error {
+func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) error {
 	// Secondary tenants do not have access to the system keyspace where
-	// the cluster init grace period is stored. As a fallback, we apply a 7-day
-	// grace period from the tenant's start time, which is used only when no
-	// license is installed. This logic applies specifically when secondary
-	// tenants are started in a separate process from the system tenant. If they
-	// are not, a shared enforcer will have access to the system keyspace and
-	// handle the grace period.
-	// TODO(spilchen): Change to give the secondary tenant read access to the
-	// system keyspace KV.
+	// the cluster init grace period is stored. In those instances, we rely on
+	// fetching that information from the system tenant using the tenant connector.
 	if !options.isSystemTenant {
-		gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
-		end := e.getStartTime().Add(gracePeriodLength)
-		e.clusterInitGracePeriodEndTS.Store(end.Unix())
+		if options.metadataAccessor == nil {
+			return errors.AssertionFailedf("no metadata accessor for secondary tenant")
+		}
+		e.metadataAccessor.Store(&options.metadataAccessor)
+		end := (*e.metadataAccessor.Load()).GetClusterInitGracePeriodTS()
+		if end != 0 {
+			e.clusterInitGracePeriodEndTS.Store(end)
+			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS().String())
+		} else {
+			// No timestamp was received, likely due to a mixed-version workload.
+			// We'll use an estimate of 7 days from this node's startup time instead
+			// and set a flag to continue polling for an updated timestamp.
+			// An update should be sent once the KV starts up on the new version.
+			gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
+			e.clusterInitGracePeriodEndTS.Store(e.getStartTime().Add(gracePeriodLength).Unix())
+			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS().String())
+			e.continueToPollMetadataAccessor.Store(true)
+		}
 		return nil
 	}
 
@@ -352,6 +380,13 @@ func (e *Enforcer) MaybeFailIfThrottled(
 	// we can exit without any further checks.
 	if !e.licenseRequiresTelemetry.Load() && hasExpiry && expiryTS.After(now) {
 		return
+	}
+
+	// When no license is installed, the cluster initialization grace period determines
+	// the throttling window. If the value wasn’t available in the KV during initialization,
+	// check if it can be retrieved from the tenant connector now.
+	if !e.GetHasLicense() && e.continueToPollMetadataAccessor.Load() {
+		e.pollMetadataAccessor(ctx)
 	}
 
 	// Throttle if the license has expired, is missing, and the grace period has ended.
@@ -673,4 +708,21 @@ func (e *Enforcer) getLicenseExpiryTS() (ts time.Time, ok bool) {
 // a notice that we haven't received telemetry and we will throttle soon.
 func (e *Enforcer) addThrottleWarningDelayForNoTelemetry(t time.Time) time.Time {
 	return t.Add(3 * 24 * time.Hour)
+}
+
+// pollMetadataAccessor retrieves the cached cluster initialization grace period timestamp
+// from the tenant connector. It is used to update the grace period if the correct timestamp
+// wasn’t available during initialization. Once the timestamp is obtained, the polling is disabled.
+func (e *Enforcer) pollMetadataAccessor(ctx context.Context) {
+	if e.metadataAccessor.Load() != nil && e.continueToPollMetadataAccessor.Load() {
+		ts := (*e.metadataAccessor.Load()).GetClusterInitGracePeriodTS()
+		if ts != 0 {
+			// Received the timestamp from the KV store. Cache it and stop polling.
+			e.clusterInitGracePeriodEndTS.Store(ts)
+			e.storeNewGracePeriodEndDate(e.GetClusterInitGracePeriodEndTS(), 0)
+			e.continueToPollMetadataAccessor.Store(false)
+			log.Infof(ctx, "late retrieval of cluster initialization grace period end time from system tenant: %s",
+				e.GetClusterInitGracePeriodEndTS().String())
+		}
+	}
 }
