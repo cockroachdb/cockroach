@@ -63,8 +63,8 @@ func TestBlockedStreamLogging(t *testing.T) {
 		p.Eval(makeStream(id)).Deduct(ctx, admissionpb.RegularWorkClass, kvflowcontrol.Tokens(numTokens), AdjNormal)
 		if checkMetric {
 			p.UpdateMetricGauges()
-			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[flowControlEvalMetricType].BlockedCount[elastic].Value())
-			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[flowControlEvalMetricType].BlockedCount[regular].Value())
+			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[elastic].Value())
+			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[regular].Value())
 		}
 		numBlocked++
 	}

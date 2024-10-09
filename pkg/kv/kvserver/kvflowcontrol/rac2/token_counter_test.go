@@ -57,7 +57,7 @@ func TestTokenAdjustment(t *testing.T) {
 			return printTrimmedTokens(kvflowcontrol.Tokens(v))
 		}
 
-		metricsString := func(t flowControlMetricType, buf *strings.Builder) {
+		metricsString := func(t TokenType, buf *strings.Builder) {
 			counterMetrics := provider.tokenMetrics.CounterMetrics[t]
 			streamMetrics := provider.tokenMetrics.StreamMetrics[t]
 			for _, wc := range []admissionpb.WorkClass{
@@ -73,7 +73,7 @@ func TestTokenAdjustment(t *testing.T) {
 				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Returned[wc].GetName(), ft(counterMetrics.Returned[wc].Count()))
 				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Unaccounted[wc].GetName(), ft(counterMetrics.Unaccounted[wc].Count()))
 			}
-			if t == flowControlSendMetricType {
+			if t == SendToken {
 				sendQueueMetrics := counterMetrics.SendQueue[0]
 				fmt.Fprintf(buf, "  send queue token metrics\n")
 				fmt.Fprintf(buf, "    %-66v: %v\n", sendQueueMetrics.ForceFlushDeducted.GetName(), ft(sendQueueMetrics.ForceFlushDeducted.Count()))
@@ -218,14 +218,14 @@ func TestTokenAdjustment(t *testing.T) {
 				var buf strings.Builder
 				switch typ {
 				case "eval":
-					metricsString(flowControlEvalMetricType, &buf)
+					metricsString(EvalToken, &buf)
 				case "send":
-					metricsString(flowControlSendMetricType, &buf)
+					metricsString(SendToken, &buf)
 				case "all":
 					buf.WriteString("eval\n")
-					metricsString(flowControlEvalMetricType, &buf)
+					metricsString(EvalToken, &buf)
 					buf.WriteString("send\n")
-					metricsString(flowControlSendMetricType, &buf)
+					metricsString(SendToken, &buf)
 				default:
 					t.Fatalf("unknown type: %s", typ)
 				}
@@ -289,8 +289,9 @@ func TestTokenCounter(t *testing.T) {
 	counter := newTokenCounter(
 		settings,
 		hlc.NewClockForTesting(nil),
-		newTokenCounterMetrics(flowControlEvalMetricType),
+		newTokenCounterMetrics(EvalToken),
 		kvflowcontrol.Stream{},
+		EvalToken,
 	)
 
 	assertStateReset := func(t *testing.T) {
@@ -465,8 +466,9 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 			tokenCounter: newTokenCounter(
 				ts.settings,
 				hlc.NewClockForTesting(nil),
-				newTokenCounterMetrics(flowControlEvalMetricType),
+				newTokenCounterMetrics(EvalToken),
 				kvflowcontrol.Stream{},
+				EvalToken,
 			),
 			stream: stream,
 		}
