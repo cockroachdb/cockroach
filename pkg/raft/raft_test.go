@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -4161,6 +4162,68 @@ func preVoteConfigWithFortificationDisabled(c *Config) {
 	c.StoreLiveness = raftstoreliveness.Disabled{}
 }
 
+// mockStoreLiveness is a simple mock implementation of StoreLiveness that
+// is used in raft unit tests. Initially treats all store to store connections
+// as live, but it can be configured to withdraw support, grant support, and
+// bump the support epoch.
+type mockStoreLiveness struct {
+	supportEpoch pb.Epoch
+	grantSupport bool
+}
+
+var _ raftstoreliveness.StoreLiveness = mockStoreLiveness{}
+
+func NewMockStoreLiveness() *mockStoreLiveness {
+	return &mockStoreLiveness{supportEpoch: pb.Epoch(1), grantSupport: true}
+}
+
+// SupportFor implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+	return m.supportEpoch, m.grantSupport
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+	if m.grantSupport {
+		return m.supportEpoch, hlc.MaxTimestamp
+	}
+	return 0, hlc.Timestamp{}
+}
+
+// SupportFromEnabled implements the StoreLiveness interface.
+func (mockStoreLiveness) SupportFromEnabled() bool {
+	return true
+}
+
+// SupportExpired implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
+	switch ts {
+	case hlc.Timestamp{}:
+		return true
+	case hlc.MaxTimestamp:
+		return false
+	default:
+		panic("unexpected timestamp")
+	}
+}
+
+// BumpSupportEpoch bumps the support epoch.
+func (m *mockStoreLiveness) BumpSupportEpoch() {
+	m.supportEpoch++
+}
+
+// WithdrawSupport causes all calls to SupportFor and SupportFrom, and
+// SupportExpired to indicate no support.
+func (m *mockStoreLiveness) WithdrawSupport() {
+	m.grantSupport = false
+}
+
+// WithdrawSupport causes all calls to SupportFor and SupportFrom, and
+// SupportExpired to indicate existing support.
+func (m *mockStoreLiveness) GrantSupport() {
+	m.grantSupport = true
+}
+
 func (nw *network) send(msgs ...pb.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
@@ -4303,7 +4366,7 @@ func newTestConfig(
 	if modifiers.testingDisableFortification {
 		storeLiveness = raftstoreliveness.Disabled{}
 	} else {
-		storeLiveness = raftstoreliveness.AlwaysLive{}
+		storeLiveness = NewMockStoreLiveness()
 	}
 	return &Config{
 		ID:              id,
