@@ -48,8 +48,8 @@ func NewStreamTokenCounterProvider(
 		settings:     settings,
 		clock:        clock,
 		tokenMetrics: NewTokenMetrics(),
-		sendLogger:   newBlockedStreamLogger(flowControlSendMetricType),
-		evalLogger:   newBlockedStreamLogger(flowControlEvalMetricType),
+		sendLogger:   newBlockedStreamLogger(SendToken),
+		evalLogger:   newBlockedStreamLogger(EvalToken),
 	}
 }
 
@@ -59,7 +59,7 @@ func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlEvalMetricType], stream))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[EvalToken], stream, EvalToken))
 	return t
 }
 
@@ -69,7 +69,7 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlSendMetricType], stream))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[SendToken], stream, SendToken))
 	return t
 }
 
@@ -118,16 +118,16 @@ func (p *StreamTokenCounterProvider) Inspect(_ context.Context) []kvflowinspectp
 // UpdateMetricGauges updates the gauge token metrics and logs blocked streams.
 func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 	var (
-		count           [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
-		blockedCount    [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
-		tokensAvailable [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
+		count           [NumTokenTypes][admissionpb.NumWorkClasses]int64
+		blockedCount    [NumTokenTypes][admissionpb.NumWorkClasses]int64
+		tokensAvailable [NumTokenTypes][admissionpb.NumWorkClasses]int64
 	)
 	now := p.clock.PhysicalTime()
 
 	// First aggregate the metrics across all streams, by (eval|send) types and
 	// (regular|elastic) work classes, then using the aggregate update the
 	// gauges.
-	gaugeUpdateFn := func(metricType flowControlMetricType) func(
+	gaugeUpdateFn := func(metricType TokenType) func(
 		kvflowcontrol.Stream, *tokenCounter) bool {
 		return func(stream kvflowcontrol.Stream, t *tokenCounter) bool {
 			regularTokens := t.tokens(admissionpb.RegularWorkClass)
@@ -148,11 +148,11 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 		}
 	}
 
-	p.evalCounters.Range(gaugeUpdateFn(flowControlEvalMetricType))
-	p.sendCounters.Range(gaugeUpdateFn(flowControlSendMetricType))
-	for _, typ := range []flowControlMetricType{
-		flowControlEvalMetricType,
-		flowControlSendMetricType,
+	p.evalCounters.Range(gaugeUpdateFn(EvalToken))
+	p.sendCounters.Range(gaugeUpdateFn(SendToken))
+	for _, typ := range []TokenType{
+		EvalToken,
+		SendToken,
 	} {
 		for _, wc := range []admissionpb.WorkClass{
 			admissionpb.RegularWorkClass,
@@ -210,7 +210,7 @@ const (
 )
 
 type blockedStreamLogger struct {
-	metricType flowControlMetricType
+	metricType TokenType
 	limiter    log.EveryN
 	// blockedCount is the total number of unique streams blocked in the last
 	// interval, regardless of the work class e.g., if 5 streams exist and all
@@ -225,7 +225,7 @@ type blockedStreamLogger struct {
 	elaBuf, regBuf      strings.Builder
 }
 
-func newBlockedStreamLogger(metricType flowControlMetricType) *blockedStreamLogger {
+func newBlockedStreamLogger(metricType TokenType) *blockedStreamLogger {
 	return &blockedStreamLogger{
 		metricType: metricType,
 		limiter:    log.Every(blockedStreamLoggingInterval),
