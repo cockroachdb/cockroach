@@ -1356,7 +1356,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 
 	ts, err := testserver.NewTestServer(opts...)
 	if err != nil {
-		t.handleWaitForInitErr(err)
+		t.handleWaitForInitErr(ts, err)
 	}
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
@@ -1381,7 +1381,7 @@ func (t *logicTest) waitForAllNodes() {
 	for i := 0; i < t.cfg.NumNodes; i++ {
 		// Wait for each node to be reachable.
 		if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-			t.handleWaitForInitErr(err)
+			t.handleWaitForInitErr(t.testserverCluster, err)
 		}
 	}
 }
@@ -1393,7 +1393,7 @@ func (t *logicTest) waitForAllNodes() {
 // issue, and we haven't been able to investigate it effectively, we
 // will ignore this error.
 // See https://github.com/cockroachdb/cockroach/issues/128759.
-func (t *logicTest) handleWaitForInitErr(err error) {
+func (t *logicTest) handleWaitForInitErr(ts testserver.TestServer, err error) {
 	if testutils.IsError(err, "init did not finish for node") {
 		foundSnappyErr := false
 		walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
@@ -1424,6 +1424,7 @@ func (t *logicTest) handleWaitForInitErr(err error) {
 		if walkErr != nil {
 			t.t().Logf("error while walking logs directory: %v", walkErr)
 		} else if foundSnappyErr {
+			ts.Stop()
 			t.t().Skip("ignoring init did not finish for node error due to snappy error")
 		}
 	}
