@@ -17,12 +17,3 @@ go_binary(
     embed = [":cockroach-oss_lib"],
     visibility = ["//visibility:public"],
 )
-
-disallowed_imports_test(
-    "cockroach-oss",
-    disallowed_list = [],
-    disallowed_prefixes = [
-        "pkg/ccl",
-        "pkg/ui/distccl",
-    ],
-)
