@@ -2885,6 +2885,14 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			}, incArgs); err != nil {
 				t.Fatal(err)
 			}
+			// We don't need to assert that the tokens are tracked, but doing so
+			// will make debugging this test failure easier.
+			h.waitForTotalTrackedTokens(ctx, repl.RangeID, 5<<20 /* 5 MiB */, 0 /* serverIdx */)
+			h.waitForAllTokensAvailable(ctx, 5, 0 /* serverIdx */, h.tokensAvailableLimitWithDelta(tokensAvailableDeltaModeEnabled(
+				mode,
+				v2EnabledWhenLeaderLevel,
+				-(1<<20), /* 1 MiB */
+			)))
 
 			h.comment(`
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
@@ -4685,6 +4693,73 @@ func (h *flowControlTestHelper) waitForAllTokensReturned(
 func (h *flowControlTestHelper) checkAllTokensReturned(
 	ctx context.Context, expStreamCount, serverIdx int, lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) error {
+	return h.checkTokensAvailable(
+		ctx, expStreamCount, serverIdx, h.tokensAvailableLimitWithDelta(kvflowinspectpb.Stream{}), lvl...)
+}
+
+func tokensAvailableDeltaModeEnabled(
+	mode kvflowcontrol.ModeT, enabled kvflowcontrol.V2EnabledWhenLeaderLevel, delta int64,
+) kvflowinspectpb.Stream {
+	streamDelta := kvflowinspectpb.Stream{
+		AvailableEvalElasticTokens: delta,
+		AvailableSendElasticTokens: delta,
+	}
+	switch mode {
+	case kvflowcontrol.ApplyToElastic:
+	// Handled above, nothing to do.
+	case kvflowcontrol.ApplyToAll:
+		if enabled == kvflowcontrol.V2EnabledWhenLeaderV2Encoding {
+			// NB: We cannot reliably assert on the regular tokens when not using the
+			// V2 protocol because we will convert all decoded priorities to elastic
+			// in processor.go: AdmitRaftEntriesRaftMuLocked.
+			streamDelta.AvailableEvalRegularTokens = delta
+			streamDelta.AvailableSendRegularTokens = delta
+		}
+	default:
+		panic("unknown flow control mode")
+	}
+
+	return streamDelta
+}
+
+func (h *flowControlTestHelper) tokensAvailableLimitWithDelta(
+	delta kvflowinspectpb.Stream,
+) kvflowinspectpb.Stream {
+	elasticTokensPerStream := kvflowcontrol.ElasticTokensPerStream.Get(&h.st.SV)
+	regularTokensPerStream := kvflowcontrol.RegularTokensPerStream.Get(&h.st.SV)
+	return kvflowinspectpb.Stream{
+		AvailableEvalRegularTokens: regularTokensPerStream + delta.AvailableEvalRegularTokens,
+		AvailableEvalElasticTokens: elasticTokensPerStream + delta.AvailableEvalElasticTokens,
+		AvailableSendRegularTokens: regularTokensPerStream + delta.AvailableSendRegularTokens,
+		AvailableSendElasticTokens: elasticTokensPerStream + delta.AvailableSendElasticTokens,
+	}
+}
+
+// waitForAllTokensAvaiable waits for all tokens to be equal to the provided
+// expTokensStream across all streams. The expected number of streams and
+// protocol level is passed in as an argument, in order to allow switching
+// between v1 and v2 flow control.
+func (h *flowControlTestHelper) waitForAllTokensAvailable(
+	ctx context.Context,
+	expStreamCount, serverIdx int,
+	expTokensStream kvflowinspectpb.Stream,
+	lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
+) {
+	testutils.SucceedsSoon(h.t, func() error {
+		return h.checkTokensAvailable(ctx, expStreamCount, serverIdx, expTokensStream, lvl...)
+	})
+}
+
+// checkTokensAvailableIs checks that the expected number of tokens are available
+// across all streams. The expected number of streams and protocol level is
+// passed in as an argument, in order to allow switching between v1 and v2 flow
+// control.
+func (h *flowControlTestHelper) checkTokensAvailable(
+	ctx context.Context,
+	expStreamCount, serverIdx int,
+	expTokensStream kvflowinspectpb.Stream,
+	lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
+) error {
 	var streams []kvflowinspectpb.Stream
 	level := h.resolveLevelArgs(lvl...)
 	switch level {
@@ -4696,8 +4771,6 @@ func (h *flowControlTestHelper) checkAllTokensReturned(
 		h.t.Fatalf("unknown level: %v", level)
 	}
 
-	elasticTokensPerStream := kvflowcontrol.ElasticTokensPerStream.Get(&h.st.SV)
-	regularTokensPerStream := kvflowcontrol.RegularTokensPerStream.Get(&h.st.SV)
 	if len(streams) != expStreamCount {
 		return fmt.Errorf("expected %d replication streams, got %d [%+v]", expStreamCount, len(streams), streams)
 	}
@@ -4708,7 +4781,7 @@ func (h *flowControlTestHelper) checkAllTokensReturned(
 		typName string,
 	) error {
 		if actualTokens != expTokens {
-			return fmt.Errorf("expected %v of %s flow tokens for %v, got %v [level=%+v %+v]",
+			return fmt.Errorf("expected %v of %v flow tokens for %v, got %v [level=%+v stream=%v]",
 				humanize.IBytes(uint64(expTokens)), typName, stream,
 				humanize.IBytes(uint64(actualTokens)),
 				level,
@@ -4724,24 +4797,24 @@ func (h *flowControlTestHelper) checkAllTokensReturned(
 			StoreID:  stream.StoreID,
 		}
 		if err := checkTokens(
-			regularTokensPerStream, stream.AvailableEvalRegularTokens, s, "regular eval",
+			expTokensStream.AvailableEvalRegularTokens, stream.AvailableEvalRegularTokens, s, "regular eval",
 		); err != nil {
 			return err
 		}
 		if err := checkTokens(
-			elasticTokensPerStream, stream.AvailableEvalElasticTokens, s, "elastic eval",
+			expTokensStream.AvailableEvalElasticTokens, stream.AvailableEvalElasticTokens, s, "elastic eval",
 		); err != nil {
 			return err
 		}
 		if level > kvflowcontrol.V2NotEnabledWhenLeader {
 			// V2 flow control also has send tokens.
 			if err := checkTokens(
-				regularTokensPerStream, stream.AvailableSendRegularTokens, s, "regular send",
+				expTokensStream.AvailableSendRegularTokens, stream.AvailableSendRegularTokens, s, "regular send",
 			); err != nil {
 				return err
 			}
 			if err := checkTokens(
-				elasticTokensPerStream, stream.AvailableSendElasticTokens, s, "elastic send",
+				expTokensStream.AvailableSendElasticTokens, stream.AvailableSendElasticTokens, s, "elastic send",
 			); err != nil {
 				return err
 			}
