@@ -101,6 +101,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		}
 		select {
 		case <-scheduleSettingsCh:
+			log.Info(ctx, "table metadata job settings updated, stopping timer.")
 			timer.Stop()
 			continue
 		case <-timer.C:
