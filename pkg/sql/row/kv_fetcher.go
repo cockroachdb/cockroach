@@ -197,6 +197,7 @@ func NewStreamingKVFetcher(
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	rawMVCCValues bool,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -228,7 +229,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued, rawMVCCValues))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

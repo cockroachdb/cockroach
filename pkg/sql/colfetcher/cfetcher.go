@@ -861,8 +861,8 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 			if vh, err := cf.machine.nextKV.Value.GetMVCCValueHeader(); err == nil {
-				cf.table.rowLastOriginID = int(vh.OriginID)
-				if cf.table.rowLastOriginTimestamp.Less(vh.OriginTimestamp) {
+				if cf.table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
+					cf.table.rowLastOriginID = int(vh.OriginID)
 					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
 				}
 			}
@@ -936,8 +936,8 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 			if vh, err := kv.Value.GetMVCCValueHeader(); err == nil {
-				cf.table.rowLastOriginID = int(vh.OriginID)
 				if cf.table.rowLastOriginTimestamp.Less(vh.OriginTimestamp) {
+					cf.table.rowLastOriginID = int(vh.OriginID)
 					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
 				}
 			}

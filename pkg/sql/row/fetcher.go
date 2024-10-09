@@ -907,10 +907,8 @@ func (rf *Fetcher) processKV(
 		table.rowLastModified = kv.Value.Timestamp
 	}
 	if vh, err := kv.Value.GetMVCCValueHeader(); err == nil {
-		if table.rowLastOriginID < int(vh.OriginID) {
+		if table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
 			table.rowLastOriginID = int(vh.OriginID)
-		}
-		if table.rowLastOriginTimestamp.Less(vh.OriginTimestamp) {
 			table.rowLastOriginTimestamp = vh.OriginTimestamp
 		}
 	}
@@ -1331,7 +1329,7 @@ func (rf *Fetcher) finalizeRow() error {
 			dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastOriginTimestamp)})
 			table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 		} else {
-			table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: tree.DNull}
+			table.row[table.originTimestampOutputIdx] = rowenc.NullEncDatum()
 		}
 	}
 

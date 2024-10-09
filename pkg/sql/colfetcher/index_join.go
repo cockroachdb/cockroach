@@ -561,6 +561,7 @@ func NewColIndexJoin(
 			),
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
+			tableArgs.RequiresRawMVCCValues(),
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
