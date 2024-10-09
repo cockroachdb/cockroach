@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -74,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -361,6 +363,10 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		SystemConfigProvider: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
+		KVFlowAdmittedPiggybacker:    node_rac2.NewAdmittedPiggybacker(),
+		KVFlowStreamTokenProvider:    rac2.NewStreamTokenCounterProvider(st, clock),
+		KVFlowEvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
+		KVFlowRangeControllerMetrics: rac2.NewRangeControllerMetrics(),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
@@ -2210,6 +2216,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	s.rangeIDAlloc = idAlloc
+
+	if s.cfg.KVFlowStreamTokenProvider == nil {
+		// Some tests don't setup a server, just a store or similar. In these
+		// cases, the KVFlow.* fields in the store config, which are references
+		// to a shared object between stores on the same server, will not be set.
+		// We set them here to avoid handling nil values in such tests within the
+		// rac2 code.
+		if buildutil.CrdbTestBuild {
+			// Ensure that this is actually test build. If it is not, we should not
+			// be compensating for an underlying bug.
+			s.cfg.KVFlowSendTokenWatcher = rac2.NewSendTokenWatcher(s.stopper, timeutil.DefaultTimeSource{})
+		} else {
+			return errors.New("missing KVFlowSendTokenWatcher")
+		}
+	}
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
