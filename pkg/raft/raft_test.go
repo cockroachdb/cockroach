@@ -356,9 +356,10 @@ func TestLearnerElectionTimeout(t *testing.T) {
 // TestLearnerPromotion verifies that the learner should not election until
 // it is promoted to a normal peer.
 func TestLearnerPromotion(t *testing.T) {
-	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
-
-	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
+	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -742,9 +743,9 @@ func TestDuelingCandidates(t *testing.T) {
 	s1 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s2 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s3 := newTestMemoryStorage(withPeers(1, 2, 3))
-	a := newTestRaft(1, 10, 1, s1, withFortificationDisabled())
-	b := newTestRaft(2, 10, 1, s2, withFortificationDisabled())
-	c := newTestRaft(3, 10, 1, s3, withFortificationDisabled())
+	a := newTestRaft(1, 10, 1, s1, withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, s2, withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, s3, withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	nt := newNetwork(a, b, c)
 	nt.cut(1, 3)
@@ -787,9 +788,12 @@ func TestDuelingCandidates(t *testing.T) {
 }
 
 func TestDuelingPreCandidates(t *testing.T) {
-	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 	cfgA.PreVote = true
 	cfgB.PreVote = true
 	cfgC.PreVote = true
@@ -1186,7 +1190,7 @@ func TestHandleHeartbeatRespStoreLivenessDisabled(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
-	sm := newTestRaft(1, 5, 1, storage, withFortificationDisabled())
+	sm := newTestRaft(1, 5, 1, storage, withStoreLiveness(raftstoreliveness.Disabled{}))
 	sm.becomeCandidate()
 	sm.becomeLeader()
 	sm.raftLog.commitTo(sm.raftLog.unstable.mark())
@@ -1517,15 +1521,12 @@ func TestCandidateResetTermMsgApp(t *testing.T) {
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
 func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
-	a := newTestRaft(
-		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	b := newTestRaft(
-		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	c := newTestRaft(
-		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	nt := newNetwork(a, b, c)
 
@@ -1674,7 +1675,8 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 }
 
 func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
-	sm := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	sm := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	sm.checkQuorum = true
 
@@ -1689,14 +1691,12 @@ func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
 }
 
 func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(
-		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	b := newTestRaft(
-		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	c := newTestRaft(
-		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1728,15 +1728,12 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 }
 
 func TestLeaderElectionWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(
-		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	b := newTestRaft(
-		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	c := newTestRaft(
-		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1773,15 +1770,12 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 // can disrupt the leader even if the leader still "officially" holds the lease, The
 // leader is expected to step down and adopt the candidate's term
 func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(
-		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	b := newTestRaft(
-		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	c := newTestRaft(
-		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1852,15 +1846,12 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 // candiate's response to late leader heartbeat forces the leader
 // to step down.
 func TestDisruptiveFollower(t *testing.T) {
-	n1 := newTestRaft(
-		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	n2 := newTestRaft(
-		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
-	n3 := newTestRaft(
-		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
-	)
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -1936,9 +1927,12 @@ func TestDisruptiveFollower(t *testing.T) {
 // Then pre-vote phase prevents this isolated node from forcing
 // current leader to step down, thus less disruptions.
 func TestDisruptiveFollowerPreVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -2066,7 +2060,7 @@ func TestBcastBeat(t *testing.T) {
 
 			testOptions := emptyTestConfigModifierOpt()
 			if !storeLivenessEnabled {
-				testOptions = withFortificationDisabled()
+				testOptions = withStoreLiveness(raftstoreliveness.Disabled{})
 			}
 
 			sm := newTestRaft(1, 10, 1, storage, testOptions)
@@ -2194,7 +2188,7 @@ func TestLeaderIncreaseNext(t *testing.T) {
 
 func TestSendAppendForProgressProbeStoreLivenessDisabled(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-		withFortificationDisabled())
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	r.becomeCandidate()
 	r.becomeLeader()
@@ -2741,7 +2735,8 @@ func TestAddLearner(t *testing.T) {
 // TestAddNodeCheckQuorum tests that addNode does not trigger a leader election
 // immediately when checkQuorum is set.
 func TestAddNodeCheckQuorum(t *testing.T) {
-	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)), withFortificationDisabled())
+	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 	r.checkQuorum = true
 
 	r.becomeCandidate()
@@ -3497,9 +3492,12 @@ func TestLeaderTransferStaleFollower(t *testing.T) {
 // Previously the cluster would come to a standstill when run with PreVote
 // enabled.
 func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3564,9 +3562,12 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 // TestPreVoteWithSplitVote verifies that after split vote, cluster can complete
 // election in next round.
 func TestPreVoteWithSplitVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3687,9 +3688,12 @@ func TestLearnerCampaign(t *testing.T) {
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
 func newPreVoteMigrationCluster(t *testing.T) *network {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -4320,7 +4324,7 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 
 // testConfigModifiers allows callers to optionally modify newTestConfig.
 type testConfigModifiers struct {
-	testingDisableFortification bool
+	testingStoreLiveness raftstoreliveness.StoreLiveness
 }
 
 // testConfigModifierOpt is the type of an optional parameter to newTestConfig
@@ -4332,10 +4336,10 @@ func emptyTestConfigModifierOpt() testConfigModifierOpt {
 	return func(modifier *testConfigModifiers) {}
 }
 
-// withRaftFortification disables raft fortification.
-func withFortificationDisabled() testConfigModifierOpt {
+// withStoreLiveness explicitly uses the supplied StoreLiveness implementation.
+func withStoreLiveness(storeLiveness raftstoreliveness.StoreLiveness) testConfigModifierOpt {
 	return func(modifier *testConfigModifiers) {
-		modifier.testingDisableFortification = true
+		modifier.testingStoreLiveness = storeLiveness
 	}
 }
 
@@ -4347,8 +4351,8 @@ func newTestConfig(
 		opt(&modifiers)
 	}
 	var storeLiveness raftstoreliveness.StoreLiveness
-	if modifiers.testingDisableFortification {
-		storeLiveness = raftstoreliveness.Disabled{}
+	if modifiers.testingStoreLiveness != nil {
+		storeLiveness = modifiers.testingStoreLiveness
 	} else {
 		storeLiveness = raftstoreliveness.AlwaysLive{}
 	}

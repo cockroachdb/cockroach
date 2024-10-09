@@ -37,6 +37,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,7 +116,7 @@ func TestLeaderBcastBeat(t *testing.T) {
 		func(t *testing.T, storeLivenessEnabled bool) {
 			testOptions := emptyTestConfigModifierOpt()
 			if !storeLivenessEnabled {
-				testOptions = withFortificationDisabled()
+				testOptions = withStoreLiveness(raftstoreliveness.Disabled{})
 			}
 
 			r := newTestRaft(1, 10, hi,
