@@ -103,6 +103,12 @@ type cTableInfo struct {
 	// to write the value for the OriginTimestamp system column.
 	originTimestampOutputIdx int
 	rowLastOriginTimestamp   hlc.Timestamp
+	// rowLastModifiedWithoutOriginTimestamp is the largest MVCC
+	// timestamp seen for any column family that _doesn't_ have an
+	// OriginTimestamp set. If this is greater than the
+	// rowLastOriginTimestamp field, we output NULL for origin
+	// timestamp.
+	rowLastModifiedWithoutOriginTimestamp hlc.Timestamp
 
 	da tree.DatumAlloc
 }
@@ -759,6 +765,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.table.rowLastModified = hlc.Timestamp{}
 			cf.table.rowLastOriginID = 0
 			cf.table.rowLastOriginTimestamp = hlc.Timestamp{}
+			cf.table.rowLastModifiedWithoutOriginTimestamp = hlc.Timestamp{}
 			cf.machine.firstKeyOfRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
@@ -865,6 +872,9 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					cf.table.rowLastOriginID = int(vh.OriginID)
 					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
 				}
+				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
+					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
+				}
 			}
 
 			// If the index has only one column family, then the next KV will
@@ -936,9 +946,12 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 			if vh, err := kv.Value.GetMVCCValueHeader(); err == nil {
-				if cf.table.rowLastOriginTimestamp.Less(vh.OriginTimestamp) {
+				if cf.table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
 					cf.table.rowLastOriginID = int(vh.OriginID)
 					cf.table.rowLastOriginTimestamp = vh.OriginTimestamp
+				}
+				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
+					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
 				}
 			}
 
@@ -962,7 +975,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				cf.machine.originIDCol.Set(cf.machine.rowIdx, int32(cf.table.rowLastOriginID))
 			}
 			if cf.table.originTimestampOutputIdx != noOutputColumn {
-				if cf.table.rowLastOriginTimestamp.IsSet() {
+				if cf.table.rowLastOriginTimestamp.IsSet() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.table.rowLastOriginTimestamp) {
 					cf.machine.originTimestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastOriginTimestamp)
 				} else {
 					cf.machine.colvecs.Nulls[cf.table.originTimestampOutputIdx].SetNull(cf.machine.rowIdx)

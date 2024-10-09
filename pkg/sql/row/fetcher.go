@@ -203,8 +203,14 @@ type tableInfo struct {
 	originIDOutputIdx int
 
 	// Fields for outputting the OriginTimestamp system column.
-	rowLastOriginTimestamp   hlc.Timestamp
-	originTimestampOutputIdx int
+	rowLastOriginTimestamp hlc.Timestamp
+	// rowLastModifiedWithoutOriginTimestamp is the largest MVCC
+	// timestamp seen for any column family that _doesn't_ have an
+	// OriginTimestamp set. If this is greater than the
+	// rowLastOriginTimestamp field, we output NULL for origin
+	// timestamp.
+	rowLastModifiedWithoutOriginTimestamp hlc.Timestamp
+	originTimestampOutputIdx              int
 
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
@@ -896,6 +902,7 @@ func (rf *Fetcher) processKV(
 		table.rowLastModified = hlc.Timestamp{}
 		table.rowLastOriginID = 0
 		table.rowLastOriginTimestamp = hlc.Timestamp{}
+		table.rowLastModifiedWithoutOriginTimestamp = hlc.Timestamp{}
 		// All row encodings (both before and after column families) have a
 		// sentinel kv (column family 0) that is always present when a row is
 		// present, even if that row is all NULLs. Thus, a row is deleted if and
@@ -910,6 +917,9 @@ func (rf *Fetcher) processKV(
 		if table.rowLastOriginTimestamp.LessEq(vh.OriginTimestamp) {
 			table.rowLastOriginID = int(vh.OriginID)
 			table.rowLastOriginTimestamp = vh.OriginTimestamp
+		}
+		if vh.OriginTimestamp.IsEmpty() && table.rowLastModifiedWithoutOriginTimestamp.Less(kv.Value.Timestamp) {
+			table.rowLastModifiedWithoutOriginTimestamp = kv.Value.Timestamp
 		}
 	}
 
@@ -1325,7 +1335,7 @@ func (rf *Fetcher) finalizeRow() error {
 	}
 
 	if table.originTimestampOutputIdx != noOutputColumn {
-		if rf.table.rowLastOriginTimestamp.IsSet() {
+		if rf.table.rowLastOriginTimestamp.IsSet() && rf.table.rowLastModifiedWithoutOriginTimestamp.Less(rf.table.rowLastOriginTimestamp) {
 			dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastOriginTimestamp)})
 			table.row[table.originTimestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 		} else {

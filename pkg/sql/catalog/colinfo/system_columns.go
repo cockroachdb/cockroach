@@ -36,13 +36,24 @@ const (
 	TableOIDColumnID
 
 	// OriginIDColumnID is the ColumnID of the OriginID column
-	// which returns the most recent OriginID from the
-	// MVCCValueHeader.
+	// which returns the OriginID from the column family with the
+	// largest OriginTimestamp.
+	//
+	// NB: The semantics of this column are subject to change and
+	// should not be relied upon.
 	OriginIDColumnID
 
 	// OriginTimestampColumnID is the ColumnID of the OriginTimestamp column
 	// which returns the most recent OriginTimestamp from the
 	// MVCCValueHeader.
+	//
+	// In the presence of multiple column families, this column
+	// will only be non-NULL if the latest OriginTimstamp is
+	// larger than then MVCC timestamp of all column families
+	// _without_ and OriginTimestamp.
+	//
+	// NB: The semantics of this column are subject to change and
+	// should not be relied upon.
 	OriginTimestampColumnID
 
 	numSystemColumns = iota
