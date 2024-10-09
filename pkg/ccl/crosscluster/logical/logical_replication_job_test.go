@@ -645,39 +645,59 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbs, _ := setupServerWithNumDBs(t, ctx, clusterArgs, 1, 3)
 	defer server.Stopper().Stop(ctx)
+
+	dbA, dbB, dbC := dbs[0], dbs[1], dbs[2]
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
 
-	var (
-		jobAID jobspb.JobID
-		jobBID jobspb.JobID
-	)
+	var jobAID, jobBID, jobCID jobspb.JobID
 
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE b.public.tab ON $1 INTO TABLE a.tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE b.tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
+	dbC.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE c.tab WITH DISCARD = 'all-deletes'", dbAURL.String()).Scan(&jobCID)
+
+	dbA.Exec(t, "INSERT INTO a.tab VALUES (0, 'a'), (1, 'b'), (2, 'c')")
+	dbA.Exec(t, "UPDATE a.tab SET payload = 'x' WHERE pk = 0")
+
+	dbA.Exec(t, "DELETE FROM a.tab WHERE pk = 2")
+
+	dbC.Exec(t, "SET disable_changefeed_replication = true")
+	dbC.Exec(t, "DELETE FROM a.tab WHERE pk = 1")
 
 	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+	t.Logf("waiting for replication job %d", jobCID)
+	WaitUntilReplicatedTime(t, now, dbB, jobCID)
 
 	// Verify that Job contains FilterRangeFeed
-	details := jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails()
-	require.False(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardNothing,
+		jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails().Discard)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes,
+		jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails().Discard)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardAllDeletes,
+		jobutils.GetJobPayload(t, dbC, jobCID).GetLogicalReplicationDetails().Discard)
 
-	details = jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails()
-	require.True(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
-
-	require.Equal(t, len(filterVal), 2)
+	require.Equal(t, len(filterVal), 3)
 
 	// Only one should be true
 	require.True(t, filterVal[0] != filterVal[1])
+
+	// A had both rows deleted, and zero updated.
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", [][]string{{"0", "x"}})
+
+	// B ignored the delete of 'c' that was marked as omit (aka 'ttl').
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", [][]string{{"0", "x"}, {"1", "b"}})
+
+	// C ignored all deletes and still has all three rows.
+	dbC.CheckQueryResults(t, "SELECT * from c.tab", [][]string{{"0", "x"}, {"1", "b"}, {"2", "c"}})
 }
 
 func TestRandomTables(t *testing.T) {
