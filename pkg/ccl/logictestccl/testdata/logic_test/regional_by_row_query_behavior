@@ -3217,7 +3217,7 @@ index-join t88047
  └── locality-optimized-search
       ├── scan t88047@t88047_inv_idx,inverted
       │    ├── constraint: /13: [/'ap-southeast-2' - /'ap-southeast-2']
-      │    ├── inverted constraint: /15/12
+      │    ├── inverted constraint: /19/14
       │    │    └── spans: ["loc"/"state"/"NY", "loc"/"state"/"NY"]
       │    └── limit: 2
       └── scan t88047@t88047_inv_idx,inverted
