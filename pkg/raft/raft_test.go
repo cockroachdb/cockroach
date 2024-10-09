@@ -4301,6 +4301,49 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// maybeWithdrawSupportAllPeers calls maybeWithdrawSupport for all peers in the
+// network.
+func (nw *network) maybeWithdrawSupportAllPeers() {
+	for id := range nw.peers {
+		nw.maybeWithdrawSupport(id)
+	}
+}
+
+// maybeWithdrawSupport causes the peer with the given ID to stop supporting and
+// getting support from all stores if it's using the mockStoreLiveness
+// implementation. Otherwise, it does nothing.
+func (nw *network) maybeWithdrawSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+
+	if mock, ok := p.(*raft).storeLiveness.(*mockStoreLiveness); ok {
+		mock.WithdrawSupport()
+	}
+}
+
+// maybeGrantSupportAllPeers calls maybeGrantSupport for all peers in the network.
+func (nw *network) maybeGrantSupportAllPeers() {
+	for id := range nw.peers {
+		nw.maybeGrantSupport(id)
+	}
+}
+
+// maybeGrantSupport causes the peer with the given ID to start supporting and
+// getting support from all stores if it's using the mockStoreLiveness
+// implementation. Otherwise, it does nothing.
+func (nw *network) maybeGrantSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+
+	if mock, ok := p.(*raft).storeLiveness.(*mockStoreLiveness); ok {
+		mock.GrantSupport()
+	}
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
