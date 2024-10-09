@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -307,7 +308,8 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, withFortificationDisabled()))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s,
+		withStoreLiveness(raftstoreliveness.Disabled{})))
 	require.NoError(t, err)
 
 	rawNode.Campaign()
