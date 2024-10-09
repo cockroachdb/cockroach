@@ -45,7 +45,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/security/username",
         "//pkg/settings",
-        "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/decodeusername",
         "//pkg/sql/lexbase",

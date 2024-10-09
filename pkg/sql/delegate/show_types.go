@@ -19,19 +19,8 @@ func (d *delegator) delegateShowTypes(n *tree.ShowTypes) (tree.Statement, error)
 	dbName := lexbase.EscapeSQLIdent(d.evalCtx.SessionData().Database)
 	commentColumn, commentJoin := ``, ``
 	if n.WithComment {
-		commentColumn = `, comment`
-		commentJoin = fmt.Sprintf(`
-			LEFT JOIN
-				(
-					SELECT 
-						objoid, description as comment
-					FROM
-						%s.pg_catalog.pg_description
-					WHERE
-						classoid = %d
-				) c
-			ON
-				 	(types.oid::int - 100000) = c.objoid`, dbName, catconstants.PgCatalogTypeTableID)
+		commentTableName := dbName + ".pg_catalog.pg_description"
+		commentColumn, commentJoin = d.getCommentQuery(commentTableName, catconstants.PgCatalogTypeTableID, "(types.oid::int - 100000)")
 	}
 
 	// Query all enum and composite types. Two explanations about the WHERE
