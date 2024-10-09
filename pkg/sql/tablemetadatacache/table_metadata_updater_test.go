@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -42,6 +43,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 	mockUpdateProgress := func(ctx context.Context, progress float32) {}
 	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, ""), func(t *testing.T, path string) {
+		mockTimeSrc := timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				TableMetadata: knobs,
@@ -51,11 +53,15 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 
 		queryConn := s.ApplicationLayer().SQLConn(t)
 		s.ApplicationLayer().DB()
-
 		spanStatsServer := s.TenantStatusServer().(serverpb.TenantStatusServer)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "set-time":
+				var unixSecs int64
+				d.ScanArgs(t, "unixSecs", &unixSecs)
+				mockTimeSrc.AdvanceTo(timeutil.FromUnixMicros(unixSecs * 1e6))
+				return ""
 			case "query":
 				rows, err := queryConn.Query(d.Input)
 				if err != nil {
@@ -68,26 +74,35 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				return res
 			case "update-cache":
 				var spanStatsErrors string
+				// The batch number to inject an error on.
+				var spanStatsErrBatch int64
 				var spanStatsSrv spanStatsFetcher = spanStatsServer
 				d.MaybeScanArgs(t, "injectSpanStatsErrors", &spanStatsErrors)
+				d.MaybeScanArgs(t, "spanStatsErrBatch", &spanStatsErrBatch)
+				batchCount := atomic.Int64{}
 				if spanStatsErrors != "" {
 					spanStatsSrv = &mockSpanStatsFetcher{
 						getSpanStats: func(ctx context.Context, request *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error) {
+							var errs []string
+							batchCount.Add(1)
+							if spanStatsErrBatch == 0 || batchCount.Load() == spanStatsErrBatch {
+								errs = strings.Split(spanStatsErrors, ",")
+							}
 							return &roachpb.SpanStatsResponse{
-								SpanToStats: make(map[string]*roachpb.SpanStats),
-								Errors:      strings.Split(spanStatsErrors, ","),
+								SpanToStats: nil,
+								Errors:      errs,
 							}, nil
 						},
 					}
 				}
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), mockTimeSrc, knobs)
 				updated, err := updater.updateCache(ctx)
 				if err != nil {
 					return err.Error()
 				}
 				return fmt.Sprintf("updated %d table(s)", updated)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()

@@ -64,6 +64,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			&metrics,
 			execCtx.ExecCfg().TenantStatusServer,
 			execCtx.ExecCfg().InternalDB.Executor(),
+			timeutil.DefaultTimeSource{},
 			testKnobs)
 	}
 	// We must reset the job's num runs to 0 so that it doesn't get

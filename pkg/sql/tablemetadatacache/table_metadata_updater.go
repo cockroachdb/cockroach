@@ -31,6 +31,7 @@ type spanStatsFetcher interface {
 // tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
 type tableMetadataUpdater struct {
 	ie               isql.Executor
+	timeSrc          timeutil.TimeSource
 	metrics          *TableMetadataUpdateJobMetrics
 	updateProgress   func(ctx context.Context, progress float32)
 	spanStatsFetcher spanStatsFetcher
@@ -57,6 +58,7 @@ func newTableMetadataUpdater(
 	metrics *TableMetadataUpdateJobMetrics,
 	spanStatsFetcher spanStatsFetcher,
 	ie isql.Executor,
+	timeSrc timeutil.TimeSource,
 	testKnobs *tablemetadatacacheutil.TestingKnobs,
 ) *tableMetadataUpdater {
 	return &tableMetadataUpdater{
@@ -64,6 +66,7 @@ func newTableMetadataUpdater(
 		metrics:          metrics,
 		updateProgress:   onProgressUpdated,
 		spanStatsFetcher: spanStatsFetcher,
+		timeSrc:          timeSrc,
 		testKnobs:        testKnobs,
 	}
 }
@@ -180,8 +183,9 @@ func (u *tableMetadataUpdater) upsertBatch(
 	upsertQuery.prepare()
 	defer upsertQuery.reset()
 	upsertBatchSize := 0
+	lastUpdated := u.timeSrc.Now()
 	for _, row := range batch {
-		if err := upsertQuery.addRow(ctx, &row, batchErr); err != nil {
+		if err := upsertQuery.addRow(ctx, &row, batchErr, lastUpdated); err != nil {
 			log.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
 			continue
 		}
@@ -222,6 +226,7 @@ type tableMetadataBatchUpsertQuery struct {
 	stmt     bytes.Buffer
 	args     []interface{}
 	batchErr error
+	timeSrc  timeutil.TimeSource
 }
 
 // newTableMetadataBatchUpsertQuery creates a new tableMetadataBatchUpsertQuery,
@@ -267,7 +272,7 @@ INSERT INTO system.table_metadata (
 
 // addRow adds a tableMetadataIterRow to the batch upsert query.
 func (q *tableMetadataBatchUpsertQuery) addRow(
-	ctx context.Context, row *tableMetadataIterRow, batchErr error,
+	ctx context.Context, row *tableMetadataIterRow, batchErr error, lastUpdatedTime time.Time,
 ) error {
 	stats := row.spanStats
 	livePercentage := float64(0)
@@ -282,7 +287,6 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		storeIds[i] = int(id)
 	}
 
-	lastUpdated := timeutil.Now()
 	details := tableMetadataDetails{AutoStatsEnabled: row.autoStatsEnabled, StatsLastUpdated: row.statsLastUpdated}
 	detailsStr, err := gojson.Marshal(details)
 	if err != nil {
@@ -310,7 +314,7 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		total,                      // total_data_bytes
 		livePercentage,             // perc_live_data
 		string(detailsStr),         // details
-		lastUpdated,                // last_updated
+		lastUpdatedTime,            // last_updated
 		errMsg,                     // last_update_error
 	}
 
