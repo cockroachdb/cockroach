@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rafttrace",
+    srcs = ["rafttrace.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "rafttrace_test",
+    srcs = ["rafttrace_test.go"],
+    embed = [":rafttrace"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/raft/raftpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
