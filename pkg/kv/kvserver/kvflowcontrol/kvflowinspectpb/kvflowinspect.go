@@ -10,6 +10,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+func (s Stream) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s Stream) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("s%v/t%v eval_regular=%v eval_elastic=%v send_regular=%v send_elastic=%v",
