@@ -5,13 +5,15 @@
 
 package fuzzystrmatch
 
-// LevenshteinDistanceWithCost calculates the Levenshtein distance between
-// source and target. The distance is calculated using the given cost metrics
-// for each of the three possible edit operations.
+// LevenshteinDistanceWithCostAndThreshold calculates the Levenshtein distance
+// between source and target. The distance is calculated using the given cost
+// metrics for each of the three possible edit operations. The distance is
+// calculated using the given threshold. If the distance is greater than the
+// threshold, the function returns value greater than the threshold.
 // Adapted from the 'Iterative with two matrix rows' approach within
 // https://en.wikipedia.org/wiki/Levenshtein_distance. This approach provides us
 // with O(n^2) time complexity and O(n) space complexity.
-func LevenshteinDistanceWithCost(source, target string, insCost, delCost, subCost int) int {
+func computeLevenshteinDistance(source, target string, insCost, delCost, subCost int, threshold *int) int {
 	if source == target {
 		return 0
 	}
@@ -52,8 +54,37 @@ func LevenshteinDistanceWithCost(source, target string, insCost, delCost, subCos
 			rowB[j+1] = min3(deletionCost, insertionCost, substitutionCost)
 		}
 		rowA, rowB = rowB, rowA
+
+		// early termination
+		if threshold != nil && *threshold < rowA[lenT] {
+			return *threshold + 1
+		}
 	}
 	return rowA[lenT]
+}
+
+// LevenshteinDistanceWithCostAndThreshold calculates the Levenshtein distance
+// between source and target. The distance is calculated using the given cost
+// metrics for each of the three possible edit operations. The distance is
+// calculated using the given threshold. If the distance is greater than the
+// threshold, the function returns value greater than the threshold.
+func LevenshteinDistanceWithCostAndThreshold(source, target string, insCost, delCost, subCost int, threshold int) int {
+	return computeLevenshteinDistance(source, target, insCost, delCost, subCost, &threshold)
+}
+
+// LevenshteinDistanceWithCost calculates the Levenshtein distance between
+// source and target. The distance is calculated using the given cost metrics
+// for each of the three possible edit operations. 
+func LevenshteinDistanceWithCost(source, target string, insCost, delCost, subCost int) int {
+	return computeLevenshteinDistance(source, target, insCost, delCost, subCost, nil)
+}
+
+// LevenshteinDistance is the standard Levenshtein distance where the cost of
+// insertion, deletion and substitution are all one. The distance is
+// calculated using the given threshold. If the distance is greater than the
+// threshold, the function returns value greater than the threshold.
+func LevenshteinDistanceWithThreshold(source, target string, threshold int) int {
+	return computeLevenshteinDistance(source, target, 1, 1, 1, &threshold)
 }
 
 // LevenshteinDistance is the standard Levenshtein distance where the cost of
