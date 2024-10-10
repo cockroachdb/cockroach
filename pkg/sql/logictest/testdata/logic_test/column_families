@@ -85,22 +85,32 @@ fetched: /t/t_pkey/1/2/z -> /1
 statement ok
 CREATE TABLE abc (a INT NOT NULL, b FLOAT NOT NULL, c INT, FAMILY (a), FAMILY (b), FAMILY (c))
 
-statement ok
+query T regexp,kvtrace(prefix=/Table/109)
 INSERT INTO abc VALUES (4, -0, 6)
+----
+CPut /Table/109/1/\d+/0 -> /TUPLE/1:1:Int/4
+CPut /Table/109/1/\d+/1/1 -> /FLOAT/-0
+CPut /Table/109/1/\d+/2/1 -> /INT/6
 
 statement ok
 ALTER TABLE abc ADD PRIMARY KEY (a, b)
 
-statement ok
+query T kvtrace(prefix=/Table/109)
 UPDATE abc SET c = NULL WHERE a = 4 AND b = -0
+----
+Scan /Table/109/4/4/0{-/PrefixEnd} lock Exclusive (Block, Unreplicated)
+Del /Table/109/4/4/0/2/1
 
 query IFI
 SELECT * FROM abc
 ----
 4  -0  NULL
 
-statement ok
-UPDATE abc SET b = 0 WHERE a = 4 AND b = -0;
+query T kvtrace(prefix=/Table/109)
+UPDATE abc SET b = 0 WHERE a = 4 AND b = -0
+----
+Scan /Table/109/4/4/0{-/PrefixEnd} lock Exclusive (Block, Unreplicated)
+Del /Table/109/4/4/0/1/1
 
 query IFI
 SELECT * FROM abc
