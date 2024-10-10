@@ -644,6 +644,11 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 
 	var jobAID, jobBID, jobCID jobspb.JobID
 
+	// Add a TTL; it won't kick in the short-lived test and won't delete anything,
+	// but to enable filtering it has to be present since otherwise we think the
+	// user forgot it. We'll get a delete to ignore manually later so this is only
+	// for the creation check.
+	dbA.Exec(t, "ALTER TABLE a.tab SET (ttl_disable_changefeed_replication=true,ttl_expiration_expression='now()')")
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE b.public.tab ON $1 INTO TABLE a.tab", dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE b.tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
 	dbC.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE c.tab WITH DISCARD = 'all-deletes'", dbAURL.String()).Scan(&jobCID)
