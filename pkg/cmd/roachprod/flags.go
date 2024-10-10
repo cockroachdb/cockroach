@@ -103,6 +103,8 @@ var (
 	fluentBitConfig fluentbit.Config
 
 	opentelemetryConfig opentelemetry.Config
+
+	fetchLogsTimeout time.Duration
 )
 
 func initFlags() {
@@ -486,4 +488,6 @@ func initFlags() {
 		"dashboard-uid", "", "grafana dashboard UID")
 	grafanaAnnotationCmd.Flags().Int64SliceVar(&grafanaTimeRange,
 		"time-range", []int64{}, "grafana annotation time range in epoch time")
+	fetchLogsCmd.Flags().DurationVarP(&fetchLogsTimeout,
+		"timeout", "t", 5*time.Minute, "Timeout for fetching the logs from the cluster nodes")
 }
