@@ -149,6 +149,9 @@ func (p synthetic) ForEachUDTDependentForHydration(fn func(t *types.T) error) er
 	return nil
 }
 
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (p synthetic) MaybeRequiresTypeHydration() bool { return false }
+
 func (p synthetic) GetRawBytesInStorage() []byte {
 	return nil
 }
