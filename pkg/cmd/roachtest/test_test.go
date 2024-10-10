@@ -58,6 +58,7 @@ func nilLogger() *logger.Logger {
 }
 
 func TestRunnerRun(t *testing.T) {
+	logger.TestingCRDBLogConfig(nilLogger())
 	ctx := context.Background()
 
 	r := mkReg(t)

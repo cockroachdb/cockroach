@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -1145,10 +1144,10 @@ func exportToRoachperf(
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
 	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		log.Errorf(ctx, "failed to create perf dir: %+v", err)
+		t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
 	}
 	if err := c.PutString(ctx, bytesBuf.String(), dest, 0755, c.Node(1)); err != nil {
-		log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+		t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 	}
 }
 

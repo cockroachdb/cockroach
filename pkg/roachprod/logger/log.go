@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	crdblog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -53,6 +54,25 @@ func (quietStderrOption) apply(cfg *Config) {
 	cfg.Stderr = io.Discard
 }
 
+// safeWriter is a thread-safe wrapper for an io.Writer. The Logger's Stdout and
+// Stderr are used directly in some cases, hence the need for this.
+type safeWriter struct {
+	mu     syncutil.Mutex
+	writer io.Writer
+}
+
+// newSafeWriter creates a new SafeWriter.
+func newSafeWriter(w io.Writer) *safeWriter {
+	return &safeWriter{writer: w}
+}
+
+// Write writes data to the underlying writer in a thread-safe manner.
+func (w *safeWriter) Write(buf []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writer.Write(buf)
+}
+
 // QuietStdout is a logger option that suppresses Stdout.
 var QuietStdout quietStdoutOption
 
@@ -76,9 +96,9 @@ type Logger struct {
 	// synchronization so that concurrent Printf()/Error() calls don't step over
 	// each other.
 	stdoutL, stderrL *log.Logger
-	// Stdout, Stderr are the raw Writers used by the loggers.
-	// If path/file is set, then they might Multiwriters, outputting to both a
-	// file and os.Stdout.
+	// Stdout, Stderr are the raw Writers used by the loggers. If path/file is
+	// set, then they might be MultiWriter(s), outputting to both a file and
+	// os.Stdout.
 	// They can be used directly by clients when a writer is required (e.g. when
 	// piping output from a subcommand).
 	Stdout, Stderr io.Writer
@@ -105,8 +125,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 			stderr = os.Stderr
 		}
 		return &Logger{
-			Stdout:  stdout,
-			Stderr:  stderr,
+			Stdout:  newSafeWriter(stdout),
+			Stderr:  newSafeWriter(stderr),
 			stdoutL: log.New(os.Stdout, cfg.Prefix, logFlags),
 			stderrL: log.New(os.Stderr, cfg.Prefix, logFlags),
 		}, nil
@@ -140,8 +160,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 	return &Logger{
 		path:    path,
 		File:    f,
-		Stdout:  stdout,
-		Stderr:  stderr,
+		Stdout:  newSafeWriter(stdout),
+		Stderr:  newSafeWriter(stderr),
 		stdoutL: stdoutL,
 		stderrL: stderrL,
 	}, nil
@@ -264,6 +284,25 @@ func (l *Logger) PrintfCtx(ctx context.Context, f string, args ...interface{}) {
 // can be passed.
 func (l *Logger) Printf(f string, args ...interface{}) {
 	l.PrintfCtxDepth(context.Background(), 2 /* depth */, f, args...)
+}
+
+// FatalfCtxDepth is like ErrorfCtxDepth, except that it closes the logger after
+// logging the message and then exits the process with status 1.
+func (l *Logger) FatalfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	l.ErrorfCtxDepth(ctx, depth, f, args...)
+	l.Close()
+	exit.WithCode(exit.UnspecifiedError())
+}
+
+// FatalfCtx is like FatalfCtxDepth, except without having to pass depth explicitly.
+func (l *Logger) FatalfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.FatalfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+// Fatalf is like FatalfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *Logger) Fatalf(f string, args ...interface{}) {
+	l.FatalfCtx(context.Background(), f, args...)
 }
 
 // PrintfCtxDepth is like PrintfCtx, except that it allows the caller to control
