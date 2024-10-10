@@ -1,0 +1,27 @@
+query T
+SELECT 'foo'::BPCHAR
+----
+foo
+
+statement ok
+CREATE TABLE t (c BPCHAR PRIMARY KEY, FAMILY (c))
+
+statement ok
+INSERT INTO t VALUES ('foo'), ('ba'), ('c'), ('foobarbaz')
+
+query T rowsort
+SELECT c FROM t
+----
+foo
+ba
+c
+foobarbaz
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  c BPCHAR NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (c ASC),
+  FAMILY fam_0_c (c)
+)
