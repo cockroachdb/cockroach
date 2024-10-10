@@ -271,11 +271,13 @@ func (b *Builder) analyzeLockArgs(
 	lockScope = inScope.push()
 	lockScope.cols = make([]scopeColumn, 0, pkCols.Len())
 
-	for i := range inScope.cols {
-		if pkCols.Contains(inScope.cols[i].id) {
-			lockScope.appendColumn(&inScope.cols[i])
+	// Make sure to check extra columns, since the primary key columns may not
+	// have been explicitly projected.
+	inScope.forEachColWithExtras(func(col *scopeColumn) {
+		if pkCols.Contains(col.id) {
+			lockScope.appendColumn(col)
 		}
-	}
+	})
 	return lockScope
 }
 
