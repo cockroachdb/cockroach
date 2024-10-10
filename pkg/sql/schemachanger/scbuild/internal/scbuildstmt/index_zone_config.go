@@ -63,9 +63,10 @@ func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.Zon
 	sameIdx := func(e *scpb.IndexZoneConfig) bool {
 		return e.TableID == izo.getTargetID() && e.IndexID == izo.indexID
 	}
-	mostRecentElem := findMostRecentZoneConfig(izo, func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
-		return b.QueryByID(id).FilterIndexZoneConfig()
-	}, sameIdx)
+	mostRecentElem := findMostRecentZoneConfig(izo,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
+			return b.QueryByID(id).FilterIndexZoneConfig()
+		}, sameIdx)
 
 	// Since we will be performing a subzone config update, we need to retrieve
 	// its parent's (table's) zone config for later use. This is because we need
@@ -113,8 +114,6 @@ func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
 	var subzone *zonepb.Subzone
 	indexID := izo.indexID
 	if placeholder != nil {
-		// TODO(annie): once we support partitions, we will need to pass in the
-		// actual partition name here.
 		if subzone = placeholder.GetSubzone(uint32(indexID), ""); subzone != nil {
 			if indexSubzone := placeholder.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
 				subzone.Config.InheritFromParent(&indexSubzone.Config)
@@ -138,6 +137,7 @@ func (izo *indexZoneConfigObj) setZoneConfigToWrite(zone *zonepb.ZoneConfig) {
 	for _, subzone := range zone.Subzones {
 		if subzone.IndexID == uint32(izo.indexID) && len(subzone.PartitionName) == 0 {
 			subzoneToWrite = &subzone
+			break
 		}
 	}
 	izo.indexSubzone = subzoneToWrite
@@ -185,7 +185,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 
 	// We are configuring an index. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
-	fillIndexAndPartitionFromZoneSpecifier(b, n.ZoneSpecifier, izo)
+	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 	indexID := izo.indexID
 	tempIndexID := mustRetrieveIndexElement(b, izo.getTargetID(), indexID).TemporaryIndexID
 
@@ -286,4 +286,22 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	}
 	izo.setZoneConfigToWrite(partialZone)
 	return err
+}
+
+// fillIndexFromZoneSpecifier fills out the index id in the zone
+// specifier for a indexZoneConfigObj.
+func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) {
+	tableID := izo.getTargetID()
+
+	indexName := string(zs.TableOrIndex.Index)
+	var indexID catid.IndexID
+	if indexName == "" {
+		// Use the primary index if index name is unspecified.
+		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
+		indexID = primaryIndexElem.IndexID
+	} else {
+		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
+		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
+	}
+	izo.indexID = indexID
 }

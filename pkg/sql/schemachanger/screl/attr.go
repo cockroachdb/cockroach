@@ -99,8 +99,10 @@ const (
 
 	// Expr corresponds to the string representation of a SQL expression for an element.
 	Expr
-	// SQL string name of the type.
+	// TypeName corresponds to the SQL string name of the type.
 	TypeName
+	// PartitionName corresponds to the name of a partition.
+	PartitionName
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -394,6 +396,12 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.IndexZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
+	),
+	rel.EntityMapping(t((*scpb.PartitionZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(PartitionName, "PartitionName"),
 		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseData)(nil)),
