@@ -793,6 +793,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		return
 	}
 
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
@@ -854,7 +855,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			}
 
 			// Try to constrain prefixCol to constant, non-ranging values.
-			foundVals, allIdx, ok := lookupjoin.FindJoinFilterConstants(c.e.ctx, allFilters, prefixCol, c.e.evalCtx)
+			foundVals, allIdx, ok := lookupjoin.FindJoinFilterConstants(
+				c.e.ctx, tabMeta, allFilters, prefixCol, c.e.evalCtx,
+			)
 			if !ok {
 				// Cannot constrain prefix column and therefore cannot generate
 				// an inverted join.
