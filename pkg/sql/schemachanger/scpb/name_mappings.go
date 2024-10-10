@@ -34,7 +34,7 @@ type HumanReadableNameProvider interface {
 	// to a placeholder if none was found.
 	FamilyName(relationID catid.DescID, familyID catid.FamilyID) string
 
-	// ConstraintName returns the name mapped to a family ID, falling back
+	// ConstraintName returns the name mapped to a constraint ID, falling back
 	// to a placeholder if none was found.
 	ConstraintName(relationID catid.DescID, constraintID catid.ConstraintID) string
 }

@@ -167,6 +167,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateIndex(ctx, n)
 	case *tree.CreateSchema:
 		return p.CreateSchema(ctx, n)
+	case *tree.CreateTrigger:
+		return p.CreateTrigger(ctx, n)
 	case *tree.CreateType:
 		return p.CreateType(ctx, n)
 	case *tree.CreateRole:
@@ -191,8 +193,6 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropDatabase(ctx, n)
 	case *tree.DropRoutine:
 		return p.DropFunction(ctx, n)
-	case *tree.DropTrigger:
-		return p.DropTrigger(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
@@ -207,6 +207,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropTable(ctx, n)
 	case *tree.DropTenant:
 		return p.DropTenant(ctx, n)
+	case *tree.DropTrigger:
+		return p.DropTrigger(ctx, n)
 	case *tree.DropType:
 		return p.DropType(ctx, n)
 	case *tree.DropView:
@@ -349,6 +351,7 @@ func init() {
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
+		&tree.CreateTrigger{},
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},

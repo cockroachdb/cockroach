@@ -1,0 +1,129 @@
+/* setup */
+CREATE TABLE defaultdb.t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(OLD, NEW);
+  END;
+$$;
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE TRIGGER
+increment telemetry for sql.schema.create_trigger
+## StatementPhase stage 1 of 1 with 8 MutationType ops
+upsert descriptor #104
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextTriggerId: 2
+     parentId: 100
+     primaryIndex:
+  ...
+     replacementOf:
+       time: {}
+  +  triggers:
+  +  - actionTime: BEFORE
+  +    dependsOn: []
+  +    dependsOnRoutines:
+  +    - 105
+  +    enabled: true
+  +    events:
+  +    - columnNames: []
+  +      type: INSERT
+  +    - columnNames: []
+  +      type: UPDATE
+  +    - columnNames: []
+  +      type: DELETE
+  +    forEachRow: true
+  +    funcArgs: []
+  +    funcBody: |
+  +      BEGIN
+  +      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  +      RETURN COALESCE(old, new);
+  +      END;
+  +    funcId: 105
+  +    id: 1
+  +    name: tr
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+   function:
+  +  dependedOnBy:
+  +  - id: 104
+  +    triggerIds:
+  +    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+upsert descriptor #104
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextTriggerId: 2
+     parentId: 100
+     primaryIndex:
+  ...
+     replacementOf:
+       time: {}
+  +  triggers:
+  +  - actionTime: BEFORE
+  +    dependsOn: []
+  +    dependsOnRoutines:
+  +    - 105
+  +    enabled: true
+  +    events:
+  +    - columnNames: []
+  +      type: INSERT
+  +    - columnNames: []
+  +      type: UPDATE
+  +    - columnNames: []
+  +      type: DELETE
+  +    forEachRow: true
+  +    funcArgs: []
+  +    funcBody: |
+  +      BEGIN
+  +      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  +      RETURN COALESCE(old, new);
+  +      END;
+  +    funcId: 105
+  +    id: 1
+  +    name: tr
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+   function:
+  +  dependedOnBy:
+  +  - id: 104
+  +    triggerIds:
+  +    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

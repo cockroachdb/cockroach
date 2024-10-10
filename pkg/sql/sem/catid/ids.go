@@ -67,11 +67,17 @@ type IndexID uint32
 // SafeValue implements the redact.SafeValue interface.
 func (IndexID) SafeValue() {}
 
-// ConstraintID is a custom type for TableDeascriptor constraint IDs.
+// ConstraintID is a custom type for TableDescriptor constraint IDs.
 type ConstraintID uint32
 
 // SafeValue implements the redact.SafeValue interface.
 func (ConstraintID) SafeValue() {}
+
+// TriggerID is a custom type for TableDescriptor trigger IDs.
+type TriggerID uint32
+
+// SafeValue implements the redact.SafeValue interface.
+func (TriggerID) SafeValue() {}
 
 // PGAttributeNum is a custom type for Column's logical order.
 type PGAttributeNum uint32

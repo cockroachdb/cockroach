@@ -589,7 +589,7 @@ func (b *Builder) buildFunction(
 			var ds cat.DataSource
 			if seqIdentifier.IsByID() {
 				flags := cat.Flags{
-					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef,
+					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef || b.insideTriggerDef,
 				}
 				ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(seqIdentifier.SeqID))
 				if err != nil {

@@ -61,7 +61,8 @@ const (
 	CREATEDB                 Kind = 34
 	CONTROLJOB               Kind = 35
 	REPAIRCLUSTER            Kind = 36
-	largestKind                   = REPAIRCLUSTER
+	TRIGGER                  Kind = 37
+	largestKind                   = TRIGGER
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -147,6 +148,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "CONTROLJOB"
 	case REPAIRCLUSTER:
 		return "REPAIRCLUSTERMETADATA"
+	case TRIGGER:
+		return "TRIGGER"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}

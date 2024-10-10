@@ -280,6 +280,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	case *memo.CreateFunctionExpr:
 		ep, outputCols, err = b.buildCreateFunction(t)
 
+	case *memo.CreateTriggerExpr:
+		ep, outputCols, err = b.buildCreateTrigger(t)
+
 	case *memo.WithExpr:
 		ep, outputCols, err = b.buildWith(t)
 

@@ -31,7 +31,7 @@ import (
 )
 
 func init() {
-	if numOperators != 62 {
+	if numOperators != 63 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -621,6 +621,16 @@ func (u *unknownTable) GetDatabaseID() descpb.ID {
 // IsHypothetical is part of the cat.Table interface.
 func (u *unknownTable) IsHypothetical() bool {
 	return false
+}
+
+// TriggerCount is part of the cat.Table interface.
+func (u *unknownTable) TriggerCount() int {
+	return 0
+}
+
+// Trigger is part of the cat.Table interface.
+func (u *unknownTable) Trigger(i int) cat.Trigger {
+	panic(errors.AssertionFailedf("not implemented"))
 }
 
 var _ cat.Table = &unknownTable{}

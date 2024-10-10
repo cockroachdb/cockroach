@@ -1,0 +1,14 @@
+/* setup */
+CREATE TABLE defaultdb.t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(OLD, NEW);
+  END;
+$$;
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+----
+Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON ‹defaultdb›.‹t› FOR EACH ROW EXECUTE FUNCTION ‹f›();
+ └── execute 1 system table mutations transaction

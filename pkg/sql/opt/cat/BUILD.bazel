@@ -12,6 +12,7 @@ go_library(
         "schema.go",
         "sequence.go",
         "table.go",
+        "trigger.go",
         "utils.go",
         "view.go",
         "zone.go",

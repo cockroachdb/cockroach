@@ -166,6 +166,9 @@ func (m *CreateStatistics) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *CreateTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *CreateTrigger) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *CreateType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -188,6 +191,9 @@ func (m *DropSequence) LoggingChannel() logpb.Channel { return logpb.Channel_SQL
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DropTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *DropTrigger) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DropType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }

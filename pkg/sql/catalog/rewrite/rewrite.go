@@ -83,26 +83,32 @@ func TableDescs(
 
 		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
-		if err := tabledesc.ForEachExprStringInTableDesc(table, func(expr *string) error {
-			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
-			if err != nil {
-				return err
-			}
-			*expr = newExpr
+		if err := tabledesc.ForEachExprStringInTableDesc(table,
+			func(expr *string, typ catalog.DescExprType) error {
+				if typ != catalog.SQLExpr {
+					// TODO(drewk): handle this case.
+					return nil
+				}
+				newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+				if err != nil {
+					return err
+				}
+				*expr = newExpr
 
-			newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
-			if err != nil {
-				return err
-			}
-			*expr = newExpr
+				newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
+				if err != nil {
+					return err
+				}
+				*expr = newExpr
 
-			newExpr, err = rewriteFunctionsInExpr(*expr, descriptorRewrites)
-			if err != nil {
-				return err
-			}
-			*expr = newExpr
-			return nil
-		}); err != nil {
+				newExpr, err = rewriteFunctionsInExpr(*expr, descriptorRewrites)
+				if err != nil {
+					return err
+				}
+				*expr = newExpr
+				return nil
+			},
+		); err != nil {
 			return err
 		}
 
