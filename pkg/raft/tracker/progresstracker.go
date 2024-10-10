@@ -137,3 +137,15 @@ func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
 	slices.Sort(nodes)
 	return nodes
 }
+
+// WithBasicProgress is a helper to introspect the BasicProgress for this node
+// and its peers.
+func (p *ProgressTracker) WithBasicProgress(visitor func(id pb.PeerID, pr BasicProgress)) {
+	for id, p := range p.progress {
+		visitor(id, BasicProgress{
+			Match: p.Match,
+			Next:  p.Next,
+			State: p.State,
+		})
+	}
+}
