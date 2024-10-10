@@ -55,6 +55,7 @@ func NewBuilderDependencies(
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
 	semaCtx *tree.SemaContext,
+	systemConfig scbuild.SystemConfigProvider,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -78,6 +79,7 @@ func NewBuilderDependencies(
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
 		semaCtx:                  semaCtx,
+		systemConfig:             systemConfig,
 	}
 }
 
@@ -101,6 +103,7 @@ type buildDeps struct {
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
 	semaCtx                  *tree.SemaContext
+	systemConfig             scbuild.SystemConfigProvider
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -472,6 +475,10 @@ func (d *buildDeps) ZoneConfigGetter() scdecomp.ZoneConfigGetter {
 	}
 }
 
+func (d *buildDeps) SystemConfigGetter() scbuild.SystemConfigProvider {
+	return d.systemConfig
+}
+
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
@@ -511,4 +518,8 @@ func (d *buildDeps) NodesStatusInfo() scbuild.NodesStatusInfo {
 
 func (d *buildDeps) RegionProvider() scbuild.RegionProvider {
 	return d.regionProvider
+}
+
+func (d *buildDeps) SystemConfigProvider() scbuild.SystemConfigProvider {
+	return d.systemConfig
 }

@@ -46,6 +46,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/clusterversion",
+        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
         "//pkg/geo/geoindex",

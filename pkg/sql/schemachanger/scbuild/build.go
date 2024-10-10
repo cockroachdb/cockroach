@@ -94,6 +94,7 @@ func Build(
 		TemporarySchemaProvider: dependencies.TemporarySchemaProvider(),
 		NodesStatusInfo:         dependencies.NodesStatusInfo(),
 		RegionProvider:          dependencies.RegionProvider(),
+		SystemConfigProvider:    dependencies.SystemConfigProvider(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 
@@ -429,6 +430,7 @@ type buildCtx struct {
 	TemporarySchemaProvider
 	NodesStatusInfo
 	RegionProvider
+	SystemConfigProvider
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}

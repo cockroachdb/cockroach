@@ -96,6 +96,9 @@ type Dependencies interface {
 
 	// RegionProvider returns a RegionProvider.
 	RegionProvider() RegionProvider
+
+	// SystemConfigProvider returns a SystemConfigProvider.
+	SystemConfigProvider() SystemConfigProvider
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -224,6 +227,9 @@ type AstFormatter interface {
 
 // CommentGetter see scdecomp.CommentGetter.
 type CommentGetter scdecomp.CommentGetter
+
+// SystemConfigProvider see scdecomp.SystemConfigProvider.
+type SystemConfigProvider scbuildstmt.SystemConfigProvider
 
 // SchemaResolverFactory is used to construct a new schema resolver with
 // injected dependencies.
