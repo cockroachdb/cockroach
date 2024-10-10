@@ -8,9 +8,9 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -23,21 +23,12 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 	if err != nil {
 		return nil, err
 	}
+
 	commentColumn, commentJoin := ``, ``
 	if n.WithComment {
-		commentColumn = `, comment`
-		commentJoin = fmt.Sprintf(`
-			LEFT JOIN
-				(
-					SELECT 
-						object_id, type, comment
-					FROM
-						system.comments
-					WHERE
-						type = %d
-				) c
-			ON
-				c.object_id = n.oid`, catalogkeys.SchemaCommentType)
+		commentTableName := name.String() + ".pg_catalog.pg_description"
+		commentColumn, commentJoin = d.getCommentQuery(commentTableName, catconstants.PgCatalogNamespaceTableID, "n.oid")
+
 	}
 
 	getSchemasQuery := fmt.Sprintf(`
