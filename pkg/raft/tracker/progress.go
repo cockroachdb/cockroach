@@ -433,3 +433,13 @@ func (m ProgressMap) String() string {
 	}
 	return buf.String()
 }
+
+// BasicProgress contains a subset of fields from Progress.
+type BasicProgress struct {
+	// Match corresponds to Progress.Match.
+	Match uint64
+	// Next corresponds to Progress.Next.
+	Next uint64
+	// State corresponds to Progress.State.
+	State StateType
+}

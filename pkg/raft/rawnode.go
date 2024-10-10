@@ -630,6 +630,12 @@ func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr 
 	withProgress(rn.raft, visitor)
 }
 
+// WithBasicProgress is a helper to introspect the BasicProgress for this node
+// and its peers.
+func (rn *RawNode) WithBasicProgress(visitor func(id pb.PeerID, pr tracker.BasicProgress)) {
+	rn.raft.trk.WithBasicProgress(visitor)
+}
+
 // ReportUnreachable reports the given node is not reachable for the last send.
 func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
