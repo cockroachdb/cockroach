@@ -38,12 +38,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// oldOriginTimestampColumnName is the name of the table
-	// column where the origin timestamp used to be stored.
-	oldOriginTimestampColumnName = "crdb_replication_origin_timestamp"
-)
-
 // A sqlRowProcessor is a RowProcessor that handles rows using the
 // provided querier.
 type sqlRowProcessor struct {
@@ -614,21 +608,10 @@ func insertColumnNamesForFamily(
 		if col.IsComputed() && !includeComputed {
 			return nil
 		}
-		colName := col.GetName()
-		// We will set crdb_replication_origin_timestamp ourselves from
-		// the MVCC timestamp of the incoming datum. We should never see
-		// this on the rangefeed as a non-null value as that would imply
-		// we've looped data around.
-		//
-		// TODO(ssd): If we aren't going to support a migration path, we
-		// can probably remove this completely.
-		if colName == oldOriginTimestampColumnName {
-			return nil
-		}
 		if _, seen := seenIds[colID]; seen {
 			return nil
 		}
-		inputColumnNames = append(inputColumnNames, colName)
+		inputColumnNames = append(inputColumnNames, col.GetName())
 		seenIds[colID] = struct{}{}
 		return nil
 	}
