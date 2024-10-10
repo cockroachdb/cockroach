@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -675,39 +676,59 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	var tt *network
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
 
-	// 0 cannot reach 2,3,4
-	tt.cut(1, 3)
-	tt.cut(1, 4)
-	tt.cut(1, 5)
+			if storeLivenessEnabled {
+				tt = newNetwork(nil, nil, nil, nil, nil)
+			} else {
+				tt = newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
+			}
 
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+			tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
-	sm := tt.peers[1].(*raft)
-	assert.Equal(t, uint64(1), sm.raftLog.committed)
+			// 0 cannot reach 2,3,4
+			tt.cut(1, 3)
+			tt.cut(1, 4)
+			tt.cut(1, 5)
 
-	// network recovery
-	tt.recover()
-	// avoid committing ChangeTerm proposal
-	tt.ignore(pb.MsgApp)
+			tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+			tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
 
-	// elect 2 as the new leader with term 2
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+			sm := tt.peers[1].(*raft)
+			assert.Equal(t, uint64(1), sm.raftLog.committed)
 
-	// no log entries from previous term should be committed
-	sm = tt.peers[2].(*raft)
-	assert.Equal(t, uint64(1), sm.raftLog.committed)
+			// network recovery
+			tt.recover()
+			// avoid committing ChangeTerm proposal
+			tt.ignore(pb.MsgApp)
 
-	tt.recover()
-	// send heartbeat; reset wait
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgBeat})
-	// append an entry at current term
-	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-	// expect the committed to be advanced
-	assert.Equal(t, uint64(5), sm.raftLog.committed)
+			// elect 2 as the new leader with term 2
+			if storeLivenessEnabled {
+				// We need peers to withdraw their support for the current leader so
+				// that a new leader can be elected.
+				tt.withdrawSupportAllPeers()
+			}
+			tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+			if storeLivenessEnabled {
+				// Now that a new leader is elected, we can grant support to all peers.
+				tt.grantSupportAllPeers()
+			}
+
+			// no log entries from previous term should be committed
+			sm = tt.peers[2].(*raft)
+			assert.Equal(t, uint64(1), sm.raftLog.committed)
+
+			tt.recover()
+			// send heartbeat; reset wait
+			tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgBeat})
+			// append an entry at current term
+			tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+			// expect the committed to be advanced
+			assert.Equal(t, uint64(5), sm.raftLog.committed)
+		})
 }
 
 // TestCommitWithoutNewTermEntry tests the entries could be committed
@@ -4161,6 +4182,68 @@ func preVoteConfigWithFortificationDisabled(c *Config) {
 	c.StoreLiveness = raftstoreliveness.Disabled{}
 }
 
+// mockStoreLiveness is a simple mock implementation of StoreLiveness that
+// is used in raft unit tests. Initially treats all store to store connections
+// as live, but it can be configured to withdraw support, grant support, and
+// bump the support epoch.
+type mockStoreLiveness struct {
+	supportEpoch pb.Epoch
+	grantSupport bool
+}
+
+var _ raftstoreliveness.StoreLiveness = mockStoreLiveness{}
+
+func NewMockStoreLiveness() *mockStoreLiveness {
+	return &mockStoreLiveness{supportEpoch: pb.Epoch(1), grantSupport: true}
+}
+
+// SupportFor implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+	return m.supportEpoch, m.grantSupport
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+	if m.grantSupport {
+		return m.supportEpoch, hlc.MaxTimestamp
+	}
+	return 0, hlc.Timestamp{}
+}
+
+// SupportFromEnabled implements the StoreLiveness interface.
+func (mockStoreLiveness) SupportFromEnabled() bool {
+	return true
+}
+
+// SupportExpired implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
+	switch ts {
+	case hlc.Timestamp{}:
+		return true
+	case hlc.MaxTimestamp:
+		return false
+	default:
+		panic("unexpected timestamp")
+	}
+}
+
+// BumpSupportEpoch bumps the support epoch.
+func (m *mockStoreLiveness) BumpSupportEpoch() {
+	m.supportEpoch++
+}
+
+// WithdrawSupport causes all calls to SupportFor and SupportFrom, and
+// SupportExpired to indicate no support.
+func (m *mockStoreLiveness) WithdrawSupport() {
+	m.grantSupport = false
+}
+
+// WithdrawSupport causes all calls to SupportFor and SupportFrom, and
+// SupportExpired to indicate existing support.
+func (m *mockStoreLiveness) GrantSupport() {
+	m.grantSupport = true
+}
+
 func (nw *network) send(msgs ...pb.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
@@ -4238,6 +4321,40 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// withdrawSupportAllPeers calls withdrawSupport for all peers in the network.
+func (nw *network) withdrawSupportAllPeers() {
+	for id := range nw.peers {
+		nw.withdrawSupport(id)
+	}
+}
+
+// withdrawSupport causes the peer with the given ID to stop supporting and
+// getting support from all stores.
+func (nw *network) withdrawSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+	p.(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupport()
+}
+
+// grantSupportAllPeers calls grantSupport for all peers in the network.
+func (nw *network) grantSupportAllPeers() {
+	for id := range nw.peers {
+		nw.grantSupport(id)
+	}
+}
+
+// grantSupport causes the peer with the given ID to start supporting and
+// getting support from all stores.
+func (nw *network) grantSupport(id pb.PeerID) {
+	p, exist := nw.peers[id]
+	if !exist {
+		return
+	}
+	p.(*raft).storeLiveness.(*mockStoreLiveness).GrantSupport()
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
@@ -4303,7 +4420,7 @@ func newTestConfig(
 	if modifiers.testingDisableFortification {
 		storeLiveness = raftstoreliveness.Disabled{}
 	} else {
-		storeLiveness = raftstoreliveness.AlwaysLive{}
+		storeLiveness = NewMockStoreLiveness()
 	}
 	return &Config{
 		ID:              id,
