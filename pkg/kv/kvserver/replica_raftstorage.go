@@ -621,6 +621,10 @@ func (r *Replica) applySnapshot(
 			writeBytes = uint64(inSnap.SSTSize)
 		}
 	}
+	// The "ignored" here is to ignore the writes to create the AC linear models
+	// for LSM writes. Since these writes typically correspond to actual writes
+	// onto the disk, we account for them separately in
+	// kvBatchSnapshotStrategy.Receive().
 	if r.store.cfg.KVAdmissionController != nil {
 		r.store.cfg.KVAdmissionController.SnapshotIngestedOrWritten(
 			r.store.StoreID(), ingestStats, writeBytes)

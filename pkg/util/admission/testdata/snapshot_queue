@@ -1,0 +1,71 @@
+# Base case, simple happy path, admit 1 request.
+init
+----
+
+set-try-get-return-value v=true
+----
+
+admit id=1 count=1 create-time-millis=1
+----
+tryGet: returning true
+id 1: admit succeeded
+
+empty
+----
+true
+
+# Now we queue 2 requests.
+set-try-get-return-value v=false
+----
+
+admit id=2 count=1 create-time-millis=2
+----
+tryGet: returning false
+
+admit id=3 count=5 create-time-millis=3
+----
+tryGet: returning false
+
+granted
+----
+id 2: admit succeeded
+granted: returned 1
+
+empty
+----
+false
+
+granted
+----
+id 3: admit succeeded
+granted: returned 5
+
+empty
+----
+true
+
+# Test context cancellation behavior.
+set-try-get-return-value v=false
+----
+
+admit id=4 count=10 create-time-millis=5
+----
+tryGet: returning false
+
+cancel-work id=4
+----
+id 4: admit failed
+
+admit id=5 count=15 create-time-millis=8
+----
+tryGet: returning false
+
+# We skip the cancelled work in the queue.
+granted
+----
+id 5: admit succeeded
+granted: returned 15
+
+empty
+----
+true

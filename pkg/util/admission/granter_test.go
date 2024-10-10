@@ -46,7 +46,9 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	// requesters[numWorkKinds] is used for kv elastic work, when working with a
 	// store grant coordinator.
-	var requesters [numWorkKinds + 1]*testRequester
+	// requesters[numWorkKinds + 1] is used for snapshot ingest, when working with a
+	// store grant coordinator.
+	var requesters [numWorkKinds + 2]*testRequester
 	var coord *GrantCoordinator
 	clearRequesterAndCoord := func() {
 		coord = nil
@@ -102,6 +104,7 @@ func TestGranterBasic(t *testing.T) {
 			metrics := makeGrantCoordinatorMetrics()
 			regularWorkQueueMetrics := makeWorkQueueMetrics("regular", registry)
 			elasticWorkQUeueMetrics := makeWorkQueueMetrics("elastic", registry)
+			snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
 			workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 				regularWorkQueueMetrics, elasticWorkQUeueMetrics,
 			}
@@ -143,6 +146,7 @@ func TestGranterBasic(t *testing.T) {
 				l0CompactedBytes:            metrics.L0CompactedBytes,
 				l0TokensProduced:            metrics.L0TokensProduced,
 				workQueueMetrics:            workQueueMetrics,
+				snapshotQueueMetrics:        snapshotQueueMetrics,
 				disableTickerForTesting:     true,
 				knobs:                       &TestingKnobs{},
 			}
@@ -153,6 +157,22 @@ func TestGranterBasic(t *testing.T) {
 			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
 			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
+			// Defensive check: `SetPebbleMetricsProvider` should initialize the SnapshotQueue.
+			require.NotNil(t, kvStoreGranter.snapshotRequester)
+			snapshotGranter := kvStoreGranter.snapshotRequester.(*SnapshotQueue).snapshotGranter
+			require.NotNil(t, snapshotGranter)
+			snapshotReq := &testRequester{
+				workKind:               KVWork,
+				granter:                snapshotGranter,
+				additionalID:           "-snapshot",
+				usesTokens:             true,
+				buf:                    &buf,
+				returnValueFromGranted: 0,
+			}
+			kvStoreGranter.snapshotRequester = snapshotReq
+			snapshotQueue := storeCoordinators.TryGetSnapshotQueueForStore(1)
+			require.NotNil(t, snapshotQueue)
+			requesters[numWorkKinds+1] = snapshotReq
 			// Use the same model for the IO linear models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
 			// Use w-amp of 1 for the purpose of this test.
@@ -477,6 +497,8 @@ func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
 		return int8(SQLStatementRootStartWork)
 	case "kv-elastic":
 		return int8(numWorkKinds)
+	case "kv-snapshot":
+		return int8(numWorkKinds + 1)
 	}
 	panic("unknown WorkKind")
 }

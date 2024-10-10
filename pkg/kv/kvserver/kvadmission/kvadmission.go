@@ -181,6 +181,9 @@ type Controller interface {
 		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
 		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
+	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
+	// snapshots.
+	GetSnapshotQueue(roachpb.StoreID) *admission.SnapshotQueue
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -700,6 +703,14 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
+}
+
+func (n *controllerImpl) GetSnapshotQueue(storeID roachpb.StoreID) *admission.SnapshotQueue {
+	sq := n.storeGrantCoords.TryGetSnapshotQueueForStore(storeID)
+	if sq == nil {
+		return nil
+	}
+	return sq.(*admission.SnapshotQueue)
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a
