@@ -190,11 +190,11 @@ func (q TSQuery) String() string {
 
 // GetInvertedExpr returns the inverted expression that can be used to search
 // an index.
-func (q TSQuery) GetInvertedExpr() (expr inverted.Expression, err error) {
+func (q TSQuery) GetInvertedExpr() (expr *inverted.SpanExpression, err error) {
 	return q.root.getInvertedExpr()
 }
 
-func (n *tsNode) getInvertedExpr() (inverted.Expression, error) {
+func (n *tsNode) getInvertedExpr() (*inverted.SpanExpression, error) {
 	switch n.op {
 	case invalid:
 		// We're looking at a lexeme match.
