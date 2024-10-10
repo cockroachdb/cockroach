@@ -521,7 +521,7 @@ ORDER BY t.oid
 ----
 text     25    -1
 float8   701   -1
-bpchar   1042  5
+bpchar   1042  -1
 varchar  1043  68
 bit      1560  1
 varbit   1562  16
@@ -539,7 +539,7 @@ ORDER BY t.oid
 ----
 text     NULL
 float8   NULL
-bpchar   1
+bpchar   NULL
 varchar  64
 bit      1
 varbit   16
@@ -558,7 +558,7 @@ ORDER BY t.oid
 ----
 text     NULL
 float8   NULL
-bpchar   1
+bpchar   NULL
 varchar  64
 bit      1
 varbit   16
