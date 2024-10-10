@@ -62,7 +62,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = raftlog.EncodeCommandBytes(enc, kvserverbase.CmdIDKey(cmdIDKey), b, 0 /* pri */)
+	ent.Data = raftlog.EncodeCommandBytes(context.Background(), enc, kvserverbase.CmdIDKey(cmdIDKey), b, 0 /* pri */)
 	return ent
 }
 
