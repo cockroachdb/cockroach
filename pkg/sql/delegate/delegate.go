@@ -7,6 +7,7 @@ package delegate
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -269,4 +270,24 @@ func (d *delegator) resolveAndModifyTableIndexName(
 		(*name).Table = resName.ToUnresolvedObjectName().ToTableName()
 	}
 	return dataSource, resName, nil
+}
+
+func (d *delegator) getCommentQuery(
+	commentTableName string, classOidType int, objIdColumn string,
+) (string, string) {
+	commentColumn := `, comment`
+	commentJoin := fmt.Sprintf(`
+			LEFT JOIN
+				(
+					SELECT 
+						objoid, description as comment
+					FROM
+						%s
+					WHERE
+						classoid = %d
+				) c
+			ON
+				%s = c.objoid`, commentTableName, classOidType, objIdColumn)
+
+	return commentColumn, commentJoin
 }
