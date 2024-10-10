@@ -6,10 +6,10 @@ CREATE TABLE t (
 )
 ----
 
-# Histogram boundaries are for JSON values `{}`, `{1}`, `{2}`, `{3}`. The
-# row_count is lower than the sum of the histogram buckets num_eq's because some
-# rows can have multiple inverted index entries, for example `{1, 2}`. There
-# are:
+# Histogram boundaries are for arrays with values 1, 2, and 3, including some
+# empty arrays. The row_count is lower than the sum of the histogram buckets
+# num_eq's because some rows can have multiple inverted index entries, for
+# example `{1, 2}`. There are:
 #
 #   - 1000 rows total
 #   - 10 empty arrays
