@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -145,24 +146,21 @@ const (
 // necessary migration for V2NotEnabledWhenLeader =>
 // V2EnabledWhenLeaderV1Encoding occurs before anything else in
 // kvserver.handleRaftReadyRaftMuLocked.
-//
-// TODO(kvoli,sumeerbhola,pav-kv): When we introduce pull mode (and associated
-// cluster setting), update this comment to mention that the cluster setting is
-// only relevant when at V2EnabledWhenLeaderV2Encoding level.
 func GetV2EnabledWhenLeaderLevel(
 	ctx context.Context, st *cluster.Settings, knobs *TestingKnobs,
 ) V2EnabledWhenLeaderLevel {
 	if knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
 		return knobs.OverrideV2EnabledWhenLeaderLevel()
 	}
-	// TODO(kvoli): Enable once #130619 merges and tests affected by enabling v2
-	// are addressed:
-	// if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) {
-	// 	return V2EnabledWhenLeaderV2Encoding
-	// }
-	// if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2WithV1EntryEncoding) {
-	// 	return V2EnabledWhenLeaderV1Encoding
-	// }
+	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) {
+		// Full RACv2 can be enabled: RACv2 protocol with V2 entry encoding.
+		return V2EnabledWhenLeaderV2Encoding
+	}
+	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2WithV1EntryEncoding) {
+		// Partial RACv2 can be enabled: RACv2 protocol with V1 entry encoding.
+		return V2EnabledWhenLeaderV1Encoding
+	}
+	// RACv2 is not enabled.
 	return V2NotEnabledWhenLeader
 }
 
