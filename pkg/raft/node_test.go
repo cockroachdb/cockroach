@@ -462,7 +462,7 @@ func TestSoftStateEqual(t *testing.T) {
 		we bool
 	}{
 		{&SoftState{}, true},
-		{&SoftState{RaftState: StateLeader}, false},
+		{&SoftState{RaftState: raftpb.StateLeader}, false},
 	}
 	for i, tt := range tests {
 		assert.Equal(t, tt.we, tt.st.equal(&SoftState{}), "#%d", i)

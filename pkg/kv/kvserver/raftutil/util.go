@@ -22,7 +22,7 @@ func ReplicaIsBehind(st *raft.Status, replicaID roachpb.ReplicaID) bool {
 		// Testing only.
 		return true
 	}
-	if st.RaftState != raft.StateLeader {
+	if st.RaftState != raftpb.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it's not behind.
 		return true
@@ -131,7 +131,7 @@ func ReplicaMayNeedSnapshot(
 		// Testing only.
 		return NoRaftStatusAvailable
 	}
-	if st.RaftState != raft.StateLeader {
+	if st.RaftState != raftpb.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it does not need a snapshot.
 		return LocalReplicaNotLeader

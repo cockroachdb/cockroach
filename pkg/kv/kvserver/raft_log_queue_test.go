@@ -205,7 +205,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			assert.False(t, recompute)
 			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
 			input.LogSizeTrusted = false
-			input.RaftStatus.RaftState = raft.StateLeader
+			input.RaftStatus.RaftState = raftpb.StateLeader
 			if input.LastIndex <= input.FirstIndex {
 				input.LastIndex = input.FirstIndex + 1
 			}

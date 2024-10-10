@@ -52,7 +52,7 @@ func TestVerify(t *testing.T) {
 			})
 		}
 	}
-	makeRaftStatus := func(lead roachpb.ReplicaID, state raft.StateType) *raft.Status {
+	makeRaftStatus := func(lead roachpb.ReplicaID, state raftpb.StateType) *raft.Status {
 		var status raft.Status
 		status.ID = raftpb.PeerID(repl1.ReplicaID)
 		status.Lead = raftpb.PeerID(lead)
@@ -68,7 +68,7 @@ func TestVerify(t *testing.T) {
 				LocalStoreID:   repl1.StoreID,
 				LocalReplicaID: repl1.ReplicaID,
 				Desc:           &descCpy,
-				RaftStatus:     makeRaftStatus(repl1.ReplicaID, raft.StateLeader),
+				RaftStatus:     makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader),
 				RaftFirstIndex: 5,
 				PrevLease: roachpb.Lease{
 					Replica:  repl2,
@@ -82,7 +82,7 @@ func TestVerify(t *testing.T) {
 		}
 		defaultFollowerInput := func() VerifyInput {
 			in := defaultLeaderInput()
-			in.RaftStatus = makeRaftStatus(repl2.ReplicaID, raft.StateFollower)
+			in.RaftStatus = makeRaftStatus(repl2.ReplicaID, raftpb.StateFollower)
 			return in
 		}
 
@@ -220,7 +220,7 @@ func TestVerify(t *testing.T) {
 				BypassSafetyChecks: false,
 			}
 		}
-		defaultNonLeaderInput := func(state raft.StateType) VerifyInput {
+		defaultNonLeaderInput := func(state raftpb.StateType) VerifyInput {
 			in := defaultInput()
 			in.RaftStatus = makeRaftStatus(repl2.ReplicaID, state)
 			return in
@@ -228,7 +228,7 @@ func TestVerify(t *testing.T) {
 		const noTargetState rafttracker.StateType = math.MaxUint64
 		defaultLeaderInput := func(targetState rafttracker.StateType, targetMatch kvpb.RaftIndex) VerifyInput {
 			in := defaultInput()
-			in.RaftStatus = makeRaftStatus(repl1.ReplicaID, raft.StateLeader)
+			in.RaftStatus = makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader)
 			in.RaftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
 				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftFirstIndex)},
 			}
@@ -244,17 +244,17 @@ func TestVerify(t *testing.T) {
 		runTests(t, []testCase{
 			{
 				name:   "follower",
-				input:  defaultNonLeaderInput(raft.StateFollower),
+				input:  defaultNonLeaderInput(raftpb.StateFollower),
 				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{
 				name:   "candidate",
-				input:  defaultNonLeaderInput(raft.StateCandidate),
+				input:  defaultNonLeaderInput(raftpb.StateCandidate),
 				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{
 				name:   "pre-candidate",
-				input:  defaultNonLeaderInput(raft.StatePreCandidate),
+				input:  defaultNonLeaderInput(raftpb.StatePreCandidate),
 				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{

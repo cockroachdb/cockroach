@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -582,7 +582,7 @@ func (r *Replica) handleChangeReplicasResult(
 
 	// This is currently executed before the conf change is applied to the Raft
 	// node, so we still see ourselves as the leader.
-	if r.raftBasicStatusRLocked().RaftState == raft.StateLeader {
+	if r.raftBasicStatusRLocked().RaftState == raftpb.StateLeader {
 		r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
 	}
 

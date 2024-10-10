@@ -1562,7 +1562,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", storeID)
 
 		status.Lead = raftpb.PeerID(replDesc.ReplicaID)
-		status.RaftState = raft.StateLeader
+		status.RaftState = raftpb.StateLeader
 		status.Commit = 2
 		for _, replica := range desc.InternalReplicas {
 			match := uint64(2)
@@ -1850,7 +1850,7 @@ func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID)
 	}
 
 	status.Lead = raftpb.PeerID(replDesc.ReplicaID)
-	status.RaftState = raft.StateLeader
+	status.RaftState = raftpb.StateLeader
 	status.Commit = 2
 	for _, replica := range desc.InternalReplicas {
 		status.Progress[raftpb.PeerID(replica.ReplicaID)] = tracker.Progress{

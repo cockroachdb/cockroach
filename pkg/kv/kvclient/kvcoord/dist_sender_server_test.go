@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -4771,7 +4771,7 @@ func TestPartialPartition(t *testing.T) {
 					store, err := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
 					require.NoError(t, err)
 					status := store.LookupReplica(roachpb.RKey(scratchKey)).RaftStatus()
-					if status == nil || status.RaftState != raft.StateLeader {
+					if status == nil || status.RaftState != raftpb.StateLeader {
 						return errors.Newf("Leader leaseholder split %v", status)
 					}
 					return nil

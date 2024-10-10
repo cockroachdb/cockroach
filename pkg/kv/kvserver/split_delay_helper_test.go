@@ -68,7 +68,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 		assert.EqualValues(t, 0, h.slept)
 	})
 
-	statusWithState := func(status raft.StateType) *raft.Status {
+	statusWithState := func(status raftpb.StateType) *raft.Status {
 		return &raft.Status{
 			BasicStatus: raft.BasicStatus{
 				SoftState: raft.SoftState{
@@ -95,14 +95,14 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 		h := &testSplitDelayHelper{
 			numAttempts: 5,
 			rangeID:     1,
-			raftStatus:  statusWithState(raft.StateFollower),
+			raftStatus:  statusWithState(raftpb.StateFollower),
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		assert.EqualValues(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
-	for _, state := range []raft.StateType{raft.StatePreCandidate, raft.StateCandidate} {
+	for _, state := range []raftpb.StateType{raftpb.StatePreCandidate, raftpb.StateCandidate} {
 		t.Run(state.String(), func(t *testing.T) {
 			h := &testSplitDelayHelper{
 				numAttempts: 5,
@@ -115,7 +115,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 	}
 
 	t.Run("inactive", func(t *testing.T) {
-		st := statusWithState(raft.StateLeader)
+		st := statusWithState(raftpb.StateLeader)
 		st.Progress = map[raftpb.PeerID]tracker.Progress{
 			2: {State: tracker.StateProbe},
 		}
@@ -132,7 +132,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 
 	for _, state := range []tracker.StateType{tracker.StateProbe, tracker.StateSnapshot} {
 		t.Run(state.String(), func(t *testing.T) {
-			st := statusWithState(raft.StateLeader)
+			st := statusWithState(raftpb.StateLeader)
 			st.Progress = map[raftpb.PeerID]tracker.Progress{
 				2: {
 					State:              state,
@@ -155,7 +155,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 	}
 
 	t.Run("immediately-replicating", func(t *testing.T) {
-		st := statusWithState(raft.StateLeader)
+		st := statusWithState(raftpb.StateLeader)
 		st.Progress = map[raftpb.PeerID]tracker.Progress{
 			2: {State: tracker.StateReplicate}, // intentionally not recently active
 		}
@@ -170,7 +170,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 	})
 
 	t.Run("becomes-replicating", func(t *testing.T) {
-		st := statusWithState(raft.StateLeader)
+		st := statusWithState(raftpb.StateLeader)
 		st.Progress = map[raftpb.PeerID]tracker.Progress{
 			2: {State: tracker.StateProbe, RecentActive: true, Inflights: &tracker.Inflights{}},
 		}
