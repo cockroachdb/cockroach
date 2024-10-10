@@ -122,7 +122,6 @@ func (sr *schemaResolver) byNameGetterBuilder() descs.ByNameGetterBuilder {
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
-
 	// Check if we are looking up a type which matches a built-in type in
 	// CockroachDB but is an extension type on the public schema in PostgreSQL.
 	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {
