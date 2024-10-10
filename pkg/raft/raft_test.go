@@ -1120,7 +1120,7 @@ func TestHandleMsgApp(t *testing.T) {
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
 
 		// Ensure 3
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
+		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 2, false},                                           // match entry 1, commit up to last entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
@@ -1166,7 +1166,7 @@ func TestHandleHeartbeat(t *testing.T) {
 		require.NoError(t, storage.Append(init.entries))
 		sm := newTestRaft(1, 5, 1, storage)
 		sm.becomeFollower(init.term, 2)
-		sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
+		sm.raftLog.commitTo(CommitMark{Term: init.term, Index: commit})
 		sm.handleHeartbeat(tt.m)
 		m := sm.readMessages()
 		require.Len(t, m, 1, "#%d", i)
@@ -1183,7 +1183,7 @@ func TestHandleHeartbeatRespStoreLivenessDisabled(t *testing.T) {
 	sm := newTestRaft(1, 5, 1, storage, withFortificationDisabled())
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	sm.raftLog.commitTo(sm.raftLog.unstable.mark())
+	sm.raftLog.commitTo(CommitMark(sm.raftLog.unstable.mark()))
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
@@ -1223,7 +1223,7 @@ func TestHandleHeatbeatTimeoutStoreLivenessEnabled(t *testing.T) {
 	sm.becomeLeader()
 	sm.fortificationTracker.RecordFortification(pb.PeerID(2), 1)
 	sm.fortificationTracker.RecordFortification(pb.PeerID(3), 1)
-	sm.raftLog.commitTo(sm.raftLog.unstable.mark())
+	sm.raftLog.commitTo(CommitMark(sm.raftLog.unstable.mark()))
 
 	// On heartbeat timeout, the leader sends a MsgApp.
 	for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
@@ -2508,7 +2508,7 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
 	require.True(t, sm.raftLog.append(init))
-	sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
+	sm.raftLog.commitTo(CommitMark{Term: init.term, Index: commit})
 
 	s := snapshot{
 		term: 1,

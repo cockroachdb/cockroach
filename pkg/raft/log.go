@@ -54,8 +54,28 @@ type raftLog struct {
 	// they will be saved into storage.
 	unstable unstable
 
-	// committed is the highest log position that is known to be in
-	// stable storage on a quorum of nodes.
+	// committed is the highest index in this log known to be committed. This
+	// index logically corresponds to the CommitMark in the coordinate system of
+	// the current raft term: CommitMark{Term: raft.Term, Index: committed}.
+	//
+	// Note that the log's accTerm can be below raft.Term. This means that there
+	// is a "time travel" effect possible when an entry in this log's accTerm
+	// coordinate system is known to be committed before the actual Term at which
+	// it got committed. There is no guarantee that in other logs at terms between
+	// accTerm and raft.Term this entry is the same. It would be unsafe to declare
+	// this entry committed in our accTerm log, because it would have a chance to
+	// be overwritten. But the guarantee below allows it.
+	//
+	// The invariant we rely on is: accTerm <= raft.Term. Raft has given a promise
+	// to never accept log writes from terms < raft.Term. Since the committed
+	// index is in raft.Term commit mark coordinate system, we have the guarantee
+	// that at terms >= raft.Term all entries up to this index match our log, so
+	// they will never be attempted to be overwritten. It is thus safe to consider
+	// them committed proactively, and proceed to apply.
+	//
+	// TODO(pav-kv): this observation warrants adding the Term field to this
+	// raftLog, and adding acceptor safety checks into it, in addition to relying
+	// on the raft struct layer.
 	committed uint64
 	// applying is the highest log position that the application has
 	// been instructed to apply to its state machine. Some of these
@@ -359,22 +379,44 @@ func (l *raftLog) lastIndex() uint64 {
 	return l.unstable.lastIndex()
 }
 
-// commitTo bumps the commit index to the given value if it is higher than the
-// current commit index.
-func (l *raftLog) commitTo(mark LogMark) {
-	// TODO(pav-kv): it is only safe to update the commit index if our log is
-	// consistent with the mark.term leader. If the mark.term leader sees the
-	// mark.index entry as committed, all future leaders have it in the log. It is
-	// thus safe to bump the commit index to min(mark.index, lastIndex) if our
-	// accTerm >= mark.term. Do this once raftLog/unstable tracks the accTerm.
-
-	// never decrease commit
-	if l.committed < mark.Index {
-		if l.lastIndex() < mark.Index {
-			l.logger.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", mark.Index, l.lastIndex())
-		}
-		l.committed = mark.Index
+// maybeCommit bumps the commit index if the given entry ID matches the log.
+func (l *raftLog) maybeCommit(id entryID) bool {
+	if id.index <= l.committed || !l.matchTerm(id) {
+		return false
 	}
+	l.committed = id.index
+	return true
+}
+
+// commitTo bumps the commit index in response to the knowledge that entries are
+// committed at the given mark. It can be a no-op if updating the commit index
+// is not safe, or the index is stale, or the entire log is already committed.
+//
+// Returns true iff the commit index has been bumped.
+func (l *raftLog) commitTo(mark CommitMark) bool {
+	// In the absence of evidence that entry in accTerm leader log (and so in our
+	// log too, even if it isn't there yet) matches the one in the mark.Term log
+	// (and so does the entire log prefix), it is only safe to bump the commit
+	// index if mark.Term <= accTerm (which implies this matching guarantee).
+	if mark.Term > l.accTerm() {
+		// NB: in this case, our log is lagging the leader's. If the leader is
+		// stable, we will eventually accept a MsgApp or snapshot which bumps
+		// accTerm and enables advancing the commit index again. By this, we have
+		// the guarantee that our commit index converges to the leader's.
+		return false
+	}
+	// Cap the committed index so that it does not cross the log's last index.
+	//
+	// NB: we could proactively remember the highest committed mark even if it
+	// extends beyond the local log. The advantage would be the ability to apply
+	// the corresponding entries immediately when they get accepted in the future.
+	// However, the next MsgApp typically carries a newer commit mark, so this
+	// optimization would be hardly necessary.
+	if index := min(mark.Index, l.lastIndex()); index > l.committed {
+		l.committed = index
+		return true
+	}
+	return false
 }
 
 func (l *raftLog) appliedTo(i uint64, size entryEncodingSize) {

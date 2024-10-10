@@ -28,6 +28,8 @@ import (
 // Every entry is associated with a leadership term which issued this entry and
 // initially appended it to the log. There can only be one leader at any term,
 // and a leader never issues two entries with the same index.
+//
+// TODO(pav-kv): export this type.
 type entryID struct {
 	term  uint64
 	index uint64
@@ -60,6 +62,37 @@ type LogMark struct {
 func (l LogMark) After(other LogMark) bool {
 	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
 }
+
+// CommitMark is a LogMark extended with the semantics of committed log state.
+//
+// A commit mark (Term, Index) carries the guarantee that all the entries at
+// indices <= Index are committed as of the given Term, and will be present and
+// committed in all future term logs.
+//
+// This corresponds to the Leader Completeness property found in Figure 3 of the
+// raft [paper](https://raft.github.io/raft.pdf): if a log entry is committed in
+// a given term, then that entry will be present in the logs of the leaders for
+// all higher-numbered terms. §5.4
+//
+// The ensemble of entryID, LogMark, and CommitMark represents the lifetime of a
+// log entry in the raft consensus algorithm, and 3 coordinate systems that
+// correspond to "proposer", "acceptor", and "learner" concepts in Paxos.
+//
+//   - When an entry is proposed by the leader/proposer, it is assigned an
+//     entryID uniquely identifying this proposal. This is a proposer coordinate
+//     system. At the same Index, there can be multiple different proposals,
+//     identified by different terms at which they were produced. Only one of
+//     them will ever be committed.
+//   - When the entry is accepted by an acceptor, it gets covered by its log's
+//     LogMark. This is a logical clock used by the acceptors, and represents
+//     the order of all log writes. At the same Index, there can be multiple
+//     different proposals, up to a Term under which one of them gets committed.
+//   - If/when the entry is committed, it enters the CommitMark coordinate
+//     system, which is scoped to learners. Entries are transferred to the state
+//     machine after getting covered by a CommitMark. In this coordinate system,
+//     the Index uniquely identifies the proposal. All logs at the same- or
+//     higher-term LogMark contain the exact same entries at indices <= Index.
+type CommitMark LogMark
 
 type LogSlice = logSlice // TODO(pav-kv): export logSlice properly
 
@@ -166,7 +199,7 @@ func (s logSlice) valid() error {
 // observed this committed state.
 //
 // Semantically, from the log perspective, this type is equivalent to a logSlice
-// from 0 to lastEntryID(), plus a commit LogMark. All leader logs at terms >=
+// from 0 to lastEntryID(), plus a CommitMark. All leader logs at terms >=
 // snapshot.term contain all entries up to the lastEntryID(). At earlier terms,
 // logs may or may not be consistent with this snapshot, depending on whether
 // they contain the lastEntryID().
@@ -199,10 +232,10 @@ func (s snapshot) lastEntryID() entryID {
 	return entryID{term: s.snap.Metadata.Term, index: s.snap.Metadata.Index}
 }
 
-// mark returns committed LogMark of this snapshot, in the coordinate system of
-// the leader who observes this committed state.
-func (s snapshot) mark() LogMark {
-	return LogMark{Term: s.term, Index: s.snap.Metadata.Index}
+// commitMark returns the commit mark of this snapshot, in the coordinate system
+// of the leader who observes this committed state.
+func (s snapshot) commitMark() CommitMark {
+	return CommitMark{Term: s.term, Index: s.snap.Metadata.Index}
 }
 
 // valid returns nil iff the snapshot is well-formed.
