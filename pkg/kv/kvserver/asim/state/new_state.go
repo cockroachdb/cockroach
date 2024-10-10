@@ -219,6 +219,23 @@ func RangesInfoWithDistribution(
 	return ret
 }
 
+func ClusterInfoWithLocality(storesPerNode int, regions []string, nodes []int) ClusterInfo {
+	if len(regions) != len(nodes) {
+		panic("len(regions) != len(nodes)")
+	}
+	ret := ClusterInfo{}
+
+	ret.Regions = make([]Region, len(regions))
+	for i, name := range regions {
+		ret.Regions[i] = Region{
+			Name:  name,
+			Zones: []Zone{NewZone(name+"1", nodes[i], storesPerNode)},
+		}
+	}
+
+	return ret
+}
+
 // ClusterInfoWithDistribution returns a ClusterInfo. The ClusterInfo regions
 // have nodes added to them according to the regionNodeWeights and numNodes
 // given. In cases where the numNodes does not divide among the regions given
@@ -239,7 +256,7 @@ func ClusterInfoWithDistribution(
 		availableNodes -= allocatedNodes
 		ret.Regions[i] = Region{
 			Name:  name,
-			Zones: []Zone{NewZone(name+"_1", allocatedNodes, storesPerNode)},
+			Zones: []Zone{NewZone(name+"1", allocatedNodes, storesPerNode)},
 		}
 	}
 
@@ -252,8 +269,8 @@ func ClusterInfoWithStoreCount(nodeCount int, storesPerNode int) ClusterInfo {
 	return ClusterInfoWithDistribution(
 		nodeCount,
 		storesPerNode,
-		[]string{"AU_EAST"}, /* regions */
-		[]float64{1},        /* regionNodeWeights */
+		[]string{"a"}, /* regions */
+		[]float64{1},  /* regionNodeWeights */
 	)
 }
 
