@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -698,6 +699,9 @@ func TestFlowControlCrashedNode(t *testing.T) {
 func TestFlowControlRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TOOD(kvoli,pav-kv,sumeerbhola): Enable this test under all conditions
+	// after fixing the flakiness introduced by #132121.
+	skip.UnderDuressWithIssue(t, 132310)
 
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -952,6 +956,10 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	h.comment(`-- (Allow below-raft admission to proceed.)`)
 	disableWorkQueueGranting.Store(false)
 
+	// Ensure that tokens are returned, the streams stay connected and that the
+	// tracked tokens goes to 0.
+	h.waitForConnectedStreams(ctx, repl.RangeID, 5, 0 /* serverIdx */)
+	h.waitForTotalTrackedTokens(ctx, repl.RangeID, 0 /* 0B */, 0 /* serverIdx */)
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 
 	h.comment(`-- Observe flow token dispatch metrics from n4.`)
