@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
@@ -121,4 +122,43 @@ func (r *replicaRLockedStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
 	// A support expiration timestamp equal to the current time is considered
 	// expired, to be consistent with support withdrawal in Store Liveness.
 	return ts.LessEq(r.store.Clock().Now())
+}
+
+type InspectAllStoreLiveness interface {
+	InspectAllSupportFrom() []slpb.SupportStatesPerStore
+	InspectAllSupportFor() []slpb.SupportStatesPerStore
+}
+
+type StoresForStoreLiveness Stores
+
+var _ InspectAllStoreLiveness = &StoresForStoreLiveness{}
+
+func MakeStoresForStoreLiveness(stores *Stores) *StoresForStoreLiveness {
+	return (*StoresForStoreLiveness)(stores)
+}
+
+func (sfsl *StoresForStoreLiveness) InspectAllSupportFrom() []slpb.SupportStatesPerStore {
+	stores := (*Stores)(sfsl)
+	var sspf []slpb.SupportStatesPerStore
+	if err := stores.VisitStores(func(s *Store) error {
+		sspf = append(sspf, s.storeLiveness.InspectSupportFrom())
+		return nil
+	}); err != nil {
+		log.Errorf(stores.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return sspf
+}
+
+func (sfsl *StoresForStoreLiveness) InspectAllSupportFor() []slpb.SupportStatesPerStore {
+	stores := (*Stores)(sfsl)
+	var sspf []slpb.SupportStatesPerStore
+	if err := stores.VisitStores(func(s *Store) error {
+		sspf = append(sspf, s.storeLiveness.InspectSupportFor())
+		return nil
+	}); err != nil {
+		log.Errorf(stores.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return sspf
 }
