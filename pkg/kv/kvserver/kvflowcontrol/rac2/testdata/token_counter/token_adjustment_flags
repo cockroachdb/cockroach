@@ -65,21 +65,21 @@ history
                                      regular |  elastic
                                       +16MiB |  +8.0MiB
 =======================================================
- -1.0MiB regular                      +15MiB |  +7.0MiB
- -7.0MiB regular                     +8.0MiB |      +0B (elastic blocked)
- -2.0MiB regular                     +6.0MiB |  -2.0MiB (elastic blocked)
- -2.0MiB regular                     +4.0MiB |  -4.0MiB (elastic blocked)
- +2.0MiB regular                     +6.0MiB |  -2.0MiB (elastic blocked)
- -2.0MiB regular                     +4.0MiB |  -4.0MiB (elastic blocked)
- +4.0MiB regular                     +8.0MiB |      +0B (elastic blocked)
+ -1.0MiB regular normal               +15MiB |  +7.0MiB
+ -7.0MiB regular normal              +8.0MiB |      +0B (elastic blocked)
+ -2.0MiB regular normal              +6.0MiB |  -2.0MiB (elastic blocked)
+ -2.0MiB regular normal              +4.0MiB |  -4.0MiB (elastic blocked)
+ +2.0MiB regular normal              +6.0MiB |  -2.0MiB (elastic blocked)
+ -2.0MiB regular normal              +4.0MiB |  -4.0MiB (elastic blocked)
+ +4.0MiB regular normal              +8.0MiB |      +0B (elastic blocked)
  +2.0MiB regular disconnect           +10MiB |  +2.0MiB
  -2.0MiB elastic force_flush          +10MiB |      +0B (elastic blocked)
  -2.0MiB regular prevent_send_queue  +8.0MiB |  -2.0MiB (elastic blocked)
- +2.0MiB regular                      +10MiB |      +0B (elastic blocked)
- +2.0MiB elastic                      +10MiB |  +2.0MiB
- +6.0MiB regular                      +16MiB |  +8.0MiB
+ +2.0MiB regular normal               +10MiB |      +0B (elastic blocked)
+ +2.0MiB elastic normal               +10MiB |  +2.0MiB
+ +6.0MiB regular normal               +16MiB |  +8.0MiB
  -9.0MiB elastic prevent_send_queue   +16MiB |  -1.0MiB (elastic blocked)
- +9.0MiB elastic                      +16MiB |  +8.0MiB
+ +9.0MiB elastic normal               +16MiB |  +8.0MiB
 
 metrics type=all
 ----

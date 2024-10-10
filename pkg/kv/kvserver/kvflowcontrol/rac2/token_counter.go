@@ -169,6 +169,33 @@ type tokensPerWorkClass struct {
 	regular, elastic kvflowcontrol.Tokens
 }
 
+// TokenType represents the type of token being adjusted, distinct from the
+// class of token (elastic or regular). A TokenCounter will have a TokenType
+// for which it adjusts tokens.
+type TokenType int
+
+const (
+	EvalToken TokenType = iota
+	SendToken
+	NumTokenTypes
+)
+
+func (f TokenType) String() string {
+	return redact.StringWithoutMarkers(f)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (f TokenType) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch f {
+	case EvalToken:
+		p.SafeString("eval")
+	case SendToken:
+		p.SafeString("send")
+	default:
+		panic("unknown flowControlMetricType")
+	}
+}
+
 // tokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
@@ -178,7 +205,8 @@ type tokenCounter struct {
 	metrics  *TokenCounterMetrics
 	// stream is the stream for which tokens are being adjusted, it is only used
 	// in logging.
-	stream kvflowcontrol.Stream
+	stream    kvflowcontrol.Stream
+	tokenType TokenType
 
 	mu struct {
 		syncutil.RWMutex
@@ -193,12 +221,14 @@ func newTokenCounter(
 	clock *hlc.Clock,
 	metrics *TokenCounterMetrics,
 	stream kvflowcontrol.Stream,
+	tokenType TokenType,
 ) *tokenCounter {
 	t := &tokenCounter{
-		settings: settings,
-		clock:    clock,
-		metrics:  metrics,
-		stream:   stream,
+		settings:  settings,
+		clock:     clock,
+		metrics:   metrics,
+		stream:    stream,
+		tokenType: tokenType,
 	}
 	limit := tokensPerWorkClass{
 		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
@@ -292,6 +322,10 @@ func (t *tokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -301,7 +335,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, flag)
+	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -534,6 +568,7 @@ func (a TokenAdjustFlag) String() string {
 func (a TokenAdjustFlag) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch a {
 	case AdjNormal:
+		w.Print("normal")
 	case AdjDisconnect:
 		w.Print("disconnect")
 	case AdjForceFlush:
@@ -554,21 +589,16 @@ func (t *tokenCounter) adjust(
 	flag TokenAdjustFlag,
 ) {
 	now := t.clock.PhysicalTime()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, flag)
+		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
 	}()
 
-	if log.V(2) {
-		func() {
-			t.mu.RLock()
-			defer t.mu.RUnlock()
-
-			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-				class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
-		}()
-	}
 }
 
 func (t *tokenCounter) adjustLocked(
@@ -577,6 +607,7 @@ func (t *tokenCounter) adjustLocked(
 	delta kvflowcontrol.Tokens,
 	now time.Time,
 	flag TokenAdjustFlag,
+	expensiveLog bool,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -600,6 +631,10 @@ func (t *tokenCounter) adjustLocked(
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
+	}
+	if expensiveLog {
+		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
 	}
 }
 
