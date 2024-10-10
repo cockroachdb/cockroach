@@ -223,7 +223,7 @@ export const TablesPageV2 = () => {
 
   // Get db id from the URL.
   const { dbID } = useRouteParams();
-  const { data, error, isLoading, refreshTables } = useTableMetadata(
+  const { data, error, isLoading, refreshTables, jobStatus } = useTableMetadata(
     createTableMetadataRequestFromParams(dbID, params),
   );
   const nodesResp = useNodeStatuses();
@@ -314,7 +314,11 @@ export const TablesPageV2 = () => {
           loading={isLoading}
           error={error}
           actionButton={
-            <TableMetadataJobControl onDataUpdated={refreshTables} />
+            <TableMetadataJobControl
+              onJobTriggered={() => refreshTables()}
+              error={jobStatus?.error}
+              jobStatus={jobStatus?.jobTriggerStatus?.jobStatus}
+            />
           }
           columns={colsWithSort}
           dataSource={tableData}

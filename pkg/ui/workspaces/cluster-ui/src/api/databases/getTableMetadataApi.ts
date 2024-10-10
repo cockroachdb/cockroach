@@ -16,6 +16,11 @@ import {
   TableMetadataResponseServer,
   TableMetadataServer,
 } from "./serverTypes";
+import {
+  convertTriggerTableMetaUpdateJobResponseFromServer,
+  TableMetadataJobStatus,
+  TriggerTableMetaUpdateJobResponseWithErr,
+} from "./tableMetaUpdateJobApi";
 
 const TABLE_METADATA_API_PATH = "api/v2/table_metadata/";
 
@@ -60,7 +65,9 @@ export type ListTableMetadataRequest = {
   name?: string;
 };
 
-type TableMetadataResponse = ResultsWithPagination<TableMetadata[]>;
+type PaginatedTableMetadataResponse = ResultsWithPagination<TableMetadata[]> & {
+  jobDetails: TriggerTableMetaUpdateJobResponseWithErr;
+};
 
 const convertTableMetadataFromServer = (
   resp: TableMetadataServer,
@@ -90,7 +97,7 @@ const convertTableMetadataFromServer = (
 
 async function getTableMetadata(
   req: ListTableMetadataRequest,
-): Promise<TableMetadataResponse> {
+): Promise<PaginatedTableMetadataResponse> {
   const urlParams = new URLSearchParams();
   if (req.dbId) {
     urlParams.append("dbId", req.dbId.toString());
@@ -123,6 +130,12 @@ async function getTableMetadata(
       pagination: convertServerPaginationToClientPagination(
         resp.pagination_info,
       ),
+      jobDetails: {
+        jobTriggerStatus: convertTriggerTableMetaUpdateJobResponseFromServer(
+          resp?.job_trigger_response?.job_details,
+        ),
+        error: resp.job_trigger_response.error,
+      },
     };
   });
 }
@@ -143,12 +156,28 @@ const createKey = (req: ListTableMetadataRequest) => {
 
 export const useTableMetadata = (req: ListTableMetadataRequest) => {
   const key = createKey(req);
-  const { data, error, isLoading, mutate } = useSWR<TableMetadataResponse>(
-    key,
-    () => getTableMetadata(req),
-  );
+  const { data, error, isLoading, mutate } =
+    useSWR<PaginatedTableMetadataResponse>(key, () => getTableMetadata(req), {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      refreshInterval: data => {
+        if (
+          data?.jobDetails.jobTriggerStatus?.jobStatus?.currentStatus ===
+          TableMetadataJobStatus.RUNNING
+        ) {
+          return 3000;
+        }
+        return 0;
+      },
+    });
 
-  return { data, error, isLoading, refreshTables: mutate };
+  return {
+    data,
+    error,
+    isLoading,
+    refreshTables: mutate,
+    jobStatus: data?.jobDetails,
+  };
 };
 
 // Point lookup - table details.

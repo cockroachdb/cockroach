@@ -16,6 +16,11 @@ import {
   DatabaseMetadataResponseServer,
   DatabaseMetadataServer,
 } from "./serverTypes";
+import {
+  convertTriggerTableMetaUpdateJobResponseFromServer,
+  TableMetadataJobStatus,
+  TriggerTableMetaUpdateJobResponseWithErr,
+} from "./tableMetaUpdateJobApi";
 
 const DATABASES_API_V2 = "api/v2/database_metadata/";
 
@@ -44,7 +49,9 @@ export type DatabaseMetadataRequest = {
   storeIds?: number[];
 };
 
-type PaginatedDatabaseMetadata = ResultsWithPagination<DatabaseMetadata[]>;
+type PaginatedDatabaseMetadata = ResultsWithPagination<DatabaseMetadata[]> & {
+  jobDetails: TriggerTableMetaUpdateJobResponseWithErr;
+};
 
 const convertDatabaseMetadataFromServer = (
   d: DatabaseMetadataServer,
@@ -87,6 +94,12 @@ export const getDatabaseMetadata = async (
   ).then(resp => ({
     results: resp.results?.map(convertDatabaseMetadataFromServer) ?? [],
     pagination: convertServerPaginationToClientPagination(resp.pagination_info),
+    jobDetails: {
+      jobTriggerStatus: convertTriggerTableMetaUpdateJobResponseFromServer(
+        resp?.job_trigger_response?.job_details,
+      ),
+      error: resp.job_trigger_response.error,
+    },
   }));
 };
 
@@ -103,6 +116,8 @@ const createKey = (req: DatabaseMetadataRequest) => {
   ].join("|");
 };
 
+// useDatabaseMetadata returns the database metadata for the given request.
+// If the job is running, it will refresh every 3 seconds.
 export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
   const { data, error, isLoading, mutate } = useSWR<PaginatedDatabaseMetadata>(
     createKey(req),
@@ -110,6 +125,15 @@ export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      refreshInterval: data => {
+        if (
+          data?.jobDetails.jobTriggerStatus?.jobStatus?.currentStatus ===
+          TableMetadataJobStatus.RUNNING
+        ) {
+          return 3000;
+        }
+        return 0;
+      },
     },
   );
 
@@ -118,6 +142,7 @@ export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
     error,
     isLoading,
     refreshDatabases: mutate,
+    jobStatus: data?.jobDetails,
   };
 };
 

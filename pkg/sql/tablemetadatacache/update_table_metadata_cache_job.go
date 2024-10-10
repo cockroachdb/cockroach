@@ -36,6 +36,8 @@ type tableMetadataUpdateJobResumer struct {
 
 var _ jobs.Resumer = (*tableMetadataUpdateJobResumer)(nil)
 
+var JobTimeSource timeutil.TimeSource = timeutil.DefaultTimeSource{}
+
 // Resume is part of the jobs.Resumer interface.
 func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	// This job is a forever running background job, and it is always safe to
@@ -142,7 +144,7 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
-		now := timeutil.Now()
+		now := JobTimeSource.Now()
 		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
 		details.LastStartTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
@@ -162,7 +164,7 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
-		now := timeutil.Now()
+		now := JobTimeSource.Now()
 		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
 		details.LastCompletedTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING

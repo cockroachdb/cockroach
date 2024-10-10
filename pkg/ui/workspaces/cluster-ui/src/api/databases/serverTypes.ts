@@ -34,6 +34,31 @@ export const convertServerPaginationToClientPagination = (
 };
 
 // ------------------------------------------------------------------------------------
+// /api/v2/updatejob/ response.
+// ------------------------------------------------------------------------------------
+
+export type TableMetaUpdateJobResponseServer = {
+  current_status: string;
+  progress: number;
+  last_start_time: string | null;
+  last_completed_time: string | null;
+  last_updated_time: string | null;
+  data_valid_duration: number;
+  automatic_updates_enabled: boolean;
+};
+
+export type TriggerTableMetaUpdateJobResponseServer = {
+  job_status: TableMetaUpdateJobResponseServer;
+  job_triggered: boolean;
+  message: string;
+};
+
+export type TriggerTableMetaUpdateWithErrorResponseServer = {
+  job_details: TriggerTableMetaUpdateJobResponseServer;
+  error: string;
+};
+
+// ------------------------------------------------------------------------------------
 // /api/v2/table_metadata/ response.
 // ------------------------------------------------------------------------------------
 export type TableMetadataServer = {
@@ -58,11 +83,14 @@ export type TableMetadataServer = {
 };
 
 export type TableMetadataResponseServer =
-  APIV2ResponseWithPaginationState<TableMetadataServer>;
+  APIV2ResponseWithPaginationState<TableMetadataServer> & {
+    job_trigger_response: TriggerTableMetaUpdateWithErrorResponseServer;
+  };
 
 // ------------------------------------------------------------------------------------
 // /api/v2/table_metadata/:tableId/ response.
 // ------------------------------------------------------------------------------------
+
 export type TableDetailsResponseServer = {
   metadata: TableMetadataServer;
   create_statement: string;
@@ -81,7 +109,9 @@ export type DatabaseMetadataServer = {
 };
 
 export type DatabaseMetadataResponseServer =
-  APIV2ResponseWithPaginationState<DatabaseMetadataServer>;
+  APIV2ResponseWithPaginationState<DatabaseMetadataServer> & {
+    job_trigger_response: TriggerTableMetaUpdateWithErrorResponseServer;
+  };
 
 // ------------------------------------------------------------------------------------
 // /api/v2/grants/tabless/:tableId/ response.

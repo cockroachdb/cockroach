@@ -5,94 +5,51 @@
 
 import { RedoOutlined } from "@ant-design/icons";
 import { Skeleton, Tooltip } from "antd";
-import React, { useCallback, useEffect } from "react";
+import React from "react";
 
 import {
   TableMetadataJobStatus,
+  TableMetaUpdateJobInfo,
+  TriggerTableMetaUpdateJobResponse,
   triggerUpdateTableMetaJobApi,
-  useTableMetaUpdateJob,
 } from "src/api/databases/tableMetaUpdateJobApi";
 import Button from "src/sharedFromCloud/button";
 import { Timestamp } from "src/timestamp";
 import { DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
-import { usePrevious } from "src/util/hooks";
 
 import styles from "./tableMetadataJobControl.module.scss";
 
 type TableMetadataJobControlProps = {
   // Callback for when the job has updated the metadata, i.e. the
   // lastUpdatedTime has changed.
-  onDataUpdated?: () => void;
+  error: string | null;
+  jobStatus: TableMetaUpdateJobInfo | null;
+  onJobTriggered?: (jobStatus: TriggerTableMetaUpdateJobResponse) => void;
 };
 
 export const TableMetadataJobControl: React.FC<
   TableMetadataJobControlProps
-> = ({ onDataUpdated }) => {
-  const { jobStatus, refreshJobStatus, isLoading } = useTableMetaUpdateJob();
-  const previousUpdateCompletedUnixSecs = usePrevious(
-    jobStatus?.lastCompletedTime?.unix(),
-  );
-  const lastUpdateCompletedUnixSecs = jobStatus?.lastCompletedTime?.unix();
-
-  const triggerUpdateTableMetaJob = useCallback(
-    async (onlyIfStale = true) => {
-      const resp = await triggerUpdateTableMetaJobApi({ onlyIfStale });
-      if (resp.job_triggered) {
-        return refreshJobStatus();
-      }
-    },
-    [refreshJobStatus],
-  );
-
-  const dataValidMs = jobStatus?.dataValidDuration.asMilliseconds();
-  useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-    // Schedule the next update request after the dataValidMs has passed since
-    // the last update completed.
-    const msSinceLastCompleted =
-      Date.now() - lastUpdateCompletedUnixSecs * 1000;
-    const delayMs = Math.max(0, dataValidMs - msSinceLastCompleted);
-    const nextUpdated = setTimeout(() => {
-      triggerUpdateTableMetaJob();
-    }, delayMs);
-
-    return () => clearTimeout(nextUpdated);
-  }, [
-    dataValidMs,
-    lastUpdateCompletedUnixSecs,
-    triggerUpdateTableMetaJob,
-    isLoading,
-  ]);
-
-  useEffect(() => {
-    // If the last completed time has changed, call the callback.
-    if (previousUpdateCompletedUnixSecs === lastUpdateCompletedUnixSecs) {
-      return;
-    }
-    onDataUpdated && onDataUpdated();
-  }, [
-    previousUpdateCompletedUnixSecs,
-    lastUpdateCompletedUnixSecs,
-    onDataUpdated,
-  ]);
-
-  const onRefreshClick = () => {
+> = ({ jobStatus, onJobTriggered, error }) => {
+  const onRefreshClick = async () => {
     // Force refresh.
-    triggerUpdateTableMetaJob(false);
+    const resp = await triggerUpdateTableMetaJobApi({ onlyIfStale: false });
+    if (resp.jobTriggered) {
+      onJobTriggered && onJobTriggered(resp);
+    }
   };
-  const durationText = jobStatus?.lastCompletedTime?.fromNow();
 
+  const tooltipText = error
+    ? error
+    : "Data is last refreshed automatically (per cluster setting) or manually.";
+
+  const durationText = jobStatus?.lastCompletedTime?.fromNow();
   const isRunning = jobStatus?.currentStatus === TableMetadataJobStatus.RUNNING;
+  const refreshTooltip = isRunning ? "Data is being refreshed" : "Refresh data";
+
   return (
     <div className={styles["controls-container"]}>
-      <Skeleton loading={isLoading}>
-        <Tooltip
-          title={
-            "Data is last refreshed automatically (per cluster setting) or manually."
-          }
-        >
+      <Skeleton loading={jobStatus == null}>
+        <Tooltip title={tooltipText}>
           Last refreshed:
           <Timestamp
             format={DATE_WITH_SECONDS_FORMAT_24_TZ}
@@ -102,7 +59,7 @@ export const TableMetadataJobControl: React.FC<
           {durationText && `(${durationText})`}
         </Tooltip>
       </Skeleton>
-      <Tooltip placement="top" title={"Refresh data"}>
+      <Tooltip placement="top" title={refreshTooltip}>
         <div>
           <Button
             disabled={isRunning}
