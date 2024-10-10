@@ -6,6 +6,7 @@
 package row
 
 import (
+	"bytes"
 	"context"
 	"sort"
 
@@ -66,14 +67,28 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	settings.WithPublic,
 )
 
+// Per-index data for writing tombstones to enforce a uniqueness constraint.
+type uniqueWithTombstoneEntry struct {
+	// implicitPartitionKeyValues contains the potential values for the
+	// partitioning column.
+	implicitPartitionKeyVals []tree.Datum
+
+	// tmpTombstones contains the tombstones generated for this index by the last
+	// call to encodeTombstonesForIndex.
+	tmpTombstones [][]byte
+}
+
 // RowHelper has the common methods for table row manipulations.
 type RowHelper struct {
 	Codec keys.SQLCodec
 
 	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []catalog.Index
-	indexEntries map[catalog.Index][]rowenc.IndexEntry
+	Indexes []catalog.Index
+
+	// Unique indexes that can be enforced with tombstones.
+	UniqueWithTombstoneIndexes intsets.Fast
+	indexEntries               map[catalog.Index][]rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -85,6 +100,11 @@ type RowHelper struct {
 	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 
+	// Used to build tmpTombstones for non-Serializable uniqueness checks.
+	index2UniqueWithTombstoneEntry map[catalog.Index]*uniqueWithTombstoneEntry
+	// Used to hold the row being written while writing tombstones.
+	tmpRow []tree.Datum
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
@@ -95,16 +115,22 @@ func NewRowHelper(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
+	uniqueWithTombstoneIndexes []catalog.Index,
 	sv *settings.Values,
 	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
+	var uniqueWithTombstoneIndexesSet intsets.Fast
+	for _, index := range uniqueWithTombstoneIndexes {
+		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
+	}
 	rh := RowHelper{
-		Codec:     codec,
-		TableDesc: desc,
-		Indexes:   indexes,
-		internal:  internal,
-		metrics:   metrics,
+		Codec:                      codec,
+		TableDesc:                  desc,
+		Indexes:                    indexes,
+		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
+		internal:                   internal,
+		metrics:                    metrics,
 	}
 
 	// Pre-compute the encoding directions of the index key values for
@@ -128,7 +154,7 @@ func NewRowHelper(
 // include empty secondary index k/v pairs.
 func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -137,11 +163,11 @@ func (rh *RowHelper) encodeIndexes(
 	secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry,
 	err error,
 ) {
-	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
+	primaryIndexKey, err = rh.encodePrimaryIndexKey(colIDtoRowPosition, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,21 +180,111 @@ func (rh *RowHelper) Init() {
 	)
 }
 
-// encodePrimaryIndex encodes the primary index key.
-func (rh *RowHelper) encodePrimaryIndex(
-	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
+// encodePrimaryIndexKey encodes the primary index key.
+func (rh *RowHelper) encodePrimaryIndexKey(
+	colIDtoRowPosition catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.PrimaryIndexKeyPrefix == nil {
 		rh.Init()
 	}
 	idx := rh.TableDesc.GetPrimaryIndex()
 	primaryIndexKey, containsNull, err := rowenc.EncodeIndexKey(
-		rh.TableDesc, idx, colIDtoRowIndex, values, rh.PrimaryIndexKeyPrefix,
+		rh.TableDesc, idx, colIDtoRowPosition, values, rh.PrimaryIndexKeyPrefix,
 	)
 	if containsNull {
-		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowIndex, values)
+		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowPosition, values)
 	}
 	return primaryIndexKey, err
+}
+
+// initRowTmp creates a copy of the row that we can modify while trying to be
+// smart about allocations.
+func (rh *RowHelper) initRowTmp(values []tree.Datum) []tree.Datum {
+	if rh.tmpRow == nil {
+		rh.tmpRow = make([]tree.Datum, len(values))
+	}
+	copy(rh.tmpRow, values)
+	return rh.tmpRow
+}
+
+// getTombstoneTmpForIndex initializes and gets for the index provided.
+func (rh *RowHelper) getTombstoneTmpForIndex(
+	index catalog.Index, partitionColValue *tree.DEnum,
+) *uniqueWithTombstoneEntry {
+	if rh.index2UniqueWithTombstoneEntry == nil {
+		rh.index2UniqueWithTombstoneEntry = make(map[catalog.Index]*uniqueWithTombstoneEntry, len(rh.TableDesc.WritableNonPrimaryIndexes())+1)
+	}
+	tombstoneTmp, ok := rh.index2UniqueWithTombstoneEntry[index]
+	if !ok {
+		implicitKeys := tree.MakeAllDEnumsInType(partitionColValue.ResolvedType())
+		tombstoneTmp = &uniqueWithTombstoneEntry{implicitPartitionKeyVals: implicitKeys, tmpTombstones: make([][]byte, len(implicitKeys)-1)}
+		rh.index2UniqueWithTombstoneEntry[index] = tombstoneTmp
+	}
+	tombstoneTmp.tmpTombstones = tombstoneTmp.tmpTombstones[:0]
+	return tombstoneTmp
+}
+
+// encodeTombstonesForIndex creates a set of keys that can be used to write
+// tombstones for the provided index. These values remain valid for the index
+// until this function is called again for that index.
+func (rh *RowHelper) encodeTombstonesForIndex(
+	ctx context.Context,
+	index catalog.Index,
+	colIDtoRowPosition catalog.TableColMap,
+	values []tree.Datum,
+) ([][]byte, error) {
+	if !rh.UniqueWithTombstoneIndexes.Contains(index.Ordinal()) {
+		return nil, nil
+	}
+
+	if !index.IsUnique() {
+		return nil, errors.AssertionFailedf("Expected index %s to be unique", index.GetName())
+	}
+	if index.GetType() != descpb.IndexDescriptor_FORWARD {
+		return nil, errors.AssertionFailedf("Expected index %s to be a forward index", index.GetName())
+	}
+
+	// Get the position and value of the partition column in this index.
+	partitionColPosition, ok := colIDtoRowPosition.Get(index.GetKeyColumnID(0 /* columnOrdinal */))
+	if !ok {
+		return nil, nil
+	}
+	partitionColValue, ok := values[partitionColPosition].(*tree.DEnum)
+	if !ok {
+		return nil, errors.AssertionFailedf("Expected partition column value to be enum, but got %T", values[partitionColPosition])
+	}
+
+	// Intentionally shadowing values here to avoid accidentally overwriting the tuple
+	values = rh.initRowTmp(values)
+	tombstoneTmpForIndex := rh.getTombstoneTmpForIndex(index, partitionColValue)
+
+	for _, partVal := range tombstoneTmpForIndex.implicitPartitionKeyVals {
+		if bytes.Equal(partitionColValue.PhysicalRep, partVal.(*tree.DEnum).PhysicalRep) {
+			continue
+		}
+		values[partitionColPosition] = partVal
+
+		if index.Primary() {
+			key, err := rh.encodePrimaryIndexKey(colIDtoRowPosition, values)
+			if err != nil {
+				return nil, err
+			}
+			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
+		} else {
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			if err != nil {
+				return nil, err
+			}
+			// If this key contains a NULL value, it can't violate a NULL constraint.
+			if containsNull {
+				tombstoneTmpForIndex.tmpTombstones = tombstoneTmpForIndex.tmpTombstones[:0]
+				break
+			}
+			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, keys...)
+		}
+	}
+
+	return tombstoneTmpForIndex.tmpTombstones, nil
 }
 
 // encodeSecondaryIndexes encodes the secondary index keys based on a row's
@@ -184,7 +300,7 @@ func (rh *RowHelper) encodePrimaryIndex(
 // k/v pairs.
 func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -201,7 +317,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}

@@ -91,7 +91,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               NewRowHelper(codec, tableDesc, indexes, sv, internal, metrics),
+		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -140,7 +140,7 @@ func (rd *Deleter) DeleteRow(
 		}
 	}
 
-	primaryIndexKey, err := rd.Helper.encodePrimaryIndex(rd.FetchColIDtoRowIndex, values)
+	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}

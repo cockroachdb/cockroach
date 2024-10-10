@@ -1350,6 +1350,18 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 	return node, nil
 }
 
+func ordinalsToIndexes(table cat.Table, ords cat.IndexOrdinals) []catalog.Index {
+	if ords == nil {
+		return nil
+	}
+
+	retval := make([]catalog.Index, len(ords))
+	for i, idx := range ords {
+		retval[i] = table.Index(idx).(*optIndex).idx
+	}
+	return retval
+}
+
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
@@ -1358,6 +1370,7 @@ func (ef *execFactory) ConstructInsert(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1372,6 +1385,7 @@ func (ef *execFactory) ConstructInsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
 		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
@@ -1430,6 +1444,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathCheck,
 	uniqChecks []exec.InsertFastPathCheck,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1444,6 +1459,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
 		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
@@ -1522,6 +1538,7 @@ func (ef *execFactory) ConstructUpdate(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// TODO(radu): the execution code has an annoying limitation that the fetch
@@ -1549,6 +1566,7 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1636,6 +1654,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		insertCols,
 		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
@@ -1652,6 +1671,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
