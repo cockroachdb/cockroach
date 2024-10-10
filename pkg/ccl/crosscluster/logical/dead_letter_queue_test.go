@@ -131,16 +131,16 @@ func setupDLQTestTables(
 	return tableNameToDesc, srcTableIDToName, expectedDLQTables, ie
 }
 
-func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, numRowsExpected int) {
+func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, minNumRows int) {
 	t.Logf("waiting for write conflicts to be logged in DLQ table %s", tableName)
 	testutils.SucceedsSoon(t, func() error {
 		query := fmt.Sprintf("SELECT count(*) FROM %s", tableName)
 		var numRows int
 		db.QueryRow(t, query).Scan(&numRows)
-		if numRows != numRowsExpected {
-			return errors.Newf("Expected DLQ table '%s' to have %d rows, received %d rows instead",
+		if numRows < minNumRows {
+			return errors.Newf("waiting for DLQ table '%s' to have %d rows, received %d rows instead",
 				tableName,
-				numRowsExpected,
+				minNumRows,
 				numRows)
 		}
 		return nil
@@ -409,8 +409,8 @@ func TestDLQJSONQuery(t *testing.T) {
 
 	sqlDB.Exec(t, `
 	CREATE TABLE foo (
-		a INT, 
-		b STRING, 
+		a INT,
+		b STRING,
 		rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)
 	)`)
@@ -472,6 +472,10 @@ func TestEndToEndDLQ(t *testing.T) {
 	ctx := context.Background()
 
 	testDLQClusterArgs := base.TestClusterArgs{
+		// This test makes assertions about the exact number of events that end up in
+		// the DLQ. However, that is impacted by retries that result from range
+		// splits. Setting ReplicationManual disables the split queue.
+		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
 			Knobs: base.TestingKnobs{
@@ -488,8 +492,6 @@ func TestEndToEndDLQ(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testDLQClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	_, cleanup := s.PGUrl(t, serverutils.DBName("a"))
-	defer cleanup()
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
 

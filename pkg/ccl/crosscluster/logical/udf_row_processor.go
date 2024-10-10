@@ -52,7 +52,7 @@ const (
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d) AS decision
+SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_internal_origin_timestamp, $%d) AS decision
 FROM data LEFT JOIN [%d as existing]
 %s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
@@ -249,7 +249,9 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, aq.ieoDelete, stmt, datums...); err != nil {
+		sess := aq.ieoDelete
+		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, sess, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -265,7 +267,9 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
+		sess := aq.ieoInsert
+		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, sess, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -412,8 +416,8 @@ func makeApplierInsertQueries(
 		if err != nil {
 			return err
 		}
-		colNames := escapedColumnNameList(append(inputColumnNames, originTimestampColumnName))
-		valStr := valueStringForNumItems(len(inputColumnNames)+1, 1)
+		colNames := escapedColumnNameList(inputColumnNames)
+		valStr := valueStringForNumItems(len(inputColumnNames), 1)
 		upsertQuery, err := parser.ParseOne(fmt.Sprintf(applierUpsertQueryBase,
 			dstTableDescID,
 			colNames,
@@ -424,10 +428,9 @@ func makeApplierInsertQueries(
 		}
 
 		queryBuilders[family.ID] = queryBuilder{
-			stmts:                []statements.Statement[tree.Statement]{upsertQuery},
-			needsOriginTimestamp: true,
-			inputColumns:         inputColumnNames,
-			scratchDatums:        make([]interface{}, len(inputColumnNames)+1),
+			stmts:         []statements.Statement[tree.Statement]{upsertQuery},
+			inputColumns:  inputColumnNames,
+			scratchDatums: make([]interface{}, len(inputColumnNames)),
 		}
 		return err
 	}); err != nil {
@@ -458,7 +461,7 @@ func makeApplierDeleteQuery(
 	return queryBuilder{
 		stmts:        []statements.Statement[tree.Statement]{stmt},
 		inputColumns: names,
-		// 2 extra datum slots for the proposed and previous MVCC timestamp.
-		scratchDatums: make([]interface{}, len(names)+2),
+		// Extra datum slots for the proposed MVCC timestamp.
+		scratchDatums: make([]interface{}, len(names)+1),
 	}, nil
 }

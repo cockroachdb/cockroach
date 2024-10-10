@@ -80,8 +80,6 @@ var (
 			},
 		},
 	}
-
-	lwwColumnAdd = "ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
 )
 
 func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
@@ -516,17 +514,6 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 	dbB.Exec(t, createStmt)
 
 	createQ := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
-
-	dbB.ExpectErrWithHint(t, "currently require a .* DECIMAL column", "ADD COLUMN", createQ, urlA)
-
-	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_replication_origin_timestamp STRING")
-	dbB.ExpectErr(t, ".*column must be type DECIMAL for use by logical replication", createQ, urlA)
-
-	dbB.Exec(t, fmt.Sprintf("ALTER TABLE tab RENAME COLUMN %[1]s TO str_col, ADD COLUMN %[1]s DECIMAL", originTimestampColumnName))
-
-	// Create the columns in the source side also.
-	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN str_col STRING, ADD COLUMN crdb_replication_origin_timestamp DECIMAL")
-
 	if s.Codec().IsSystem() {
 		dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
 		kvserver.RangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -558,8 +545,6 @@ family f2(other_payload, v2))
 `
 	serverASQL.Exec(t, createStmt)
 	serverBSQL.Exec(t, createStmt)
-	serverASQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
-	serverBSQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
 
 	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
@@ -694,7 +679,6 @@ func TestRandomTables(t *testing.T) {
 	tableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
 
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
 	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -712,8 +696,6 @@ func TestRandomTables(t *testing.T) {
 		t.Log(stmt)
 		runnerA.Exec(t, stmt)
 		runnerB.Exec(t, stmt)
-		runnerA.Exec(t, addCol)
-		runnerB.Exec(t, addCol)
 
 		var jobBID jobspb.JobID
 		err := runnerB.DB.QueryRowContext(ctx, streamStartStmt, dbAURL.String()).Scan(&jobBID)
@@ -858,11 +840,9 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
 			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
-			addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
 			runnerA.Exec(t, schemaStmt)
 			runnerB.Exec(t, schemaStmt)
-			runnerA.Exec(t, addCol)
-			runnerB.Exec(t, addCol)
+
 			if tc.useUDF {
 				runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
 			}
@@ -1341,7 +1321,6 @@ func setupLogicalTestServer(
 func createBasicTable(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
 	createStmt := fmt.Sprintf("CREATE TABLE %s (pk int primary key, payload string)", tableName)
 	db.Exec(t, createStmt)
-	db.Exec(t, fmt.Sprintf("ALTER TABLE %s %s", tableName, lwwColumnAdd))
 }
 
 func compareReplicatedTables(
@@ -1362,9 +1341,9 @@ func compareReplicatedTables(
 		indexB, err := catalog.MustFindIndexByName(descB, indexA.GetName())
 		require.NoError(t, err)
 
-		aFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descA, indexA, []string{originTimestampColumnName})
+		aFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descA, indexA, []string{})
 		require.NoError(t, err)
-		bFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descB, indexB, []string{originTimestampColumnName})
+		bFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descB, indexB, []string{})
 		require.NoError(t, err)
 		t.Logf("fingerprinting index %s", indexA.GetName())
 		runnerB.CheckQueryResults(t, bFingerprintQuery, runnerA.QueryStr(t, aFingerprintQuery))
@@ -1966,8 +1945,6 @@ func TestUserDefinedTypes(t *testing.T) {
 
 	dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val my_enum DEFAULT 'two')")
 	dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val my_enum DEFAULT 'two')")
-	dbA.Exec(t, fmt.Sprintf("ALTER TABLE data %s", lwwColumnAdd))
-	dbB.Exec(t, fmt.Sprintf("ALTER TABLE data %s", lwwColumnAdd))
 
 	dbB.Exec(t, "INSERT INTO data VALUES (1, 'one')")
 	// Force default expression evaluation.
@@ -2016,7 +1993,6 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	for _, db := range []*sqlutils.SQLRunner{dbA, dbB} {
 		db.Exec(t, "SET experimental_enable_unique_without_index_constraints = true")
 		db.Exec(t, "CREATE TABLE tab_with_uwi (pk INT PRIMARY KEY, v INT UNIQUE WITHOUT INDEX)")
-		db.Exec(t, fmt.Sprintf("ALTER TABLE %s %s", "tab_with_uwi", lwwColumnAdd))
 	}
 	dbA.ExpectErr(t,
 		"cannot create logical replication stream: table tab_with_uwi has UNIQUE WITHOUT INDEX constraints: unique_v",
@@ -2026,7 +2002,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Check for mismatched numbers of columns.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
 	dbA.ExpectErr(t,
-		"cannot create logical replication stream: destination table tab has 3 columns, but the source table tab has 4 columns",
+		"cannot create logical replication stream: destination table tab has 2 columns, but the source table tab has 3 columns",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
 
