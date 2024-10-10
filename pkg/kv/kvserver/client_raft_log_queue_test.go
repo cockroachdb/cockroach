@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
@@ -129,6 +131,49 @@ func TestRaftLogQueue(t *testing.T) {
 	if afterTruncationIndex > after2ndTruncationIndex {
 		t.Fatalf("second truncation destroyed state: afterTruncationIndex:%d after2ndTruncationIndex:%d",
 			afterTruncationIndex, after2ndTruncationIndex)
+	}
+}
+
+func TestRaftTracerDemo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(baptist): Raft tracing write to the span after it is finished. Need to look at options...
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RangeLeaseDuration:       24 * time.Hour, // disable lease moves
+				RaftElectionTimeoutTicks: 1 << 30,        // disable elections
+			},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Write a single value to ensure we have a leader on n1.
+	key := tc.ScratchRange(t)
+	_, pErr := kv.SendWrapped(context.Background(), store.TestSender(), putArgs(key, []byte("value")))
+	require.NoError(t, pErr.GoError())
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	// Set to have 3 voters.
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	for i := 0; i < 100; i++ {
+		var finish func() tracingpb.Recording
+		ctx := context.Background()
+		if i == 50 {
+			// Trace a random request on a "client" tracer.
+			ctx, finish = tracing.ContextWithRecordingSpan(ctx, tracing.NewTracerWithOpt(context.Background(), tracing.WithUseAfterFinishOpt(true, true)), "test")
+		}
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(key, []byte(fmt.Sprintf("value-%d", i))))
+		require.NoError(t, pErr.GoError())
+		// Note that this is the clients span, there may be additional logs created after the span is returned.
+		if finish != nil {
+			// TODO: Validate that the log is here and also in the standard logging.
+			fmt.Println(finish())
+		}
 	}
 }
 
