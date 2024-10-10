@@ -2650,6 +2650,7 @@ func createSchemaChangeEvalCtx(
 			ClusterID:            execCfg.NodeInfo.LogicalClusterID(),
 			ClusterName:          execCfg.RPCContext.ClusterName(),
 			NodeID:               execCfg.NodeInfo.NodeID,
+			SQLAddr:              execCfg.NodeInfo.SQLAddr,
 			Codec:                execCfg.Codec,
 			Locality:             execCfg.Locality,
 			OriginalLocality:     execCfg.Locality,
