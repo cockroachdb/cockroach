@@ -11,9 +11,11 @@ set -o pipefail
 TPCC_DB=cct_tpcc
 TPCC_USER=cct_tpcc_user
 TPCC_PASSWORD=tpcc
-PGURLS=$(./roachprod pgurl cct-232 --external --secure --cluster application | sed s/\'//g)
-
-read -r -a PGURLS_ARR <<< "$PGURLS"
+export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
+export ROACHPROD_DNS="drt.crdb.io"
+./roachprod sync
+sleep 20
+PGURLS=$(./roachprod pgurl drt-scale | sed s/\'//g)
 
 j=0
 while true; do
@@ -34,7 +36,7 @@ while true; do
       --tolerate-errors \
       --password tpcc \
       --families \
-        "${PGURLS_ARR[@]}" | tee $LOG
+      $PGURLS | tee $LOG
     if [ $? -eq 0 ]; then
         rm "$LOG"
     fi

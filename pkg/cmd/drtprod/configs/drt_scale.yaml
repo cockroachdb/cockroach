@@ -122,3 +122,13 @@ targets:
           - $WORKLOAD_CLUSTER
           - pkg/cmd/drt/scripts/roachtest_operations_run.sh
           - roachtest_operations_run.sh
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/tpcc_init.sh
+          - tpcc_init.sh
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/tpcc_run.sh
+          - tpcc_run.sh
