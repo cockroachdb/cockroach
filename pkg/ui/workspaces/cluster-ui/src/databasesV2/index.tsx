@@ -137,9 +137,8 @@ export const DatabasesPageV2 = () => {
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
-  const { data, error, isLoading, refreshDatabases } = useDatabaseMetadata(
-    createDatabaseMetadataRequestFromParams(params),
-  );
+  const { data, jobStatus, error, isLoading, refreshDatabases } =
+    useDatabaseMetadata(createDatabaseMetadataRequestFromParams(params));
   const nodesResp = useNodeStatuses();
 
   const onNodeRegionsChange = (storeIDs: StoreID[]) => {
@@ -219,7 +218,11 @@ export const DatabasesPageV2 = () => {
           loading={isLoading}
           error={error}
           actionButton={
-            <TableMetadataJobControl onDataUpdated={refreshDatabases} />
+            <TableMetadataJobControl
+              error={jobStatus?.error}
+              jobStatus={jobStatus?.jobTriggerStatus?.jobStatus}
+              onJobTriggered={() => refreshDatabases()}
+            />
           }
           columns={colsWithSort}
           dataSource={tableData}

@@ -236,7 +236,7 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	apiutil.WriteJSONResponse(ctx, w, http.StatusMultiStatus, resp)
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, resp)
 }
 
 // GetTableMetadataWithDetails fetches table metadata for a specific table id.
