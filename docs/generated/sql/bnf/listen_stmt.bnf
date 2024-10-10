@@ -1,0 +1,2 @@
+listen_stmt ::=
+	'LISTEN' type_name
