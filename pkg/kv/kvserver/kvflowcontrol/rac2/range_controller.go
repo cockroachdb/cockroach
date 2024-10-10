@@ -610,7 +610,7 @@ func NewRangeController(
 	rc.scheduledMu.replicas = make(map[roachpb.ReplicaID]struct{})
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.mu.lastSendQueueStats = make(RangeSendQueueStats, 0, len(init.ReplicaSet))
-	rc.updateReplicaSet(ctx, init.ReplicaSet)
+	rc.updateReplicaSetRaftMuLocked(ctx, init.ReplicaSet)
 	rc.updateWaiterSetsRaftMuLocked()
 	rc.opts.RangeControllerMetrics.Count.Inc(1)
 	return rc
@@ -1309,7 +1309,7 @@ func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error {
-	rc.updateReplicaSet(ctx, replicas)
+	rc.updateReplicaSetRaftMuLocked(ctx, replicas)
 	rc.updateWaiterSetsRaftMuLocked()
 	return nil
 }
@@ -1457,7 +1457,7 @@ func (rc *rangeController) updateSendQueueStatsRaftMuRCLocked(now time.Time) {
 	rc.mu.lastSendQueueStatRefresh = now
 }
 
-func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
+func (rc *rangeController) updateReplicaSetRaftMuLocked(ctx context.Context, newSet ReplicaSet) {
 	prevSet := rc.replicaSet
 	for r := range prevSet {
 		desc, ok := newSet[r]
@@ -1474,6 +1474,12 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 			rs.desc = desc
 		}
 	}
+	// NB: We acquire rc.mu here to synchronize with callers of SendStreamStats
+	// grabbing lastSendQueueStats, which acquires rc.mu, but doesn't acquire
+	// raftMu. The other writer is updateSendQueueStatsRaftMuRCLocked, which as
+	// the name suggests, holds both locks.
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 	for r, desc := range newSet {
 		_, ok := prevSet[r]
 		if ok {
