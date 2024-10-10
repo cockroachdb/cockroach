@@ -198,6 +198,11 @@ export type ListTracingSnapshotsRequestMessage =
 export type ListTracingSnapshotsResponseMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
+export type GetThrottlingMetadataRequest =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataRequest;
+export type GetThrottlingMetadataResponse =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -825,6 +830,17 @@ export function getKeyVisualizerSamples(
     serverpb.KeyVisSamplesResponse,
     `${STATUS_PREFIX}/keyvissamples`,
     req as any,
+    timeout,
+  );
+}
+
+export function getThrottlingMetadata(
+  timeout?: moment.Duration,
+): Promise<GetThrottlingMetadataResponse> {
+  return timeoutFetch(
+    serverpb.GetThrottlingMetadataResponse,
+    `${STATUS_PREFIX}/throttling`,
+    null,
     timeout,
   );
 }
