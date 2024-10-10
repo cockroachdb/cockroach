@@ -263,6 +263,9 @@ const (
 	checksumSize          = 4
 	tagPos                = checksumSize
 	headerSize            = tagPos + 1
+
+	extendedMVCCValLenSize = 4
+	extendedPreludeSize    = extendedMVCCValLenSize + 1
 )
 
 var _ redact.SafeFormatter = ValueType(0)
@@ -276,7 +279,17 @@ func (v Value) checksum() uint32 {
 	if len(v.RawBytes) < checksumSize {
 		return 0
 	}
-	_, u, err := encoding.DecodeUint32Ascending(v.RawBytes[:checksumSize])
+
+	checksumStart := 0
+	if v.usesExtendedEncoding() {
+		extendedHeaderSize := int(extendedMVCCValLenSize + binary.BigEndian.Uint32(v.RawBytes))
+		if len(v.RawBytes) < extendedHeaderSize+headerSize {
+			return 0
+		}
+		checksumStart = extendedHeaderSize + 1
+	}
+
+	_, u, err := encoding.DecodeUint32Ascending(v.RawBytes[checksumStart : checksumStart+checksumSize])
 	if err != nil {
 		panic(err)
 	}
@@ -287,6 +300,10 @@ func (v *Value) setChecksum(cksum uint32) {
 	if len(v.RawBytes) >= checksumSize {
 		encoding.EncodeUint32Ascending(v.RawBytes[:0], cksum)
 	}
+}
+
+func (v *Value) usesExtendedEncoding() bool {
+	return len(v.RawBytes) > headerSize && v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL)
 }
 
 // InitChecksum initializes a checksum based on the provided key and
@@ -346,7 +363,20 @@ func (v *Value) ShallowClone() *Value {
 
 // IsPresent returns true if the value is present (existent and not a tombstone).
 func (v *Value) IsPresent() bool {
-	return v != nil && len(v.RawBytes) != 0
+	if v == nil || len(v.RawBytes) == 0 {
+		return false
+	}
+	// TODO(ssd): This is a bit awkward because this is the right thing to
+	// do for production callers trying to determine if this value is a
+	// tombstone. But, many tests shove random strings into RawBytes, and in
+	// then case we'll hit this case if the 5th character of that string
+	// happens to be `e` (ascii 101). There aren't _that_ many callers to
+	// IsPresent(). We may just need to audit them all.
+	if v.usesExtendedEncoding() {
+		extendedHeaderSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
+		return len(v.RawBytes) > int(extendedHeaderSize)
+	}
+	return true
 }
 
 // MakeValueFromString returns a value with bytes and tag set.
@@ -376,20 +406,64 @@ func (v Value) GetTag() ValueType {
 	if len(v.RawBytes) <= tagPos {
 		return ValueType_UNKNOWN
 	}
+	if v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+		simpleTagPos := v.extendedSimpleTagPos()
+		if len(v.RawBytes) <= simpleTagPos {
+			return ValueType_UNKNOWN
+		}
+		return ValueType(v.RawBytes[simpleTagPos])
+	}
 	return ValueType(v.RawBytes[tagPos])
+}
+
+// GetMVCCValueHeader returns the MVCCValueHeader if one exists.
+func (v Value) GetMVCCValueHeader() (enginepb.MVCCValueHeader, error) {
+	if len(v.RawBytes) <= tagPos {
+		return enginepb.MVCCValueHeader{}, nil
+	}
+	if v.RawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+		extendedHeaderSize := extendedPreludeSize + binary.BigEndian.Uint32(v.RawBytes)
+		if len(v.RawBytes) < int(extendedHeaderSize) {
+			return enginepb.MVCCValueHeader{}, nil
+		}
+
+		parseBytes := v.RawBytes[extendedPreludeSize:extendedHeaderSize]
+		var vh enginepb.MVCCValueHeader
+		// NOTE: we don't use protoutil to avoid passing header through an interface,
+		// which would cause a heap allocation and incur the cost of dynamic dispatch.
+		if err := vh.Unmarshal(parseBytes); err != nil {
+			return enginepb.MVCCValueHeader{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
+		}
+		return vh, nil
+	}
+	return enginepb.MVCCValueHeader{}, nil
 }
 
 func (v *Value) setTag(t ValueType) {
 	v.RawBytes[tagPos] = byte(t)
 }
 
+// extendedSimpleTagPos returns the position of the value tag assuming
+// that the value contains an enginepb.MVCCValueHeader.
+func (v Value) extendedSimpleTagPos() int {
+	return int(extendedMVCCValLenSize + binary.BigEndian.Uint32(v.RawBytes) + headerSize)
+}
+
 func (v Value) dataBytes() []byte {
+	if v.usesExtendedEncoding() {
+		simpleTagPos := v.extendedSimpleTagPos()
+		return v.RawBytes[simpleTagPos+1:]
+	}
 	return v.RawBytes[headerSize:]
 }
 
 // TagAndDataBytes returns the value's tag and data (no checksum, no timestamp).
 // This is suitable to be used as the expected value in a CPut.
 func (v Value) TagAndDataBytes() []byte {
+	if v.usesExtendedEncoding() {
+		simpleTagPos := v.extendedSimpleTagPos()
+		return v.RawBytes[simpleTagPos:]
+	}
 	return v.RawBytes[tagPos:]
 }
 
@@ -783,6 +857,15 @@ func computeChecksum(key, rawBytes []byte, crc hash.Hash32) uint32 {
 	if len(rawBytes) < headerSize {
 		return 0
 	}
+
+	if rawBytes[tagPos] == byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL) {
+		simpleValueStart := extendedMVCCValLenSize + binary.BigEndian.Uint32(rawBytes) + 1
+		rawBytes = rawBytes[simpleValueStart:]
+		if len(rawBytes) < headerSize {
+			return 0
+		}
+	}
+
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
