@@ -23,18 +23,19 @@ const (
 )
 
 type mockLDAPUtil struct {
-	conn      *ldap.Conn
-	tlsConfig *tls.Config
-	groupDNs  []string
+	conn         *ldap.Conn
+	tlsConfig    *tls.Config
+	userGroupDNs map[string][]string
 }
 
 var _ ILDAPUtil = &mockLDAPUtil{}
 
-var NewMockLDAPUtil func(context.Context, ldapConfig) (ILDAPUtil, error) = func(
-	ctx context.Context,
-	conf ldapConfig,
-) (ILDAPUtil, error) {
-	return &mockLDAPUtil{}, nil
+var LDAPMocks = func() (mockLDAPUtil, func(context.Context, ldapConfig) (ILDAPUtil, error)) {
+	var mLU = mockLDAPUtil{tlsConfig: &tls.Config{}, userGroupDNs: make(map[string][]string)}
+	var newMockLDAPUtil = func(ctx context.Context, conf ldapConfig) (ILDAPUtil, error) {
+		return &mLU, nil
+	}
+	return mLU, newMockLDAPUtil
 }
 
 // MaybeInitLDAPsConn implements the ILDAPUtil interface.
@@ -86,13 +87,18 @@ func (lu *mockLDAPUtil) Search(
 		return "", errors.Newf(searchFailureMessage+": too many matching entries returned for user %q", username)
 	}
 
-	distinguishedName := "CN=" + commonNames[0]
-	return distinguishedName, nil
+	return lu.GetLdapDN(commonNames[0]), nil
 }
 
-// setGroups overrides the return value of ListGroups for testing purposes.
-func (lu *mockLDAPUtil) setGroups(groupsDN []string) {
-	lu.groupDNs = groupsDN
+// GetLdapDN returns the LDAP DN for a sql user for testing purposes.
+func (lu *mockLDAPUtil) GetLdapDN(user string) string {
+	return "cn=" + user
+}
+
+// SetGroups overrides the return value of ListGroups for an LDAP userDN for
+// testing purposes.
+func (lu *mockLDAPUtil) SetGroups(userDN string, groupsDN []string) {
+	lu.userGroupDNs[userDN] = groupsDN
 }
 
 // ListGroups implements the ILDAPUtil interface.
@@ -119,7 +125,7 @@ func (lu *mockLDAPUtil) ListGroups(
 		return nil, errors.Newf(groupListFailureMessage+": user dn %q does not belong to any groups", userDN)
 	}
 
-	return lu.groupDNs, nil
+	return lu.userGroupDNs[userDN], nil
 }
 
 func constructHBAEntry(
