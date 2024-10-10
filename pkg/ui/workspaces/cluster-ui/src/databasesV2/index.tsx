@@ -32,8 +32,6 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
-import { getNodesByRegionString } from "../databases";
-
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
 import { rawDatabaseMetadataToDatabaseRows } from "./utils";

@@ -15,9 +15,9 @@ type Props = {
   nodes: NodeID[];
 };
 
-export const NodesList: React.FC<Props> = ({ nodes }) => {
+export const NodesList: React.FC<Props> = ({ nodes = [] }) => {
   const displayedNodes = nodes.slice(0, 4);
-  const hiddenNodes = nodes?.length > 4 ? nodes.slice(4) : [];
+  const hiddenNodes = nodes.length > 4 ? nodes.slice(4) : [];
   return (
     <div>
       {displayedNodes.map(nid => (

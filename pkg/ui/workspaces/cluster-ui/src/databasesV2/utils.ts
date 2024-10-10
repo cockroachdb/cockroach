@@ -5,6 +5,7 @@
 
 import { DatabaseMetadata } from "src/api/databases/getDatabaseMetadataApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
+import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
 
 import { DatabaseRow } from "./databaseTypes";
 
@@ -17,17 +18,11 @@ export const rawDatabaseMetadataToDatabaseRows = (
   },
 ): DatabaseRow[] => {
   return raw.map((db: DatabaseMetadata): DatabaseRow => {
-    const nodesByRegion: Record<string, NodeID[]> = {};
-    if (!nodesInfo.isLoading) {
-      db.storeIds?.forEach(storeID => {
-        const nodeID = nodesInfo.storeIDToNodeID[storeID as StoreID];
-        const region = nodesInfo.nodeIDToRegion[nodeID];
-        if (!nodesByRegion[region]) {
-          nodesByRegion[region] = [];
-        }
-        nodesByRegion[region].push(nodeID);
-      });
-    }
+    const nodesByRegion = mapStoreIDsToNodeRegions(
+      db.storeIds,
+      nodesInfo?.nodeIDToRegion,
+      nodesInfo?.storeIDToNodeID,
+    );
     return {
       name: db.dbName,
       id: db.dbId,
