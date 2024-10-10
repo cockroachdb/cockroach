@@ -515,15 +515,30 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 	}
 }
 
+// spaces is used for padding CHAR(N) datums.
+var spaces = [16]byte{
+	' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+}
+
 func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
-	v = tree.ResolveBlankPaddedCharBytes(v, t)
 	if t.Oid() == oid.T_char && len(v) == 0 {
 		// Match Postgres and always explicitly include a null byte if we have
 		// an empty string for the "char" type in the binary format.
 		v = []byte{0}
 	}
-	b.putInt32(int32(len(v)))
+	pad := 0
+	if t.Oid() == oid.T_bpchar && len(v) < int(t.Width()) {
+		// Pad spaces on the right of the byte slice to make it of length
+		// specified in the type t.
+		pad = int(t.Width()) - len(v)
+	}
+	b.putInt32(int32(len(v) + pad))
 	b.write(v)
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
+	}
 }
 
 func writeBinaryString(b *writeBuffer, v string, t *types.T) {
