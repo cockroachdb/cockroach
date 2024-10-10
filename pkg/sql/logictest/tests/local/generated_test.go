@@ -283,6 +283,13 @@ func TestLogic_bit(
 	runLogicTest(t, "bit")
 }
 
+func TestLogic_bpchar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "bpchar")
+}
+
 func TestLogic_builtin_function(
 	t *testing.T,
 ) {
@@ -309,6 +316,13 @@ func TestLogic_cascade(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cascade")
+}
+
+func TestLogic_case(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "case")
 }
 
 func TestLogic_case_sensitive_names(
