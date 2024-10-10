@@ -610,7 +610,7 @@ func NewRangeController(
 	rc.scheduledMu.replicas = make(map[roachpb.ReplicaID]struct{})
 	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.mu.lastSendQueueStats = make(RangeSendQueueStats, 0, len(init.ReplicaSet))
-	rc.updateReplicaSet(ctx, init.ReplicaSet)
+	rc.updateReplicaSetRaftMuLocked(ctx, init.ReplicaSet)
 	rc.updateWaiterSetsRaftMuLocked()
 	rc.opts.RangeControllerMetrics.Count.Inc(1)
 	return rc
@@ -1309,7 +1309,7 @@ func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error {
-	rc.updateReplicaSet(ctx, replicas)
+	rc.updateReplicaSetRaftMuLocked(ctx, replicas)
 	rc.updateWaiterSetsRaftMuLocked()
 	return nil
 }
@@ -1457,7 +1457,10 @@ func (rc *rangeController) updateSendQueueStatsRaftMuRCLocked(now time.Time) {
 	rc.mu.lastSendQueueStatRefresh = now
 }
 
-func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
+func (rc *rangeController) updateReplicaSetRaftMuLocked(ctx context.Context, newSet ReplicaSet) {
+	var toAdd, toRemove [5]roachpb.ReplicaID
+	add := toAdd[:0:len(toAdd)]
+	remove := toRemove[:0:len(toRemove)]
 	prevSet := rc.replicaSet
 	for r := range prevSet {
 		desc, ok := newSet[r]
@@ -1468,7 +1471,7 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 				rs.closeSendStream(ctx)
 			}
 			delete(rc.replicaMap, r)
-			rc.mu.lastSendQueueStats.Remove(r)
+			remove = append(remove, r)
 		} else {
 			rs := rc.replicaMap[r]
 			rs.desc = desc
@@ -1482,6 +1485,17 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 		}
 		newRepl := NewReplicaState(ctx, rc, desc)
 		rc.replicaMap[r] = newRepl
+		add = append(add, r)
+	}
+	rc.replicaSet = newSet
+
+	// Acquire rc.mu since we need to update rc.mu.lastSendQueueStats.
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	for _, r := range remove {
+		rc.mu.lastSendQueueStats.Remove(r)
+	}
+	for _, r := range add {
 		rc.mu.lastSendQueueStats.Set(ReplicaSendQueueStats{
 			ReplicaID: r,
 			// NOTE: We leave the SendQueue(Bytes|Count) unpopulated, they will be updated
@@ -1489,7 +1503,6 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 			// sendQueueStatRefreshInterval duration from now.
 		})
 	}
-	rc.replicaSet = newSet
 }
 
 func (rc *rangeController) updateWaiterSetsRaftMuLocked() {
