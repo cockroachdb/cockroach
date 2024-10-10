@@ -335,6 +335,18 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				return ts.Equal(tc.expectedGracePeriodEnd)
 			}, 20*time.Second, time.Millisecond,
 				"GetGracePeriodEndTS() did not return grace period of %s in time", tc.expectedGracePeriodEnd.String())
+
+			// Perform the throttle check after the license change. We expect an error
+			// if a grace period is set, since all licenses expired long ago and any
+			// grace period would have already ended.
+			const aboveThreshold = 100
+			_, err = enforcer.TestingMaybeFailIfThrottled(ctx, aboveThreshold)
+			if tc.expectedGracePeriodEnd.Equal(timeutil.UnixEpoch) {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "maximum number of concurrently open transactions has been reached")
+			}
 		})
 	}
 }
