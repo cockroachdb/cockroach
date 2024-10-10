@@ -1136,7 +1136,9 @@ func (r *testingRCRange) testingReturnTokens(
 	raftPri := AdmissionToRaftPriority(pri)
 	returnIndex := uint64(0)
 	r.mu.outstandingReturns[rid] += tokens
-	for _, deduction := range rs.sendStream.mu.tracker.tracked[raftPri] {
+	n := rs.sendStream.mu.tracker.tracked[raftPri].Length()
+	for i := 0; i < n; i++ {
+		deduction := rs.sendStream.mu.tracker.tracked[raftPri].At(i)
 		if r.mu.outstandingReturns[rid]-deduction.tokens >= 0 {
 			r.mu.outstandingReturns[rid] -= deduction.tokens
 			returnIndex = deduction.id.index
@@ -1217,11 +1219,13 @@ func (r *testingRCRange) testingDisconnectStream(
 func (t *Tracker) testingString() string {
 	var buf strings.Builder
 	for pri, deductions := range t.tracked {
-		if len(deductions) == 0 {
+		n := deductions.Length()
+		if n == 0 {
 			continue
 		}
 		buf.WriteString(fmt.Sprintf("pri=%s\n", RaftToAdmissionPriority(raftpb.Priority(pri))))
-		for _, deduction := range deductions {
+		for i := 0; i < n; i++ {
+			deduction := deductions.At(i)
 			buf.WriteString(fmt.Sprintf("  tokens=%s log-position=%v/%v\n",
 				testingPrintTrimmedTokens(deduction.tokens), deduction.id.term, deduction.id.index))
 		}

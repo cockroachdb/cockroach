@@ -26,13 +26,13 @@ func (l *LogTracker) check(t *testing.T) {
 	stable := l.Stable()
 	require.Equal(t, l.last.Term, stable.Term)
 	for _, waiting := range l.waiting {
-		if ln := len(waiting); ln != 0 {
-			require.LessOrEqual(t, waiting[ln-1].Index, l.last.Index)
-			require.LessOrEqual(t, waiting[ln-1].Term, l.last.Term)
+		if ln := waiting.Length(); ln != 0 {
+			require.LessOrEqual(t, waiting.At(ln-1).Index, l.last.Index)
+			require.LessOrEqual(t, waiting.At(ln-1).Term, l.last.Term)
 		}
-		for i, ln := 1, len(waiting); i < ln; i++ {
-			require.Less(t, waiting[i-1].Index, waiting[i].Index)
-			require.LessOrEqual(t, waiting[i-1].Term, waiting[i].Term)
+		for i, ln := 1, waiting.Length(); i < ln; i++ {
+			require.Less(t, waiting.At(i-1).Index, waiting.At(i).Index)
+			require.LessOrEqual(t, waiting.At(i-1).Term, waiting.At(i).Term)
 		}
 	}
 	a := l.Admitted()
@@ -239,7 +239,8 @@ func TestLogTracker(t *testing.T) {
 		case "snap":
 			mark := readMark(t, d, "index")
 			updated := tracker.Snap(ctx, mark)
-			return state(updated)
+			str := state(updated)
+			return str
 
 		case "sync": // Example: sync term=10 index=100
 			mark := readMark(t, d, "index")
