@@ -30,7 +30,7 @@ func MakeRaftNodeBasicStateLocked(
 // held, at least for read.
 func MakeReplicaStateInfos(rn *raft.RawNode, infoMap map[roachpb.ReplicaID]rac2.ReplicaStateInfo) {
 	clear(infoMap)
-	rn.WithProgress(func(peerID raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
+	rn.WithBasicProgress(func(peerID raftpb.PeerID, progress tracker.BasicProgress) {
 		infoMap[roachpb.ReplicaID(peerID)] = rac2.ReplicaStateInfo{
 			Match: progress.Match,
 			Next:  progress.Next,
