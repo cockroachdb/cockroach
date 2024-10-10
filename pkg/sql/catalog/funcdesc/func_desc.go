@@ -464,6 +464,19 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 	return iterutil.Map(fn(desc.ReturnType.Type))
 }
 
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *immutable) MaybeRequiresTypeHydration() bool {
+	if catid.IsOIDUserDefined(desc.ReturnType.Type.Oid()) {
+		return true
+	}
+	for i := range desc.Params {
+		if catid.IsOIDUserDefined(desc.Params[i].Type.Oid()) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetReplicatedPCRVersion is a part of the catalog.Descriptor
 func (desc *immutable) GetReplicatedPCRVersion() descpb.DescriptorVersion {
 	return desc.ReplicatedPCRVersion

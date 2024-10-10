@@ -236,6 +236,7 @@ func (d fakeSystemDatabase) Adding() bool               { return false }
 func (d fakeSystemDatabase) ForEachUDTDependentForHydration(func(t *types.T) error) error {
 	return nil
 }
+func (d fakeSystemDatabase) MaybeRequiresTypeHydration() bool { return false }
 
 type fakeLeasedDescriptor struct {
 	catalog.Descriptor
@@ -279,6 +280,7 @@ func (d fakeRegionEnum) Adding() bool               { return false }
 func (d fakeRegionEnum) ForEachUDTDependentForHydration(func(t *types.T) error) error {
 	return nil
 }
+func (d fakeRegionEnum) MaybeRequiresTypeHydration() bool { return false }
 func (d fakeRegionEnum) AsEnumTypeDescriptor() catalog.EnumTypeDescriptor {
 	if d.isNotEnum {
 		return nil
