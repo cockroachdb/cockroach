@@ -1829,9 +1829,6 @@ func (rs *replicaState) createReplicaSendStream(
 	// TODO(sumeer): initialize based on recent appends seen by the
 	// RangeController.
 	rss.mu.sendQueue.approxMeanSizeBytes = 500
-	if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
-		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
-	}
 }
 
 func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ bool) {
@@ -2066,6 +2063,12 @@ func (rs *replicaState) handleReadyState(
 		}
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream(ctx, mode, info.Next, nextRaftIndex)
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+
+			if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
+				rs.sendStream.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+			}
 			// Have stale send-queue state.
 			shouldWaitChange = true
 		}
