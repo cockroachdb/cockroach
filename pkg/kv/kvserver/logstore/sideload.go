@@ -125,7 +125,7 @@ func MaybeSideloadEntries(
 		// TODO(tbg): this should be supported by a method as well.
 		{
 			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
+			raftlog.EncodeRaftCommandPrefix(ctx, data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
@@ -218,7 +218,7 @@ func MaybeInlineSideloadedRaftCommand(
 	// the EntryEncoding.
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
+		raftlog.EncodeRaftCommandPrefix(ctx, data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 		_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
