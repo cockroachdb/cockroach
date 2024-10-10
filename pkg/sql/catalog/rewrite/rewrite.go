@@ -767,6 +767,16 @@ func rewriteSchemaChangerState(
 			data.SchemaID = rewrite.ParentSchemaID
 			continue
 		}
+
+		// removeElementAtCurrentIdx deletes the element at the current index.
+		removeElementAtCurrentIdx := func() {
+			state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+			state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+			state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+			i--
+		}
+
+		missingID := descpb.InvalidID
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
 			if *id == descpb.InvalidID {
 				// Some descriptor ID fields in elements may be deliberately unset.
@@ -775,6 +785,7 @@ func rewriteSchemaChangerState(
 			}
 			rewrite, ok := descriptorRewrites[*id]
 			if !ok {
+				missingID = *id
 				return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
 			}
 			*id = rewrite.ID
@@ -785,29 +796,27 @@ func rewriteSchemaChangerState(
 				// We'll permit this in the special case of a schema parent element.
 				_, scExists := descriptorRewrites[el.SchemaID]
 				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
-					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
-					state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
-					state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
-					i--
+					removeElementAtCurrentIdx()
 					continue
 				}
 			case *scpb.CheckConstraint:
 				// IF there is any dependency missing for check constraint, we just drop
 				// the target.
-				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
-				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
-				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
-				i--
+				removeElementAtCurrentIdx()
 				droppedConstraints.Add(el.ConstraintID)
 				continue
 			case *scpb.ColumnDefaultExpression:
 				// IF there is any dependency missing for column default expression, we
 				// just drop the target.
-				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
-				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
-				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
-				i--
+				removeElementAtCurrentIdx()
 				continue
+			case *scpb.SequenceOwner:
+				// If a sequence owner is missing the sequence, then the sequence
+				// was already dropped and this element can be safely removed.
+				if el.SequenceID == missingID {
+					removeElementAtCurrentIdx()
+					continue
+				}
 			}
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
