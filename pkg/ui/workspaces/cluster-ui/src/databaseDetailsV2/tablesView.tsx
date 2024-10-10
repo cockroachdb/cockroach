@@ -104,15 +104,7 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       ),
       width: "20%",
       render: (t: TableRow) => (
-        <div>
-          {Object.entries(t.nodesByRegion ?? {}).map(([region, nodes]) => (
-            <RegionNodesLabel
-              key={region}
-              nodes={nodes}
-              region={{ label: region, code: region }}
-            />
-          ))}
-        </div>
+        <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
       ),
     },
     {
