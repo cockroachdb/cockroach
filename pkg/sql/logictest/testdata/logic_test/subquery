@@ -1054,3 +1054,23 @@ query B
 SELECT o NOT IN ((SELECT NULL FROM t127814_empty),) FROM t127814
 ----
 NULL
+
+# Regression test for #130759. The vectorized engine should correctly evaluate
+# IN expressions where the tuple on the RHS contains a single NULL value.
+statement ok
+CREATE TABLE t130759 (
+  i INT
+);
+
+statement ok
+INSERT INTO t130759 VALUES (0);
+
+query I
+SELECT 1
+FROM t130759
+WHERE NOT (
+  ('127.0.0.1'::INET - i) IN (
+    (SELECT NULL FROM (VALUES (0)) v(i) WHERE false),
+  )
+)
+----
