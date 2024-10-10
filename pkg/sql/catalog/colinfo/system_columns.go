@@ -35,6 +35,27 @@ const (
 	// TableOIDColumnID is the ID of the tableoid system column.
 	TableOIDColumnID
 
+	// OriginIDColumnID is the ColumnID of the OriginID column
+	// which returns the OriginID from the column family with the
+	// largest OriginTimestamp.
+	//
+	// NB: The semantics of this column are subject to change and
+	// should not be relied upon.
+	OriginIDColumnID
+
+	// OriginTimestampColumnID is the ColumnID of the OriginTimestamp column
+	// which returns the most recent OriginTimestamp from the
+	// MVCCValueHeader.
+	//
+	// In the presence of multiple column families, this column
+	// will only be non-NULL if the latest OriginTimstamp is
+	// larger than then MVCC timestamp of all column families
+	// _without_ and OriginTimestamp.
+	//
+	// NB: The semantics of this column are subject to change and
+	// should not be relied upon.
+	OriginTimestampColumnID
+
 	numSystemColumns = iota
 )
 
@@ -59,6 +80,8 @@ func init() {
 var AllSystemColumnDescs = []descpb.ColumnDescriptor{
 	MVCCTimestampColumnDesc,
 	TableOIDColumnDesc,
+	OriginIDColumnDesc,
+	OriginTimestampColumnDesc,
 }
 
 // MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
@@ -76,6 +99,38 @@ const MVCCTimestampColumnName = "crdb_internal_mvcc_timestamp"
 
 // MVCCTimestampColumnType is the type of the MVCC timestamp system column.
 var MVCCTimestampColumnType = types.Decimal
+
+// OriginIDColumnDesc is a column descriptor for the OriginID system column.
+var OriginIDColumnDesc = descpb.ColumnDescriptor{
+	Name:             OriginIDColumnName,
+	Type:             OriginIDColumnType,
+	Hidden:           true,
+	Nullable:         true,
+	SystemColumnKind: catpb.SystemColumnKind_ORIGINID,
+	ID:               OriginIDColumnID,
+}
+
+// OriginIDColumnName is the name of the OriginID system column.
+const OriginIDColumnName = "crdb_internal_origin_id"
+
+// OriginIDColumnType is the type of the OriginID system column.
+var OriginIDColumnType = types.Int4
+
+// OriginTimestampColumnDesc is a column descriptor for the OriginTimestamp system column.
+var OriginTimestampColumnDesc = descpb.ColumnDescriptor{
+	Name:             OriginTimestampColumnName,
+	Type:             OriginTimestampColumnType,
+	Hidden:           true,
+	Nullable:         true,
+	SystemColumnKind: catpb.SystemColumnKind_ORIGINTIMESTAMP,
+	ID:               OriginTimestampColumnID,
+}
+
+// OriginTimestampColumnName is the name of the OriginTimestamp system column.
+const OriginTimestampColumnName = "crdb_internal_origin_timestamp"
+
+// OriginTimestampColumnType is the type of the OriginTimestamp system column.
+var OriginTimestampColumnType = types.Decimal
 
 // TableOIDColumnDesc is a column descriptor for the tableoid column.
 var TableOIDColumnDesc = descpb.ColumnDescriptor{

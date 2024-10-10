@@ -122,7 +122,7 @@ EXPLAIN (OPT) UPDATE cookies SET j = 2 WHERE c = 1
 update cookies
  ├── project
  │    ├── scan cookies
- │    │    └── constraint: /5: [/1 - /1]
+ │    │    └── constraint: /7: [/1 - /1]
  │    └── projections
  │         └── 2
  └── f-k-checks
@@ -290,7 +290,7 @@ EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
 ----
 delete jars
  ├── scan jars
- │    └── constraint: /4: [/1 - /1]
+ │    └── constraint: /6: [/1 - /1]
  └── f-k-checks
       └── f-k-checks-item: cookies(j) -> jars(j)
            └── semi-join (hash)

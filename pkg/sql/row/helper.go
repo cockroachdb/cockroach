@@ -16,7 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -390,4 +393,17 @@ func (oh *OriginTimestampCPutHelper) DelWithCPut(
 		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
 	}
 	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+}
+
+func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {
+	for idx := range spec.FetchedColumns {
+		colID := spec.FetchedColumns[idx].ColumnID
+		if colinfo.IsColIDSystemColumn(colID) {
+			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
+			case catpb.SystemColumnKind_ORIGINID, catpb.SystemColumnKind_ORIGINTIMESTAMP:
+				return true
+			}
+		}
+	}
+	return false
 }
