@@ -35,14 +35,10 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
 
 func init() {
-	// Let CheckEnterpriseEnabled know that all the ccl code is linked in.
-	utilccl.AllCCLCodeImported = true
-
 	// Set up license-related hooks from OSS to CCL. The implementation of the
 	// functions we bind is in utilccl, but license checks only work once
 	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
@@ -50,7 +46,6 @@ func init() {
 	base.CheckEnterpriseEnabled = utilccl.CheckEnterpriseEnabled
 	base.LicenseType = utilccl.GetLicenseType
 	base.GetLicenseTTL = utilccl.GetLicenseTTL
-	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
 	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
 }
 
