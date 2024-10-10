@@ -5,6 +5,7 @@
 
 import { TableMetadata } from "src/api/databases/getTableMetadataApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
+import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
 
 import { TableRow } from "./types";
 
@@ -17,17 +18,11 @@ export const tableMetadataToRows = (
   },
 ): TableRow[] => {
   return tables.map(table => {
-    const nodesByRegion: Record<string, NodeID[]> = {};
-    if (!nodesInfo.isLoading) {
-      table.storeIds?.forEach(storeID => {
-        const nodeID = nodesInfo.storeIDToNodeID[storeID as StoreID];
-        const region = nodesInfo.nodeIDToRegion[nodeID];
-        if (!nodesByRegion[region]) {
-          nodesByRegion[region] = [];
-        }
-        nodesByRegion[region].push(nodeID);
-      });
-    }
+    const nodesByRegion = mapStoreIDsToNodeRegions(
+      table.storeIds,
+      nodesInfo?.nodeIDToRegion,
+      nodesInfo?.storeIDToNodeID,
+    );
     return {
       ...table,
       nodesByRegion: nodesByRegion,
