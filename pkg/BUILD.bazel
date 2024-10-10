@@ -1516,6 +1516,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/raftentry:raftentry_test",
     "//pkg/kv/kvserver/raftlog:raftlog",
     "//pkg/kv/kvserver/raftlog:raftlog_test",
+    "//pkg/kv/kvserver/rafttrace:rafttrace",
     "//pkg/kv/kvserver/raftutil:raftutil",
     "//pkg/kv/kvserver/raftutil:raftutil_test",
     "//pkg/kv/kvserver/rangefeed:rangefeed",
