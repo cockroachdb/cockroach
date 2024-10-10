@@ -1,3 +1,6 @@
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
+//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -203,26 +206,18 @@ func TestInflightsFull(t *testing.T) {
 
 			addUntilFull := func(begin, end int) {
 				for i := begin; i < end; i++ {
-					if in.Full() {
-						t.Fatalf("full at %d, want %d", i, end)
-					}
+					require.False(t, in.Full(), "full at %d, want %d", i, end)
 					in.Add(uint64(i), uint64(100+i))
 				}
-				if !in.Full() {
-					t.Fatalf("not full at %d", end)
-				}
+				require.True(t, in.Full())
 			}
 
 			addUntilFull(0, tc.fullAt)
 			in.FreeLE(tc.freeLE)
 			addUntilFull(tc.fullAt, tc.againAt)
 
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("Add() did not panic")
-				}
-			}()
 			in.Add(100, 1024)
+			require.True(t, in.Full()) // the full tracker remains full
 		})
 	}
 }
