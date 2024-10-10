@@ -143,6 +143,17 @@ func (s *systemStatusServer) spanStatsFanOut(
 		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
 		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
+			if spanStats == nil {
+				log.Errorf(ctx, "Span stats for %s from node response is nil", spanStr)
+				continue
+			}
+
+			_, ok := res.SpanToStats[spanStr]
+			if !ok {
+				log.Warningf(ctx, "Received Span not in original request: %s", spanStr)
+				res.SpanToStats[spanStr] = &roachpb.SpanStats{}
+			}
+
 			// Accumulate physical values across all replicas:
 			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
 			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
