@@ -284,7 +284,6 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				LicenseTestingKnobs: license.TestingKnobs{
-					Enable:            true,
 					SkipDisable:       true,
 					OverrideStartTime: &ts1,
 				},
