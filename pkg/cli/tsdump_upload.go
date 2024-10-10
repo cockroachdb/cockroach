@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"encoding/gob"
@@ -49,6 +50,7 @@ var (
 	targetURLFormat           = "https://%s/api/v2/series"
 	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/bif-kwe-gx2/self-hosted-db-console-tsdump?" +
 		"tpl_var_cluster=%s&tpl_var_upload_id=%s&from_ts=%d&to_ts=%d"
+	zipFileSignature = []byte{0x50, 0x4B, 0x03, 0x04}
 )
 
 // DatadogPoint is a single metric point in Datadog format
@@ -273,7 +275,7 @@ func (d *datadogWriter) flush(data []DatadogSeries) error {
 }
 
 func (d *datadogWriter) upload(fileName string) error {
-	f, err := os.Open(fileName)
+	f, err := getFileReader(fileName)
 	if err != nil {
 		return err
 	}
@@ -345,4 +347,54 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	close(ch)
 	return nil
+}
+
+// getFileReader returns an io.Reader based on the file type.
+func getFileReader(fileName string) (io.Reader, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the file is a zip file by reading its magic number
+	buf := make([]byte, 4)
+	if _, err := file.Read(buf); err != nil {
+		return nil, err
+	}
+
+	// Reset the file pointer to the beginning
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	// Check for zip file signature
+	if bytes.HasPrefix(buf, zipFileSignature) {
+		zipReader, err := zip.NewReader(file, fileSize(file))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(zipReader.File) > 0 {
+			if len(zipReader.File) > 1 {
+				fmt.Printf("tsdump datadog upload: warning: more than one file in zip archive, using the first file %s\n", zipReader.File[0].Name)
+			}
+			firstFile, err := zipReader.File[0].Open()
+			if err != nil {
+				return nil, err
+			}
+			return firstFile, nil
+		}
+		return nil, fmt.Errorf("zip archive is empty")
+	}
+
+	return file, nil
+}
+
+// fileSize returns the size of the file.
+func fileSize(file *os.File) int64 {
+	info, err := file.Stat()
+	if err != nil {
+		return 0
+	}
+	return info.Size()
 }
