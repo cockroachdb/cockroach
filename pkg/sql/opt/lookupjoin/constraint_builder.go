@@ -163,7 +163,6 @@ func (b *ConstraintBuilder) Build(
 	// Extract the equality columns from the ON and derived FK filters.
 	leftEq, rightEq, eqFilterOrds :=
 		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, b.allFilters)
-	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from the ON and derived FK filters.
 	var rightCmp opt.ColList
@@ -188,7 +187,7 @@ func (b *ConstraintBuilder) Build(
 	// columns, but it avoids unnecessary work in most cases.
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
-		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
+		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEq.ToSet()); !ok {
 			if !HasJoinFilterConstants(b.ctx, b.allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
@@ -246,6 +245,17 @@ func (b *ConstraintBuilder) Build(
 		rightSideCols = append(rightSideCols, rightCol)
 	}
 
+	// rightEqIdenticalTypeCols is the set of columns in rightEq that have
+	// identical types to the corresponding columns in leftEq. This is used to
+	// determine if a computed column can be synthesized for a column in the
+	// index in order to allow a lookup join.
+	var rightEqIdenticalTypeCols opt.ColSet
+	for i := range rightEq {
+		if b.md.ColumnMeta(rightEq[i]).Type.Identical(b.md.ColumnMeta(leftEq[i]).Type) {
+			rightEqIdenticalTypeCols.Add(rightEq[i])
+		}
+	}
+
 	// All the lookup conditions must apply to the prefix of the index and so
 	// the projected columns created must be created in order.
 	for j := 0; j < numIndexKeyCols; j++ {
@@ -267,7 +277,10 @@ func (b *ConstraintBuilder) Build(
 		// and construct a Project expression that wraps the join's input
 		// below. See findComputedColJoinEquality for the requirements to
 		// synthesize a computed column equality constraint.
-		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqSet); ok {
+		//
+		// NOTE: we must only consider equivalent columns with identical types,
+		// since column remapping is otherwise not valid.
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqIdenticalTypeCols); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
@@ -448,6 +461,8 @@ func (b *ConstraintBuilder) Build(
 //  2. col is a computed column.
 //  3. Columns referenced in the computed expression are a subset of columns
 //     that already have equality constraints.
+//  4. The computed column expression is not composite-sensitive to the set of
+//     referenced columns.
 //
 // For example, consider the table and query:
 //
@@ -502,6 +517,14 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 	}
 	expr, ok := tabMeta.ComputedColExpr(col)
 	if !ok {
+		return nil, false
+	}
+	if memo.CanBeCompositeSensitive(expr) {
+		// Composite-typed values might compare equally without being exactly the
+		// same (e.g. 2.0::DECIMAL vs 2.000::DECIMAL). We must ensure that the
+		// computed column expression produces equivalent (but not necessarily
+		// identical) results if its columns are swapped out with equivalent
+		// columns.
 		return nil, false
 	}
 	var sharedProps props.Shared
