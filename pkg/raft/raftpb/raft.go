@@ -5,7 +5,11 @@
 
 package raftpb
 
-import "github.com/cockroachdb/redact"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/redact"
+)
 
 // PeerID is a custom type for peer IDs in a raft group.
 type PeerID uint64
@@ -75,4 +79,31 @@ func (p Priority) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		panic("invalid raft priority")
 	}
+}
+
+// StateType represents the role of a node in a cluster.
+type StateType uint64
+
+// Possible values for StateType.
+const (
+	StateFollower StateType = iota
+	StateCandidate
+	StateLeader
+	StatePreCandidate
+	NumStates
+)
+
+var stmap = [...]string{
+	"StateFollower",
+	"StateCandidate",
+	"StateLeader",
+	"StatePreCandidate",
+}
+
+func (st StateType) String() string {
+	return stmap[st]
+}
+
+func (st StateType) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%q", st.String())), nil
 }

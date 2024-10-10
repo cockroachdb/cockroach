@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1092,7 +1091,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				return err
 			}
 			raftStatus := repl.RaftStatus()
-			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+			if raftStatus != nil && raftStatus.RaftState == raftpb.StateFollower {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1), false /* bypassSafetyChecks */)

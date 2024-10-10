@@ -206,13 +206,13 @@ func raftStatusFollower(replicaID roachpb.ReplicaID) *raft.Status {
 	s := &raft.Status{}
 	s.ID = raftpb.PeerID(replicaID)
 	s.Term = 5
-	s.RaftState = raft.StateFollower
+	s.RaftState = raftpb.StateFollower
 	return s
 }
 
 func raftStatusLeader(replicaID roachpb.ReplicaID) *raft.Status {
 	s := raftStatusFollower(replicaID)
-	s.RaftState = raft.StateLeader
+	s.RaftState = raftpb.StateLeader
 	s.LeadSupportUntil = ts30
 	return s
 }

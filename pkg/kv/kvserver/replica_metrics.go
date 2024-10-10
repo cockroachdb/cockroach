@@ -174,7 +174,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
-	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
+	leader := d.raftStatus != nil && d.raftStatus.RaftState == raftpb.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)

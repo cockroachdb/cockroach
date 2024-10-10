@@ -288,7 +288,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	// Is this the raft leader? We only propose log truncation on the raft
 	// leader which has the up to date info on followers.
-	if raftStatus.RaftState != raft.StateLeader {
+	if raftStatus.RaftState != raftpb.StateLeader {
 		return truncateDecision{}, nil
 	}
 

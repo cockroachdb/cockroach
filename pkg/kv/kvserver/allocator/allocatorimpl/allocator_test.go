@@ -1917,7 +1917,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	raftStatus := &raft.Status{
 		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
-	raftStatus.RaftState = raft.StateLeader
+	raftStatus.RaftState = raftpb.StateLeader
 	for i := int32(1); i <= r.replicationFactor; i++ {
 		state := tracker.StateReplicate
 		if _, ok := r.replsInNeedOfSnapshot[roachpb.ReplicaID(i)]; ok {
@@ -8290,7 +8290,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 				Progress: make(map[raftpb.PeerID]tracker.Progress),
 			}
 			status.Lead = c.leader
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -8363,7 +8363,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -8421,7 +8421,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {

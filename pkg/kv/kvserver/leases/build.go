@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -383,7 +384,7 @@ func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
 		// construct an epoch-based lease.
 		return roachpb.LeaseEpoch
 	}
-	if i.RaftStatus.RaftState != raft.StateLeader || i.RaftStatus.LeadTransferee != raft.None {
+	if i.RaftStatus.RaftState != raftpb.StateLeader || i.RaftStatus.LeadTransferee != raft.None {
 		// If this range wants to use a leader lease, but the local replica is not
 		// currently the raft leader, we construct an expiration-based lease. It is
 		// highly likely that the lease acquisition will be rejected before being
@@ -541,7 +542,7 @@ func leaseTerm(i BuildInput, nextType roachpb.LeaseType) uint64 {
 	if nextType != roachpb.LeaseLeader {
 		panic("leaseTerm called for non-leader lease")
 	}
-	if i.RaftStatus.RaftState != raft.StateLeader {
+	if i.RaftStatus.RaftState != raftpb.StateLeader {
 		panic("leaseTerm called when not leader")
 	}
 	if i.RaftStatus.Term == 0 {

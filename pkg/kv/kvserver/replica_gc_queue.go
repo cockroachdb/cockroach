@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -168,7 +168,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	switch raftStatus.SoftState.RaftState {
 	// If a replica is a candidate, then by definition it has lost contact with
 	// its leader and possibly the rest of the Raft group, so consider it suspect.
-	case raft.StateCandidate, raft.StatePreCandidate:
+	case raftpb.StateCandidate, raftpb.StatePreCandidate:
 		return true
 
 	// If the replica is a follower, check that the leader is in our range
@@ -177,7 +177,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// a quiesced follower which was partitioned away from the Raft group during
 	// its own removal from the range -- this case is vulnerable to race
 	// conditions, but if it fails it will be GCed within 12 hours anyway.
-	case raft.StateFollower:
+	case raftpb.StateFollower:
 		leadDesc, ok := repl.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
 		if !ok || !livenessMap[leadDesc.NodeID].IsLive {
 			return true
@@ -186,7 +186,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// If the replica is a leader, check that it has a quorum. This handles e.g.
 	// a stuck leader with a lost quorum being replaced via Node.ResetQuorum,
 	// which must cause the stale leader to relinquish its lease and GC itself.
-	case raft.StateLeader:
+	case raftpb.StateLeader:
 		if !repl.Desc().Replicas().CanMakeProgress(func(d roachpb.ReplicaDescriptor) bool {
 			return livenessMap[d.NodeID].IsLive
 		}) {

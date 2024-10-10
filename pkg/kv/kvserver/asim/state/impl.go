@@ -1203,7 +1203,7 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	// TODO(kvoli): The raft leader will always be the current leaseholder
 	// here. This should change to enable testing this scenario.
 	status.Lead = raftpb.PeerID(leader.ReplicaID())
-	status.RaftState = raft.StateLeader
+	status.RaftState = raftpb.StateLeader
 	status.Commit = 2
 	// TODO(kvoli): A replica is never behind on their raft log, this should
 	// change to enable testing this scenario where replicas fall behind. e.g.

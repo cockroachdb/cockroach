@@ -631,7 +631,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 		// mass unquiescence due to the continuous prevotes.
 		if r.mu.quiescent {
 			st := r.raftBasicStatusRLocked()
-			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
+			hasLeader := st.RaftState == raftpb.StateFollower && st.Lead != 0
 			fromLeader := raftpb.PeerID(req.FromReplica.ReplicaID) == st.Lead
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
@@ -1487,7 +1487,7 @@ func (r *Replica) tick(
 	r.mu.internalRaftGroup.Tick()
 	postTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
 	if preTickState != postTickState {
-		if postTickState == raft.StatePreCandidate {
+		if postTickState == raftpb.StatePreCandidate {
 			r.store.Metrics().RaftTimeoutCampaign.Inc(1)
 			if k := r.store.TestingKnobs(); k != nil && k.OnRaftTimeoutCampaign != nil {
 				k.OnRaftTimeoutCampaign(r.RangeID)
@@ -2317,7 +2317,7 @@ func shouldCampaignOnWake(
 		return false
 	}
 	// If we're already campaigning don't start a new term.
-	if raftStatus.RaftState != raft.StateFollower {
+	if raftStatus.RaftState != raftpb.StateFollower {
 		return false
 	}
 	// If we don't know who the leader is, then campaign.
@@ -2428,7 +2428,7 @@ func shouldForgetLeaderOnVoteRequest(
 	now hlc.Timestamp,
 ) bool {
 	// If we're not a follower with a leader, there's noone to forget.
-	if raftStatus.RaftState != raft.StateFollower || raftStatus.Lead == raft.None {
+	if raftStatus.RaftState != raftpb.StateFollower || raftStatus.Lead == raft.None {
 		return false
 	}
 
@@ -2479,7 +2479,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
-	if raftStatus.RaftState != raft.StateFollower {
+	if raftStatus.RaftState != raftpb.StateFollower {
 		return false
 	}
 	// If we don't know who the leader is, then campaign.
@@ -2657,7 +2657,7 @@ func shouldTransferRaftLeadershipToLeaseholderLocked(
 	draining bool,
 ) bool {
 	// If we're not the leader, there's nothing to do.
-	if raftStatus.RaftState != raft.StateLeader {
+	if raftStatus.RaftState != raftpb.StateLeader {
 		return false
 	}
 
@@ -3014,7 +3014,7 @@ func shouldCampaignAfterConfChange(
 		// throwing spurious elections.
 		return false
 	}
-	if raftStatus.RaftState == raft.StateLeader {
+	if raftStatus.RaftState == raftpb.StateLeader {
 		// We're already the leader, no point in campaigning.
 		return false
 	}
