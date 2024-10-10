@@ -268,6 +268,7 @@ message LogicalReplicationDetails {
   enum Discard {
     DiscardNothing = 0;
     DiscardCDCIgnoredTTLDeletes = 1;
+    DiscardAllDeletes = 2;
   }
 
   Discard discard = 11;
