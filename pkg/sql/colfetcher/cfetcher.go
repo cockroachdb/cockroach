@@ -982,6 +982,10 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			}
 
+			if err := cf.fillDefaults(); err != nil {
+				return nil, err
+			}
+
 			// We're finished with a row. Fill the row in with nulls if
 			// necessary, perform the memory accounting for the row, bump the
 			// row index, emit the batch if necessary, and move to the next
@@ -1345,6 +1349,35 @@ func (cf *cFetcher) processValueBytes(
 		prettyValue = cf.machine.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
+}
+
+func (cf *cFetcher) fillDefaults() error {
+	if cf.machine.remainingValueColsByIdx.Empty() {
+		return nil
+	}
+	for i, ok := cf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = cf.machine.remainingValueColsByIdx.Next(i + 1) {
+		defaultExpr := cf.table.spec.FetchedColumns[i].DefaultExpr
+		if defaultExpr != "" {
+			e := tree.NewDString(defaultExpr)
+			val, err := eval.Expr(nil, nil, e)
+			if err != nil {
+				return err
+			}
+
+			vec := cf.machine.colvecs.Vecs[i]
+
+			bytes := vec.Bytes()
+			// xclog.Print("---")
+			// xclog.Print("bytes: %v", bytes.String())
+
+			rowIdx := cf.machine.rowIdx
+			bytes.Set(rowIdx, []byte(val.String()))
+
+			// xclog.Print("bytes: %v", bytes.String())
+			// xclog.Print("---")
+		}
+	}
+	return nil
 }
 
 func (cf *cFetcher) fillNulls() error {
