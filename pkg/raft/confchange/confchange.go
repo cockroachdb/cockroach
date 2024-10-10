@@ -18,13 +18,13 @@
 package confchange
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/errors"
 )
 
 // Changer facilitates configuration changes. It exposes methods to handle

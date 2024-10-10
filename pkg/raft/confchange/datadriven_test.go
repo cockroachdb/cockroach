@@ -18,7 +18,6 @@
 package confchange
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func TestConfChangeDataDriven(t *testing.T) {
