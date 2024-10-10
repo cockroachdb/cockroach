@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // FollowerReadTimestampFunctionName is the name of the function which can be
@@ -132,6 +133,14 @@ func Eval(
 	defer scalarProps.Restore(*scalarProps)
 	scalarProps.Require("AS OF SYSTEM TIME", tree.RejectSpecial|tree.RejectSubqueries)
 
+	// Disable type resolution. Doing that requires a transaction, but this
+	// expression is being evaluated before a transaction begins, so resolving
+	// any type should result in an error. There is no valid AS OF SYSTEM TIME
+	// expression that requires type resolution.
+	origTypeResolver := semaCtx.GetTypeResolver()
+	semaCtx.TypeResolver = &asOfTypeResolver{err: newInvalidExprError()}
+	defer func() { semaCtx.TypeResolver = origTypeResolver }()
+
 	var ret eval.AsOfSystemTime
 
 	// In order to support the follower reads feature we permit this expression
@@ -202,6 +211,26 @@ func Eval(
 		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
 	return ret, nil
+}
+
+// asOfTypeResolver is a type resolver that always returns an error. It is used
+// to block type resolution while evaluating the AS OF SYSTEM TIME expression.
+type asOfTypeResolver struct {
+	err error
+}
+
+var _ tree.TypeReferenceResolver = (*asOfTypeResolver)(nil)
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (r *asOfTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	return nil, r.err
+}
+
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+func (r *asOfTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	return nil, r.err
 }
 
 // DatumToHLCUsage specifies which statement DatumToHLC() is used for.
