@@ -511,3 +511,66 @@ func TestPauseOrResumePolling(t *testing.T) {
 	require.False(t, sf.pollingPaused())
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, sf.highWater())
 }
+
+// BenchmarkPauseOrResumePolling benchmarks pauseOrResumePolling in cases where
+// there is a non-terminal error early, polling should be paused, and polling
+// should not be paused.
+func BenchmarkPauseOrResumePolling(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	sf := schemaFeed{
+		leaseMgr: &testLeaseAcquirer{
+			id: tableID,
+			descs: []*testLeasedDescriptor{
+				newTestLeasedDescriptor(tableID, 1, false, hlc.Timestamp{WallTime: 30}),
+				newTestLeasedDescriptor(tableID, 2, true, hlc.Timestamp{WallTime: 40}),
+			},
+		},
+		targets: CreateChangefeedTargets(tableID),
+	}
+	setHighWater := func(t hlc.Timestamp) {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		sf.mu.highWater = t
+	}
+
+	// Set the initial frontier to 10.
+	setHighWater(hlc.Timestamp{WallTime: 10})
+	// Initially, polling should not be paused.
+	require.False(b, sf.pollingPaused())
+
+	b.Run("non-terminal error", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			// We expect a non-terminal error to be swallowed for time 10 since a
+			// valid descriptor does not exist for time 10.
+			require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 10}))
+		}
+		require.False(b, sf.pollingPaused())
+	})
+	b.Run("not schema locked", func(b *testing.B) {
+		// We bump the highwater up to reflect a descriptor being read at time 30.
+		setHighWater(hlc.Timestamp{WallTime: 30})
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			// We do not expect polling to be paused for time 30 since the descriptor
+			// at time 30 is not schema locked.
+			require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 30}))
+		}
+		require.False(b, sf.pollingPaused())
+	})
+	b.Run("schema locked", func(b *testing.B) {
+		// We bump the highwater up to reflect a descriptor being read at time 50.
+		setHighWater(hlc.Timestamp{WallTime: 50})
+		for i := 0; i < b.N; i++ {
+			// We expect polling to be paused for time 50 now that the highwater on a
+			// schema-locked version.
+			require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 50}))
+		}
+		require.True(b, sf.pollingPaused())
+	})
+}
