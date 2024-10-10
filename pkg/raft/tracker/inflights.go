@@ -64,13 +64,15 @@ func (in *Inflights) Clone() *Inflights {
 }
 
 // Add notifies the Inflights that a new message with the given index and byte
-// size is being dispatched. Full() must be called prior to Add() to verify that
-// there is room for one more message, and consecutive calls to Add() must
-// provide a monotonic sequence of indexes.
+// size is being dispatched. Consecutive calls to Add() must provide a monotonic
+// sequence of log indices.
+//
+// The caller should check that the tracker is not Full(), before calling Add().
+// If the tracker is full, the caller should hold off sending entries to the
+// peer. However, Add() is still valid and allowed, for cases when this pacing
+// is implemented at the higher app level. The tracker correctly tracks all the
+// in-flight entries.
 func (in *Inflights) Add(index, bytes uint64) {
-	if in.Full() {
-		panic("cannot add into a Full inflights")
-	}
 	next := in.start + in.count
 	size := in.size
 	if next >= size {
@@ -134,7 +136,7 @@ func (in *Inflights) FreeLE(to uint64) {
 
 // Full returns true if no more messages can be sent at the moment.
 func (in *Inflights) Full() bool {
-	return in.count == in.size || (in.maxBytes != 0 && in.bytes >= in.maxBytes)
+	return in.count >= in.size || (in.maxBytes != 0 && in.bytes >= in.maxBytes)
 }
 
 // Count returns the number of inflight messages.

@@ -203,26 +203,18 @@ func TestInflightsFull(t *testing.T) {
 
 			addUntilFull := func(begin, end int) {
 				for i := begin; i < end; i++ {
-					if in.Full() {
-						t.Fatalf("full at %d, want %d", i, end)
-					}
+					require.False(t, in.Full(), "full at %d, want %d", i, end)
 					in.Add(uint64(i), uint64(100+i))
 				}
-				if !in.Full() {
-					t.Fatalf("not full at %d", end)
-				}
+				require.True(t, in.Full())
 			}
 
 			addUntilFull(0, tc.fullAt)
 			in.FreeLE(tc.freeLE)
 			addUntilFull(tc.fullAt, tc.againAt)
 
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("Add() did not panic")
-				}
-			}()
 			in.Add(100, 1024)
+			require.True(t, in.Full()) // the full tracker remains full
 		})
 	}
 }
