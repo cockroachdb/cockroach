@@ -31,6 +31,7 @@ import {
   TextTypes,
 } from "src/components";
 import { getDataFromServer } from "src/util/dataFromServer";
+import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
@@ -99,6 +100,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <TenantDropdown />
             </PageHeader>
           </div>
+          <ThrottleNotificationBar />
           <div className="layout-panel__body">
             <div className="layout-panel__sidebar">
               <NavigationBar />
