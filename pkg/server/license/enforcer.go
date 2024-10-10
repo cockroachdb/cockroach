@@ -46,7 +46,7 @@ type Enforcer struct {
 	// telemetryStatusReporter is an interface for getting the timestamp of the
 	// last successful ping to the telemetry server. For some licenses, sending
 	// telemetry data is required to avoid throttling.
-	telemetryStatusReporter atomic.Pointer[TelemetryStatusReporter]
+	telemetryStatusReporter TelemetryStatusReporter
 
 	// clusterInitGracePeriodEndTS marks the end of the grace period when a
 	// license is required. It is set during the cluster's initial startup. The
@@ -95,7 +95,7 @@ type Enforcer struct {
 	// metadataAccessor is a pointer to a tenant connector that has the latest
 	// cluster init grace period timestamp. This is only set when this is
 	// initialized by the secondary tenant.
-	metadataAccessor atomic.Pointer[MetadataAccessor]
+	metadataAccessor MetadataAccessor
 
 	// continueToPollMetadataAccessor indicates whether requests for the cluster
 	// init grace period timestamp should continue polling for the latest value
@@ -126,6 +126,10 @@ type TestingKnobs struct {
 	// overwrite the existing cluster initialization grace period timestamp,
 	// even if one is already set.
 	OverwriteClusterInitGracePeriodTS bool
+
+	// OverrideTelemetryStatusReporter, if set, will set the telemetry status
+	// reporter in Start().
+	OverrideTelemetryStatusReporter TelemetryStatusReporter
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -157,11 +161,6 @@ func NewEnforcer(tk *TestingKnobs) *Enforcer {
 	return e
 }
 
-// SetTelemetryStatusReporter will set the pointer to the telemetry status reporter.
-func (e *Enforcer) SetTelemetryStatusReporter(reporter TelemetryStatusReporter) {
-	e.telemetryStatusReporter.Store(&reporter)
-}
-
 func (e *Enforcer) GetTestingKnobs() *TestingKnobs {
 	return e.testingKnobs
 }
@@ -184,7 +183,10 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	if options.testingKnobs != nil {
 		e.testingKnobs = options.testingKnobs
 	}
-	e.telemetryStatusReporter.Store(&options.telemetryStatusReporter)
+	e.telemetryStatusReporter = options.telemetryStatusReporter
+	if options.testingKnobs != nil && options.testingKnobs.OverrideTelemetryStatusReporter != nil {
+		e.telemetryStatusReporter = options.testingKnobs.OverrideTelemetryStatusReporter
+	}
 
 	// We always start disabled. If an error occurs, the enforcer setup will be
 	// incomplete, but the server will continue to start. To ensure stability in
@@ -225,8 +227,8 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 		if options.metadataAccessor == nil {
 			return errors.AssertionFailedf("no metadata accessor for secondary tenant")
 		}
-		e.metadataAccessor.Store(&options.metadataAccessor)
-		end := (*e.metadataAccessor.Load()).GetClusterInitGracePeriodTS()
+		e.metadataAccessor = options.metadataAccessor
+		end := e.metadataAccessor.GetClusterInitGracePeriodTS()
 		if end != 0 {
 			e.clusterInitGracePeriodEndTS.Store(end)
 			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS().String())
@@ -345,12 +347,11 @@ func (e *Enforcer) GetGracePeriodEndTS() (time.Time, bool) {
 // data needs to be received before we start to throttle. If the license doesn't
 // require telemetry, then false is returned for second return value.
 func (e *Enforcer) GetTelemetryDeadline() (deadline, lastPing time.Time, ok bool) {
-	if !e.licenseRequiresTelemetry.Load() || e.telemetryStatusReporter.Load() == nil {
+	if !e.licenseRequiresTelemetry.Load() || e.telemetryStatusReporter == nil {
 		return time.Time{}, time.Time{}, false
 	}
 
-	ptr := e.telemetryStatusReporter.Load()
-	lastTelemetryDataReceived := (*ptr).GetLastSuccessfulTelemetryPing()
+	lastTelemetryDataReceived := e.telemetryStatusReporter.GetLastSuccessfulTelemetryPing()
 	throttleTS := lastTelemetryDataReceived.Add(e.getMaxTelemetryInterval())
 	return throttleTS, lastTelemetryDataReceived, true
 }
@@ -549,6 +550,22 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 	})
 }
 
+// TestingMaybeFailIfThrottled is a helper that runs MaybeFailIfThrottled in a separate goroutine.
+// This helps uncover potential data races and simulates a real-world scenario where the throttle
+// check is triggered by a different goroutine than the one that initialized the enforcer.
+func (e *Enforcer) TestingMaybeFailIfThrottled(
+	ctx context.Context, threshold int64,
+) (error, error) {
+	errCh := make(chan error)
+	noticeCh := make(chan error)
+	go func() {
+		notice, err := e.MaybeFailIfThrottled(ctx, threshold)
+		noticeCh <- notice
+		errCh <- err
+	}()
+	return <-noticeCh, <-errCh
+}
+
 // Disable turns off all license enforcement for the lifetime of this object.
 func (e *Enforcer) Disable(ctx context.Context) {
 	// We provide an override so that we can continue to test license enforcement
@@ -698,8 +715,8 @@ func (e *Enforcer) addThrottleWarningDelayForNoTelemetry(t time.Time) time.Time 
 // from the tenant connector. It is used to update the grace period if the correct timestamp
 // wasn’t available during initialization. Once the timestamp is obtained, the polling is disabled.
 func (e *Enforcer) pollMetadataAccessor(ctx context.Context) {
-	if e.metadataAccessor.Load() != nil && e.continueToPollMetadataAccessor.Load() {
-		ts := (*e.metadataAccessor.Load()).GetClusterInitGracePeriodTS()
+	if e.metadataAccessor != nil && e.continueToPollMetadataAccessor.Load() {
+		ts := e.metadataAccessor.GetClusterInitGracePeriodTS()
 		if ts != 0 {
 			// Received the timestamp from the KV store. Cache it and stop polling.
 			e.clusterInitGracePeriodEndTS.Store(ts)
