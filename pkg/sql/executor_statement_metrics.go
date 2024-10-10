@@ -208,8 +208,10 @@ func (ex *connExecutor) recordStatementSummary(
 		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).Add(svcLatRaw),
 		FullScan:             fullScan,
 		ExecStats:            queryLevelStats,
-		Indexes:              planner.instrumentation.indexesUsed,
-		Database:             planner.SessionData().Database,
+		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
+		// converting to strings.
+		Indexes:  planner.instrumentation.indexesUsed.Strings(),
+		Database: planner.SessionData().Database,
 	}
 
 	stmtFingerprintID, err :=
