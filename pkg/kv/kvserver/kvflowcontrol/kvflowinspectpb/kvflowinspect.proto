@@ -78,6 +78,7 @@ message ConnectedStream {
 // available for it (as maintained by the node-level kvflowcontrol.Controller,
 // or in >= v24.3, by the node level StreamTokenCounterProvider).
 message Stream {
+  option (gogoproto.goproto_stringer) = false;
   roachpb.TenantID tenant_id = 1 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TenantID"];
