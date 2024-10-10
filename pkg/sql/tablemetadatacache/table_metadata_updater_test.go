@@ -12,10 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
@@ -47,22 +44,10 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 
 	queryConn := s.ApplicationLayer().SQLConn(t)
 	s.ApplicationLayer().DB()
-	jobRegistry := s.JobRegistry().(*jobs.Registry)
-	jobId := jobRegistry.MakeJobID()
 
-	// Create a new job so that we don't have to wait for the existing one be claimed
-	jr := jobs.Record{
-		JobID:         jobId,
-		Description:   jobspb.TypeUpdateTableMetadataCache.String(),
-		Details:       jobspb.UpdateTableMetadataCacheDetails{},
-		Progress:      jobspb.UpdateTableMetadataCacheProgress{},
-		CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},
-		Username:      username.NodeUserName(),
-		NonCancelable: true,
-	}
-	job, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobId, nil)
+	// We won't check the job progress in this test.
+	mockUpdateProgress := func(ctx context.Context, progress float32) {}
 	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
-	require.NoError(t, err)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, ""), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -77,14 +62,14 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				}
 				return res
 			case "update-cache":
-				updater := newTableMetadataUpdater(job, &metrics, s.InternalExecutor().(isql.Executor), knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, s.InternalExecutor().(isql.Executor), knobs)
 				updated, err := updater.updateCache(ctx)
 				if err != nil {
 					return err.Error()
 				}
 				return fmt.Sprintf("updated %d table(s)", updated)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(job, &metrics, s.InternalExecutor().(isql.Executor), knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, s.InternalExecutor().(isql.Executor), knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()

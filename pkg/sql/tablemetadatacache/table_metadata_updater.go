@@ -13,7 +13,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,18 +47,17 @@ type tableMetadataDetails struct {
 var _ tablemetadatacacheutil.ITableMetadataUpdater = &tableMetadataUpdater{}
 
 // newTableMetadataUpdater creates a new tableMetadataUpdater.
-var newTableMetadataUpdater = func(
-	job *jobs.Job,
+func newTableMetadataUpdater(
+	onProgressUpdated func(ctx context.Context, progress float32),
 	metrics *TableMetadataUpdateJobMetrics,
 	ie isql.Executor,
-	testKnobs *tablemetadatacacheutil.TestingKnobs) *tableMetadataUpdater {
+	testKnobs *tablemetadatacacheutil.TestingKnobs,
+) *tableMetadataUpdater {
 	return &tableMetadataUpdater{
-		ie:      ie,
-		metrics: metrics,
-		updateProgress: func(ctx context.Context, progress float32) {
-			updateProgress(ctx, job, progress)
-		},
-		testKnobs: testKnobs,
+		ie:             ie,
+		metrics:        metrics,
+		updateProgress: onProgressUpdated,
+		testKnobs:      testKnobs,
 	}
 }
 
