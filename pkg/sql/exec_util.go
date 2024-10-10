@@ -632,7 +632,7 @@ var disallowFullTableScans = settings.RegisterBoolSetting(
 	"setting to true rejects queries that have planned a full table scan; set "+
 		"large_full_scan_rows > 0 to allow small full table scans estimated to "+
 		"read fewer than large_full_scan_rows",
-	false,
+	true,
 	settings.WithPublic)
 
 // intervalStyle controls intervals representation.
