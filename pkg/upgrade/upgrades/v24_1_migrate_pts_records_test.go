@@ -86,6 +86,7 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 		allTargets = append(allTargets, []catid.DescID{
 			keys.DescriptorTableID,
 			keys.ZonesTableID,
+			keys.RoleMembersTableID,
 			keys.CommentsTableID,
 			tableDesc.GetID()})
 		descIDsArr = append(descIDsArr, tableDesc.GetID())
@@ -93,7 +94,11 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 	}
 	_, err = sqlDB.Exec(fmt.Sprintf("create changefeed for %s INTO 'null://'", strings.Join(allTables, ",")))
 	require.NoError(t, err)
-	descIDsArr = append(descIDsArr, keys.DescriptorTableID, keys.ZonesTableID, keys.CommentsTableID)
+	descIDsArr = append(descIDsArr,
+		keys.DescriptorTableID,
+		keys.ZonesTableID,
+		keys.RoleMembersTableID,
+		keys.CommentsTableID)
 	sort.Slice(descIDsArr, func(i int, j int) bool {
 		return descIDsArr[i] < descIDsArr[j]
 	})
