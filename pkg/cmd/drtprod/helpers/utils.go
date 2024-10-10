@@ -40,8 +40,9 @@ func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 	}
 }
 
-// ExecuteCmd runs a shell command with the given arguments and streams the output.
-func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+// ExecuteCmdWithPrefix runs a shell command with the given arguments and streams the output.
+// The output is prefixed with the prefix that is passed
+func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 	// Create a command with the given context and arguments.
 	c := exec.CommandContext(ctx, cmd, args...)
 
@@ -51,12 +52,6 @@ func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...strin
 		return err
 	}
 	stderr, err := c.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	// Start the command execution
-	err = c.Start()
 	if err != nil {
 		return err
 	}
@@ -82,5 +77,50 @@ func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...strin
 	}()
 
 	// Wait for the command to complete and return any errors encountered.
-	return c.Wait()
+	return c.Run()
+}
+
+// ExecuteCmdInteractive runs a shell command with the given arguments. This is to be used in case the
+// subprocess need an interactive interface.
+func ExecuteCmdInteractive(ctx context.Context, cmd string, args ...string) error {
+	// Create a command with the given context and arguments.
+	c := exec.CommandContext(ctx, cmd, args...)
+
+	// redirect stdin, stdout and stderr
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	// Wait for the command to complete and return any errors encountered.
+	return c.Run()
+}
+
+// ExecuteCmdWithReturn runs a shell command with the given arguments and streams the output. It returns the
+// stdout and stderr outputs.
+func ExecuteCmdWithReturn(ctx context.Context, cmd string, args ...string) (string, string, error) {
+	// Create a command with the given context and arguments.
+	c := exec.CommandContext(ctx, cmd, args...)
+
+	so := saveOutput{finalOutput: os.Stdout}
+	se := saveOutput{finalOutput: os.Stderr}
+	// redirect stdin, stdout and stderr
+	// intercept the outputs of stdout and stderr to return
+	c.Stdout = &so
+	c.Stderr = &se
+	c.Stdin = os.Stdin
+
+	// Run the command execution
+	err := c.Run()
+	return string(so.savedOutput), string(se.savedOutput), err
+}
+
+// saveOutput saves the out of the subprocess. This is used as an interceptor of the output
+type saveOutput struct {
+	savedOutput []byte
+	finalOutput *os.File
+}
+
+func (so *saveOutput) Write(p []byte) (n int, err error) {
+	so.savedOutput = append(so.savedOutput, p...)
+	return so.finalOutput.Write(p)
 }
