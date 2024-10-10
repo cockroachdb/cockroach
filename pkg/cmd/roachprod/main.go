@@ -2010,6 +2010,7 @@ func main() {
 		fluentBitStopCmd,
 		opentelemetryStartCmd,
 		opentelemetryStopCmd,
+		fetchLogsCmd,
 	)
 	loadBalancerCmd.AddCommand(createLoadBalancerCmd)
 	loadBalancerCmd.AddCommand(loadBalancerPGUrl)
@@ -2079,4 +2080,32 @@ Node specification
 		// Cobra has already printed the error message.
 		os.Exit(1)
 	}
+}
+
+var fetchLogsCmd = &cobra.Command{
+	Use:     "fetchlogs <cluster> <destination (optional)> [flags]",
+	Aliases: []string{"getlogs"},
+	Short:   "download the logs from the cluster",
+	Long: `Download the logs from the cluster using "roachprod get".
+
+The logs will be placed in the directory if specified or in the directory named as <clustername>_logs.
+`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		ctx := context.Background()
+		var dest string
+		if len(args) == 2 {
+			dest = args[1]
+		} else {
+			// trim the node number and keep only the cluster name as prefix of the directory
+			dest = fmt.Sprintf("%s_logs", strings.Split(args[0], ":")[0])
+			fmt.Printf("Placing logs at %s\n", dest)
+		}
+		if err := os.Mkdir(dest, 0755); err != nil {
+			return err
+		}
+		return roachprod.FetchLogs(ctx, config.Logger, cluster, dest,
+			fetchLogsTimeout)
+	}),
 }
