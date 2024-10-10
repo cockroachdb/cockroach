@@ -1818,6 +1818,9 @@ func (rs *replicaState) createReplicaSendStream(
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
 	}
+	rs.sendStream.mu.Lock()
+	defer rs.sendStream.mu.Unlock()
+
 	rss := rs.sendStream
 	rss.mu.tracker.Init(rs.parent.term, rs.stream)
 	rss.mu.closed = false
