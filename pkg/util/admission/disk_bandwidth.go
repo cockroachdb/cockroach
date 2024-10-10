@@ -143,7 +143,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	// elastic writes completely due to out-sized reads from above.
 	diskWriteTokens = int64(math.Max(0, float64(diskWriteTokens)))
 
-	totalUsedTokens := sumDiskTokens(usedTokens[admissionpb.ElasticWorkClass], usedTokens[admissionpb.RegularWorkClass])
+	totalUsedTokens := sumDiskTokens(usedTokens)
 	tokens := diskTokens{
 		readByteTokens:  0,
 		writeByteTokens: diskWriteTokens,
@@ -182,11 +182,13 @@ func (d *diskBandwidthLimiter) String() string {
 	return redact.StringWithoutMarkers(d)
 }
 
-func sumDiskTokens(l diskTokens, r diskTokens) diskTokens {
-	return diskTokens{
-		readByteTokens:  l.readByteTokens + r.readByteTokens,
-		writeByteTokens: l.writeByteTokens + r.writeByteTokens,
-		readIOPSTokens:  l.readIOPSTokens + r.readIOPSTokens,
-		writeIOPSTokens: l.writeIOPSTokens + r.writeIOPSTokens,
+func sumDiskTokens(tokens [admissionpb.NumStoreWorkTypes]diskTokens) diskTokens {
+	var sumTokens diskTokens
+	for i := 0; i < admissionpb.NumStoreWorkTypes; i++ {
+		sumTokens.readByteTokens += tokens[i].readByteTokens
+		sumTokens.writeByteTokens += tokens[i].writeByteTokens
+		sumTokens.readIOPSTokens += tokens[i].readIOPSTokens
+		sumTokens.writeIOPSTokens += tokens[i].writeIOPSTokens
 	}
+	return sumTokens
 }
