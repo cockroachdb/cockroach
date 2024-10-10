@@ -1830,6 +1830,11 @@ func (rs *replicaState) createReplicaSendStream(
 	// RangeController.
 	rss.mu.sendQueue.approxMeanSizeBytes = 500
 	if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
+		// NB: need to lock rss.mu since
+		// startAttemptingToEmptySendQueueViaWatcherLocked can hand a reference to
+		// rss to a different goroutine, which can start running immediately.
+		rss.mu.Lock()
+		defer rss.mu.Unlock()
 		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
 	}
 }
