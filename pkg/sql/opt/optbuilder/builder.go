@@ -350,6 +350,11 @@ func (b *Builder) buildStmt(
 				panic(unimplemented.Newf("stored procedures", "%s usage inside a routine definition is not supported until version 24.1", stmt.StatementTag()))
 			}
 		default:
+			if tree.CanModifySchema(stmt) {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported", stmt.StatementTag(),
+				))
+			}
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
 	}
