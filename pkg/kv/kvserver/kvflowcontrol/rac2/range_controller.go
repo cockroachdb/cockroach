@@ -2108,6 +2108,12 @@ func (rs *replicaState) handleReadyState(
 		}
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream(ctx, mode, info.Next, nextRaftIndex)
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+
+			if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
+				rs.sendStream.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+			}
 			// Have stale send-queue state.
 			shouldWaitChange = true
 		}
