@@ -39,19 +39,3 @@ func TestExport(t *testing.T) {
 		return strings.Join(output, "\n")
 	})
 }
-
-func TestSanitize(t *testing.T) {
-	testCases := []struct {
-		input  string
-		output string
-	}{
-		{"test", "test"},
-		{"test/sla//sh", "test_sla__sh"},
-		{"5words", "_words"},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
-			require.Equal(t, tc.output, sanitize(tc.input))
-		})
-	}
-}

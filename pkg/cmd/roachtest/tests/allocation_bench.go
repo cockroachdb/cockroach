@@ -356,7 +356,7 @@ func runAllocationBench(
 		t.L().PrintfCtx(ctx, "no samples found for allocation bench run, won't put any artifacts")
 		return
 	}
-	if err := result.SerializeOutRun(ctx, t, c); err != nil {
+	if err := result.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics()); err != nil {
 		t.L().PrintfCtx(ctx, "error putting run artifacts, %v", err)
 	}
 }

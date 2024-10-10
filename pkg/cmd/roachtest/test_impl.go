@@ -128,6 +128,9 @@ type testImpl struct {
 	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
 	// when starting nodes.
 	goCoverEnabled bool
+	// If true, the stats exporter will export metrics in openmetrics format.
+	// else the exporter will export in the JSON format.
+	exportOpenmetrics bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -182,6 +185,10 @@ func (t *testImpl) Cockroach() string {
 	})
 
 	return t.randomizedCockroach
+}
+
+func (t *testImpl) ExportOpenmetrics() bool {
+	return t.exportOpenmetrics
 }
 
 func (t *testImpl) RuntimeAssertionsCockroach() string {
