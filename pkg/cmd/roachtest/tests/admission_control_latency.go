@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -82,11 +84,9 @@ type variations struct {
 	splits               int
 	numNodes             int
 	numWorkloadNodes     int
-	partitionSite        bool
 	vcpu                 int
 	disks                int
 	leaseType            registry.LeaseType
-	cleanRestart         bool
 	perturbation         perturbation
 	workload             workloadType
 	acceptableChange     float64
@@ -111,10 +111,10 @@ var leases = []registry.LeaseType{
 func (v variations) String() string {
 	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
 		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"partitionSite: %t, vcpu: %d, disks: %d, leaseType: %s, cloud: %v",
+		"vcpu: %d, disks: %d, leaseType: %s, cloud: %v, perturbation: %s",
 		v.seed, v.fillDuration, v.maxBlockBytes,
 		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.partitionSite, v.vcpu, v.disks, v.leaseType, v.cloud)
+		v.vcpu, v.disks, v.leaseType, v.cloud, v.perturbation)
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -141,12 +141,11 @@ func setupMetamorphic(p perturbation) variations {
 	v.numWorkloadNodes = v.numNodes/numNodesPerWorker + 1
 	v.vcpu = numVCPUs[rng.Intn(len(numVCPUs))]
 	v.disks = numDisks[rng.Intn(len(numDisks))]
-	v.partitionSite = rng.Intn(2) == 0
-	v.cleanRestart = rng.Intn(2) == 0
 	v.cloud = cloudSets[rng.Intn(len(cloudSets))]
 	// TODO(baptist): Temporarily disable the metamorphic tests on other clouds
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
+	p.setupMetamorphic(rng)
 	v.perturbation = p
 	return v
 }
@@ -160,14 +159,12 @@ func setupFull(p perturbation) variations {
 	v.splits = 10000
 	v.numNodes = 12
 	v.numWorkloadNodes = v.numNodes/numNodesPerWorker + 1
-	v.partitionSite = true
 	v.vcpu = 16
 	v.disks = 2
 	v.fillDuration = 10 * time.Minute
 	v.validationDuration = 5 * time.Minute
 	v.perturbationDuration = 10 * time.Minute
 	v.ratioOfMax = 0.5
-	v.cleanRestart = true
 	v.cloud = registry.OnlyGCE
 	v.perturbation = p
 	return v
@@ -184,12 +181,10 @@ func setupDev(p perturbation) variations {
 	v.numWorkloadNodes = 1
 	v.vcpu = 4
 	v.disks = 1
-	v.partitionSite = true
 	v.fillDuration = 20 * time.Second
 	v.validationDuration = 10 * time.Second
 	v.perturbationDuration = 30 * time.Second
 	v.ratioOfMax = 0.5
-	v.cleanRestart = true
 	v.cloud = registry.AllClouds
 	v.perturbation = p
 	return v
@@ -199,32 +194,44 @@ func registerLatencyTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
-	addMetamorphic(r, restart{}, math.Inf(1))
-	addMetamorphic(r, partition{}, math.Inf(1))
+	addMetamorphic(r, &restart{}, math.Inf(1))
+	addMetamorphic(r, &partition{}, math.Inf(1))
 	addMetamorphic(r, addNode{}, 3.0)
-	addMetamorphic(r, decommission{}, 3.0)
+	addMetamorphic(r, &decommission{}, 3.0)
 	addMetamorphic(r, backfill{}, 40.0)
+	addMetamorphic(r, &slowDisk{}, math.Inf(1))
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
-	addFull(r, restart{}, math.Inf(1))
-	addFull(r, partition{}, math.Inf(1))
+	addFull(r, &restart{cleanRestart: true}, math.Inf(1))
+	addFull(r, &partition{partitionSite: true}, math.Inf(1))
 	addFull(r, addNode{}, 3.0)
-	addFull(r, decommission{}, 3.0)
+	addFull(r, &decommission{drain: true}, 3.0)
 	addFull(r, backfill{}, 40.0)
+	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
-	addDev(r, restart{}, math.Inf(1))
-	addDev(r, partition{}, math.Inf(1))
+	addDev(r, &restart{cleanRestart: true}, math.Inf(1))
+	addDev(r, &partition{partitionSite: true}, math.Inf(1))
 	addDev(r, addNode{}, math.Inf(1))
-	addDev(r, decommission{}, math.Inf(1))
+	addDev(r, &decommission{drain: true}, math.Inf(1))
 	addDev(r, backfill{}, math.Inf(1))
+	addDev(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
 	// NB: We use low memory to force non-cache disk reads earlier.
-	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low))
+	// TODO(baptist): Allow the non-disk tests to reuse the cluster.
+	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low), spec.ReuseNone())
+}
+
+func (v variations) perturbationName() string {
+	t := reflect.TypeOf(v.perturbation)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.Name()
 }
 
 func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
@@ -233,7 +240,7 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
 	// a given seed.
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/metamorphic/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
@@ -248,7 +255,7 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 	v := setupFull(p)
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/full/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
@@ -263,7 +270,7 @@ func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
 	v := setupDev(p)
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/dev/%s", reflect.TypeOf(p).Name()),
+		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
 		Suites:           registry.ManualOnly,
 		Owner:            registry.OwnerKV,
@@ -274,6 +281,9 @@ func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
 }
 
 type perturbation interface {
+	// setupMetamorphic is called at the start of the test to randomize the perturbation.
+	setupMetamorphic(rng *rand.Rand)
+
 	// startTargetNode is called for custom logic starting the target node(s).
 	// Some of the perturbations need special logic for starting the target
 	// node.
@@ -296,6 +306,8 @@ type perturbation interface {
 type backfill struct{}
 
 var _ perturbation = backfill{}
+
+func (b backfill) setupMetamorphic(rng *rand.Rand) {}
 
 // startTargetNode starts the target node and creates the backfill table.
 func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -351,21 +363,90 @@ func (b backfill) endPerturbation(ctx context.Context, t test.Test, v variations
 	return v.validationDuration
 }
 
+type slowDisk struct {
+	// slowLiveness will place the liveness range on the slow node (may not be the slow disk).
+	slowLiveness bool
+	// walFailover will add add WAL failover to the slow node.
+	walFailover bool
+	staller     roachtestutil.DiskStaller
+}
+
+var _ perturbation = &slowDisk{}
+
+func (s *slowDisk) setupMetamorphic(rng *rand.Rand) {
+	s.slowLiveness = rng.Intn(2) == 0
+	s.walFailover = rng.Intn(2) == 0
+}
+
+func (s *slowDisk) String() string {
+	return fmt.Sprintf("slowDisk{slowLiveness: %t, walFailover: %t}", s.slowLiveness, s.walFailover)
+}
+
+// startTargetNode implements perturbation.
+func (s *slowDisk) startTargetNode(ctx context.Context, t test.Test, v variations) {
+	extraArgs := []string{}
+	if s.walFailover && v.disks > 1 {
+		extraArgs = append(extraArgs, "--wal-failover=among-stores")
+	}
+	v.startNoBackup(ctx, t, v.targetNodes(), extraArgs...)
+
+	if s.slowLiveness {
+		// TODO(baptist): Handle multiple target nodes.
+		target := v.targetNodes()[0]
+		db := v.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		cmd := fmt.Sprintf(`ALTER RANGE liveness CONFIGURE ZONE USING CONSTRAINTS='{"+node%d":1}', lease_preferences='[[+node%d]]'`, target, target)
+		_, err := db.ExecContext(ctx, cmd)
+		require.NoError(t, err)
+	}
+
+	if v.IsLocal() {
+		s.staller = roachtestutil.NoopDiskStaller{}
+	} else {
+		s.staller = roachtestutil.MakeCgroupDiskStaller(t, v, false /* readsToo */, false /* logsToo */)
+	}
+}
+
+// startPerturbation implements perturbation.
+func (s *slowDisk) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+	// TODO(baptist): Do this more dynamically?
+	s.staller.Slow(ctx, v.targetNodes(), 20_000_000)
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
+}
+
+// endPerturbation implements perturbation.
+func (s *slowDisk) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+	s.staller.Unstall(ctx, v.targetNodes())
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
+}
+
 // restart will gracefully stop and then restart a node after a custom duration.
-type restart struct{}
+type restart struct {
+	cleanRestart bool
+}
 
-var _ perturbation = restart{}
+var _ perturbation = &restart{}
 
-func (r restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (r *restart) String() string {
+	return fmt.Sprintf("restart{cleanRestart: %t}", r.cleanRestart)
+}
+
+func (r *restart) setupMetamorphic(rng *rand.Rand) {
+	r.cleanRestart = rng.Intn(2) == 0
+}
+
+func (r *restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
 // startPerturbation stops the target node with a graceful shutdown.
-func (r restart) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+func (r *restart) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	gracefulOpts := option.DefaultStopOpts()
 	// SIGTERM for clean shutdown
-	if v.cleanRestart {
+	if r.cleanRestart {
 		gracefulOpts.RoachprodOpts.Sig = 15
 	} else {
 		gracefulOpts.RoachprodOpts.Sig = 9
@@ -373,7 +454,7 @@ func (r restart) startPerturbation(ctx context.Context, t test.Test, v variation
 	gracefulOpts.RoachprodOpts.Wait = true
 	v.Stop(ctx, t.L(), gracefulOpts, v.targetNodes())
 	waitDuration(ctx, v.perturbationDuration)
-	if v.cleanRestart {
+	if r.cleanRestart {
 		return timeutil.Since(startTime)
 	}
 	// If it is not a clean restart, we ignore the first 10 seconds to allow for lease movement.
@@ -388,10 +469,10 @@ func (r restart) endPerturbation(ctx context.Context, t test.Test, v variations)
 	return timeutil.Since(startTime)
 }
 
-// partition nodes in the first region.
-func (v variations) withPartitionedNodes(c cluster.Cluster) install.RunOptions {
+// partition either the first node or all nodes in the first region.
+func (v variations) withPartitionedNodes(c cluster.Cluster, partitionSite bool) install.RunOptions {
 	numPartitionNodes := 1
-	if v.partitionSite {
+	if partitionSite {
 		numPartitionNodes = v.numNodes / NUM_REGIONS
 	}
 	return option.WithNodes(c.Range(1, numPartitionNodes))
@@ -399,22 +480,34 @@ func (v variations) withPartitionedNodes(c cluster.Cluster) install.RunOptions {
 
 // partition will partition the target node from either one other node or all
 // other nodes in a different AZ.
-type partition struct{}
+type partition struct {
+	partitionSite bool
+}
 
-var _ perturbation = partition{}
+var _ perturbation = &partition{}
 
-func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (p *partition) String() string {
+	return fmt.Sprintf("partition{partitionSite: %t}", p.partitionSite)
+}
+
+func (p *partition) setupMetamorphic(rng *rand.Rand) {
+	p.partitionSite = rng.Intn(2) == 0
+}
+
+func (p *partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
-func (p partition) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+func (p *partition) startPerturbation(
+	ctx context.Context, t test.Test, v variations,
+) time.Duration {
 	targetIPs, err := v.InternalIP(ctx, t.L(), v.targetNodes())
 	require.NoError(t, err)
 
 	if !v.IsLocal() {
 		v.Run(
 			ctx,
-			v.withPartitionedNodes(v),
+			v.withPartitionedNodes(v, p.partitionSite),
 			fmt.Sprintf(
 				`sudo iptables -A INPUT -p tcp -s %s -j DROP`, targetIPs[0]))
 	}
@@ -424,10 +517,10 @@ func (p partition) startPerturbation(ctx context.Context, t test.Test, v variati
 	return v.perturbationDuration - 20*time.Second
 }
 
-func (p partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+func (p *partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	if !v.IsLocal() {
-		v.Run(ctx, v.withPartitionedNodes(v), `sudo iptables -F`)
+		v.Run(ctx, v.withPartitionedNodes(v, p.partitionSite), `sudo iptables -F`)
 	}
 	waitDuration(ctx, v.validationDuration)
 	return timeutil.Since(startTime)
@@ -438,6 +531,8 @@ func (p partition) endPerturbation(ctx context.Context, t test.Test, v variation
 type addNode struct{}
 
 var _ perturbation = addNode{}
+
+func (addNode) setupMetamorphic(rng *rand.Rand) {}
 
 func (addNode) startTargetNode(ctx context.Context, t test.Test, v variations) {
 }
@@ -461,32 +556,43 @@ func (addNode) endPerturbation(ctx context.Context, t test.Test, v variations) t
 }
 
 // restart will gracefully stop and then restart a node after a custom duration.
-type decommission struct{}
+type decommission struct {
+	drain bool
+}
 
-var _ perturbation = restart{}
+var _ perturbation = &decommission{}
 
-func (d decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (d *decommission) String() string {
+	return fmt.Sprintf("decommission{drain: %t}", d.drain)
+}
+
+func (d *decommission) setupMetamorphic(rng *rand.Rand) {
+	d.drain = rng.Intn(2) == 0
+}
+
+func (d *decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
-func (d decommission) startPerturbation(
+func (d *decommission) startPerturbation(
 	ctx context.Context, t test.Test, v variations,
 ) time.Duration {
 	startTime := timeutil.Now()
 	// TODO(baptist): If we want to support multiple decommissions in parallel,
 	// run drain and decommission in separate goroutine.
-	t.L().Printf("draining target nodes")
-	for _, node := range v.targetNodes() {
-		drainCmd := fmt.Sprintf(
-			"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
-			install.CockroachNodeCertsDir,
-			node,
-		)
-		v.Run(ctx, option.WithNodes(v.Node(node)), drainCmd)
+	if d.drain {
+		t.L().Printf("draining target nodes")
+		for _, node := range v.targetNodes() {
+			drainCmd := fmt.Sprintf(
+				"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
+				install.CockroachNodeCertsDir,
+				node,
+			)
+			v.Run(ctx, option.WithNodes(v.Node(node)), drainCmd)
+		}
+		// Wait for all the other nodes to see the drain over gossip.
+		time.Sleep(10 * time.Second)
 	}
-
-	// Wait for all the other nodes to see the drain over gossip.
-	time.Sleep(10 * time.Second)
 
 	t.L().Printf("decommissioning nodes")
 	for _, node := range v.targetNodes() {
@@ -505,7 +611,7 @@ func (d decommission) startPerturbation(
 
 // endPerturbation already waited for completion as part of start, so it doesn't
 // need to wait again here.
-func (d decommission) endPerturbation(
+func (d *decommission) endPerturbation(
 	ctx context.Context, t test.Test, v variations,
 ) time.Duration {
 	waitDuration(ctx, v.validationDuration)
@@ -794,7 +900,9 @@ func isAcceptableChange(
 }
 
 // startNoBackup starts the nodes without enabling backup.
-func (v variations) startNoBackup(ctx context.Context, t test.Test, nodes option.NodeListOption) {
+func (v variations) startNoBackup(
+	ctx context.Context, t test.Test, nodes option.NodeListOption, extraArgs ...string,
+) {
 	nodesPerRegion := v.numNodes / NUM_REGIONS
 	for _, node := range nodes {
 		// Don't start a backup schedule because this test is timing sensitive.
@@ -802,6 +910,7 @@ func (v variations) startNoBackup(ctx context.Context, t test.Test, nodes option
 		opts.RoachprodOpts.StoreCount = v.disks
 		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--locality=region=fake-%d", (node-1)/nodesPerRegion))
+		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, extraArgs...)
 		v.Start(ctx, t.L(), opts, install.MakeClusterSettings(), v.Node(node))
 	}
 }

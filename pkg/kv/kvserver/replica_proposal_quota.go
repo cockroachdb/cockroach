@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -211,7 +210,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// to consider progress beyond it as meaningful.
 	minIndex := kvpb.RaftIndex(status.Applied)
 
-	r.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, progress tracker.Progress) {
+	r.mu.internalRaftGroup.WithBasicProgress(func(id raftpb.PeerID, progress tracker.BasicProgress) {
 		rep, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
 			return
