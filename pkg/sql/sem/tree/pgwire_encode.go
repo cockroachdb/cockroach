@@ -32,17 +32,6 @@ func ResolveBlankPaddedChar(s string, t *types.T) string {
 	return s
 }
 
-// ResolveBlankPaddedCharBytes is similar to ResolveBlankPaddedChar but operates
-// on a slice of bytes instead of a string.
-func ResolveBlankPaddedCharBytes(v []byte, t *types.T) []byte {
-	if t.Oid() == oid.T_bpchar && len(v) < int(t.Width()) {
-		// Pad spaces on the right of the byte slice to make it of length
-		// specified in the type t.
-		return append(v, bytes.Repeat([]byte(" "), int(t.Width())-len(v))...)
-	}
-	return v
-}
-
 func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 	// When converting a tuple to text in "postgres mode" there is
 	// special behavior: values are printed in "postgres mode" then the
