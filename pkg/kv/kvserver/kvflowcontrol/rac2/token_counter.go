@@ -322,6 +322,10 @@ func (t *tokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -331,7 +335,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, flag)
+	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -585,10 +589,14 @@ func (t *tokenCounter) adjust(
 	flag TokenAdjustFlag,
 ) {
 	now := t.clock.PhysicalTime()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, flag)
+		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
 	}()
 
 }
@@ -599,6 +607,7 @@ func (t *tokenCounter) adjustLocked(
 	delta kvflowcontrol.Tokens,
 	now time.Time,
 	flag TokenAdjustFlag,
+	expensiveLog bool,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -623,11 +632,9 @@ func (t *tokenCounter) adjustLocked(
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
 	}
-	if log.V(2) {
-		func() {
-			log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-				t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
-		}()
+	if expensiveLog {
+		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
 	}
 }
 
