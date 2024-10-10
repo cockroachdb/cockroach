@@ -189,9 +189,9 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2 AND i = 1
 ----
-memo (optimized, ~9KB, required=[presentation: info:6] [distribution: test])
+memo (optimized, ~9KB, required=[presentation: info:8] [distribution: test])
  ├── G1: (explain G2 [presentation: i:1,j:2,k:3] [distribution: test])
- │    └── [presentation: info:6] [distribution: test]
+ │    └── [presentation: info:8] [distribution: test]
  │         ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
  │         └── cost: 9.18
  ├── G2: (select G3 G4) (select G5 G6)

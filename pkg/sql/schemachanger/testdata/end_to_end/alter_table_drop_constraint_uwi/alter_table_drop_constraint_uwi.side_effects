@@ -67,6 +67,8 @@ upsert descriptor #104
   +      columns:
   +        "1": i
   +        "2": j
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
   +        "4294967294": tableoid
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
@@ -140,6 +142,8 @@ upsert descriptor #104
   -      columns:
   -        "1": i
   -        "2": j
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
   -        "4294967294": tableoid
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:

@@ -622,7 +622,10 @@ func (d *eventDecoder) initForKey(
 // In particular, when decoding previous row, we strip table OID column
 // since it makes little sense to include it in the previous row value.
 var systemColumns = []descpb.ColumnDescriptor{
-	colinfo.MVCCTimestampColumnDesc, colinfo.TableOIDColumnDesc,
+	colinfo.MVCCTimestampColumnDesc,
+	colinfo.TableOIDColumnDesc,
+	colinfo.OriginIDColumnDesc,
+	colinfo.OriginTimestampColumnDesc,
 }
 
 type fetcher struct {

@@ -301,14 +301,14 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@def_e_decimal_pkey
-    │ lookup condition: (column11 >= e) AND (b = f)
+    │ lookup condition: (column15 >= e) AND (b = f)
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -330,14 +330,14 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@desc_idx
-    │ lookup condition: (column11 >= e) AND (b = f)
+    │ lookup condition: (column15 >= e) AND (b = f)
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -381,15 +381,15 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@desc_idx
     │ equality: (b) = (f)
-    │ pred: column11 > e
+    │ pred: column15 > e
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -705,7 +705,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 99
 │ table: books2@books2_pkey
-│ equality: (book, lookup_join_const_col_@7) = (title, edition)
+│ equality: (book, lookup_join_const_col_@9) = (title, edition)
 │ equality cols are key
 │
 └── • render
@@ -2093,15 +2093,15 @@ vectorized: true
     │ columns: (pk, col0, col3)
     │
     └── • lookup join (semi)
-        │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
+        │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
         │ estimated row count: 10 (missing stats)
         │ table: tab4@tab4_col3_col4_key
-        │ equality: (col0, lookup_join_const_col_@15) = (col3, col4)
+        │ equality: (col0, lookup_join_const_col_@17) = (col3, col4)
         │ equality cols are key
         │
         └── • render
-            │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
-            │ render lookup_join_const_col_@15: 495.6
+            │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
+            │ render lookup_join_const_col_@17: 495.6
             │ render pk: pk
             │ render col0: col0
             │ render col3: col3
@@ -2266,7 +2266,7 @@ vectorized: true
     │ estimated row count: 33
     │ table: def_e_decimal@def_e_decimal_pkey
     │ equality: (b) = (f)
-    │ pred: column11 >= e
+    │ pred: column15 >= e
     │
     └── • render
         │

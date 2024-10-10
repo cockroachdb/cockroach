@@ -27,7 +27,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: db.sc.t
-## StatementPhase stage 1 of 1 with 38 MutationType ops
+## StatementPhase stage 1 of 1 with 46 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -49,7 +49,7 @@ delete comment TableCommentType(objID: 107, subID: 0)
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 40 MutationType ops
+## PreCommitPhase stage 2 of 2 with 48 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
