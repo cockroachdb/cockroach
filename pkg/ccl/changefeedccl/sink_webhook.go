@@ -74,15 +74,17 @@ type webhookSinkPayload struct {
 }
 
 type encodedPayload struct {
-	data     []byte
-	alloc    kvevent.Alloc
-	emitTime time.Time
-	mvcc     hlc.Timestamp
+	data        []byte
+	alloc       kvevent.Alloc
+	emitTime    time.Time
+	mvcc        hlc.Timestamp
+	recordCount int
 }
 
 func encodePayloadJSONWebhook(messages []deprecatedMessagePayload) (encodedPayload, error) {
 	result := encodedPayload{
-		emitTime: timeutil.Now(),
+		emitTime:    timeutil.Now(),
+		recordCount: len(messages),
 	}
 
 	payload := make([]json.RawMessage, len(messages))
@@ -546,7 +548,7 @@ func (s *deprecatedWebhookSink) workerLoop(workerIndex int) {
 				s.exitWorkersWithError(err)
 				return
 			}
-			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data); err != nil {
+			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data, encoded.recordCount); err != nil {
 				s.exitWorkersWithError(err)
 				return
 			}
@@ -557,9 +559,19 @@ func (s *deprecatedWebhookSink) workerLoop(workerIndex int) {
 	}
 }
 
-func (s *deprecatedWebhookSink) sendMessageWithRetries(ctx context.Context, reqBody []byte) error {
+func (s *deprecatedWebhookSink) sendMessageWithRetries(
+	ctx context.Context, reqBody []byte, recordCount int,
+) error {
+	firstTry := true
 	requestFunc := func() error {
+		if firstTry {
+			firstTry = false
+		} else {
+			s.metrics.recordInternalRetry(int64(recordCount), false)
+		}
+
 		return s.sendMessage(ctx, reqBody)
+
 	}
 	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
 }
@@ -682,7 +694,7 @@ func (s *deprecatedWebhookSink) EmitResolvedTimestamp(
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
 	// in order)
-	if err := s.sendMessageWithRetries(ctx, payload); err != nil {
+	if err := s.sendMessageWithRetries(ctx, payload, 1); err != nil {
 		s.exitWorkersWithError(err)
 		return err
 	}

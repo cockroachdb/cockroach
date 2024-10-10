@@ -925,6 +925,7 @@
 <tr><td>APPLICATION</td><td>changefeed.schemafeed.table_history_scans</td><td>The number of table history scans during polling</td><td>Counts</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.schemafeed.table_metadata_nanos</td><td>Time blocked while verifying table metadata histories</td><td>Nanoseconds</td><td>COUNTER</td><td>NANOSECONDS</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.sink_batch_hist_nanos</td><td>Time spent batched in the sink buffer before being flushed and acknowledged</td><td>Changefeeds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>changefeed.sink_errors</td><td>Number of changefeed errors caused by the sink</td><td>Count</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.sink_io_inflight</td><td>The number of keys currently inflight as IO requests being sent to the sink</td><td>Messages</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.size_based_flushes</td><td>Total size based flushes across all feeds</td><td>Flushes</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.total_ranges</td><td>The total number of ranges being watched by changefeed aggregators</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
