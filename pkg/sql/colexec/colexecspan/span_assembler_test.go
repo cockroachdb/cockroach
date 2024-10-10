@@ -109,7 +109,9 @@ func TestSpanAssembler(t *testing.T) {
 									converter := colconv.NewAllVecToDatumConverter(len(typs))
 
 									var builder span.Builder
-									builder.Init(&evalCtx, codec, testTable, testTable.GetPrimaryIndex())
+									builder.InitAllowingExternalRowData(
+										&evalCtx, codec, testTable, testTable.GetPrimaryIndex(),
+									)
 									splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
 									var fetchSpec fetchpb.IndexFetchSpec

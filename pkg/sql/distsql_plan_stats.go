@@ -333,7 +333,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	}
 
 	var sb span.Builder
-	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
+	sb.InitAllowingExternalRowData(
+		planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
+	)
 
 	var stat *stats.TableStatistic
 	var histogram []cat.HistogramBucket
@@ -532,7 +534,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return nil, err
 	}
 	var sb span.Builder
-	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
+	sb.InitAllowingExternalRowData(
+		planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
+	)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
