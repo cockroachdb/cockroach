@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3282,10 +3284,10 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	})
 }
 
-// TestFlowControlQuiescedRangeV2 tests flow token behavior when ranges are
-// quiesced. It ensures that we have timely returns of flow tokens even when
-// there's no raft traffic to piggyback token returns on top of.
-func TestFlowControlQuiescedRangeV2(t *testing.T) {
+// TestFlowControlTokenReturnsPiggybackedV2 tests that flow tokens are returned
+// by the piggybacking and the fallback dispatch mechanisms. It also ensures
+// that the range does not quiesce until all deducted flow tokens are returned.
+func TestFlowControlTokenReturnsPiggybackedV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3295,35 +3297,41 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 	}, func(t *testing.T, v2EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel) {
 		ctx := context.Background()
 		var disableWorkQueueGranting atomic.Bool
+		var disablePiggybackTokenDispatch atomic.Bool
 		var disableFallbackTokenDispatch atomic.Bool
 		disableWorkQueueGranting.Store(true)
+		disablePiggybackTokenDispatch.Store(true)
 		disableFallbackTokenDispatch.Store(true)
 
 		settings := cluster.MakeTestingClusterSettings()
 		// Override metamorphism to allow range quiescence.
 		kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, false)
+		pinnedLease := kvserver.NewPinnedLeases()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Settings: settings,
 				RaftConfig: base.RaftConfig{
-					// Suppress timeout-based elections. This test doesn't want to
-					// deal with leadership changing hands.
+					// Suppress timeout-based elections. This test doesn't want to deal
+					// with leadership changing hands.
 					RaftElectionTimeoutTicks: 1000000,
 				},
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						// Pin the lease to the first store to prevent lease and leader
+						// moves which disrupt this test.
+						PinnedLeases: pinnedLease,
+
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 								return v2EnabledWhenLeaderLevel
 							},
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
-								// This test asserts on the exact values of tracked
-								// tokens. In non-test code, the tokens deducted are
-								// a few bytes off (give or take) from the size of
-								// the proposals. We don't care about such
-								// differences.
+								// This test asserts on the exact values of tracked tokens. In
+								// non-test code, the tokens deducted are a few bytes off (give
+								// or take) from the size of the proposals. We don't care about
+								// such differences.
 								return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 							},
 						},
@@ -3339,8 +3347,7 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 							return disableFallbackTokenDispatch.Load()
 						},
 						DisablePiggyBackedFlowTokenDispatch: func() bool {
-							// We'll only test using the fallback token mechanism.
-							return true
+							return disablePiggybackTokenDispatch.Load()
 						},
 					},
 				},
@@ -3349,13 +3356,15 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		k := tc.ScratchRange(t)
+		desc, err := tc.LookupRange(k)
+		require.NoError(t, err)
+		pinnedLease.PinLease(desc.RangeID, tc.GetFirstStoreFromServer(t, 0).StoreID())
+
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 		h := newFlowControlTestHelperV2(t, tc, v2EnabledWhenLeaderLevel)
 		h.init()
 		defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, "quiesced_range"))
 
-		desc, err := tc.LookupRange(k)
-		require.NoError(t, err)
 		h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
 		n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -3376,32 +3385,30 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 		require.NotNil(t, leader)
 		require.False(t, leader.IsQuiescent())
 
+		h.dropAdmissionsFromRaftMessages(desc.RangeID)
 		h.comment(`
--- (Allow below-raft admission to proceed. We've disabled the fallback token
--- dispatch mechanism so no tokens are returned yet -- quiesced ranges don't
--- use the piggy-backed token return mechanism since there's no raft traffic.)`)
+-- (Allow below-raft admission to proceed, and enable piggybacking. All tokens
+-- are returned via the piggybacking mechanism.)`)
+		disablePiggybackTokenDispatch.Store(false)
 		disableWorkQueueGranting.Store(false)
-
-		h.comment(`
--- Flow token metrics from n1 after work gets admitted but fallback token
--- dispatch mechanism is disabled. Deducted elastic tokens from remote stores
--- are yet to be returned. Tokens for the local store are.
-`)
-		h.waitForTotalTrackedTokens(ctx, desc.RangeID, 2<<20 /* 2*1MiB=2MiB */, 0 /* serverIdx */)
-		h.query(n1, v2FlowTokensQueryStr)
-
-		h.comment(`-- (Enable the fallback token dispatch mechanism.)`)
-		disableFallbackTokenDispatch.Store(false)
 		h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
-
-		h.comment(`
--- Flow token metrics from n1 after work gets admitted and all elastic tokens
--- are returned through the fallback mechanism. 
-`)
 		h.query(n1, v2FlowTokensQueryStr)
 
-		// The range eventually quiesces because all the tokens have been returned.
-		h.comment(`-- (Wait for range to quiesce.)`)
+		h.comment(`-- (Issuing another 1x1MiB write, 3x replicated. Not admitted.)`)
+		disableWorkQueueGranting.Store(true)
+		disablePiggybackTokenDispatch.Store(true)
+		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.BulkNormalPri)
+		h.query(n1, v2FlowTokensQueryStr)
+
+		h.comment(`
+-- (Allow below-raft admission to proceed, and only enable the fallback dispatch
+-- mechanism. All tokens are returned via the fallback mechanism.)`)
+		disableFallbackTokenDispatch.Store(false)
+		disableWorkQueueGranting.Store(false)
+		h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
+		h.query(n1, v2FlowTokensQueryStr)
+
+		h.comment(`-- (Now the range can quiesce. Wait for it.)`)
 		testutils.SucceedsSoon(t, func() error {
 			if !leader.IsQuiescent() {
 				return errors.Errorf("%s not quiescent", leader)
@@ -3411,11 +3418,11 @@ func TestFlowControlQuiescedRangeV2(t *testing.T) {
 	})
 }
 
-// TestFlowControlUnquiescedRangeV2 tests flow token behavior when ranges are
-// unquiesced. It's a sort of roundabout test to ensure that flow tokens are
-// returned through the raft transport piggybacking mechanism, piggybacking on
-// raft heartbeats.
-func TestFlowControlUnquiescedRangeV2(t *testing.T) {
+// TestFlowControlTokenReturnsV2 tests that flow tokens are reliably returned
+// via the normal flow of MsgApp and MsgAppResp messages, with MsgApp pings if
+// the admissions are lagging. It also ensures that the range does not quiesce
+// until all deducted flow tokens are returned.
+func TestFlowControlTokenReturnsV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3425,13 +3432,12 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	}, func(t *testing.T, v2EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel) {
 		ctx := context.Background()
 		var disableWorkQueueGranting atomic.Bool
-		var disablePiggybackTokenDispatch atomic.Bool
 		disableWorkQueueGranting.Store(true)
-		disablePiggybackTokenDispatch.Store(true)
 
 		settings := cluster.MakeTestingClusterSettings()
 		// Override metamorphism to allow range quiescence.
 		kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, false)
+		pinnedLease := kvserver.NewPinnedLeases()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -3444,17 +3450,20 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						// Pin the lease to the first store to prevent lease and leader
+						// moves which disrupt this test.
+						PinnedLeases: pinnedLease,
+
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
 								return v2EnabledWhenLeaderLevel
 							},
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
-								// This test asserts on the exact values of tracked
-								// tokens. In non-test code, the tokens deducted are
-								// a few bytes off (give or take) from the size of
-								// the proposals. We don't care about such
-								// differences.
+								// This test asserts on the exact values of tracked tokens. In
+								// non-test code, the tokens deducted are a few bytes off (give
+								// or take) from the size of the proposals. We don't care about
+								// such differences.
 								return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 							},
 						},
@@ -3466,13 +3475,10 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 						},
 					},
 					RaftTransport: &kvserver.RaftTransportTestingKnobs{
-						DisableFallbackFlowTokenDispatch: func() bool {
-							// We'll only test using the piggy-back token mechanism.
-							return true
-						},
-						DisablePiggyBackedFlowTokenDispatch: func() bool {
-							return disablePiggybackTokenDispatch.Load()
-						},
+						// Test only the MsgApp / MsgAppResp flow, with the piggybacked
+						// token return channel fully disabled.
+						DisableFallbackFlowTokenDispatch:    func() bool { return true },
+						DisablePiggyBackedFlowTokenDispatch: func() bool { return true },
 					},
 				},
 			},
@@ -3480,13 +3486,15 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		k := tc.ScratchRange(t)
+		desc, err := tc.LookupRange(k)
+		require.NoError(t, err)
+		pinnedLease.PinLease(desc.RangeID, tc.GetFirstStoreFromServer(t, 0).StoreID())
+
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 		h := newFlowControlTestHelperV2(t, tc, v2EnabledWhenLeaderLevel)
 		h.init()
 		defer h.close(makeV2EnabledTestFileName(v2EnabledWhenLeaderLevel, "unquiesced_range"))
 
-		desc, err := tc.LookupRange(k)
-		require.NoError(t, err)
 		h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
 		n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -3508,37 +3516,14 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 		require.False(t, leader.IsQuiescent())
 
 		h.comment(`
--- (Allow below-raft admission to proceed. We've disabled the fallback token
--- dispatch mechanism so no tokens are returned yet -- quiesced ranges don't
--- use the piggy-backed token return mechanism since there's no raft traffic.)`)
+-- (Allow below-raft admission to proceed. We've disabled the piggybacked token
+-- return mechanism so no tokens are returned via this path. But the tokens will
+-- be returned anyway because the range is not quiesced and keeps pinging.)`)
 		disableWorkQueueGranting.Store(false)
-
-		h.comment(`
--- Flow token metrics from n1 after work gets admitted but fallback token
--- dispatch mechanism is disabled. Deducted elastic tokens from remote stores
--- are yet to be returned. Tokens for the local store are.
-`)
-		h.waitForTotalTrackedTokens(ctx, desc.RangeID, 2<<20 /* 2*1MiB=2MiB */, 0 /* serverIdx */)
+		h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 		h.query(n1, v2FlowTokensQueryStr)
 
-		h.comment(`-- (Enable the piggyback token dispatch mechanism.)`)
-		disablePiggybackTokenDispatch.Store(false)
-
-		h.comment(`-- (Unquiesce the range.)`)
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.GetRaftLeader(t, roachpb.RKey(k)).MaybeUnquiesceAndPropose()
-			require.NoError(t, err)
-			return h.checkAllTokensReturned(ctx, 3, 0 /* serverIdx */)
-		})
-
-		h.comment(`
--- Flow token metrics from n1 after work gets admitted and all elastic tokens
--- are returned through the piggyback mechanism. 
-`)
-		h.query(n1, v2FlowTokensQueryStr)
-
-		// The range eventually quiesces because all the tokens have been returned.
-		h.comment(`-- (Wait for range to quiesce.)`)
+		h.comment(`-- (Now the range can quiesce. Wait for it.)`)
 		testutils.SucceedsSoon(t, func() error {
 			if !leader.IsQuiescent() {
 				return errors.Errorf("%s not quiescent", leader)
@@ -4796,6 +4781,29 @@ func (h *flowControlTestHelper) enableVerboseRaftMsgLoggingForRange(rangeID roac
 				rangeID:                    rangeID,
 				IncomingRaftMessageHandler: si,
 				unreliableRaftHandlerFuncs: noopRaftHandlerFuncs(),
+			})
+	}
+}
+
+// dropAdmissionInRaftMessages installs a raft handler which wipes admitted
+// vectors from all raft carrying one, for the given range. Can be used to
+// exercise reliability of the admitted vector piggybacking mechanism.
+func (h *flowControlTestHelper) dropAdmissionsFromRaftMessages(rangeID roachpb.RangeID) {
+	for i := 0; i < len(h.tc.Servers); i++ {
+		si, err := h.tc.Server(i).GetStores().(*kvserver.Stores).GetStore(h.tc.Server(i).GetFirstStoreID())
+		require.NoError(h.t, err)
+		h.tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
+			&unreliableRaftHandler{
+				rangeID:                    rangeID,
+				IncomingRaftMessageHandler: si,
+				unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+					dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+						req.AdmittedState = kvflowcontrolpb.AdmittedState{}
+						return false
+					},
+					dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+					dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				},
 			})
 	}
 }
