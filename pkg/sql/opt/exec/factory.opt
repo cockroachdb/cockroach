@@ -739,6 +739,7 @@ define ControlSchedules {
 define CancelQueries {
     Input exec.Node
     IfExists bool
+    Message string
 }
 
 # CancelSessions implements CANCEL SESSIONS.

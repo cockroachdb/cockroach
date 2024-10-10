@@ -356,6 +356,13 @@ func TestRepeatableReadLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
+func TestRepeatableReadLogic_cancel(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cancel")
+}
+
 func TestRepeatableReadLogic_cascade(
 	t *testing.T,
 ) {

@@ -1159,7 +1159,7 @@ func (e *distSQLSpecExecFactory) ConstructControlSchedules(
 }
 
 func (e *distSQLSpecExecFactory) ConstructCancelQueries(
-	input exec.Node, ifExists bool,
+	input exec.Node, ifExists bool, message string,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel queries")
 }

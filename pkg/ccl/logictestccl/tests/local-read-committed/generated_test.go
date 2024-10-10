@@ -356,6 +356,13 @@ func TestReadCommittedLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
+func TestReadCommittedLogic_cancel(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cancel")
+}
+
 func TestReadCommittedLogic_cascade(
 	t *testing.T,
 ) {
