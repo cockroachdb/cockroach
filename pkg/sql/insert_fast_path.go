@@ -109,7 +109,7 @@ func (c *insertFastPathCheck) init(params runParams) error {
 
 	codec := params.ExecCfg().Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
-	c.spanBuilder.Init(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.spanBuilder.InitAllowingExternalRowData(params.EvalContext(), codec, c.tabDesc, c.idx)
 	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, intsets.Fast{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
