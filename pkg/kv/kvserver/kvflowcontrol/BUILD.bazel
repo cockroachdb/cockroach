@@ -18,7 +18,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
-        "//pkg/util/metamorphic",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
     ],
