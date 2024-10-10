@@ -703,12 +703,8 @@ func randDatumsForTable(rng *rand.Rand, td catalog.TableDescriptor) ([]tree.Datu
 		if c.IsComputed() {
 			return nil, errors.Errorf("unable to generate random datums for table with computed column %q", c.GetName())
 		}
-		if c.GetName() == "crdb_replication_origin_timestamp" {
-			datums = append(datums, tree.DNull)
-		} else {
-			datums = append(datums,
-				randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
-		}
+		datums = append(datums,
+			randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
 	}
 	return datums, nil
 }

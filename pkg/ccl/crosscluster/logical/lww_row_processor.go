@@ -38,10 +38,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	originTimestampColumnName = "crdb_replication_origin_timestamp"
-)
-
 // A sqlRowProcessor is a RowProcessor that handles rows using the
 // provided querier.
 type sqlRowProcessor struct {
@@ -71,8 +67,7 @@ type queryBuilder struct {
 
 	// TODO(ssd): It would almost surely be better to track this by column IDs than name.
 	//
-	// TODO(ssd): The management of MVCC Origin Timestamp column is a bit messy. The mess
-	// is caused by column families that don't have that row in the datum.
+	// TODO(ssd): The management of MVCC Origin Timestamp column is a bit messy.
 	//
 	// If the query requires the origin timestamp column, inputColumns should not include the column.
 	// Rather, the query should set needsOriginTimestamp.
@@ -442,22 +437,15 @@ func (m *muxQuerier) RequiresParsedBeforeRow(id catid.DescID) bool {
 	return m.shouldUseUDF[id]
 }
 
-// lwwQuerier is a querier that implements partial
-// last-write-wins semantics using SQL queries. We assume that the table has an
-// crdb_replication_origin_timestamp column defined as:
-//
-//	crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
-//
-// This row is explicitly set by the INSERT query using the MVCC timestamp of
-// the inbound write.
+// lwwQuerier is a querier that implements partial last-write-wins
+// semantics using SQL queries.
 //
 // Known issues:
 //
 //  1. An UPDATE and a DELETE may be applied out of order because we have no way
 //     from SQL of knowing the write timestamp of the deletion tombstone.
-//  2. The crdb_replication_origin_timestamp requires modifying the user's schema.
 //
-// See the design document for possible solutions to both of these problems.
+// See the design document for possible solutions to these problems.
 type lwwQuerier struct {
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
@@ -512,7 +500,10 @@ func (lww *lwwQuerier) InsertRow(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, lww.ieOverrideOptimisticInsert, stmt, datums...); err != nil {
+
+		sess := lww.ieOverrideOptimisticInsert
+		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -531,7 +522,9 @@ func (lww *lwwQuerier) InsertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, lww.ieOverrideInsert, stmt, datums...); err != nil {
+	sess := lww.ieOverrideInsert
+	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -559,7 +552,9 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, lww.ieOverrideDelete, stmt, datums...); err != nil {
+	sess := lww.ieOverrideDelete
+	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, sess, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -574,10 +569,10 @@ VALUES (%s)
 ON CONFLICT (%s)
 DO UPDATE SET
 %s
-WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_replication_origin_timestamp
-     AND t.crdb_replication_origin_timestamp IS NULL)
- OR (t.crdb_replication_origin_timestamp <= excluded.crdb_replication_origin_timestamp
-     AND t.crdb_replication_origin_timestamp IS NOT NULL)`
+WHERE (t.crdb_internal_mvcc_timestamp <= $%[6]d
+    AND t.crdb_internal_origin_timestamp IS NULL)
+ OR (t.crdb_internal_origin_timestamp <= $%[6]d
+ 	AND t.crdb_internal_origin_timestamp IS NOT NULL)`
 )
 
 func sqlEscapedJoin(parts []string, sep string) string {
@@ -613,18 +608,10 @@ func insertColumnNamesForFamily(
 		if col.IsComputed() && !includeComputed {
 			return nil
 		}
-		colName := col.GetName()
-		// We will set crdb_replication_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
-		// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
-		if colName == originTimestampColumnName {
-			return nil
-		}
 		if _, seen := seenIds[colID]; seen {
 			return nil
 		}
-		if colName != originTimestampColumnName {
-			inputColumnNames = append(inputColumnNames, colName)
-		}
+		inputColumnNames = append(inputColumnNames, col.GetName())
 		seenIds[colID] = struct{}{}
 		return nil
 	}
@@ -684,8 +671,7 @@ func makeLWWInsertQueries(
 			addColToQueryParts(name)
 		}
 
-		addColToQueryParts(originTimestampColumnName)
-		valStr := valueStringForNumItems(len(inputColumnNames)+1, 1)
+		valStr := valueStringForNumItems(len(inputColumnNames), 1)
 		parsedOptimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryOptimistic,
 			dstTableDescID,
 			columnNames.String(),
@@ -695,12 +681,14 @@ func makeLWWInsertQueries(
 			return err
 		}
 
+		originTSIdx := len(inputColumnNames) + 1
 		parsedPessimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryPessimistic,
 			dstTableDescID,
 			columnNames.String(),
 			valStr,
 			sqlEscapedJoin(td.TableDesc().PrimaryIndex.KeyColumnNames, ","),
 			onConflictUpdateClause.String(),
+			originTSIdx,
 		))
 		if err != nil {
 			return err
@@ -737,9 +725,9 @@ func makeLWWDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) (query
 	baseQuery := `
 DELETE FROM [%d as t] WHERE %s
    AND ((t.crdb_internal_mvcc_timestamp < $%[3]d
-        AND t.crdb_replication_origin_timestamp IS NULL)
-    OR (t.crdb_replication_origin_timestamp < $%[3]d
-        AND t.crdb_replication_origin_timestamp IS NOT NULL))`
+        AND t.crdb_internal_origin_timestamp IS NULL)
+    OR (t.crdb_internal_origin_timestamp < $%[3]d
+        AND t.crdb_internal_origin_timestamp IS NOT NULL))`
 	stmt, err := parser.ParseOne(
 		fmt.Sprintf(baseQuery, dstTableDescID, whereClause.String(), originTSIdx))
 	if err != nil {

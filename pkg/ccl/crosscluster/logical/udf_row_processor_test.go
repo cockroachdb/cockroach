@@ -85,10 +85,6 @@ func TestUDFWithRandomTables(t *testing.T) {
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
-
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
@@ -130,10 +126,6 @@ func TestUDFInsertOnly(t *testing.T) {
 		END
 		$$ LANGUAGE plpgsql
 		`)
-
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -184,10 +176,6 @@ func TestUDFPreviousValue(t *testing.T) {
 		END
 		$$ LANGUAGE plpgsql
 		`)
-
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
