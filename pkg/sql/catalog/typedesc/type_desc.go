@@ -916,6 +916,22 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 	return nil
 }
 
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *immutable) MaybeRequiresTypeHydration() bool {
+	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
+		return true
+	}
+	if desc.Composite == nil {
+		return false
+	}
+	for _, e := range desc.Composite.Elements {
+		if catid.IsOIDUserDefined(e.ElementType.Oid()) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (ret catalog.DescriptorIDSet) {
 	// Collect the descriptor's own ID.

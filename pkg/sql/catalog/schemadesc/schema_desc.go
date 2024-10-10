@@ -106,6 +106,28 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 	return nil
 }
 
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *immutable) MaybeRequiresTypeHydration() bool {
+	for _, f := range desc.Functions {
+		for _, sig := range f.Signatures {
+			if catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
+				return true
+			}
+			for _, typ := range sig.ArgTypes {
+				if catid.IsOIDUserDefined(typ.Oid()) {
+					return true
+				}
+			}
+			for _, typ := range sig.OutParamTypes {
+				if catid.IsOIDUserDefined(typ.Oid()) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // SafeMessage makes Mutable a SafeMessager.
 func (desc *Mutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.Mutable", desc)

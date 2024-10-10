@@ -226,7 +226,7 @@ func isHydratable(desc catalog.Descriptor) bool {
 		// Don't hydrate dropped descriptors.
 		return false
 	}
-	return catalog.MaybeRequiresHydration(desc)
+	return desc.MaybeRequiresTypeHydration()
 }
 
 // hydrate ensures that type metadata is present in any type.T objects
