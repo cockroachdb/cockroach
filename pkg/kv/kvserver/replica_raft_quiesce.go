@@ -192,7 +192,8 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	if r.store.cfg.TestingKnobs.DisableQuiescence {
 		return false
 	}
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
+	status, lagging, ok := shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
+		ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
 	}
@@ -253,7 +254,7 @@ func (s laggingReplicaSet) Len() int           { return len(s) }
 func (s laggingReplicaSet) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeID }
 
-// shouldReplicaQuiesce determines if a replica should be quiesced. All the
+// shouldReplicaQuiesceRaftMuLockedReplicaMuLocked determines if a replica should be quiesced. All the
 // access to Replica internals is gated by the quiescer interface to facilitate
 // testing. Returns the raft.Status and true on success, and (nil, false) on
 // failure.
@@ -282,7 +283,7 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 // failovers can take longer.
 //
 // NOTE: The last 3 conditions are fairly, but not completely, overlapping.
-func shouldReplicaQuiesce(
+func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context,
 	q quiescer,
 	leaseStatus kvserverpb.LeaseStatus,
@@ -576,7 +577,7 @@ func shouldFollowerQuiesceOnNotify(
 	//
 	// The other two checks that combine to provide this guarantee are:
 	// 1. a leader will not quiesce if it believes any lagging replicas
-	//    are alive (see shouldReplicaQuiesce).
+	//    are alive (see shouldReplicaQuiesceRaftMuLockedReplicaMuLocked).
 	// 2. any up-to-date replica that learns that a lagging replica is
 	//    alive will unquiesce the range (see Store.nodeIsLiveCallback).
 	//
