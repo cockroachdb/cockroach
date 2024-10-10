@@ -81,8 +81,9 @@ type testRaftNode struct {
 	b *strings.Builder
 	r *testReplica
 
-	term   uint64
-	leader roachpb.ReplicaID
+	isLeader bool
+	term     uint64
+	leader   roachpb.ReplicaID
 
 	mark              rac2.LogMark
 	nextUnstableIndex uint64
@@ -252,6 +253,8 @@ func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const replicaID = 5
+
 	ctx := context.Background()
 	var b strings.Builder
 	var r *testReplica
@@ -275,7 +278,7 @@ func TestProcessorBasic(t *testing.T) {
 			NodeID:                 1,
 			StoreID:                2,
 			RangeID:                3,
-			ReplicaID:              5,
+			ReplicaID:              replicaID,
 			Replica:                r,
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
@@ -322,6 +325,7 @@ func TestProcessorBasic(t *testing.T) {
 				if d.HasArg("leader") {
 					var leaderID int
 					d.ScanArgs(t, "leader", &leaderID)
+					r.raftNode.isLeader = leaderID == replicaID
 					r.raftNode.leader = roachpb.ReplicaID(leaderID)
 				}
 				if d.HasArg("next-unstable-index") {
@@ -366,6 +370,7 @@ func TestProcessorBasic(t *testing.T) {
 				if r.raftNode != nil {
 					state = RaftNodeBasicState{
 						Term:              r.raftNode.term,
+						IsLeader:          r.raftNode.isLeader,
 						Leader:            r.raftNode.leader,
 						NextUnstableIndex: r.raftNode.nextUnstableIndex,
 						Leaseholder:       r.leaseholder,
@@ -402,6 +407,7 @@ func TestProcessorBasic(t *testing.T) {
 				if r.raftNode != nil {
 					state = RaftNodeBasicState{
 						Term:              r.raftNode.term,
+						IsLeader:          r.raftNode.isLeader,
 						Leader:            r.raftNode.leader,
 						NextUnstableIndex: r.raftNode.nextUnstableIndex,
 						Leaseholder:       r.leaseholder,
