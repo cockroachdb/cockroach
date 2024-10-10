@@ -493,8 +493,13 @@ func (m *deferredVisitor) MaybeAddSplitForIndex(
 	return nil
 }
 
-func (i *immediateVisitor) AddIndexZoneConfig(
-	ctx context.Context, op scop.AddIndexZoneConfig,
+func (i *immediateVisitor) AddIndexZoneConfig(_ context.Context, op scop.AddIndexZoneConfig) error {
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
+	return nil
+}
+
+func (i *immediateVisitor) AddPartitionZoneConfig(
+	_ context.Context, op scop.AddPartitionZoneConfig,
 ) error {
 	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
 	return nil

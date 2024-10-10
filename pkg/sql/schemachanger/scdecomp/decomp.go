@@ -434,10 +434,19 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
 				w.ev(scpb.Status_PUBLIC,
 					&scpb.IndexZoneConfig{
+						TableID: tbl.GetID(),
+						IndexID: catid.IndexID(subZoneCfg.IndexID),
+						Subzone: subZoneCfg,
+						SeqNum:  0,
+					})
+			}
+			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.PartitionZoneConfig{
 						TableID:       tbl.GetID(),
 						IndexID:       catid.IndexID(subZoneCfg.IndexID),
-						Subzone:       subZoneCfg,
 						PartitionName: subZoneCfg.PartitionName,
+						Subzone:       subZoneCfg,
 						SeqNum:        0,
 					})
 			}

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1732,9 +1733,26 @@ func mustRetrievePhysicalTableElem(b BuildCtx, descID catid.DescID) scpb.Element
 // element.
 func mustRetrieveIndexNameElem(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
-) (indexNameElem *scpb.IndexName) {
+) *scpb.IndexName {
 	return b.QueryByID(tableID).FilterIndexName().
-		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) bool {
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) bool {
 			return e.IndexID == indexID
 		}).MustGetOneElement()
+}
+
+// mustRetrievePartitioningFromIndexPartitioning retrieves the partitioning
+// from the index partitioning element associated with the given tableID
+// and indexID.
+func mustRetrievePartitioningFromIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) catalog.Partitioning {
+	idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
+			return e.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	partition := tabledesc.NewPartitioning(nil)
+	if idxPart != nil {
+		partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
+	}
+	return partition
 }

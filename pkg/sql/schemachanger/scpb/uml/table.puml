@@ -258,7 +258,6 @@ object IndexZoneConfig
 
 IndexZoneConfig :  TableID
 IndexZoneConfig :  IndexID
-IndexZoneConfig :  PartitionName
 IndexZoneConfig :  Subzone
 IndexZoneConfig : []SubzoneSpans
 IndexZoneConfig :  SeqNum
@@ -279,6 +278,15 @@ object Owner
 
 Owner :  DescriptorID
 Owner :  Owner
+
+object PartitionZoneConfig
+
+PartitionZoneConfig :  TableID
+PartitionZoneConfig :  IndexID
+PartitionZoneConfig :  PartitionName
+PartitionZoneConfig :  Subzone
+PartitionZoneConfig : []SubzoneSpans
+PartitionZoneConfig :  SeqNum
 
 object PrimaryIndex
 
@@ -498,6 +506,7 @@ Database <|-- Owner
 Schema <|-- Owner
 AliasType <|-- Owner
 EnumType <|-- Owner
+TablePartitioning <|-- PartitionZoneConfig
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelTTL

@@ -193,7 +193,7 @@ translate database=db table=partition_by_list
 
 exec-sql
 CREATE TABLE db.test(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
-  PARTITION one_and_five    VALUES IN (1, 5)
+  PARTITION one_and_five VALUES IN (1, 5)
 );
 ----
 
@@ -218,3 +218,38 @@ translate database=db table=test
 /Table/110/1/{5-6}                         ttl_seconds=3 num_replicas=4
 /Table/110/{1/6-2}                         num_replicas=4
 /Table/11{0/2-1}                           range default
+
+exec-sql
+CREATE TABLE db.part (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data) PARTITION BY LIST (data) (
+        PARTITION p1 VALUES IN (10, 20, 30),
+        PARTITION p2 VALUES IN (40, 50, 60)
+    )
+);
+----
+
+exec-sql
+ALTER PARTITION p1 OF index db.part@idx CONFIGURE ZONE USING num_replicas = 10;
+----
+
+exec-sql
+ALTER PARTITION p2 OF index db.part@idx CONFIGURE ZONE USING num_replicas = 11;
+----
+
+translate database=db table=part
+----
+/Table/111{-/2/10}                         range default
+/Table/111/2/1{0-1}                        num_replicas=10
+/Table/111/2/{11-20}                       range default
+/Table/111/2/2{0-1}                        num_replicas=10
+/Table/111/2/{21-30}                       range default
+/Table/111/2/3{0-1}                        num_replicas=10
+/Table/111/2/{31-40}                       range default
+/Table/111/2/4{0-1}                        num_replicas=11
+/Table/111/2/{41-50}                       range default
+/Table/111/2/5{0-1}                        num_replicas=11
+/Table/111/2/{51-60}                       range default
+/Table/111/2/6{0-1}                        num_replicas=11
+/Table/11{1/2/61-2}                        range default

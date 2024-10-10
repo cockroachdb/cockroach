@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -371,26 +370,6 @@ func loadSettingsToZoneConfigs(
 	return nil
 }
 
-// fillIndexAndPartitionFromZoneSpecifier fills out the index id in the zone
-// specifier for a indexZoneConfigObj.
-func fillIndexAndPartitionFromZoneSpecifier(
-	b BuildCtx, zs tree.ZoneSpecifier, idxObj *indexZoneConfigObj,
-) {
-	tableID := idxObj.getTargetID()
-
-	indexName := string(zs.TableOrIndex.Index)
-	var indexID catid.IndexID
-	if indexName == "" {
-		// Use the primary index if index name is unspecified.
-		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
-		indexID = primaryIndexElem.IndexID
-	} else {
-		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
-	}
-	idxObj.indexID = indexID
-}
-
 // lookUpSystemZonesTable attempts to look up the zone config in `system.zones`
 // table by `targetID`.
 // If `targetID` is not found, a nil `zone` is returned.
@@ -682,16 +661,10 @@ func generateSubzoneSpans(
 	// pretty sane. Dropped elements may refer to dropped types and we aren't
 	// necessarily in a position to deal with those dropped types. Add a special
 	// case to avoid generating any subzone spans in the face of being dropped.
-	isDroppedTable := false
-	b.QueryByID(tableID).FilterTable().
-		ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.Table) {
-			if e.TableID == tableID {
-				if current == scpb.Status_DROPPED || target == scpb.ToAbsent {
-					isDroppedTable = true
-				}
-			}
-		})
-	if isDroppedTable {
+	droppedTable := b.QueryByID(tableID).FilterTable().Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.Table) bool {
+		return e.TableID == tableID && (current == scpb.Status_DROPPED || target == scpb.ToAbsent)
+	})
+	if droppedTable.Size() != 0 {
 		return nil, nil
 	}
 
@@ -705,14 +678,37 @@ func generateSubzoneSpans(
 		}
 	}
 
+	a := &tree.DatumAlloc{}
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	b.QueryByID(tableID).FilterIndexName().ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-		newIndexCovering, newPartitionCoverings := getCoverings(b, subzoneIndexByIndexID,
-			subzoneIndexByPartition, tableID, e.IndexID, "")
-		indexCovering = append(indexCovering, newIndexCovering...)
-		partitionCoverings = append(partitionCoverings, newPartitionCoverings...)
-	})
+	var err error
+	b.QueryByID(tableID).FilterIndexName().NotToAbsent().ForEach(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			_, indexSubzoneExists := subzoneIndexByIndexID[e.IndexID]
+			if indexSubzoneExists {
+				prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, e.IndexID))
+				idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+				// Each index starts with a unique prefix, so (from a precedence
+				// perspective) it's safe to append them all together.
+				indexCovering = append(indexCovering, covering.Range{
+					Start: idxSpan.Key, End: idxSpan.EndKey,
+					Payload: zonepb.Subzone{IndexID: uint32(e.IndexID)},
+				})
+			}
+			var emptyPrefix []tree.Datum
+			index := mustRetrieveIndexColumnElements(b, tableID, e.IndexID)
+			partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, e.IndexID)
+			var indexPartitionCoverings []covering.Covering
+			indexPartitionCoverings, err = indexCoveringsForPartitioning(
+				b, a, tableID, e.IndexID, index, partitioning, subzoneIndexByPartition, emptyPrefix)
+			if err != nil {
+				return
+			}
+			partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
+		})
+	if err != nil {
+		return nil, err
+	}
 
 	// OverlapCoveringMerge returns the payloads for any coverings that overlap
 	// in the same order they were input. So, we require that they be ordered
@@ -751,55 +747,6 @@ func generateSubzoneSpans(
 	return subzoneSpans, nil
 }
 
-func getCoverings(
-	b BuildCtx,
-	subzoneIndexByIndexID map[descpb.IndexID]int32,
-	subzoneIndexByPartition map[string]int32,
-	tableID catid.DescID,
-	indexID catid.IndexID,
-	partitionName string,
-) (covering.Covering, []covering.Covering) {
-	var indexCovering covering.Covering
-	var partitionCoverings []covering.Covering
-	a := &tree.DatumAlloc{}
-	idxCols := mustRetrieveIndexColumnElements(b, tableID, indexID)
-
-	for _, idxCol := range idxCols {
-		_, indexSubzoneExists := subzoneIndexByIndexID[idxCol.IndexID]
-		if indexSubzoneExists {
-			prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, idxCol.IndexID))
-			idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-			// Each index starts with a unique prefix, so (from a precedence
-			// perspective) it's safe to append them all together.
-			indexCovering = append(indexCovering, covering.Range{
-				Start: idxSpan.Key, End: idxSpan.EndKey,
-				Payload: zonepb.Subzone{IndexID: uint32(idxCol.IndexID)},
-			})
-		}
-		var emptyPrefix []tree.Datum
-		idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
-			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
-				return e.TableID == tableID && e.IndexID == indexID
-			}).MustGetZeroOrOneElement()
-		partition := tabledesc.NewPartitioning(nil)
-		if idxPart != nil {
-			partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
-			partition = partition.FindPartitionByName(partitionName)
-		}
-		indexPartitionCoverings, err := indexCoveringsForPartitioning(
-			b, a, tableID, idxCols, partition, subzoneIndexByPartition, emptyPrefix)
-		if err != nil {
-			panic(err)
-		}
-		// The returned indexPartitionCoverings are sorted with highest
-		// precedence first. They all start with the index prefix, so cannot
-		// overlap with the partition coverings for any other index, so (from a
-		// precedence perspective) it's safe to append them all together.
-		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
-	}
-	return indexCovering, partitionCoverings
-}
-
 // indexCoveringsForPartitioning returns span coverings representing the
 // partitions in partDesc (including subpartitions). They are sorted with
 // highest precedence first and the interval.Range payloads are each a
@@ -808,12 +755,13 @@ func indexCoveringsForPartitioning(
 	b BuildCtx,
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
-	idxs []*scpb.IndexColumn,
+	indexID catid.IndexID,
+	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
 	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
 ) ([]covering.Covering, error) {
-	if part == nil || part.NumColumns() == 0 {
+	if part.NumColumns() == 0 {
 		return nil, nil
 	}
 
@@ -832,7 +780,7 @@ func indexCoveringsForPartitioning(
 		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 			for _, valueEncBuf := range values {
 				t, keyPrefix, err := decodePartitionTuple(
-					b, a, tableID, idxs, part, valueEncBuf, prefixDatums)
+					b, a, tableID, indexID, index, part, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
@@ -844,7 +792,7 @@ func indexCoveringsForPartitioning(
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
-					b, a, tableID, idxs, subPartitioning, relevantPartitions, newPrefixDatums)
+					b, a, tableID, indexID, index, subPartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
 					return err
 				}
@@ -868,12 +816,12 @@ func indexCoveringsForPartitioning(
 				return nil
 			}
 			_, fromKey, err := decodePartitionTuple(
-				b, a, tableID, idxs, part, from, prefixDatums)
+				b, a, tableID, indexID, index, part, from, prefixDatums)
 			if err != nil {
 				return err
 			}
 			_, toKey, err := decodePartitionTuple(
-				b, a, tableID, idxs, part, to, prefixDatums)
+				b, a, tableID, indexID, index, part, to, prefixDatums)
 			if err != nil {
 				return err
 			}
@@ -927,6 +875,7 @@ func decodePartitionTuple(
 	b BuildCtx,
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
+	indexID catid.IndexID,
 	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
 	valueEncBuf []byte,
@@ -934,7 +883,7 @@ func decodePartitionTuple(
 ) (*rowenc.PartitionTuple, []byte, error) {
 	keyColumns := b.QueryByID(tableID).FilterIndexColumn().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) bool {
-			return e.Kind == scpb.IndexColumn_KEY
+			return e.IndexID == indexID && e.Kind == scpb.IndexColumn_KEY
 		})
 	if len(prefixDatums)+part.NumColumns() > keyColumns.Size() {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
@@ -1164,4 +1113,18 @@ func prepareZoneConfig(
 		return nil, err
 	}
 	return partialZone, nil
+}
+
+// isCorrespondingTemporaryIndex returns true iff idx is a temporary index
+// created during a backfill and is the corresponding temporary index for
+// otherIdx. It assumes that idx and otherIdx are both indexes from the same
+// table.
+func isCorrespondingTemporaryIndex(
+	b BuildCtx, tableID catid.DescID, idx catid.IndexID, otherIdx catid.IndexID,
+) bool {
+	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
+		}).MustGetZeroOrOneElement()
+	return maybeCorresponding != nil
 }

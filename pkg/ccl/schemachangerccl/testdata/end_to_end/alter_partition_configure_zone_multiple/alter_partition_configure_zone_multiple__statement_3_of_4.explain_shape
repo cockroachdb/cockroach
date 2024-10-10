@@ -1,0 +1,20 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data) PARTITION BY LIST (data) (
+        PARTITION p1 VALUES IN (10, 20, 30),
+        PARTITION p2 VALUES IN (40, 50, 60)
+    )
+) PARTITION BY LIST (id) (
+    PARTITION p3 VALUES IN (1, 2, 3),
+    PARTITION p4 VALUES IN (4, 5, 6)
+);
+
+/* test */
+ALTER PARTITION p3 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 7;
+ALTER PARTITION p3 OF INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 10000;
+EXPLAIN (DDL, SHAPE) ALTER PARTITION p1 OF INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 12000;
+----
+Schema change plan for ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹12000›; following ALTER PARTITION ‹p3› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹7›; ALTER PARTITION ‹p3› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›;
+ └── execute 1 system table mutations transaction
