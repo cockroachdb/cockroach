@@ -7,6 +7,7 @@ package roachpb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"math"
 	"math/rand"
@@ -1936,6 +1937,72 @@ func BenchmarkValueGetTuple(b *testing.B) {
 		if _, err := v.GetTuple(); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestExtendedDecoding(t *testing.T) {
+	// A bit of duplication to avoid import cycles.
+	encodeWithValueHeader := func(v Value, vh enginepb.MVCCValueHeader) []byte {
+		// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+		// MVCC-level metadata. Requires a re-allocation and copy.
+		headerLen := vh.Size()
+		headerSize := extendedPreludeSize + headerLen
+		valueSize := headerSize + len(v.RawBytes)
+		buf := make([]byte, valueSize)
+		// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+		// MVCC-level metadata. Requires a copy.
+		// 4-byte-header-len
+		binary.BigEndian.PutUint32(buf, uint32(headerLen))
+		// 1-byte-sentinel
+		buf[tagPos] = byte(ValueType_MVCC_EXTENDED_ENCODING_SENTINEL)
+		_, err := protoutil.MarshalTo(&vh, buf[extendedPreludeSize:headerSize])
+		require.NoError(t, err)
+		// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
+		copy(buf[headerSize:], v.RawBytes)
+		return buf
+	}
+
+	key := Key("hello")
+	var boolValue Value
+	boolValue.SetBool(true)
+
+	testValues := map[string]Value{
+		"bool":      boolValue,
+		"tombstone": {Timestamp: hlc.Timestamp{WallTime: 1}},
+		"untagged":  {RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}},
+	}
+	for name, tv := range testValues {
+		t.Run(name, func(t *testing.T) {
+			tv.InitChecksum(key)
+			extendedValueBytes := encodeWithValueHeader(tv, enginepb.MVCCValueHeader{OriginID: 1})
+			extendedValue := Value{RawBytes: extendedValueBytes, Timestamp: tv.Timestamp}
+
+			// These methods error on degenerate values.
+			if len(tv.RawBytes) >= headerSize {
+				require.NoError(t, tv.Verify(key))
+				require.NoError(t, extendedValue.Verify(key))
+			}
+
+			require.Equal(t, tv.checksum(), extendedValue.checksum())
+			require.Equal(t, tv.computeChecksum(key), tv.computeChecksum(key))
+
+			require.Equal(t, tv.IsPresent(), extendedValue.IsPresent())
+			require.Equal(t, tv.GetTag(), extendedValue.GetTag())
+			vh, err := tv.GetMVCCValueHeader()
+			require.NoError(t, err)
+			require.Equal(t, uint32(0), vh.OriginID)
+
+			vh, err = extendedValue.GetMVCCValueHeader()
+			require.NoError(t, err)
+			require.Equal(t, uint32(1), vh.OriginID)
+
+			// These methods crash if called on tombstones or degenerate values.
+			if len(tv.RawBytes) > tagPos {
+				require.Equal(t, tv.TagAndDataBytes(), extendedValue.TagAndDataBytes())
+				require.True(t, tv.EqualTagAndData(extendedValue))
+				require.True(t, extendedValue.EqualTagAndData(tv))
+			}
+		})
 	}
 }
 
