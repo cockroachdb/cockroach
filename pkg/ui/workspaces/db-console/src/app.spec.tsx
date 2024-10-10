@@ -48,6 +48,10 @@ stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
   "default",
 );
+stubComponentInModule(
+  "src/views/shared/components/alertBar/alertBar",
+  "ThrottleNotificationBar",
+);
 
 import React from "react";
 import { Action, Store } from "redux";
