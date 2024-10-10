@@ -18,10 +18,10 @@
 package rafttest
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func (env *InteractionEnv) handleReportUnreachable(t *testing.T, d datadriven.TestData) error {
