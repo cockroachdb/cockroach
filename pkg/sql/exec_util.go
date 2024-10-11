@@ -3888,6 +3888,10 @@ func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bo
 	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
 }
 
+func (m *sessionDataMutator) SetBypassPCRReaderCatalogAOST(val bool) {
+	m.data.BypassPCRReaderCatalogAOST = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
