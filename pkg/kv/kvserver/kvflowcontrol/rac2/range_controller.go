@@ -2223,7 +2223,6 @@ func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	rss.stopAttemptingToEmptySendQueueLocked(ctx, true)
 	if rss.mu.sendQueue.forceFlushScheduled {
 		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
-		log.Infof(ctx, "r%v:%v stream %v force-flushing -1", rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
 	}
 	rss.mu.closed = true
 }
