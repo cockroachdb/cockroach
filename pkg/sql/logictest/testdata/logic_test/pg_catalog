@@ -2869,6 +2869,7 @@ authentication_method                                      cert-password       N
 autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
+bypass_pcr_reader_catalog_aost                             off                 NULL      NULL        NULL        string
 bytea_output                                               hex                 NULL      NULL        NULL        string
 check_function_bodies                                      on                  NULL      NULL        NULL        string
 client_encoding                                            UTF8                NULL      NULL        NULL        string
@@ -3062,6 +3063,7 @@ authentication_method                                      cert-password       N
 autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
 avoid_buffering                                            off                 NULL  user     NULL      off                 off
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
+bypass_pcr_reader_catalog_aost                             off                 NULL  user     NULL      off                 off
 bytea_output                                               hex                 NULL  user     NULL      hex                 hex
 check_function_bodies                                      on                  NULL  user     NULL      on                  on
 client_encoding                                            UTF8                NULL  user     NULL      UTF8                UTF8
@@ -3248,6 +3250,7 @@ authentication_method                                      NULL    NULL     NULL
 autocommit_before_ddl                                      NULL    NULL     NULL     NULL        NULL
 avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
 backslash_quote                                            NULL    NULL     NULL     NULL        NULL
+bypass_pcr_reader_catalog_aost                             NULL    NULL     NULL     NULL        NULL
 bytea_output                                               NULL    NULL     NULL     NULL        NULL
 check_function_bodies                                      NULL    NULL     NULL     NULL        NULL
 client_encoding                                            NULL    NULL     NULL     NULL        NULL
