@@ -548,6 +548,9 @@ message LocalOnlySessionData {
   // written in this session were originally written with before being
   // replicated via Logical Data Replication.
   util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
+  // BypassPCRReaderCatalogAOST disables the AOST used by all user queries on
+  // the PCR reader catalog.
+  bool bypass_pcr_reader_catalog_aost = 141  [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

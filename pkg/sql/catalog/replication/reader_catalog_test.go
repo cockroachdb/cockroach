@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -304,52 +305,76 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 
 	require.NoError(t, advanceTS(now))
 	compareEqual("SELECT * FROM t1")
-	// Validate multiple advances of the timestamp work concurrently with queries.
-	// The tight loop below should relatively easily hit errors if all the timestamps
-	// are not line up on the reader catalog.
-	grp := ctxgroup.WithContext(ctx)
-	require.NoError(t, err)
-	var iterationsDone atomic.Bool
+
 	var newTS hlc.Timestamp
-	grp.GoCtx(func(ctx context.Context) error {
-		defer func() {
-			iterationsDone.Swap(true)
-		}()
-		const NumIterations = 16
-		for iter := 0; iter < NumIterations; iter++ {
-			if _, err := srcRunner.DB.ExecContext(ctx,
-				"INSERT INTO t1(val, j) VALUES('open', $1);",
-				iter); err != nil {
-				return err
+
+	for _, useAOST := range []bool{false, true} {
+		errorDetected := false
+		checkAOSTError := func(err error) {
+			if useAOST || err == nil {
+				require.NoError(t, err)
+				return
 			}
-			// Signal the next timestamp value.
-			newTS = ts.Clock().Now()
-			// Advanced the timestamp next.
-			if err := advanceTS(newTS); err != nil {
-				return err
-			}
+			errorDetected = errorDetected ||
+				strings.Contains(err.Error(), "PCR reader timestamp has moved forward, existing descriptor")
 		}
-		return nil
-	})
-	// Validates that the implicit txn and explicit txn's
-	// can safely use fixed timestamps.
-	for !iterationsDone.Load() {
-		tx := destRunner.Begin(t)
-		_, err := tx.Exec("SELECT * FROM t1")
+		// Validate multiple advances of the timestamp work concurrently with queries.
+		// The tight loop below should relatively easily hit errors if all the timestamps
+		// are not line up on the reader catalog.
+		grp := ctxgroup.WithContext(ctx)
 		require.NoError(t, err)
-		_, err = tx.Exec("SELECT * FROM v1")
-		require.NoError(t, err)
-		_, err = tx.Exec("SELECT * FROM t2")
-		require.NoError(t, err)
-		require.NoError(t, tx.Commit())
+		var iterationsDone atomic.Bool
+		grp.GoCtx(func(ctx context.Context) error {
+			defer func() {
+				iterationsDone.Swap(true)
+			}()
+			const NumIterations = 64
+			for iter := 0; iter < NumIterations; iter++ {
+				if _, err := srcRunner.DB.ExecContext(ctx,
+					"INSERT INTO t1(val, j) VALUES('open', $1);",
+					iter); err != nil {
+					return err
+				}
+				// Signal the next timestamp value.
+				newTS = ts.Clock().Now()
+				// Advanced the timestamp next.
+				if err := advanceTS(newTS); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		// Validates that the implicit txn and explicit txn's
+		// can safely use fixed timestamps.
+		if useAOST {
+			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='off'")
+		} else {
+			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='on'")
+		}
+		for !iterationsDone.Load() {
+			tx := destRunner.Begin(t)
+			_, err := tx.Exec("SELECT * FROM t1")
+			checkAOSTError(err)
+			_, err = tx.Exec("SELECT * FROM v1")
+			checkAOSTError(err)
+			_, err = tx.Exec("SELECT * FROM t2")
+			checkAOSTError(err)
+			checkAOSTError(tx.Commit())
 
-		destRunner.Exec(t, "SELECT * FROM t1,v1, t2")
-		destRunner.Exec(t, "SELECT * FROM v1 ORDER BY 1")
-		destRunner.Exec(t, "SELECT * FROM t2 ORDER BY 1")
+			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
+			checkAOSTError(err)
+			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM v1 ORDER BY 1")
+			checkAOSTError(err)
+			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t2 ORDER BY 1")
+			checkAOSTError(err)
+		}
+
+		// Finally ensure the queries actually match.
+		require.NoError(t, grp.Wait())
+		// Check if the error was detected.
+		require.Equalf(t, !useAOST, errorDetected,
+			"error was detected unexpectedly (AOST = %t on connection)", useAOST)
 	}
-
-	// Finally ensure the queries actually match.
-	require.NoError(t, grp.Wait())
 	now = newTS
 	compareEqual("SELECT * FROM t1 ORDER BY j")
 	compareEqual("SELECT * FROM v1 ORDER BY 1")
