@@ -80,6 +80,15 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedEventPredicate {
 	}
 }
 
+func ContainsRangeStats() FeedEventPredicate {
+	return func(msg crosscluster.Event) bool {
+		if msg.Type() != crosscluster.CheckpointEvent {
+			return false
+		}
+		return msg.GetCheckpoint().RangeStats != nil
+	}
+}
+
 // FeedSource is a source of events for a ReplicationFeed.
 type FeedSource interface {
 	// Next returns the next event, and a flag indicating if there are more events
@@ -139,6 +148,15 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 		return false
 	})
 	return minResolvedTimestamp(rf.msg.GetCheckpoint().ResolvedSpans)
+}
+
+func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) streampb.StreamEvent_RangeStats {
+	if !ContainsRangeStats()(rf.msg) {
+		rf.consumeUntil(ctx, ContainsRangeStats(), func(err error) bool {
+			return false
+		})
+	}
+	return *rf.msg.GetCheckpoint().RangeStats
 }
 
 // ObserveError consumes the feed until the feed is exhausted, and the final error should

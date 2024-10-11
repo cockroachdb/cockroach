@@ -233,10 +233,16 @@ message StreamEvent {
     repeated KV kvs = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVs"];
   }
 
+  message RangeStats {
+    int64 range_count = 1;
+    int64 scanning_range_count = 2;
+  }
+
   // Checkpoint represents stream checkpoint.
   message StreamCheckpoint {
     reserved 1;
     repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 2  [(gogoproto.nullable) = false];
+    RangeStats range_stats = 3;
   }
 
   // Only 1 field ought to be set.
