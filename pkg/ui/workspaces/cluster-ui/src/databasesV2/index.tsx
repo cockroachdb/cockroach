@@ -95,15 +95,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     ),
     render: (db: DatabaseRow) => (
       <Skeleton loading={db.nodesByRegion.isLoading}>
-        <div>
-          {Object.entries(db.nodesByRegion?.data).map(([region, nodes]) => (
-            <RegionNodesLabel
-              key={region}
-              nodes={nodes}
-              region={{ label: region, code: region }}
-            />
-          ))}
-        </div>
+        <RegionNodesLabel nodesByRegion={db.nodesByRegion?.data} />
       </Skeleton>
     ),
   },
