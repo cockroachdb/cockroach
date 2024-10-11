@@ -526,7 +526,10 @@ type rangeController struct {
 	opts RangeControllerOptions
 	// term is the raft term of the leader who runs this range controller. The
 	// term does not change during the lifetime of the range controller.
-	term       uint64
+	term uint64
+	// replicaSet contains exactly the same entries as replicaMap.
+	//
+	// TODO(sumeer): remove the replicaSet member.
 	replicaSet ReplicaSet
 	// leaseholder can be NoReplicaID or not be in ReplicaSet, i.e., it is
 	// eventually consistent with the set of replicas.
@@ -542,6 +545,9 @@ type rangeController struct {
 		// waiterSetRefreshCh is closed, and replaced with a new channel. The
 		// voterSets and nonVoterSets is copy-on-write, so waiters make a shallow
 		// copy.
+		//
+		// Replicas in replicaSet that are neither voter or non-voter, e.g.
+		// LEARNER, does not appear here.
 		voterSets          []voterSet
 		nonVoterSet        []stateForWaiters
 		waiterSetRefreshCh chan struct{}
@@ -1078,6 +1084,9 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	if shouldWaitChange {
 		rc.updateWaiterSetsRaftMuLocked()
 	}
+	if buildutil.CrdbTestBuild {
+		rc.checkConsistencyRaftMuLocked(ctx)
+	}
 
 	// It may have been longer than the sendQueueStatRefreshInterval since we
 	// last updated the send queue stats. Maybe update them now.
@@ -1263,11 +1272,11 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
 	nextScheduled := scheduled[:0]
 	updateWaiterSets := false
 	for _, rs := range scheduled {
-		scheduleAgain, closedReplica := rs.scheduled(ctx, mode, logSnapshot)
+		scheduleAgain, updateWaiters := rs.scheduledRaftMuLocked(ctx, mode, logSnapshot)
 		if scheduleAgain {
 			nextScheduled = append(nextScheduled, rs)
 		}
-		if closedReplica {
+		if updateWaiters {
 			updateWaiterSets = true
 		}
 	}
@@ -1287,6 +1296,9 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(
 	}
 	if updateWaiterSets {
 		rc.updateWaiterSetsRaftMuLocked()
+	}
+	if buildutil.CrdbTestBuild {
+		rc.checkConsistencyRaftMuLocked(ctx)
 	}
 }
 
@@ -1600,6 +1612,70 @@ func (rc *rangeController) scheduleReplica(r roachpb.ReplicaID) {
 	if wasEmpty && len(rc.scheduledMu.replicas) == 1 {
 		// Call ScheduleControllerEvent on transition from empty => non-empty.
 		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
+	}
+}
+
+// checkConsistencyRaftMuLocked is an expensive function to check consistency.
+func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
+	replicas := map[roachpb.ReplicaID]stateForWaiters{}
+	func() {
+		var leaderID, leaseholderID roachpb.ReplicaID
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
+		for _, vs := range rc.mu.voterSets {
+			for _, v := range vs {
+				if v.isLeader {
+					if leaderID == 0 {
+						leaderID = v.replicaID
+					} else if v.replicaID != leaderID {
+						panic(errors.AssertionFailedf("two leaders: %s and %s", leaderID, v.replicaID))
+					}
+				}
+				if v.isLeaseHolder {
+					if leaseholderID == 0 {
+						leaseholderID = v.replicaID
+					} else if v.replicaID != leaseholderID {
+						panic(errors.AssertionFailedf(
+							"two leaseholders: %s and %s", leaseholderID, v.replicaID))
+					}
+				}
+				replicas[v.replicaID] = v.stateForWaiters
+			}
+		}
+		for _, nv := range rc.mu.nonVoterSet {
+			replicas[nv.replicaID] = nv
+		}
+	}()
+	for _, state := range replicas {
+		rs, ok := rc.replicaMap[state.replicaID]
+		if !ok {
+			panic(errors.AssertionFailedf("replica %s not in replicaMap", state.replicaID))
+		}
+		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQ()
+		if state.isStateReplicate != isStateReplicate {
+			panic(errors.AssertionFailedf("inconsistent isStateReplicate: %t, %t",
+				state.isStateReplicate, isStateReplicate))
+		}
+		if state.hasSendQ != hasSendQ {
+			panic(errors.AssertionFailedf("inconsistent hasSendQ: %t, %t",
+				state.hasSendQ, hasSendQ))
+		}
+		_, ok = rc.replicaSet[state.replicaID]
+		if !ok {
+			panic(errors.AssertionFailedf("replica %s not in replicaSet", state.replicaID))
+		}
+	}
+	for replicaID, rs := range rc.replicaMap {
+		if rs.desc.IsAnyVoter() || rs.desc.IsNonVoter() {
+			_, ok := replicas[replicaID]
+			if !ok {
+				panic(errors.AssertionFailedf("replica %s not in voter or non-voter sets", replicaID))
+			}
+		}
+		_, ok := rc.replicaSet[replicaID]
+		if !ok {
+			panic(errors.AssertionFailedf("replica %s not in replicaSet", replicaID))
+		}
 	}
 }
 
@@ -2042,7 +2118,7 @@ func (rs *replicaState) handleReadyEntries(
 		// deal with.
 		rs.sendStream.closeLocked(ctx)
 		rs.sendStream = nil
-		transitionedSendQState = rs.desc.IsAnyVoter()
+		transitionedSendQState = true
 	}
 	return transitionedSendQState
 }
@@ -2124,9 +2200,9 @@ func (rs *replicaState) handleReadyState(
 // scheduled is only called when rs.sendStream != nil, and on followers.
 //
 // closedReplica => !scheduleAgain.
-func (rs *replicaState) scheduled(
+func (rs *replicaState) scheduledRaftMuLocked(
 	ctx context.Context, mode RaftMsgAppMode, logSnapshot RaftLogSnapshot,
-) (scheduleAgain bool, closedReplica bool) {
+) (scheduleAgain bool, updateWaiterSets bool) {
 	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID {
 		panic("scheduled called on the leader replica")
 	}
@@ -2148,7 +2224,7 @@ func (rs *replicaState) scheduled(
 	if mode != rss.mu.mode {
 		// Must be switching from MsgAppPull => MsgAppPush.
 		rss.tryHandleModeChangeLocked(ctx, mode, false, false)
-		return
+		return false, false
 	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
 	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
@@ -2183,13 +2259,13 @@ func (rs *replicaState) scheduled(
 		// deal with.
 		rs.sendStream.closeLocked(ctx)
 		rs.sendStream = nil
-		return false, rs.desc.IsAnyVoter()
+		return false, true
 	}
 	rss.dequeueFromQueueAndSendLocked(ctx, msg)
 	isEmpty := rss.isEmptySendQueueLocked()
 	if isEmpty {
 		rss.stopAttemptingToEmptySendQueueLocked(ctx, false)
-		return false, false
+		return false, true
 	}
 	// Still have a send-queue.
 	watchForTokens :=

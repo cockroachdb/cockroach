@@ -105,3 +105,67 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 ++++
 schedule-controller-event-count: 1
 scheduled-replicas: 3
+
+# Give some send tokens to the replica 4, the non-voter.
+adjust_tokens send
+  store_id=4 pri=HighPri tokens=500KiB
+----
+t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+500 KiB/+16 MiB ela=+0 B/+8.0 MiB
+
+# Note the deducted value. Replica 4 is waiting for a scheduler event.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB force-flushing
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,1) send_queue=[1,2) precise_q_size=+1.0 MiB deducted=+500 KiB
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+++++
+schedule-controller-event-count: 1
+scheduled-replicas: 3 4
+
+# Scheduler event. The non-voter now has an empty send-queue.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+1.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+++++
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+1.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: true entries: [1]
+ to: 4, lowPri: true entries: [1]
+++++
+schedule-controller-event-count: 1
