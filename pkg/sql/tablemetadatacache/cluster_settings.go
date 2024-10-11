@@ -12,7 +12,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const defaultDataValidDuration = time.Minute * 20
+const (
+	defaultDataValidDuration = time.Minute * 20
+	// defaultTableBatchSize is the number of tables to fetch in a
+	// single batch from the system tables.
+	defaultTableBatchSize = 20
+)
 
 var AutomaticCacheUpdatesEnabledSetting = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -34,3 +39,12 @@ var DataValidDurationSetting = settings.RegisterDurationSetting(
 		return nil
 	}),
 	settings.WithPublic)
+
+var updateJobBatchSizeSetting = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"obs.tablemetadata.update_job_batch_size",
+	"the number of tables the update table metadata job will attempt to update "+
+		"in a single batch",
+	defaultTableBatchSize,
+	settings.NonNegativeInt,
+)

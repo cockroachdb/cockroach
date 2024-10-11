@@ -35,6 +35,7 @@ type tableMetadataUpdater struct {
 	metrics          *TableMetadataUpdateJobMetrics
 	updateProgress   func(ctx context.Context, progress float32)
 	spanStatsFetcher spanStatsFetcher
+	batchSize        int64
 	testKnobs        *tablemetadatacacheutil.TestingKnobs
 }
 
@@ -59,6 +60,7 @@ func newTableMetadataUpdater(
 	spanStatsFetcher spanStatsFetcher,
 	ie isql.Executor,
 	timeSrc timeutil.TimeSource,
+	batchSize int64,
 	testKnobs *tablemetadatacacheutil.TestingKnobs,
 ) *tableMetadataUpdater {
 	return &tableMetadataUpdater{
@@ -67,6 +69,7 @@ func newTableMetadataUpdater(
 		updateProgress:   onProgressUpdated,
 		spanStatsFetcher: spanStatsFetcher,
 		timeSrc:          timeSrc,
+		batchSize:        batchSize,
 		testKnobs:        testKnobs,
 	}
 }
@@ -91,16 +94,16 @@ func (u *tableMetadataUpdater) RunUpdater(ctx context.Context) error {
 func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, err error) {
 	// upsertQuery is the query used to upsert table metadata rows,
 	// it is reused for each batch to avoid allocations between batches.
-	upsert := newTableMetadataBatchUpsertQuery(tableBatchSize)
-	it := newTableMetadataBatchIterator(u.ie, u.spanStatsFetcher, u.testKnobs.GetAOSTClause())
+	upsert := newTableMetadataBatchUpsertQuery(u.batchSize)
+	it := newTableMetadataBatchIterator(u.ie, u.spanStatsFetcher, u.testKnobs.GetAOSTClause(), u.batchSize)
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
 	if err != nil {
 		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
 	}
-	estimatedBatches := int(math.Ceil(float64(estimatedRowsToUpdate) / float64(tableBatchSize)))
+	estimatedBatches := int(math.Ceil(float64(estimatedRowsToUpdate) / float64(u.batchSize)))
 	batchNum := 0
 	for {
-		more, batchErr := it.fetchNextBatch(ctx, tableBatchSize)
+		more, batchErr := it.fetchNextBatch(ctx)
 		if batchErr != nil {
 			log.Errorf(ctx, "failure in batch request: %s", batchErr.Error())
 			u.metrics.Errors.Inc(1)
@@ -230,7 +233,7 @@ type tableMetadataBatchUpsertQuery struct {
 
 // newTableMetadataBatchUpsertQuery creates a new tableMetadataBatchUpsertQuery,
 // which expects the given number of rows to be added.
-func newTableMetadataBatchUpsertQuery(batchLen int) *tableMetadataBatchUpsertQuery {
+func newTableMetadataBatchUpsertQuery(batchLen int64) *tableMetadataBatchUpsertQuery {
 	q := &tableMetadataBatchUpsertQuery{
 		args: make([]interface{}, 0, batchLen*iterCols),
 	}

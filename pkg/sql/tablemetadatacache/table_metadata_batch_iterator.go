@@ -19,12 +19,6 @@ import (
 )
 
 const (
-	// tableBatchSize is the number of tables to fetch in a
-	// single batch from the system tables.
-	tableBatchSize = 20
-)
-
-const (
 	idIdx = iota
 	tableNameIdx
 	parentIDIdx
@@ -74,15 +68,17 @@ type tableMetadataBatchIterator struct {
 	// query statement to use for retrieving batches
 	queryStatement   string
 	spanStatsFetcher spanStatsFetcher
+	batchSize        int64
 }
 
 func newTableMetadataBatchIterator(
-	ie isql.Executor, spanStatsFetcher spanStatsFetcher, aostClause string,
+	ie isql.Executor, spanStatsFetcher spanStatsFetcher, aostClause string, batchSize int64,
 ) *tableMetadataBatchIterator {
 	return &tableMetadataBatchIterator{
+		batchSize:        batchSize,
 		ie:               ie,
 		spanStatsFetcher: spanStatsFetcher,
-		batchRows:        make([]tableMetadataIterRow, 0, tableBatchSize),
+		batchRows:        make([]tableMetadataIterRow, 0, batchSize),
 		lastID: paginationKey{
 			parentID: 1,
 			schemaID: 1,
@@ -99,9 +95,8 @@ func newTableMetadataBatchIterator(
 // - crdb_internal.tenant_span_stats
 //
 // It will return true if any tables were fetched.
-func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
-	ctx context.Context, batchSize int,
-) (bool, error) {
+func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context) (bool, error) {
+	batchSize := batchIter.batchSize
 	if batchSize == 0 {
 		return false, nil
 	}
