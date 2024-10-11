@@ -224,8 +224,13 @@ func TestLint(t *testing.T) {
 		extensions := []string{
 			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
 		}
+		fullExtensions := make([]string, len(extensions)*2)
+		for i, extension := range extensions {
+			fullExtensions[i*2] = "build/**/" + extension
+			fullExtensions[i*2+1] = "pkg/**/" + extension
+		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{"ls-files"}, extensions...)...)
+		cmd, stderr, filter, err := dirCmd(crdbDir, "git", append([]string{"ls-files"}, fullExtensions...)...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +257,7 @@ func TestLint(t *testing.T) {
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
-			file, err := os.Open(filepath.Join(pkgDir, filename))
+			file, err := os.Open(filepath.Join(crdbDir, filename))
 			if err != nil {
 				t.Error(err)
 				return
@@ -265,7 +270,7 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isApache := strings.HasPrefix(filename, "obsservice")
+			isApache := strings.HasPrefix(filename, "pkg/obsservice")
 			switch {
 			case isApache:
 				if apacheHeader.Find(data) == nil {
