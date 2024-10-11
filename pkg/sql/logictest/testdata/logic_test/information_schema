@@ -6221,6 +6221,7 @@ application_name                                           ·
 authentication_method                                      cert-password
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
+bypass_pcr_reader_catalog_aost                             off
 bytea_output                                               hex
 check_function_bodies                                      on
 client_encoding                                            UTF8
