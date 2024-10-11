@@ -103,11 +103,6 @@ message RaftMessageRequest {
   // indices. Used only with RACv2.
   kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedState admitted_state = 14 [(gogoproto.nullable) = false];
 
-  // AdmittedResponse is used in RACv2, for piggybacking MsgAppResp messages
-  // from a follower to a leader, that advance admitted for a follower.
-  //
-  // TODO(pav-kv): remove.
-  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 15 [(gogoproto.nullable) = false];
   reserved 10;
 }
 
