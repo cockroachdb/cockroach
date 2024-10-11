@@ -81,7 +81,6 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 			"build",
 			"//pkg/cmd/cockroach-short",
 			"//pkg/cmd/dev",
-			"//pkg/obsservice/cmd/obsservice",
 			"//pkg/cmd/roachprod",
 			"//pkg/cmd/roachtest",
 			"--//build/toolchains:nogo_flag",
