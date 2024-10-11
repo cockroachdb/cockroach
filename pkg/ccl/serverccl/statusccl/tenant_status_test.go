@@ -1590,6 +1590,8 @@ func TestThrottlingMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "times out under race")
+
 	testtime := timeutil.Now()
 
 	s := serverutils.StartCluster(t, 3, base.TestClusterArgs{
@@ -1597,7 +1599,6 @@ func TestThrottlingMetadata(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					LicenseTestingKnobs: license.TestingKnobs{
-						Enable:            true,
 						OverrideStartTime: &testtime,
 					},
 				},
