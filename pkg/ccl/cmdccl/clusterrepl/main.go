@@ -251,8 +251,7 @@ func subscriptionConsumer(
 				case crosscluster.DeleteRangeEvent:
 				case crosscluster.CheckpointEvent:
 					fmt.Printf("%s checkpoint\n", timeutil.Now().Format(time.RFC3339))
-					resolved := event.GetResolvedSpans()
-					for _, r := range resolved {
+					for _, r := range event.GetCheckpoint().ResolvedSpans {
 						_, err := frontier.Forward(r.Span, r.Timestamp)
 						if err != nil {
 							return err

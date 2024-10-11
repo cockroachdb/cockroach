@@ -919,7 +919,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 		}
 	}
 
-	resolvedSpans := event.GetResolvedSpans()
+	resolvedSpans := event.GetCheckpoint().ResolvedSpans
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
