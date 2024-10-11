@@ -95,6 +95,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 value={Bytes(metadata.replicationSizeBytes)}
               />
               <SummaryCardItem label="Ranges" value={metadata.rangeCount} />
+              <SummaryCardItem label="Replicas" value={metadata.replicaCount} />
               <SummaryCardItem
                 label="Regions / Nodes"
                 value={

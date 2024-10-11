@@ -453,6 +453,7 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 			tbm.store_ids, 
 			COALESCE((tbm.details->>'auto_stats_enabled')::BOOL, csc.auto_stats_enabled) as auto_stats_enabled,
 			parse_timestamp(tbm.details->>'stats_last_updated') as stats_last_updated,
+			COALESCE((tbm.details->>'replica_count')::INT, 0) as replica_count,
 			COALESCE(tbm.last_update_error, '') as last_update_error,
 			tbm.last_updated,
 			count(*) OVER() as total_row_count
@@ -522,6 +523,9 @@ func rowToTableMetadata(scanner resultScanner, row tree.Datums) (tmd tableMetada
 		return tmd, err
 	}
 	if err = scanner.Scan(row, "stats_last_updated", &tmd.StatsLastUpdated); err != nil {
+		return tmd, err
+	}
+	if err = scanner.Scan(row, "replica_count", &tmd.ReplicaCount); err != nil {
 		return tmd, err
 	}
 
@@ -1090,6 +1094,7 @@ type tableMetadata struct {
 	StatsLastUpdated     *time.Time `json:"stats_last_updated"`
 	LastUpdateError      string     `json:"last_update_error,omitempty"`
 	LastUpdated          time.Time  `json:"last_updated"`
+	ReplicaCount         int64      `json:"replica_count"`
 }
 
 type dbMetadata struct {

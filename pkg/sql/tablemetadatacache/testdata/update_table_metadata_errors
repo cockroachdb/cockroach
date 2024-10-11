@@ -11,63 +11,63 @@ query
 SELECT * FROM system.table_metadata
 ORDER BY (db_name, table_name)
 ----
-1 24 system public comments 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 44 system public database_role_settings 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 3 system public descriptor 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 7 system public descriptor_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 12 system public eventlog 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 53 system public external_connections 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 54 system public job_info 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 15 system public jobs 12 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 41 system public join_tokens 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 11 system public lease 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 21 system public locations 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 40 system public migrations 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 64 system public mvcc_statistics 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 30 system public namespace 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 52 system public privileges 5 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 31 system public protected_ts_meta 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 32 system public protected_ts_records 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 13 system public rangelog 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 9 system public region_liveness 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 25 system public replication_constraint_stats 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 26 system public replication_critical_localities 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 27 system public replication_stats 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 28 system public reports_meta 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 48 system public role_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 23 system public role_members 5 5 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 33 system public role_options 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 37 system public scheduled_jobs 10 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 6 system public settings 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 47 system public span_configurations 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 51 system public span_count 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 56 system public span_stats_buckets 5 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 57 system public span_stats_samples 2 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 58 system public span_stats_tenant_boundaries 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 55 system public span_stats_unique_keys 2 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 46 system public sql_instances 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 39 system public sqlliveness 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 61 system public statement_activity 17 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 34 system public statement_bundle_chunks 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 36 system public statement_diagnostics 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 35 system public statement_diagnostics_requests 11 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 66 system public statement_execution_insights 29 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 42 system public statement_statistics 19 8 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 67 system public table_metadata 18 10 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 20 system public table_statistics 12 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 59 system public task_payloads 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 63 system public tenant_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 50 system public tenant_settings 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 60 system public tenant_tasks 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 45 system public tenant_usage 14 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 8 system public tenants 6 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 62 system public transaction_activity 14 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 65 system public transaction_execution_insights 23 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 43 system public transaction_statistics 14 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 14 system public ui 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 4 system public users 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 19 system public web_sessions 9 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
-1 5 system public zones 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "stats_last_updated": null}
+1 24 system public comments 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 44 system public database_role_settings 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 3 system public descriptor 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 7 system public descriptor_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 12 system public eventlog 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 53 system public external_connections 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 54 system public job_info 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 15 system public jobs 12 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 41 system public join_tokens 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 11 system public lease 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 21 system public locations 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 40 system public migrations 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 64 system public mvcc_statistics 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 30 system public namespace 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 52 system public privileges 5 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 31 system public protected_ts_meta 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 32 system public protected_ts_records 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 13 system public rangelog 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 9 system public region_liveness 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 25 system public replication_constraint_stats 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 26 system public replication_critical_localities 5 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 27 system public replication_stats 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 28 system public reports_meta 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 48 system public role_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 23 system public role_members 5 5 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 33 system public role_options 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 37 system public scheduled_jobs 10 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 6 system public settings 4 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 47 system public span_configurations 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 51 system public span_count 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 56 system public span_stats_buckets 5 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 57 system public span_stats_samples 2 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 58 system public span_stats_tenant_boundaries 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 55 system public span_stats_unique_keys 2 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 46 system public sql_instances 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 39 system public sqlliveness 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 61 system public statement_activity 17 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 34 system public statement_bundle_chunks 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 36 system public statement_diagnostics 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 35 system public statement_diagnostics_requests 11 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 66 system public statement_execution_insights 29 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 42 system public statement_statistics 19 8 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 67 system public table_metadata 18 10 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 20 system public table_statistics 12 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 59 system public task_payloads 8 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 63 system public tenant_id_seq 1 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 50 system public tenant_settings 6 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 60 system public tenant_tasks 7 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 45 system public tenant_usage 14 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 8 system public tenants 6 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 62 system public transaction_activity 14 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 65 system public transaction_execution_insights 23 2 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 43 system public transaction_statistics 14 7 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 14 system public ui 3 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 4 system public users 4 1 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 19 system public web_sessions 9 4 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 5 system public zones 2 0 {} 0 0 0 0 0 error1 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
 
 
 set-time unixSecs=1710000000

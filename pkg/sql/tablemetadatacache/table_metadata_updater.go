@@ -48,6 +48,9 @@ type tableMetadataDetails struct {
 	// the table. This can be nil if table stats haven't been
 	// updated yet.
 	StatsLastUpdated *time.Time `json:"stats_last_updated"`
+	// ReplicaCount is the number of voter and non-voter replicas
+	// containing data for the table.
+	ReplicaCount int32 `json:"replica_count"`
 }
 
 var _ tablemetadatacacheutil.ITableMetadataUpdater = &tableMetadataUpdater{}
@@ -286,7 +289,11 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		storeIds[i] = int(id)
 	}
 
-	details := tableMetadataDetails{AutoStatsEnabled: row.autoStatsEnabled, StatsLastUpdated: row.statsLastUpdated}
+	details := tableMetadataDetails{
+		AutoStatsEnabled: row.autoStatsEnabled,
+		StatsLastUpdated: row.statsLastUpdated,
+		ReplicaCount:     stats.ReplicaCount,
+	}
 	detailsStr, err := gojson.Marshal(details)
 	if err != nil {
 		log.Errorf(ctx, "failed to encode details: %v", err)
