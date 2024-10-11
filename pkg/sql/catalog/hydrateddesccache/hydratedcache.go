@@ -257,7 +257,7 @@ func (c *Cache) GetHydratedDescriptor(
 
 	// If the table has no user defined types, it is already effectively hydrated,
 	// so just return it.
-	if !catalog.MaybeRequiresHydration(hydratable) {
+	if !hydratable.MaybeRequiresTypeHydration() {
 		return hydratable, nil
 	}
 
