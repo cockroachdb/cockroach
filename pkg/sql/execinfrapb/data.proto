@@ -329,6 +329,8 @@ message RemoteProducerMetadata {
       (gogoproto.customname) = "FlowID",
       (gogoproto.customtype) = "FlowID"];
     optional bool drained = 9 [(gogoproto.nullable) = false];
+    // ProcessorID is the ID of the processor that published the metadata.
+    optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
