@@ -294,8 +294,7 @@ func makeSpanConfigFrontier(span roachpb.Span) *spanConfigFrontier {
 	checkpoint := streampb.StreamEvent_StreamCheckpoint{
 		ResolvedSpans: []jobspb.ResolvedSpan{{
 			Span: span,
-		},
-		},
+		}},
 	}
 	return &spanConfigFrontier{
 		checkpoint: checkpoint,
