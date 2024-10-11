@@ -559,7 +559,6 @@
 /pkg/util/tracing            @cockroachdb/obs-prs
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-prs
-/pkg/obsservice/             @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
 
 # Own all bazel files to dev-inf, but don't request reviews for them
