@@ -9,8 +9,10 @@ go_library(
         "//pkg/base",
         "//pkg/sql",
         "//pkg/sql/appstatspb",
+        "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/util/safesql",
     ],
 )
