@@ -75,8 +75,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
 	}
 
-	responses := make(map[string]struct{})
-
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
 		return nil, err
@@ -125,38 +123,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return resp, err
 	}
 
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		// Noop if nil response (returned from skipped node).
-		if resp == nil {
-			return
-		}
-
-		nodeResponse := resp.(*roachpb.SpanStatsResponse)
-
-		// Values of ApproximateTotalStats, ApproximateDiskBytes,
-		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
-		// TotalStats should be the logical, pre-replicated value.
-		//
-		// Note: This implementation can return arbitrarily stale values, because instead of getting
-		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
-		// See #108779.
-		for spanStr, spanStats := range nodeResponse.SpanToStats {
-			// Accumulate physical values across all replicas:
-			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
-			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
-			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
-			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
-
-			// Logical values: take the values from the node that responded first.
-			// TODO: This should really be read from the leaseholder.
-			if _, ok := responses[spanStr]; !ok {
-				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
-				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
-				responses[spanStr] = struct{}{}
-			}
-		}
-	}
-
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
 		errorMessage := fmt.Sprintf("%v", err)
@@ -172,13 +138,63 @@ func (s *systemStatusServer) spanStatsFanOut(
 		timeout,
 		smartDial,
 		nodeFn,
-		responseFn,
+		collectSpanStatsResponses(ctx, res),
 		errorFn,
 	); err != nil {
 		return nil, err
 	}
 
 	return res, nil
+}
+
+// collectSpanStatsResponses takes a *roachpb.SpanStatsResponse and creates a closure around it
+// to provide as a callback to fanned out SpanStats requests.
+func collectSpanStatsResponses(
+	ctx context.Context, res *roachpb.SpanStatsResponse,
+) func(nodeID roachpb.NodeID, resp interface{}) {
+	responses := make(map[string]struct{})
+	return func(nodeID roachpb.NodeID, resp interface{}) {
+		// Noop if nil response (returned from skipped node).
+		if resp == nil {
+			return
+		}
+
+		nodeResponse := resp.(*roachpb.SpanStatsResponse)
+
+		// Values of ApproximateTotalStats, ApproximateDiskBytes,
+		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats should be the logical, pre-replicated value.
+		//
+		// Note: This implementation can return arbitrarily stale values, because instead of getting
+		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
+		// See #108779.
+		for spanStr, spanStats := range nodeResponse.SpanToStats {
+			if spanStats == nil {
+				log.Errorf(ctx, "Span stats for %s from node response is nil", spanStr)
+				continue
+			}
+
+			_, ok := res.SpanToStats[spanStr]
+			if !ok {
+				log.Warningf(ctx, "Received Span not in original request: %s", spanStr)
+				res.SpanToStats[spanStr] = &roachpb.SpanStats{}
+			}
+
+			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
+			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
+			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
+			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
+
+			// Logical values: take the values from the node that responded first.
+			// TODO: This should really be read from the leaseholder.
+			if _, ok := responses[spanStr]; !ok {
+				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
+				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
+				responses[spanStr] = struct{}{}
+			}
+		}
+	}
 }
 
 func (s *systemStatusServer) getLocalStats(
