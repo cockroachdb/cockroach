@@ -24,6 +24,7 @@ go_library(
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
