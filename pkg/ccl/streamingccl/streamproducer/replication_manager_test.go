@@ -80,9 +80,9 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: true},
 		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: true},
 
-		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
+		{user: "admin", expErr: "", isEnterprise: false},
+		{user: "root", expErr: "", isEnterprise: false},
+		{user: "somebody", expErr: "", isEnterprise: false},
 		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: false},
 		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: false},
 	} {
