@@ -128,6 +128,8 @@ func createLogicalReplicationStreamPlanHook(
 			switch m {
 			case "ttl-deletes":
 				discard = jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
+			case "all-deletes":
+				discard = jobspb.LogicalReplicationDetails_DiscardAllDeletes
 			default:
 				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
 			}
@@ -206,10 +208,22 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
+		// If the user asked to ignore "ttl-deletes", make sure that at least one of
+		// the source tables actually has a TTL job which sets the omit bit that
+		// is used for filtering; if not, they probably forgot that step.
+		throwNoTTLWithCDCIgnoreError := discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
+
 		for i, name := range srcTableNames {
 			td := spec.TableDescriptors[name]
 			srcTableDescs[i] = &td
 			repPairs[i].SrcDescriptorID = int32(td.ID)
+			if td.RowLevelTTL != nil && td.RowLevelTTL.DisableChangefeedReplication {
+				throwNoTTLWithCDCIgnoreError = false
+			}
+		}
+
+		if throwNoTTLWithCDCIgnoreError {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "DISCARD = 'ttl-deletes' specified but no tables have changefeed-excluded TTLs")
 		}
 
 		replicationStartTime := spec.ReplicationStartTime
