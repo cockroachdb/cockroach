@@ -26,6 +26,15 @@ var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, feature stri
 	return errEnterpriseNotEnabled // nb: this is squarely in the hot path on OSS builds
 }
 
+// TestingCheckEnterpriseEnabledLegacy is like CheckEnterpriseEnabled, however
+// it retains the same behaviour prior to the core license deprecation. This
+// should only be used in test.
+//
+// This function is overridden by an init hook in CCL builds.
+var TestingCheckEnterpriseEnabledLegacy = func(_ *cluster.Settings, _ uuid.UUID, feature string) error {
+	return errEnterpriseNotEnabled
+}
+
 // CCLDistributionAndEnterpriseEnabled is a simpler version of
 // CheckEnterpriseEnabled which doesn't take in feature-related info and doesn't
 // return an error with a nice message.
