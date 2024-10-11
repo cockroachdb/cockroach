@@ -1,8 +1,24 @@
 diff --git a/src/context/context.go b/src/context/context.go
-index 80e1787..9dbf2a5 100644
+index 763d4f777f..73739bc90e 100644
 --- a/src/context/context.go
 +++ b/src/context/context.go
-@@ -477,17 +477,7 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
+@@ -59,6 +59,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
++	_ "unsafe"  // for go:linkname
+ )
+ 
+ // A Context carries a deadline, a cancellation signal, and other values across
+@@ -361,6 +362,7 @@ type stopCtx struct {
+ var goroutines atomic.Int32
+ 
+ // &cancelCtxKey is the key that a cancelCtx returns itself for.
++//go:linkname cancelCtxKey
+ var cancelCtxKey int
+ 
+ // parentCancelCtx returns the underlying *cancelCtx for parent.
+@@ -477,17 +479,7 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
  
  	if p, ok := parentCancelCtx(parent); ok {
  		// parent is a *cancelCtx, or derives from one.
@@ -21,7 +37,7 @@ index 80e1787..9dbf2a5 100644
  		return
  	}
  
-@@ -515,6 +505,22 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
+@@ -515,6 +507,22 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
  	}()
  }
  
@@ -44,7 +60,7 @@ index 80e1787..9dbf2a5 100644
  type stringer interface {
  	String() string
  }
-@@ -788,3 +794,33 @@ func value(c Context, key any) any {
+@@ -790,3 +798,33 @@ func value(c Context, key any) any {
  		}
  	}
  }
@@ -79,7 +95,7 @@ index 80e1787..9dbf2a5 100644
 +	return true
 +}
 diff --git a/src/crypto/md5/md5.go b/src/crypto/md5/md5.go
-index 83e9e4c..c7a80ea 100644
+index 843678702b..979b453322 100644
 --- a/src/crypto/md5/md5.go
 +++ b/src/crypto/md5/md5.go
 @@ -27,6 +27,10 @@ const Size = 16
@@ -106,10 +122,10 @@ index 83e9e4c..c7a80ea 100644
  		} else {
  			blockGeneric(d, p[:n])
 diff --git a/src/crypto/md5/md5_test.go b/src/crypto/md5/md5_test.go
-index 851e7fb..e120be3 100644
+index a5b661126d..5285a13724 100644
 --- a/src/crypto/md5/md5_test.go
 +++ b/src/crypto/md5/md5_test.go
-@@ -120,10 +120,11 @@ func TestGoldenMarshal(t *testing.T) {
+@@ -121,10 +121,11 @@ func TestGoldenMarshal(t *testing.T) {
  
  func TestLarge(t *testing.T) {
  	const N = 10000
@@ -123,7 +139,7 @@ index 851e7fb..e120be3 100644
  		for i := 0; i < N; i++ {
  			block[offset+i] = '0' + byte(i%10)
  		}
-@@ -142,6 +143,31 @@ func TestLarge(t *testing.T) {
+@@ -143,6 +144,32 @@ func TestLarge(t *testing.T) {
  	}
  }
  
@@ -152,11 +168,12 @@ index 851e7fb..e120be3 100644
 +	}
 +}
 +
++
  // Tests that blockGeneric (pure Go) and block (in assembly for amd64, 386, arm) match.
  func TestBlockGeneric(t *testing.T) {
  	gen, asm := New().(*digest), New().(*digest)
 diff --git a/src/crypto/sha256/sha256.go b/src/crypto/sha256/sha256.go
-index 0cc7fca..a315bbe 100644
+index 68244fd63b..a2f669fa9c 100644
 --- a/src/crypto/sha256/sha256.go
 +++ b/src/crypto/sha256/sha256.go
 @@ -28,6 +28,10 @@ const Size224 = 28
@@ -170,7 +187,7 @@ index 0cc7fca..a315bbe 100644
  const (
  	chunk     = 64
  	init0     = 0x6A09E667
-@@ -191,6 +195,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
+@@ -186,6 +190,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
  	}
  	if len(p) >= chunk {
  		n := len(p) &^ (chunk - 1)
@@ -183,13 +200,15 @@ index 0cc7fca..a315bbe 100644
  		p = p[n:]
  	}
 diff --git a/src/crypto/sha256/sha256_test.go b/src/crypto/sha256/sha256_test.go
-index 7304678..4d5e8bc 100644
+index d91f01e9ba..f5dd4025d2 100644
 --- a/src/crypto/sha256/sha256_test.go
 +++ b/src/crypto/sha256/sha256_test.go
-@@ -183,6 +183,56 @@ func TestGoldenMarshal(t *testing.T) {
+@@ -184,6 +184,58 @@ func TestGoldenMarshal(t *testing.T) {
  	}
  }
  
++
++
 +func TestLarge(t *testing.T) {
 +	const N = 10000
 +	const offsets = 4
@@ -244,10 +263,10 @@ index 7304678..4d5e8bc 100644
  	h1 := New()
  	h2 := New224()
 diff --git a/src/runtime/extern.go b/src/runtime/extern.go
-index e42122f..cb019fd 100644
+index 2019be4dde..fce67adb7d 100644
 --- a/src/runtime/extern.go
 +++ b/src/runtime/extern.go
-@@ -92,6 +92,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
+@@ -89,6 +89,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
  	making every garbage collection a stop-the-world event. Setting gcstoptheworld=2
  	also disables concurrent sweeping after the garbage collection finishes.
  
@@ -258,11 +277,91 @@ index e42122f..cb019fd 100644
  	gctrace: setting gctrace=1 causes the garbage collector to emit a single line to standard
  	error at each collection, summarizing the amount of memory collected and the
  	length of the pause. The format of this line is subject to change. Included in
+diff --git a/src/runtime/lock_futex.go b/src/runtime/lock_futex.go
+index 58690e45e4..4aafc3e44d 100644
+--- a/src/runtime/lock_futex.go
++++ b/src/runtime/lock_futex.go
+@@ -48,6 +48,7 @@ func mutexContended(l *mutex) bool {
+ 	return atomic.Load(key32(&l.key)) > mutex_locked
+ }
+ 
++//go:linkname lock
+ func lock(l *mutex) {
+ 	lockWithRank(l, getLockRank(l))
+ }
+@@ -117,6 +118,7 @@ func lock2(l *mutex) {
+ 	}
+ }
+ 
++//go:linkname unlock
+ func unlock(l *mutex) {
+ 	unlockWithRank(l)
+ }
+diff --git a/src/runtime/lock_js.go b/src/runtime/lock_js.go
+index b6ee5ec7af..5ca1e3d561 100644
+--- a/src/runtime/lock_js.go
++++ b/src/runtime/lock_js.go
+@@ -27,6 +27,7 @@ func mutexContended(l *mutex) bool {
+ 	return false
+ }
+ 
++//go:linkname lock
+ func lock(l *mutex) {
+ 	lockWithRank(l, getLockRank(l))
+ }
+@@ -45,6 +46,7 @@ func lock2(l *mutex) {
+ 	l.key = mutex_locked
+ }
+ 
++//go:linkname unlock
+ func unlock(l *mutex) {
+ 	unlockWithRank(l)
+ }
+diff --git a/src/runtime/lock_sema.go b/src/runtime/lock_sema.go
+index 32d2235ad3..20a0243655 100644
+--- a/src/runtime/lock_sema.go
++++ b/src/runtime/lock_sema.go
+@@ -35,6 +35,7 @@ func mutexContended(l *mutex) bool {
+ 	return atomic.Loaduintptr(&l.key) > locked
+ }
+ 
++//go:linkname lock
+ func lock(l *mutex) {
+ 	lockWithRank(l, getLockRank(l))
+ }
+@@ -99,6 +100,7 @@ Loop:
+ 	}
+ }
+ 
++//go:linkname unlock
+ func unlock(l *mutex) {
+ 	unlockWithRank(l)
+ }
+diff --git a/src/runtime/lock_wasip1.go b/src/runtime/lock_wasip1.go
+index acfc62acb4..2c5bd3c590 100644
+--- a/src/runtime/lock_wasip1.go
++++ b/src/runtime/lock_wasip1.go
+@@ -23,6 +23,7 @@ func mutexContended(l *mutex) bool {
+ 	return false
+ }
+ 
++//go:linkname lock
+ func lock(l *mutex) {
+ 	lockWithRank(l, getLockRank(l))
+ }
+@@ -41,6 +42,7 @@ func lock2(l *mutex) {
+ 	l.key = mutex_locked
+ }
+ 
++//go:linkname unlock
+ func unlock(l *mutex) {
+ 	unlockWithRank(l)
+ }
 diff --git a/src/runtime/malloc.go b/src/runtime/malloc.go
-index e2cb2e4..75bb0b1 100644
+index b92a213245..112fd876d0 100644
 --- a/src/runtime/malloc.go
 +++ b/src/runtime/malloc.go
-@@ -1336,7 +1336,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
+@@ -1332,7 +1332,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
  // Returns the G for which the assist credit was accounted.
  func deductAssistCredit(size uintptr) *g {
  	var assistG *g
@@ -272,10 +371,10 @@ index e2cb2e4..75bb0b1 100644
  		assistG = getg()
  		if assistG.m.curg != nil {
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 0616731..88950ff 100644
+index 76c8b71ab9..a96d5a6abc 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -1067,6 +1067,11 @@ func casfrom_Gscanstatus(gp *g, oldval, newval uint32) {
+@@ -1137,6 +1137,11 @@ func casfrom_Gscanstatus(gp *g, oldval, newval uint32) {
  		dumpgstatus(gp)
  		throw("casfrom_Gscanstatus: gp->status is not in scan state")
  	}
@@ -284,13 +383,13 @@ index 0616731..88950ff 100644
 +	if newval == _Grunning {
 +		gp.lastsched = nanotime()
 +	}
- 	releaseLockRank(lockRankGscan)
+ 	releaseLockRankAndM(lockRankGscan)
  }
  
-@@ -1082,6 +1087,11 @@ func castogscanstatus(gp *g, oldval, newval uint32) bool {
+@@ -1152,6 +1157,11 @@ func castogscanstatus(gp *g, oldval, newval uint32) bool {
  			r := gp.atomicstatus.CompareAndSwap(oldval, newval)
  			if r {
- 				acquireLockRank(lockRankGscan)
+ 				acquireLockRankAndM(lockRankGscan)
 +				// We're transitioning out of running, record how long we were in the
 +				// state.
 +				if oldval == _Grunning {
@@ -299,7 +398,7 @@ index 0616731..88950ff 100644
  			}
  			return r
  
-@@ -1136,7 +1146,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1211,7 +1221,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		}
  	}
  
@@ -318,7 +417,7 @@ index 0616731..88950ff 100644
  		// Track every gTrackingPeriod time a goroutine transitions out of running.
  		if casgstatusAlwaysTrack || gp.trackingSeq%gTrackingPeriod == 0 {
  			gp.tracking = true
-@@ -1157,7 +1178,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1232,7 +1253,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		// We transitioned out of runnable, so measure how much
  		// time we spent in this state and add it to
  		// runnableTime.
@@ -326,7 +425,7 @@ index 0616731..88950ff 100644
  		gp.runnableTime += now - gp.trackingStamp
  		gp.trackingStamp = 0
  	case _Gwaiting:
-@@ -1170,7 +1190,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1245,7 +1265,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		// a more representative estimate of the absolute value.
  		// gTrackingPeriod also represents an accurate sampling period
  		// because we can only enter this state from _Grunning.
@@ -334,7 +433,7 @@ index 0616731..88950ff 100644
  		sched.totalMutexWaitTime.Add((now - gp.trackingStamp) * gTrackingPeriod)
  		gp.trackingStamp = 0
  	}
-@@ -1181,12 +1200,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1256,12 +1275,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
  			break
  		}
  		// Blocking on a lock. Write down the timestamp.
@@ -347,8 +446,8 @@ index 0616731..88950ff 100644
  		gp.trackingStamp = now
  	case _Grunning:
  		// We're transitioning into running, so turn off
-@@ -1237,6 +1254,9 @@ func casGToPreemptScan(gp *g, old, new uint32) {
- 	acquireLockRank(lockRankGscan)
+@@ -1323,6 +1340,9 @@ func casGToPreemptScan(gp *g, old, new uint32) {
+ 	acquireLockRankAndM(lockRankGscan)
  	for !gp.atomicstatus.CompareAndSwap(_Grunning, _Gscan|_Gpreempted) {
  	}
 +	// We're transitioning out of running, record how long we were in the
@@ -357,22 +456,22 @@ index 0616731..88950ff 100644
  }
  
  // casGFromPreempted attempts to transition gp from _Gpreempted to
-@@ -3932,6 +3952,14 @@ func dropg() {
+@@ -4059,6 +4079,14 @@ func dropg() {
  	setGNoWB(&gp.m.curg, nil)
  }
  
-+// grunningnanos returns the wall time spent by current g in the running state.
++// Grunningnanos returns the wall time spent by current g in the running state.
 +// A goroutine may be running on an OS thread that's descheduled by the OS
 +// scheduler, this time still counts towards the metric.
-+func grunningnanos() int64 {
++func Grunningnanos() int64 {
 +	gp := getg()
 +	return gp.runningnanos + nanotime() - gp.lastsched
 +}
 +
- // checkTimers runs any timers for the P that are ready.
- // If now is not 0 it is the current time.
- // It returns the passed time or the current time if now was passed as 0.
-@@ -4203,6 +4231,8 @@ func gdestroy(gp *g) {
+ func parkunlock_c(gp *g, lock unsafe.Pointer) bool {
+ 	unlock((*mutex)(lock))
+ 	return true
+@@ -4290,6 +4318,8 @@ func gdestroy(gp *g) {
  	gp.param = nil
  	gp.labels = nil
  	gp.timer = nil
@@ -382,30 +481,30 @@ index 0616731..88950ff 100644
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
 diff --git a/src/runtime/runtime1.go b/src/runtime/runtime1.go
-index afe1bdd..1070b6b 100644
+index 03ef74b8dc..cb45504fbf 100644
 --- a/src/runtime/runtime1.go
 +++ b/src/runtime/runtime1.go
 @@ -316,6 +316,7 @@ var debug struct {
- 	gcpacertrace            int32
- 	gcshrinkstackoff        int32
- 	gcstoptheworld          int32
-+	gcnoassist              int32
- 	gctrace                 int32
- 	invalidptr              int32
- 	madvdontneed            int32 // for Linux; issue 28466
-@@ -352,6 +353,7 @@ var dbgvars = []*dbgVar{
+ 	gcpacertrace             int32
+ 	gcshrinkstackoff         int32
+ 	gcstoptheworld           int32
++	gcnoassist               int32
+ 	gctrace                  int32
+ 	invalidptr               int32
+ 	madvdontneed             int32 // for Linux; issue 28466
+@@ -374,6 +375,7 @@ var dbgvars = []*dbgVar{
  	{name: "gcpacertrace", value: &debug.gcpacertrace},
  	{name: "gcshrinkstackoff", value: &debug.gcshrinkstackoff},
  	{name: "gcstoptheworld", value: &debug.gcstoptheworld},
 +	{name: "gcnoassist", value: &debug.gcnoassist},
  	{name: "gctrace", value: &debug.gctrace},
- 	{name: "invalidptr", value: &debug.invalidptr},
- 	{name: "madvdontneed", value: &debug.madvdontneed},
+ 	{name: "harddecommit", value: &debug.harddecommit},
+ 	{name: "inittrace", value: &debug.inittrace},
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index 63320d4..6569dc3 100644
+index 4a78963961..da1db551d5 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
-@@ -492,7 +492,6 @@ type g struct {
+@@ -493,7 +493,6 @@ type g struct {
  	trackingStamp int64 // timestamp of when the G last started being tracked
  	runnableTime  int64 // the amount of time spent runnable, cleared when running, only used when tracking
  	lockedm       muintptr
@@ -413,26 +512,35 @@ index 63320d4..6569dc3 100644
  	writebuf      []byte
  	sigcode0      uintptr
  	sigcode1      uintptr
-@@ -507,6 +506,9 @@ type g struct {
- 	labels        unsafe.Pointer // profiler labels
+@@ -509,6 +508,10 @@ type g struct {
  	timer         *timer         // cached timer for time.Sleep
+ 	sleepWhen     int64          // when to sleep until
  	selectDone    atomic.Uint32  // are we participating in a select and did someone win the race?
 +	sig           uint32
 +	lastsched     int64 // timestamp when the G last started running
 +	runningnanos  int64 // wall time spent in the running state
++
  
- 	coroarg *coro // argument during coroutine transfers
+ 	// goroutineProfiled indicates the status of this goroutine's stack for the
+ 	// current in-progress goroutine profile
+@@ -1189,6 +1192,7 @@ var (
  
+ 	// len(allp) == gomaxprocs; may change at safe points, otherwise
+ 	// immutable.
++	//go:linkname allp
+ 	allp []*p
+ 
+ 	// Bitmask of Ps in _Pidle list, one bit per P. Reads and writes must
 diff --git a/src/runtime/sizeof_test.go b/src/runtime/sizeof_test.go
-index aa8caaa..7916bde 100644
+index 43aba98dce..a076c93b8e 100644
 --- a/src/runtime/sizeof_test.go
 +++ b/src/runtime/sizeof_test.go
-@@ -27,7 +27,7 @@ func TestSizeof(t *testing.T) {
+@@ -20,7 +20,7 @@ func TestSizeof(t *testing.T) {
  		_32bit uintptr // size on 32bit platforms
  		_64bit uintptr // size on 64bit platforms
  	}{
--		{runtime.G{}, g32bit, 424}, // g, but exported for testing
-+		{runtime.G{}, g32bit, 432}, // g, but exported for testing
- 		{runtime.Sudog{}, 56, 88},  // sudog, but exported for testing
+-		{runtime.G{}, 272, 432},   // g, but exported for testing
++		{runtime.G{}, 272, 448},   // g, but exported for testing
+ 		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
  

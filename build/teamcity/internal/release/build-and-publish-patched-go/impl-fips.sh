@@ -9,8 +9,8 @@
 set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=8092b8157908b59e5930a1247b6f41842a25f89e
-GO_VERSION=1.22.5
+GO_FIPS_COMMIT=e982fa08164dabdefde5fd38b35ee3122ee0bb20
+GO_VERSION=1.23.2
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
@@ -25,6 +25,11 @@ cd /workspace
 git clone $GO_FIPS_REPO go
 cd go
 git checkout $GO_FIPS_COMMIT
+# Delete a patch that we don't want. This shouldn't be necessary when we upgrade
+# to Ubuntu 24.04. Without this removal, attempting to run the binary on our
+# current build infrastructure results in the following error:
+#     version `GLIBC_2.32' not found (required by external/go_sdk_fips/bin/go)
+rm ./patches/017-fix-linkage.patch
 # Lower the requirements in case we need to bootstrap with an older Go version
 sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
 ./scripts/full-initialize-repo.sh "go$GO_VERSION"

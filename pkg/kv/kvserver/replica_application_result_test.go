@@ -38,7 +38,7 @@ func makeProposalData() *ProposalData {
 	}
 
 	return &ProposalData{
-		ctx:                     context.WithValue(context.Background(), struct{}{}, "nonempty-ctx"),
+		ctx:                     context.WithValue(context.Background(), &contextKeyPtr, "nonempty-ctx"),
 		sp:                      &tracing.Span{},
 		idKey:                   "deadbeef",
 		proposedAtTicks:         1,
@@ -119,3 +119,7 @@ func TestReplicaMakeReproposalChaininig(t *testing.T) {
 	_, _ = reproposal, onSuccess // No onSuccess call, assume the proposal failed.
 	verify()
 }
+
+type contextKey struct{}
+
+var contextKeyPtr contextKey

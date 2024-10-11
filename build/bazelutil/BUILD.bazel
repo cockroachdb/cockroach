@@ -3,17 +3,6 @@ exports_files(["nogo_config.json"])
 load("@bazel_skylib//rules:analysis_test.bzl", "analysis_test")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
-analysis_test(
-    name = "test_nogo_configured",
-    targets = select(
-        {
-            "//build/toolchains:nogo": [],
-            "//build/toolchains:nonogo_explicit": [],
-        },
-        no_match_error = "must use exactly one of `--config lintonbuild` or `--config nolintonbuild` explicitly",
-    ),
-)
-
 # The output file will be empty unless we're using the force_build_cdeps config.
 genrule(
     name = "test_force_build_cdeps",
