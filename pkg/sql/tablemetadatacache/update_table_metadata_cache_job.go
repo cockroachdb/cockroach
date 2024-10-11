@@ -59,7 +59,13 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	}
 
 	if updater == nil {
-		updater = newTableMetadataUpdater(j.updateProgress, &metrics, execCtx.ExecCfg().InternalDB.Executor(), testKnobs)
+		updater = newTableMetadataUpdater(
+			j.updateProgress,
+			&metrics,
+			execCtx.ExecCfg().TenantStatusServer,
+			execCtx.ExecCfg().InternalDB.Executor(),
+			timeutil.DefaultTimeSource{},
+			testKnobs)
 	}
 	// We must reset the job's num runs to 0 so that it doesn't get
 	// delayed by the job system's exponential backoff strategy.
