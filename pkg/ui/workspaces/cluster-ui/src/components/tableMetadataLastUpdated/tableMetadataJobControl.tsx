@@ -22,69 +22,67 @@ import styles from "./tableMetadataJobControl.module.scss";
 type TableMetadataJobControlProps = {
   // Callback for when the job has updated the metadata, i.e. the
   // lastUpdatedTime has changed.
-  onDataUpdated?: () => void;
+  onJobComplete?: () => void;
 };
+
+// This value is used to signal that the job completed
+// time hasn't loaded yet.
+const JOB_NOT_LOADED = -1;
 
 export const TableMetadataJobControl: React.FC<
   TableMetadataJobControlProps
-> = ({ onDataUpdated }) => {
+> = ({ onJobComplete }) => {
   const { jobStatus, refreshJobStatus, isLoading } = useTableMetaUpdateJob();
   const previousUpdateCompletedUnixSecs = usePrevious(
-    jobStatus?.lastCompletedTime?.unix(),
+    isLoading ? JOB_NOT_LOADED : jobStatus?.lastCompletedTime?.unix(),
   );
   const lastUpdateCompletedUnixSecs = jobStatus?.lastCompletedTime?.unix();
 
   const triggerUpdateTableMetaJob = useCallback(
     async (onlyIfStale = true) => {
       const resp = await triggerUpdateTableMetaJobApi({ onlyIfStale });
-      if (resp.job_triggered) {
+      if (resp.jobTriggered) {
         return refreshJobStatus();
       }
     },
     [refreshJobStatus],
   );
 
-  const dataValidMs = jobStatus?.dataValidDuration.asMilliseconds();
   useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-    // Schedule the next update request after the dataValidMs has passed since
-    // the last update completed.
-    const msSinceLastCompleted =
-      Date.now() - lastUpdateCompletedUnixSecs * 1000;
-    const delayMs = Math.max(0, dataValidMs - msSinceLastCompleted);
-    const nextUpdated = setTimeout(() => {
+    triggerUpdateTableMetaJob();
+    const nextUpdated = setInterval(() => {
       triggerUpdateTableMetaJob();
-    }, delayMs);
+    }, 10000);
 
     return () => clearTimeout(nextUpdated);
-  }, [
-    dataValidMs,
-    lastUpdateCompletedUnixSecs,
-    triggerUpdateTableMetaJob,
-    isLoading,
-  ]);
+  }, [triggerUpdateTableMetaJob]);
 
   useEffect(() => {
     // If the last completed time has changed, call the callback.
-    if (previousUpdateCompletedUnixSecs === lastUpdateCompletedUnixSecs) {
+    if (
+      previousUpdateCompletedUnixSecs === JOB_NOT_LOADED ||
+      previousUpdateCompletedUnixSecs === lastUpdateCompletedUnixSecs
+    ) {
       return;
     }
-    onDataUpdated && onDataUpdated();
+    onJobComplete && onJobComplete();
   }, [
     previousUpdateCompletedUnixSecs,
     lastUpdateCompletedUnixSecs,
-    onDataUpdated,
+    onJobComplete,
   ]);
 
   const onRefreshClick = () => {
     // Force refresh.
     triggerUpdateTableMetaJob(false);
   };
-  const durationText = jobStatus?.lastCompletedTime?.fromNow();
 
+  const durationText = jobStatus?.lastCompletedTime?.fromNow();
   const isRunning = jobStatus?.currentStatus === TableMetadataJobStatus.RUNNING;
+  const refreshButtonTooltip = isRunning
+    ? "Data is currently refreshing"
+    : "Refresh data";
+
   return (
     <div className={styles["controls-container"]}>
       <Skeleton loading={isLoading}>
@@ -93,7 +91,7 @@ export const TableMetadataJobControl: React.FC<
             "Data is last refreshed automatically (per cluster setting) or manually."
           }
         >
-          Last refreshed:
+          Last refreshed:{" "}
           <Timestamp
             format={DATE_WITH_SECONDS_FORMAT_24_TZ}
             time={jobStatus?.lastCompletedTime}
@@ -102,7 +100,7 @@ export const TableMetadataJobControl: React.FC<
           {durationText && `(${durationText})`}
         </Tooltip>
       </Skeleton>
-      <Tooltip placement="top" title={"Refresh data"}>
+      <Tooltip placement="top" title={refreshButtonTooltip}>
         <div>
           <Button
             disabled={isRunning}
