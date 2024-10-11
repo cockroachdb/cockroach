@@ -35,6 +35,7 @@ import "./layout.styl";
 import "./layoutPanel.styl";
 import { getDataFromServer } from "src/util/dataFromServer";
 import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
+import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
 export interface LayoutProps {
   clusterName: string;
@@ -96,6 +97,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <TenantDropdown />
             </PageHeader>
           </div>
+          <ThrottleNotificationBar />
           <div className="layout-panel__body">
             <div className="layout-panel__sidebar">
               <NavigationBar />

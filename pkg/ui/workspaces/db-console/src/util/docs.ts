@@ -55,6 +55,7 @@ export let privileges: string;
 export let showSessions: string;
 export let sessionsTable: string;
 export let upgradeTroubleshooting: string;
+export let throttlingFaqs: string;
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const enterpriseLicenseUpdate =
@@ -134,6 +135,7 @@ export const recomputeDocsURLs = () => {
   upgradeTroubleshooting = docsURL(
     "upgrade-cockroach-version.html#troubleshooting",
   );
+  throttlingFaqs = docsURL("licensing-faqs#monitor-for-license-expiry");
 };
 
 recomputeDocsURLs();
