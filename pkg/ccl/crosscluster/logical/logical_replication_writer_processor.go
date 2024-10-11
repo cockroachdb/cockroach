@@ -699,6 +699,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
 	lrw.debug.RecordFlushComplete(flushTime, int64(len(kvs)), stats.processed.bytes)
 
+	lrw.metrics.KVUpdateTooOld.Inc(stats.kvWriteTooOld)
+	lrw.metrics.KVValueRefreshes.Inc(stats.kvWriteValueRefreshes)
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
 	if l := lrw.spec.MetricsLabel; l != "" {
@@ -831,8 +833,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 							stats.notProcessed.bytes += int64(batch[i].Size())
 						}
 					} else {
-						stats.optimisticInsertConflicts += singleStats.optimisticInsertConflicts
-						stats.kvWriteFallbacks += singleStats.kvWriteFallbacks
+						stats.batchStats.Add(singleStats)
 						batch[i] = streampb.StreamEvent_KV{}
 						stats.processed.success++
 						stats.processed.bytes += int64(batch[i].Size())
@@ -840,8 +841,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				}
 			}
 		} else {
-			stats.optimisticInsertConflicts += s.optimisticInsertConflicts
-			stats.kvWriteFallbacks += s.kvWriteFallbacks
+			stats.batchStats.Add(s)
 			stats.processed.success += int64(len(batch))
 			// Clear the event to indicate successful application.
 			for i := range batch {
@@ -916,8 +916,16 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 
 type batchStats struct {
 	optimisticInsertConflicts int64
-	kvWriteFallbacks          int64
+	kvWriteTooOld             int64
+	kvWriteValueRefreshes     int64
 }
+
+func (b *batchStats) Add(o batchStats) {
+	b.optimisticInsertConflicts += o.optimisticInsertConflicts
+	b.kvWriteTooOld += o.kvWriteTooOld
+	b.kvWriteValueRefreshes += o.kvWriteValueRefreshes
+}
+
 type flushStats struct {
 	processed struct {
 		success, dlq, bytes int64
@@ -925,7 +933,8 @@ type flushStats struct {
 	notProcessed struct {
 		count, bytes int64
 	}
-	optimisticInsertConflicts, kvWriteFallbacks int64
+
+	batchStats
 }
 
 func (b *flushStats) Add(o flushStats) {
@@ -934,8 +943,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.processed.bytes += o.processed.bytes
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
-	b.optimisticInsertConflicts += o.optimisticInsertConflicts
-	b.kvWriteFallbacks += o.kvWriteFallbacks
+	b.batchStats.Add(o.batchStats)
 }
 
 type BatchHandler interface {
