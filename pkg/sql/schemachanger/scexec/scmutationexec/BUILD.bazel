@@ -14,6 +14,7 @@ go_library(
         "helpers.go",
         "index.go",
         "privileges.go",
+        "range.go",
         "references.go",
         "schema.go",
         "schema_change_job.go",
