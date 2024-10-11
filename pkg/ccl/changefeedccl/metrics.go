@@ -47,32 +47,35 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
-	EmittedMessages           *aggmetric.AggCounter
-	FilteredMessages          *aggmetric.AggCounter
-	MessageSize               *aggmetric.AggHistogram
-	EmittedBytes              *aggmetric.AggCounter
-	FlushedBytes              *aggmetric.AggCounter
-	BatchHistNanos            *aggmetric.AggHistogram
-	Flushes                   *aggmetric.AggCounter
-	FlushHistNanos            *aggmetric.AggHistogram
-	SizeBasedFlushes          *aggmetric.AggCounter
-	ParallelIOQueueNanos      *aggmetric.AggHistogram
-	SinkIOInflight            *aggmetric.AggGauge
-	CommitLatency             *aggmetric.AggHistogram
-	BackfillCount             *aggmetric.AggGauge
-	BackfillPendingRanges     *aggmetric.AggGauge
-	ErrorRetries              *aggmetric.AggCounter
-	AdmitLatency              *aggmetric.AggHistogram
-	RunningCount              *aggmetric.AggGauge
-	BatchReductionCount       *aggmetric.AggGauge
-	InternalRetryMessageCount *aggmetric.AggGauge
-	SchemaRegistrations       *aggmetric.AggCounter
-	SchemaRegistryRetries     *aggmetric.AggCounter
-	AggregatorProgress        *aggmetric.AggGauge
-	CheckpointProgress        *aggmetric.AggGauge
-	LaggingRanges             *aggmetric.AggGauge
-	TotalRanges               *aggmetric.AggGauge
-	CloudstorageBufferedBytes *aggmetric.AggGauge
+	EmittedMessages             *aggmetric.AggCounter
+	FilteredMessages            *aggmetric.AggCounter
+	MessageSize                 *aggmetric.AggHistogram
+	EmittedBytes                *aggmetric.AggCounter
+	FlushedBytes                *aggmetric.AggCounter
+	BatchHistNanos              *aggmetric.AggHistogram
+	Flushes                     *aggmetric.AggCounter
+	FlushHistNanos              *aggmetric.AggHistogram
+	SizeBasedFlushes            *aggmetric.AggCounter
+	SinkIOInflight              *aggmetric.AggGauge
+	ParallelIOPendingQueueNanos *aggmetric.AggHistogram
+	ParallelIOPendingRows       *aggmetric.AggGauge
+	ParallelIOResultQueueNanos  *aggmetric.AggHistogram
+	ParallelIOInFlightKeys      *aggmetric.AggGauge
+	CommitLatency               *aggmetric.AggHistogram
+	BackfillCount               *aggmetric.AggGauge
+	BackfillPendingRanges       *aggmetric.AggGauge
+	ErrorRetries                *aggmetric.AggCounter
+	AdmitLatency                *aggmetric.AggHistogram
+	RunningCount                *aggmetric.AggGauge
+	BatchReductionCount         *aggmetric.AggGauge
+	InternalRetryMessageCount   *aggmetric.AggGauge
+	SchemaRegistrations         *aggmetric.AggCounter
+	SchemaRegistryRetries       *aggmetric.AggCounter
+	AggregatorProgress          *aggmetric.AggGauge
+	CheckpointProgress          *aggmetric.AggGauge
+	LaggingRanges               *aggmetric.AggGauge
+	TotalRanges                 *aggmetric.AggGauge
+	CloudstorageBufferedBytes   *aggmetric.AggGauge
 
 	Timers *timers.Timers
 
@@ -106,7 +109,7 @@ type metricsRecorder interface {
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
-	recordParallelIOQueueLatency(time.Duration)
+	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	netMetrics() *cidr.NetMetrics
@@ -120,32 +123,35 @@ func (a *AggMetrics) MetricStruct() {}
 
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
-	EmittedMessages           *aggmetric.Counter
-	FilteredMessages          *aggmetric.Counter
-	MessageSize               *aggmetric.Histogram
-	EmittedBytes              *aggmetric.Counter
-	FlushedBytes              *aggmetric.Counter
-	BatchHistNanos            *aggmetric.Histogram
-	Flushes                   *aggmetric.Counter
-	FlushHistNanos            *aggmetric.Histogram
-	SizeBasedFlushes          *aggmetric.Counter
-	ParallelIOQueueNanos      *aggmetric.Histogram
-	SinkIOInflight            *aggmetric.Gauge
-	CommitLatency             *aggmetric.Histogram
-	ErrorRetries              *aggmetric.Counter
-	AdmitLatency              *aggmetric.Histogram
-	BackfillCount             *aggmetric.Gauge
-	BackfillPendingRanges     *aggmetric.Gauge
-	RunningCount              *aggmetric.Gauge
-	BatchReductionCount       *aggmetric.Gauge
-	InternalRetryMessageCount *aggmetric.Gauge
-	SchemaRegistrations       *aggmetric.Counter
-	SchemaRegistryRetries     *aggmetric.Counter
-	AggregatorProgress        *aggmetric.Gauge
-	CheckpointProgress        *aggmetric.Gauge
-	LaggingRanges             *aggmetric.Gauge
-	TotalRanges               *aggmetric.Gauge
-	CloudstorageBufferedBytes *aggmetric.Gauge
+	EmittedMessages             *aggmetric.Counter
+	FilteredMessages            *aggmetric.Counter
+	MessageSize                 *aggmetric.Histogram
+	EmittedBytes                *aggmetric.Counter
+	FlushedBytes                *aggmetric.Counter
+	BatchHistNanos              *aggmetric.Histogram
+	Flushes                     *aggmetric.Counter
+	FlushHistNanos              *aggmetric.Histogram
+	SizeBasedFlushes            *aggmetric.Counter
+	ParallelIOPendingQueueNanos *aggmetric.Histogram
+	ParallelIOPendingRows       *aggmetric.Gauge
+	ParallelIOResultQueueNanos  *aggmetric.Histogram
+	ParallelIOInFlightKeys      *aggmetric.Gauge
+	SinkIOInflight              *aggmetric.Gauge
+	CommitLatency               *aggmetric.Histogram
+	ErrorRetries                *aggmetric.Counter
+	AdmitLatency                *aggmetric.Histogram
+	BackfillCount               *aggmetric.Gauge
+	BackfillPendingRanges       *aggmetric.Gauge
+	RunningCount                *aggmetric.Gauge
+	BatchReductionCount         *aggmetric.Gauge
+	InternalRetryMessageCount   *aggmetric.Gauge
+	SchemaRegistrations         *aggmetric.Counter
+	SchemaRegistryRetries       *aggmetric.Counter
+	AggregatorProgress          *aggmetric.Gauge
+	CheckpointProgress          *aggmetric.Gauge
+	LaggingRanges               *aggmetric.Gauge
+	TotalRanges                 *aggmetric.Gauge
+	CloudstorageBufferedBytes   *aggmetric.Gauge
 
 	Timers *timers.ScopedTimers
 
@@ -327,12 +333,61 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
-func (m *sliMetrics) recordParallelIOQueueLatency(latency time.Duration) {
-	if m == nil {
+type parallelIOMetricsRecorder interface {
+	recordPendingQueuePush(numKeys int64)
+	recordPendingQueuePop(numKeys int64, latency time.Duration)
+	recordResultQueueLatency(latency time.Duration)
+	setInFlightKeys(n int64)
+}
+
+type parallelIOMetricsRecorderImpl struct {
+	pendingQueueNanos *aggmetric.Histogram
+	pendingRows       *aggmetric.Gauge
+	resultQueueNanos  *aggmetric.Histogram
+	inFlight          *aggmetric.Gauge
+}
+
+func (p *parallelIOMetricsRecorderImpl) setInFlightKeys(n int64) {
+	if p == nil {
 		return
 	}
-	m.ParallelIOQueueNanos.RecordValue(latency.Nanoseconds())
+	p.inFlight.Update(n)
 }
+
+func (p *parallelIOMetricsRecorderImpl) recordResultQueueLatency(latency time.Duration) {
+	if p == nil {
+		return
+	}
+	p.resultQueueNanos.RecordValue(latency.Nanoseconds())
+}
+
+func (p *parallelIOMetricsRecorderImpl) recordPendingQueuePush(n int64) {
+	if p == nil {
+		return
+	}
+	p.pendingRows.Inc(n)
+}
+
+func (p *parallelIOMetricsRecorderImpl) recordPendingQueuePop(n int64, latency time.Duration) {
+	if p == nil {
+		return
+	}
+	p.pendingRows.Dec(n)
+	p.pendingQueueNanos.RecordValue(latency.Nanoseconds())
+}
+
+func (m *sliMetrics) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
+	if m == nil {
+		return (*parallelIOMetricsRecorderImpl)(nil)
+	}
+	return &parallelIOMetricsRecorderImpl{
+		pendingQueueNanos: m.ParallelIOPendingQueueNanos,
+		pendingRows:       m.ParallelIOPendingRows,
+		resultQueueNanos:  m.ParallelIOResultQueueNanos,
+		inFlight:          m.ParallelIOInFlightKeys,
+	}
+}
+
 func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	if m == nil {
 		return
@@ -503,12 +558,12 @@ func (w *wrappingCostController) recordSizeBasedFlush() {
 	w.inner.recordSizeBasedFlush()
 }
 
-func (w *wrappingCostController) recordParallelIOQueueLatency(latency time.Duration) {
-	w.inner.recordParallelIOQueueLatency(latency)
-}
-
 func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
+}
+
+func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
+	return w.inner.newParallelIOMetricsRecorder()
 }
 
 func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
@@ -735,10 +790,30 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedParallelIOQueueNanos := metric.Metadata{
-		Name:        "changefeed.parallel_io_queue_nanos",
-		Help:        "Time spent with outgoing requests to the sink waiting in queue due to inflight requests with conflicting keys",
-		Measurement: "Changefeeds",
+		Name: "changefeed.parallel_io_queue_nanos",
+		Help: "Time that outgoing requests to the sink spend waiting in a queue due to" +
+			" in-flight requests with conflicting keys",
+		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedParallelIOPendingRows := metric.Metadata{
+		Name:        "changefeed.parallel_io_pending_rows",
+		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedParallelIOResultQueueNanos := metric.Metadata{
+		Name: "changefeed.parallel_io_result_queue_nanos",
+		Help: "Time that incoming results from the sink spend waiting in parallel io emitter" +
+			" before they are acknowledged by the changefeed",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedParallelIOInFlightKeys := metric.Metadata{
+		Name:        "changefeed.parallel_io_in_flight_keys",
+		Help:        "The number of keys currently in-flight which may contend with batches pending to be emitted",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedSinkIOInflight := metric.Metadata{
 		Name:        "changefeed.sink_io_inflight",
@@ -805,15 +880,23 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		FlushedBytes:     b.Counter(metaChangefeedFlushedBytes),
 		Flushes:          b.Counter(metaChangefeedFlushes),
 		SizeBasedFlushes: b.Counter(metaSizeBasedFlushes),
-		ParallelIOQueueNanos: b.Histogram(metric.HistogramOptions{
+		ParallelIOPendingQueueNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedParallelIOQueueNanos,
 			Duration:     histogramWindow,
 			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		SinkIOInflight: b.Gauge(metaChangefeedSinkIOInflight),
-
+		ParallelIOPendingRows: b.Gauge(metaChangefeedParallelIOPendingRows),
+		ParallelIOResultQueueNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedParallelIOResultQueueNanos,
+			Duration:     histogramWindow,
+			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
+		ParallelIOInFlightKeys: b.Gauge(metaChangefeedParallelIOInFlightKeys),
+		SinkIOInflight:         b.Gauge(metaChangefeedSinkIOInflight),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
@@ -894,30 +977,33 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedMessages:           a.EmittedMessages.AddChild(scope),
-		FilteredMessages:          a.FilteredMessages.AddChild(scope),
-		MessageSize:               a.MessageSize.AddChild(scope),
-		EmittedBytes:              a.EmittedBytes.AddChild(scope),
-		FlushedBytes:              a.FlushedBytes.AddChild(scope),
-		BatchHistNanos:            a.BatchHistNanos.AddChild(scope),
-		Flushes:                   a.Flushes.AddChild(scope),
-		FlushHistNanos:            a.FlushHistNanos.AddChild(scope),
-		SizeBasedFlushes:          a.SizeBasedFlushes.AddChild(scope),
-		ParallelIOQueueNanos:      a.ParallelIOQueueNanos.AddChild(scope),
-		SinkIOInflight:            a.SinkIOInflight.AddChild(scope),
-		CommitLatency:             a.CommitLatency.AddChild(scope),
-		ErrorRetries:              a.ErrorRetries.AddChild(scope),
-		AdmitLatency:              a.AdmitLatency.AddChild(scope),
-		BackfillCount:             a.BackfillCount.AddChild(scope),
-		BackfillPendingRanges:     a.BackfillPendingRanges.AddChild(scope),
-		RunningCount:              a.RunningCount.AddChild(scope),
-		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
-		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
-		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
-		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
-		LaggingRanges:             a.LaggingRanges.AddChild(scope),
-		TotalRanges:               a.TotalRanges.AddChild(scope),
-		CloudstorageBufferedBytes: a.CloudstorageBufferedBytes.AddChild(scope),
+		EmittedMessages:             a.EmittedMessages.AddChild(scope),
+		FilteredMessages:            a.FilteredMessages.AddChild(scope),
+		MessageSize:                 a.MessageSize.AddChild(scope),
+		EmittedBytes:                a.EmittedBytes.AddChild(scope),
+		FlushedBytes:                a.FlushedBytes.AddChild(scope),
+		BatchHistNanos:              a.BatchHistNanos.AddChild(scope),
+		Flushes:                     a.Flushes.AddChild(scope),
+		FlushHistNanos:              a.FlushHistNanos.AddChild(scope),
+		SizeBasedFlushes:            a.SizeBasedFlushes.AddChild(scope),
+		ParallelIOPendingQueueNanos: a.ParallelIOPendingQueueNanos.AddChild(scope),
+		ParallelIOPendingRows:       a.ParallelIOPendingRows.AddChild(scope),
+		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
+		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
+		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
+		CommitLatency:               a.CommitLatency.AddChild(scope),
+		ErrorRetries:                a.ErrorRetries.AddChild(scope),
+		AdmitLatency:                a.AdmitLatency.AddChild(scope),
+		BackfillCount:               a.BackfillCount.AddChild(scope),
+		BackfillPendingRanges:       a.BackfillPendingRanges.AddChild(scope),
+		RunningCount:                a.RunningCount.AddChild(scope),
+		BatchReductionCount:         a.BatchReductionCount.AddChild(scope),
+		InternalRetryMessageCount:   a.InternalRetryMessageCount.AddChild(scope),
+		SchemaRegistryRetries:       a.SchemaRegistryRetries.AddChild(scope),
+		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
+		LaggingRanges:               a.LaggingRanges.AddChild(scope),
+		TotalRanges:                 a.TotalRanges.AddChild(scope),
+		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 
 		Timers: a.Timers.GetOrCreateScopedTimers(scope),
 
