@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var logicalReplicationWriterResultType = []*types.T{
@@ -83,6 +84,7 @@ var maxChunkSize = settings.RegisterIntSetting(
 // by decoding kvs in it to logical changes and applying them by executing DMLs.
 type logicalReplicationWriterProcessor struct {
 	execinfra.ProcessorBase
+	processorID int32
 
 	spec execinfrapb.LogicalReplicationWriterSpec
 
@@ -112,6 +114,8 @@ type logicalReplicationWriterProcessor struct {
 	errCh chan error
 
 	checkpointCh chan []jobspb.ResolvedSpan
+
+	rangeStatsCh chan *streampb.StreamEvent_RangeStats
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -187,6 +191,7 @@ func newLogicalReplicationWriterProcessor(
 	lrw := &logicalReplicationWriterProcessor{
 		configByTable: procConfigByDestTableID,
 		spec:          spec,
+		processorID:   processorID,
 		getBatchSize: func() int {
 			// TODO(ssd): We set this to 1 since putting more than 1
 			// row in a KV batch using the new ConditionalPut-based
@@ -221,6 +226,7 @@ func newLogicalReplicationWriterProcessor(
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
 		checkpointCh:   make(chan []jobspb.ResolvedSpan),
+		rangeStatsCh:   make(chan *streampb.StreamEvent_RangeStats),
 		errCh:          make(chan error, 1),
 		logBufferEvery: log.Every(30 * time.Second),
 		debug: streampb.DebugLogicalConsumerStatus{
@@ -382,6 +388,13 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 				return nil, lrw.DrainHelper()
 			}
 		}
+	case stats := <-lrw.rangeStatsCh:
+		meta, err := lrw.newRangeStatsProgressMeta(stats)
+		if err != nil {
+			lrw.MoveToDrainingAndLogError(err)
+			return nil, lrw.DrainHelper()
+		}
+		return nil, meta
 	case err := <-lrw.errCh:
 		lrw.MoveToDrainingAndLogError(err)
 		return nil, lrw.DrainHelper()
@@ -494,7 +507,7 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 			return err
 		}
 	case crosscluster.CheckpointEvent:
-		if err := lrw.maybeCheckpoint(ctx, event.GetCheckpoint().ResolvedSpans); err != nil {
+		if err := lrw.maybeCheckpoint(ctx, event.GetCheckpoint()); err != nil {
 			return err
 		}
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
@@ -512,16 +525,65 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 }
 
 func (lrw *logicalReplicationWriterProcessor) maybeCheckpoint(
-	ctx context.Context, resolvedSpans []jobspb.ResolvedSpan,
+	ctx context.Context, checkpoint *streampb.StreamEvent_StreamCheckpoint,
 ) error {
+	// If the checkpoint contains stats publish them to the coordinator. The
+	// stats ignore purgatory because they:
+	// 1. Track the status of the producer scans
+	// 2. Are intended for monitoring and don't need to reflect the committed
+	//    state of the write processor.
+	//
+	// RangeStats may be nil if the producer does not support the stats field or
+	// the the producer has not finished counting the ranges.
+	if checkpoint.RangeStats != nil {
+		err := lrw.rangeStats(ctx, checkpoint.RangeStats)
+		if err != nil {
+			return err
+		}
+	}
+
 	// If purgatory is non-empty, it intercepts the checkpoint and then we can try
 	// to drain it.
 	if !lrw.purgatory.Empty() {
-		lrw.purgatory.Checkpoint(ctx, resolvedSpans)
+		lrw.purgatory.Checkpoint(ctx, checkpoint.ResolvedSpans)
 		return lrw.purgatory.Drain(ctx)
 	}
 
-	return lrw.checkpoint(ctx, resolvedSpans)
+	return lrw.checkpoint(ctx, checkpoint.ResolvedSpans)
+}
+
+func (lrw *logicalReplicationWriterProcessor) rangeStats(
+	ctx context.Context, stats *streampb.StreamEvent_RangeStats,
+) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case lrw.rangeStatsCh <- stats:
+		return nil
+	case <-lrw.stopCh:
+		// We need to select on stopCh here because the reader
+		// of rangestatsCh is the caller of Next(). But there
+		// might never be another Next() call since it may
+		// have exited based on an error.
+		return nil
+	}
+}
+
+func (lrw *logicalReplicationWriterProcessor) newRangeStatsProgressMeta(
+	stats *streampb.StreamEvent_RangeStats,
+) (*execinfrapb.ProducerMetadata, error) {
+	asAny, err := pbtypes.MarshalAny(stats)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to convert stats into any proto")
+	}
+	return &execinfrapb.ProducerMetadata{
+		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+			NodeID:          lrw.FlowCtx.NodeID.SQLInstanceID(),
+			FlowID:          lrw.FlowCtx.ID,
+			ProcessorID:     lrw.ProcessorID,
+			ProgressDetails: *asAny,
+		},
+	}, nil
 }
 
 func (lrw *logicalReplicationWriterProcessor) checkpoint(
