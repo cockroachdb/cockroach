@@ -91,7 +91,7 @@ func parseEvent(streamEvent *streampb.StreamEvent) crosscluster.Event {
 	}
 
 	if streamEvent.Checkpoint != nil {
-		event := crosscluster.MakeCheckpointEvent(streamEvent.Checkpoint.ResolvedSpans)
+		event := crosscluster.MakeCheckpointEvent(streamEvent.Checkpoint)
 		streamEvent.Checkpoint = nil
 		return event
 	}
