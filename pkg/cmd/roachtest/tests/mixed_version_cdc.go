@@ -67,7 +67,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          120 * time.Minute,
+		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
@@ -502,6 +502,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// 23.1. That mistake was then fixed (#110676) but, to simplify
 		// this test, we only create changefeeds in more recent versions.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// We limit the number of upgrades to be performed in the test run because
+		// the test takes a significant amount of time to complete.
+		mixedversion.MaxUpgrades(3),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
