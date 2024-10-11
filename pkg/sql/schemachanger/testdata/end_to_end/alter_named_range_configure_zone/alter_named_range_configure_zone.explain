@@ -1,0 +1,23 @@
+/* setup */
+
+/* test */
+EXPLAIN (DDL) ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+----
+Schema change plan for ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 0 (#0), SeqNum: 1}
+ │         └── 1 Mutation operation
+ │              └── AddNamedRangeZoneConfig {"RangeName":"default"}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 0 (#0), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 0 (#0), SeqNum: 1}
+           └── 1 Mutation operation
+                └── AddNamedRangeZoneConfig {"RangeName":"default"}

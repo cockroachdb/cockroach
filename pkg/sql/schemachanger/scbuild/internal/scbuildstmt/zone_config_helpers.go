@@ -1082,10 +1082,6 @@ func prepareZoneConfig(
 	setters []func(c *zonepb.ZoneConfig),
 	obj zoneConfigObject,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	// TODO(annie): once we allow configuring zones for named zones/system ranges,
-	// we will need to guard against secondary tenants from configuring such
-	// ranges.
-
 	// Retrieve the partial zone configuration
 	partialZone := obj.retrievePartialZoneConfig(b)
 
@@ -1143,7 +1139,13 @@ func prepareZoneConfig(
 	oldZone := protoutil.Clone(completeZone).(*zonepb.ZoneConfig)
 
 	if n.SetDefault {
-		finalZone = *zonepb.NewZoneConfig()
+		// ALTER RANGE default USING DEFAULT sets the default to the in
+		// memory default value.
+		if keys.RootNamespaceID == uint32(obj.getTargetID()) {
+			finalZone = *protoutil.Clone(b.GetDefaultZoneConfig()).(*zonepb.ZoneConfig)
+		} else {
+			finalZone = *zonepb.NewZoneConfig()
+		}
 	}
 
 	// Fill in our zone configs with var = val assignments.
