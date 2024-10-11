@@ -18,10 +18,10 @@
 package raft
 
 import (
-	"errors"
 	"sync"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrCompacted is returned by Storage.Entries/Compact when a requested

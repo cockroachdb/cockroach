@@ -18,7 +18,6 @@
 package rafttest
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) error {
