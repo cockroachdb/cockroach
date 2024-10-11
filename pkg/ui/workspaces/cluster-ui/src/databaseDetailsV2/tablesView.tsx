@@ -300,7 +300,7 @@ export const TablesPageV2 = () => {
           loading={isLoading}
           error={error}
           actionButton={
-            <TableMetadataJobControl onDataUpdated={refreshTables} />
+            <TableMetadataJobControl onJobComplete={refreshTables} />
           }
           columns={colsWithSort}
           dataSource={tableData}

@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import moment from "moment-timezone";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import useSWR from "swr";
 
 import { fetchDataJSON } from "../fetchData";
@@ -67,7 +67,8 @@ export const convertTableMetaUpdateJobFromServer = (
 
 // useTableMetaUpdateJob is a hook that fetches the current status of the table
 // metadata update job and returns the status and other relevant information.
-// The hook polls the API every 3 seconds if the job status is parsed as running.
+// The hook polls the API every 3 seconds if the job status is parsed as and every
+// 10 seconds otherwise.
 export const useTableMetaUpdateJob = () => {
   const { data, isLoading, mutate } = useSWR(
     "tableMetaUpdateJob",
@@ -77,7 +78,7 @@ export const useTableMetaUpdateJob = () => {
       refreshInterval: (latest: TableMetaUpdateJobResponseServer) => {
         return latest?.current_status === TableMetadataJobStatus.RUNNING
           ? 3000
-          : 0;
+          : 10000;
       },
       dedupingInterval: 3000,
     },
@@ -87,33 +88,6 @@ export const useTableMetaUpdateJob = () => {
     () => convertTableMetaUpdateJobFromServer(data),
     [data],
   );
-
-  const dataValidDurationMs = formattedResp?.dataValidDuration.asMilliseconds();
-  // Last completed is only non-null if the job has completed at least once.
-  const lastCompletedTimeUnixMs =
-    (formattedResp?.lastCompletedTime?.unix() ?? 0) * 1000;
-
-  useEffect(() => {
-    // This effect is triggered whenever the job's last completed time has changed.
-    // It will schedule a job trigger request a little after when the data is scheduled
-    // to expire: lastCompletedTime + dataValidDuration.
-    // We add a 3 second slack to the delay.
-    if (isLoading) {
-      return;
-    }
-
-    const msSinceLastCompletedWithSlack =
-      Date.now() - lastCompletedTimeUnixMs + 3000;
-    const delay = Math.max(
-      0,
-      dataValidDurationMs - msSinceLastCompletedWithSlack,
-    );
-    const nextUpdated = setTimeout(() => {
-      return mutate();
-    }, delay);
-
-    return () => clearTimeout(nextUpdated);
-  }, [dataValidDurationMs, isLoading, lastCompletedTimeUnixMs, mutate]);
 
   return {
     jobStatus: formattedResp,

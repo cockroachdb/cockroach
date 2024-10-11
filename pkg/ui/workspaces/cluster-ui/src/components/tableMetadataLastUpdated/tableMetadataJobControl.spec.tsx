@@ -16,7 +16,7 @@ import { TableMetadataJobControl } from "./tableMetadataJobControl";
 jest.mock("src/api/databases/tableMetaUpdateJobApi");
 
 describe("TableMetadataJobControl", () => {
-  const mockOnDataUpdated = jest.fn();
+  const mockOnJobComplete = jest.fn();
   const mockRefreshJobStatus = jest.fn();
   const mockLastCompletedTime = moment("2024-01-01T12:00:00Z");
   const mockLastUpdatedTime = moment("2024-01-01T12:05:00Z");
@@ -39,7 +39,7 @@ describe("TableMetadataJobControl", () => {
     });
     jest.spyOn(api, "triggerUpdateTableMetaJobApi").mockResolvedValue({
       message: "Job triggered",
-      job_triggered: true,
+      jobTriggered: true,
     });
   });
 
@@ -51,7 +51,7 @@ describe("TableMetadataJobControl", () => {
   it("renders the last refreshed time", () => {
     render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
@@ -78,7 +78,7 @@ describe("TableMetadataJobControl", () => {
 
     render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
@@ -88,7 +88,7 @@ describe("TableMetadataJobControl", () => {
   it("triggers update when refresh button is clicked", async () => {
     render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
@@ -103,16 +103,19 @@ describe("TableMetadataJobControl", () => {
     expect(mockRefreshJobStatus).toHaveBeenCalled();
   });
 
-  it("schedules next update after dataValidDuration", async () => {
+  it("schedules periodic updates", async () => {
+    jest.spyOn(global, "setInterval");
+
     render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
+    expect(setInterval).toHaveBeenCalledWith(expect.any(Function), 10000);
+
     await act(async () => {
-      // Advance timer 1 hour and 30s.
-      jest.advanceTimersByTime(3600000 + 30000);
+      jest.advanceTimersByTime(10000);
     });
 
     expect(api.triggerUpdateTableMetaJobApi).toHaveBeenCalledWith({
@@ -120,10 +123,10 @@ describe("TableMetadataJobControl", () => {
     });
   });
 
-  it("calls onDataUpdated when lastCompletedTime changes", () => {
+  it("calls onJobComplete when lastCompletedTime changes", () => {
     const { rerender } = render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
@@ -145,11 +148,11 @@ describe("TableMetadataJobControl", () => {
     // Rerender the component with the updated mock
     rerender(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
-    expect(mockOnDataUpdated).toHaveBeenCalled();
+    expect(mockOnJobComplete).toHaveBeenCalled();
   });
 
   it("disables refresh button when job is running", () => {
@@ -169,7 +172,7 @@ describe("TableMetadataJobControl", () => {
 
     render(
       <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onDataUpdated={mockOnDataUpdated} />
+        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
       </TimezoneContext.Provider>,
     );
 
