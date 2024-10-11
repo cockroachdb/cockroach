@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -39,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -116,9 +114,7 @@ type SQLServerWrapper struct {
 	tenantStatus    *statusServer
 	drainServer     *drainServer
 	authentication  authserver.Server
-	// eventsExporter exports data to the Observability Service.
-	eventsExporter obs.EventsExporterInterface
-	stopper        *stop.Stopper
+	stopper         *stop.Stopper
 
 	debug *debug.Server
 
@@ -520,7 +516,6 @@ func newTenantServer(
 		tenantStatus:    sStatus,
 		drainServer:     drainServer,
 		authentication:  sAuth,
-		eventsExporter:  args.eventsExporter,
 		stopper:         args.stopper,
 
 		debug: debugServer,
@@ -883,15 +878,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 	if instanceID == 0 {
 		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
-	}
-	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
-		ClusterID:     clusterID,
-		TenantID:      int64(s.rpcContext.TenantID.InternalValue),
-		NodeID:        int32(instanceID),
-		BinaryVersion: build.BinaryVersion(),
-	})
-	if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
-		return errors.Wrap(err, "failed to start the event exporter")
 	}
 
 	// Add more context to the Sentry reporter.
@@ -1327,30 +1313,6 @@ func makeTenantSQLServerArgs(
 	remoteFlowRunnerAcc := monitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
 	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(baseCfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 
-	// Create the EventServer. It will be made operational later, after the
-	// cluster ID is known, with a Start() call.
-	var eventsExporter obs.EventsExporterInterface
-	if baseCfg.ObsServiceAddr != "" {
-		if baseCfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-			// TODO(andrei): Add support for this option for tenants - at least for
-			// shared-process tenants where the event exporting should be hooked up to
-			// the ingester running in the host process.
-			return sqlServerArgs{}, errors.New("--obsservice-addr=embed is not currently supported for tenants")
-		}
-		ee := obs.NewEventsExporter(
-			baseCfg.ObsServiceAddr,
-			timeutil.DefaultTimeSource{},
-			baseCfg.Tracer,
-			5*time.Second,                          // maxStaleness
-			1<<20,                                  // triggerSizeBytes - 1MB
-			10*1<<20,                               // maxBufferSizeBytes - 10MB
-			monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-		)
-		eventsExporter = ee
-	} else {
-		eventsExporter = &obs.NoopEventsExporter{}
-	}
-
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
 	return sqlServerArgs{
@@ -1404,7 +1366,6 @@ func makeTenantSQLServerArgs(
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
-		eventsExporter:           eventsExporter,
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    noopElasticCPUGrantCoord,
 		rangeDescIteratorFactory: tenantConnect,

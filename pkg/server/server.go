@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
@@ -63,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -181,9 +179,6 @@ type topLevelServer struct {
 	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
 	keyVisualizerServer *KeyVisualizerServer
 
-	// The Observability Server, used by the Observability Service to subscribe to
-	// CRDB data.
-	eventsExporter obs.EventsExporterInterface
 	recoveryServer *loqrecovery.Server
 	raftTransport  *kvserver.RaftTransport
 	stopper        *stop.Stopper
@@ -1065,54 +1060,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 	nodeRegistry.AddMetricStruct(kvProber.Metrics())
 
-	flushInterval := 5 * time.Second
-	flushTriggerBytesSize := uint64(1 << 20) // 1MB
-	if cfg.TestingKnobs.EventExporter != nil {
-		knobs := cfg.TestingKnobs.EventExporter.(*obs.EventExporterTestingKnobs)
-		if knobs.FlushInterval != time.Duration(0) {
-			flushInterval = knobs.FlushInterval
-		}
-		if knobs.FlushTriggerByteSize != 0 {
-			flushTriggerBytesSize = knobs.FlushTriggerByteSize
-		}
-	}
-
-	// Create the EventExporter, which will export events to the Obs Service.
-	// We'll start it later, once we know our node ID.
-	var eventsExporter obs.EventsExporterInterface
-	if cfg.ObsServiceAddr != "" {
-		if cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-			ee := obs.NewEventsExporter(
-				"", // targetAddr - we'll configure a custom dialer connecting to the local node later
-				timeutil.DefaultTimeSource{},
-				cfg.Tracer,
-				flushInterval,
-				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
-				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-			)
-			eventsExporter = ee
-		} else {
-			targetAddr, err := obs.ValidateOTLPTargetAddr(cfg.ObsServiceAddr)
-			if err != nil {
-				return nil, err
-			}
-			ee := obs.NewEventsExporter(
-				targetAddr,
-				timeutil.DefaultTimeSource{},
-				cfg.Tracer,
-				flushInterval,
-				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
-				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-			)
-			log.Infof(ctx, "will export events over OTLP to: %s", cfg.ObsServiceAddr)
-			eventsExporter = ee
-		}
-	} else {
-		eventsExporter = &obs.NoopEventsExporter{}
-	}
-
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
@@ -1192,7 +1139,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
-		eventsExporter:           eventsExporter,
 		admissionPacerFactory:    gcoords.Elastic,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
@@ -1332,7 +1278,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		authentication:            sAuth,
 		tsDB:                      tsDB,
 		tsServer:                  &sTS,
-		eventsExporter:            eventsExporter,
 		recoveryServer:            recoveryServer,
 		raftTransport:             raftTransport,
 		stopper:                   stopper,
@@ -2138,18 +2083,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// If enabled, start reporting diagnostics.
 	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
-	}
-
-	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
-		ClusterID:     state.clusterID,
-		NodeID:        int32(state.nodeID),
-		TenantID:      0,
-		BinaryVersion: build.BinaryVersion(),
-	})
-	if s.cfg.ObsServiceAddr != base.ObsServiceEmbedFlagValue {
-		if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
-			return errors.Wrapf(err, "failed to start events exporter")
-		}
 	}
 
 	if storage.WorkloadCollectorEnabled {

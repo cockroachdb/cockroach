@@ -584,7 +584,6 @@
 /pkg/util/mon                @cockroachdb/sql-queries-prs
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-prs
-/pkg/obsservice/             @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
 /pkg/cmd/drt*                @cockroachdb/test-eng
 
