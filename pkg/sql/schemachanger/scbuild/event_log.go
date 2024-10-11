@@ -462,7 +462,7 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			}
 		}
 	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig, *scpb.IndexZoneConfig,
-		*scpb.PartitionZoneConfig:
+		*scpb.PartitionZoneConfig, *scpb.NamedRangeZoneConfig:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			var zcDetails eventpb.CommonZoneConfigDetails
 			var oldConfig string

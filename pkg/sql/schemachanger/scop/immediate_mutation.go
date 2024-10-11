@@ -999,14 +999,14 @@ type AddNamedRangeZoneConfig struct {
 type AddDatabaseZoneConfig struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	ZoneConfig zonepb.ZoneConfig
 }
 
 // AddTableZoneConfig adds a zone config to a table.
 type AddTableZoneConfig struct {
 	immediateMutationOp
 	TableID    descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	ZoneConfig zonepb.ZoneConfig
 }
 
 // AddIndexZoneConfig adds a zone config to an index.

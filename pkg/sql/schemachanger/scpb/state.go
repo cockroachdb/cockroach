@@ -147,10 +147,19 @@ type ZoneConfigElement interface {
 	GetTargetID() catid.DescID
 }
 
+var _ ZoneConfigElement = &NamedRangeZoneConfig{}
 var _ ZoneConfigElement = &DatabaseZoneConfig{}
 var _ ZoneConfigElement = &TableZoneConfig{}
 var _ ZoneConfigElement = &IndexZoneConfig{}
 var _ ZoneConfigElement = &PartitionZoneConfig{}
+
+func (e *NamedRangeZoneConfig) GetSeqNum() uint32 {
+	return e.SeqNum
+}
+
+func (e *NamedRangeZoneConfig) GetTargetID() catid.DescID {
+	return e.RangeID
+}
 
 func (e *DatabaseZoneConfig) GetSeqNum() uint32 {
 	return e.SeqNum
