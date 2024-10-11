@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -101,4 +102,242 @@ func TestSpanStatsBatching(t *testing.T) {
 		require.Equal(t, len(tcase.expectedBatches), len(res.Errors))
 	}
 
+}
+
+func TestCollectSpanStatsResponses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *roachpb.SpanStatsResponse
+	}
+	type testCase struct {
+		actualRes     *roachpb.SpanStatsResponse
+		nodeResponses []nodeResponse
+		expectedRes   *roachpb.SpanStatsResponse
+	}
+
+	var testCases []testCase
+
+	// test case 1
+	tc1 := testCase{
+		actualRes: createSpanStatsResponse("span1", "span2"),
+		nodeResponses: []nodeResponse{
+			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {RangeCount: 1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{1},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+			{nodeID: 2, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span2": {RangeCount: 1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{2},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+		},
+		expectedRes: &roachpb.SpanStatsResponse{
+			SpanToStats: map[string]*roachpb.SpanStats{
+				"span1": {RangeCount: 1,
+					ApproximateDiskBytes: 1,
+					RemoteFileBytes:      1,
+					ExternalFileBytes:    1,
+					StoreIDs:             []roachpb.StoreID{1},
+					ReplicaCount:         1,
+				},
+				"span2": {RangeCount: 1,
+					ApproximateDiskBytes: 1,
+					RemoteFileBytes:      1,
+					ExternalFileBytes:    1,
+					StoreIDs:             []roachpb.StoreID{2},
+					ReplicaCount:         1,
+				},
+			},
+		},
+	}
+	testCases = append(testCases, tc1)
+
+	// test case 2 - span is replicated in node 1 and 2
+	totalStats1 := enginepb.MVCCStats{LiveBytes: 1}
+	totalStats2 := enginepb.MVCCStats{LiveBytes: 2}
+	expectedApproxTotalStats := enginepb.MVCCStats{}
+	expectedApproxTotalStats.Add(totalStats1)
+	expectedApproxTotalStats.Add(totalStats2)
+	tc2 := testCase{
+		actualRes: createSpanStatsResponse("span1", "span2"),
+		nodeResponses: []nodeResponse{
+			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						TotalStats:           totalStats1,
+						RangeCount:           1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{1, 2},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+			{nodeID: 2, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						TotalStats:           totalStats2,
+						RangeCount:           1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{2},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+		},
+		expectedRes: &roachpb.SpanStatsResponse{
+			SpanToStats: map[string]*roachpb.SpanStats{
+				"span1": {
+					TotalStats:            totalStats1,
+					ApproximateTotalStats: expectedApproxTotalStats,
+					RangeCount:            1,
+					ApproximateDiskBytes:  2,
+					RemoteFileBytes:       2,
+					ExternalFileBytes:     2,
+					StoreIDs:              []roachpb.StoreID{1, 2},
+					ReplicaCount:          1,
+				},
+			},
+		},
+	}
+	testCases = append(testCases, tc2)
+
+	// test case 3 - node response spanToStats value is nil for span2
+	tc3 := testCase{
+		actualRes: createSpanStatsResponse("span1", "span2"),
+		nodeResponses: []nodeResponse{
+			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						RangeCount:           1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{1},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+			{nodeID: 2, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span2": nil,
+				},
+			}},
+		},
+		expectedRes: &roachpb.SpanStatsResponse{
+			SpanToStats: map[string]*roachpb.SpanStats{
+				"span1": {
+					RangeCount:           1,
+					ApproximateDiskBytes: 1,
+					RemoteFileBytes:      1,
+					ExternalFileBytes:    1,
+					StoreIDs:             []roachpb.StoreID{1},
+					ReplicaCount:         1,
+				},
+				"span2": {},
+			},
+		},
+	}
+	testCases = append(testCases, tc3)
+
+	// test case 4 - node response contains span not in original response struct
+	tc4 := testCase{
+		actualRes: createSpanStatsResponse("span1"),
+		nodeResponses: []nodeResponse{
+			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						RangeCount:           1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{1},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+			{nodeID: 2, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span2": {
+						RangeCount:           1,
+						ApproximateDiskBytes: 1,
+						RemoteFileBytes:      1,
+						ExternalFileBytes:    1,
+						StoreIDs:             []roachpb.StoreID{2},
+						ReplicaCount:         1,
+					},
+				},
+			}},
+		},
+		expectedRes: &roachpb.SpanStatsResponse{
+			SpanToStats: map[string]*roachpb.SpanStats{
+				"span1": {
+					RangeCount:           1,
+					ApproximateDiskBytes: 1,
+					RemoteFileBytes:      1,
+					ExternalFileBytes:    1,
+					StoreIDs:             []roachpb.StoreID{1},
+					ReplicaCount:         1,
+				},
+				"span2": {
+					RangeCount:           1,
+					ApproximateDiskBytes: 1,
+					RemoteFileBytes:      1,
+					ExternalFileBytes:    1,
+					StoreIDs:             []roachpb.StoreID{2},
+					ReplicaCount:         1,
+				},
+			},
+		},
+	}
+	testCases = append(testCases, tc4)
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		cb := collectSpanStatsResponses(ctx, tc.actualRes)
+		for _, nodeResp := range tc.nodeResponses {
+			cb(nodeResp.nodeID, nodeResp.resp)
+		}
+
+		for spanStr, spanStats := range tc.expectedRes.SpanToStats {
+			actualSpanStat, ok := tc.actualRes.SpanToStats[spanStr]
+			require.True(t, ok)
+			require.NotNil(t, actualSpanStat)
+			require.Equal(t, spanStats.TotalStats, actualSpanStat.TotalStats)
+			require.Equal(t, spanStats.RangeCount, actualSpanStat.RangeCount)
+			require.Equal(t, spanStats.ApproximateDiskBytes, actualSpanStat.ApproximateDiskBytes)
+			require.Equal(t, spanStats.RemoteFileBytes, actualSpanStat.RemoteFileBytes)
+			require.Equal(t, spanStats.ExternalFileBytes, actualSpanStat.ExternalFileBytes)
+			require.Equal(t, spanStats.StoreIDs, actualSpanStat.StoreIDs)
+			require.Equal(t, spanStats.ReplicaCount, actualSpanStat.ReplicaCount)
+		}
+	}
+}
+
+func createSpanStatsResponse(spanStrs ...string) *roachpb.SpanStatsResponse {
+	resp := &roachpb.SpanStatsResponse{}
+	resp.SpanToStats = make(map[string]*roachpb.SpanStats)
+	for _, str := range spanStrs {
+		resp.SpanToStats[str] = &roachpb.SpanStats{}
+	}
+	return resp
 }
