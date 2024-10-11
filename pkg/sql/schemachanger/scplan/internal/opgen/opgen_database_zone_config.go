@@ -18,7 +18,7 @@ func init() {
 				emit(func(this *scpb.DatabaseZoneConfig) *scop.AddDatabaseZoneConfig {
 					return &scop.AddDatabaseZoneConfig{
 						DatabaseID: this.DatabaseID,
-						ZoneConfig: this.ZoneConfig,
+						ZoneConfig: *this.ZoneConfig,
 					}
 				}),
 			),

@@ -999,7 +999,7 @@ type AddNamedRangeZoneConfig struct {
 type AddDatabaseZoneConfig struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	ZoneConfig zonepb.ZoneConfig
 }
 
 // DiscardZoneConfig discards the zone config for the given descriptor ID.
@@ -1013,7 +1013,7 @@ type DiscardZoneConfig struct {
 type AddTableZoneConfig struct {
 	immediateMutationOp
 	TableID    descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	ZoneConfig zonepb.ZoneConfig
 }
 
 // AddIndexZoneConfig adds a zone config to an index.

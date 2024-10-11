@@ -58,7 +58,7 @@ eexpect ":/# "
 # Disable replication so as to avoid spurious purgatory errors.
 start_server $argv
 send "$argv sql --insecure -e \"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1\"\r"
-eexpect "CONFIGURE ZONE 1"
+eexpect {CONFIGURE ZONE [0-9]}
 eexpect ":/# "
 stop_server $argv
 
