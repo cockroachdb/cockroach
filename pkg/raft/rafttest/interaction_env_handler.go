@@ -292,6 +292,13 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Explanation:
 		// 1 (from_store) grants support for 2 (for_store) at a higher epoch.
 		err = env.handleGrantSupport(t, d)
+	case "support-expired":
+		// Configures whether a store considers its leader's support to be expired
+		// or not.
+		//
+		// Example:
+		// support-expired 1 [reset]
+		err = env.handleSupportExpired(t, d)
 	case "print-fortification-state":
 		// Prints the fortification state being tracked by a raft leader. Empty on a
 		// follower.

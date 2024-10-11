@@ -131,7 +131,7 @@ metrics type=send_queue
 ----
 kvflowcontrol.send_queue.count                                    : 2
 kvflowcontrol.send_queue.bytes                                    : 2097152
-kvflowcontrol.send_queue.scheduled.force_flush                    : 0
+kvflowcontrol.send_queue.scheduled.force_flush                    : 1
 kvflowcontrol.send_queue.scheduled.deducted_bytes                 : 0
 kvflowcontrol.send_queue.prevent.count                            : 0
 kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue : 0
