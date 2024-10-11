@@ -46,6 +46,7 @@ go_library(
         "opgen_index_partitioning.go",
         "opgen_index_zone_config.go",
         "opgen_ldr_job_ids.go",
+        "opgen_named_range_zone_config.go",
         "opgen_namespace.go",
         "opgen_owner.go",
         "opgen_partition_zone_config.go",
@@ -93,6 +94,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/config/zonepb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

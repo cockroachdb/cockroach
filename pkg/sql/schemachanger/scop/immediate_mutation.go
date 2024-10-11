@@ -988,6 +988,13 @@ type CreateDatabaseDescriptor struct {
 	DatabaseID descpb.ID
 }
 
+// AddNamedRangeZoneConfig adds a zone config to a named range..
+type AddNamedRangeZoneConfig struct {
+	immediateMutationOp
+	RangeName  zonepb.NamedZone
+	ZoneConfig zonepb.ZoneConfig
+}
+
 // AddDatabaseZoneConfig adds a zone config to a database.
 type AddDatabaseZoneConfig struct {
 	immediateMutationOp
