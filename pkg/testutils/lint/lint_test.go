@@ -249,9 +249,6 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`/embedded.go`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
-			// The opentelemetry-proto files are copied from otel with their own
-			// license.
-			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
 			// Generated files for plpgsql.
@@ -270,16 +267,8 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isApache := strings.HasPrefix(filename, "pkg/obsservice")
-			switch {
-			case isApache:
-				if apacheHeader.Find(data) == nil {
-					t.Errorf("did not find expected Apache license header in %s", filename)
-				}
-			default:
-				if cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected CSL license header in %s", filename)
-				}
+			if cslHeader.Find(data) == nil {
+				t.Errorf("did not find expected CSL license header in %s", filename)
 			}
 		}); err != nil {
 			t.Fatal(err)
@@ -944,8 +933,6 @@ func TestLint(t *testing.T) {
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
-			":!obsservice/cmd/obsservice/main.go",
-			":!obsservice/obslib/ingest/ingest_test.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {

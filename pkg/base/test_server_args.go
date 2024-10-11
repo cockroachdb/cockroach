@@ -162,10 +162,6 @@ type TestServerArgs struct {
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
 
-	// ObsServiceAddr is the address to which events will be exported over OTLP.
-	// If empty, exporting events is inhibited.
-	ObsServiceAddr string
-
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
