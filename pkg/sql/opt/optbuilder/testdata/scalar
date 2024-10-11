@@ -1664,7 +1664,6 @@ project
       └── filters
            └── NOT ((t:1 >= t:1) AND (t:1 <= CASE NULL WHEN true THEN c:5 ELSE t:1::BPCHAR END))
 
-# TODO(#108360): implicit casts from STRING to CHAR should use bpchar.
 exec-ddl
 CREATE TABLE t108360_1 (t TEXT)
 ----
