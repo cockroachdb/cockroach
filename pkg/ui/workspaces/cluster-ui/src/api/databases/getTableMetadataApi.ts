@@ -148,6 +148,10 @@ export const useTableMetadata = (req: ListTableMetadataRequest) => {
   const { data, error, isLoading, mutate } = useSWR<TableMetadataResponse>(
     key,
     () => getTableMetadata(req),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
 
   return { data, error, isLoading, refreshTables: mutate };

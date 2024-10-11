@@ -56,6 +56,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 		spanStatsServer := s.TenantStatusServer().(serverpb.TenantStatusServer)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			batchSize := updateJobBatchSizeSetting.Get(&s.ClusterSettings().SV)
 			switch d.Cmd {
 			case "set-time":
 				var unixSecs int64
@@ -95,7 +96,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 						},
 					}
 				}
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), mockTimeSrc, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
 				prevUpdatedTables := metrics.UpdatedTables.Count()
 				prevErrs := metrics.Errors.Count()
 				err := updater.RunUpdater(ctx)
@@ -108,7 +109,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					metrics.NumRuns.Count(),
 					metrics.Duration.CumulativeSnapshot().Mean() > 0)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()
@@ -147,6 +148,7 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+	batchSize := updateJobBatchSizeSetting.Get(&s.ClusterSettings().SV)
 	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
 	count := 0
 	updater := newTableMetadataUpdater(
@@ -159,6 +161,7 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 		s.TenantStatusServer().(serverpb.TenantStatusServer),
 		s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor(),
 		timeutil.DefaultTimeSource{},
+		batchSize,
 		knobs,
 	)
 	require.NoError(t, updater.RunUpdater(ctx))
@@ -188,7 +191,7 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 	// random tables were previously generated
 	expectedTablesUpdated := (updatedTables * 2) + 500
 	require.Equal(t, expectedTablesUpdated, metrics.UpdatedTables.Count())
-	estimatedBatches := int(math.Ceil(float64(expectedTablesUpdated) / float64(tableBatchSize)))
+	estimatedBatches := int(math.Ceil(float64(expectedTablesUpdated) / float64(batchSize)))
 	estimatedProgressUpdates := estimatedBatches / batchesPerProgressUpdate
 	require.GreaterOrEqual(t, count, estimatedProgressUpdates)
 	require.Equal(t, int64(0), metrics.Errors.Count())

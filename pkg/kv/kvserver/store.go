@@ -3484,6 +3484,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
 		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
 	}
+	s.cfg.KVFlowRangeControllerMetrics.SendQueue.SizeCount.Update(kvflowSendQueueSizeCount)
+	s.cfg.KVFlowRangeControllerMetrics.SendQueue.SizeBytes.Update(kvflowSendQueueSizeBytes)
 
 	if err := s.metrics.RecentReplicaCPUNanosPerSecond.Rotate(); err != nil {
 		return err

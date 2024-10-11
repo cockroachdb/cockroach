@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,7 +38,7 @@ func TestFortificationEnabled(t *testing.T) {
 
 	for _, tc := range testCases {
 		cfg := quorum.MakeEmptyConfig()
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness, raftlogger.DiscardLogger)
 		require.Equal(t, tc.expectEnabled, fortificationTracker.FortificationEnabled())
 	}
 }
@@ -156,10 +157,10 @@ func TestLeadSupportUntil(t *testing.T) {
 		for _, id := range tc.ids {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness, raftlogger.DiscardLogger)
 
-		tc.setup(&fortificationTracker)
-		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil())
+		tc.setup(fortificationTracker)
+		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil(pb.StateLeader))
 	}
 }
 
@@ -257,9 +258,9 @@ func TestIsFortifiedBy(t *testing.T) {
 		for _, id := range tc.ids {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, tc.storeLiveness)
+		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness, raftlogger.DiscardLogger)
 
-		tc.setup(&fortificationTracker)
+		tc.setup(fortificationTracker)
 		isFortified, isSupported := fortificationTracker.IsFortifiedBy(1)
 		require.Equal(t, tc.expSupported, isSupported)
 		require.Equal(t, tc.expFortified, isFortified)
@@ -390,11 +391,104 @@ func TestQuorumActive(t *testing.T) {
 		for _, id := range []pb.PeerID{1, 2, 3} {
 			cfg.Voters[0][id] = struct{}{}
 		}
-		fortificationTracker := MakeFortificationTracker(&cfg, mockLiveness)
+		fortificationTracker := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
 
-		tc.setup(&fortificationTracker)
+		tc.setup(fortificationTracker)
 		require.Equal(t, tc.expQuorumActive, fortificationTracker.QuorumActive(), "#%d %s %s",
-			i, fortificationTracker.LeadSupportUntil(), tc.curTS)
+			i, fortificationTracker.LeadSupportUntil(pb.StateLeader), tc.curTS)
+	}
+}
+
+// TestCanDefortify tests whether a leader can safely de-fortify or not based
+// on some tracked state.
+func TestCanDefortify(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+	mockLiveness := makeMockStoreLiveness(
+		map[pb.PeerID]mockLivenessEntry{
+			1: makeMockLivenessEntry(10, ts(10)),
+			2: makeMockLivenessEntry(20, ts(15)),
+			3: makeMockLivenessEntry(30, ts(20)),
+		},
+	)
+
+	testCases := []struct {
+		setup               func(tracker *FortificationTracker)
+		curTS               hlc.Timestamp
+		expCanDefortify     bool
+		expLeadSupportUntil hlc.Timestamp
+	}{
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.RecordFortification(1, 10)
+				ft.RecordFortification(2, 20)
+			},
+			curTS:               ts(10),
+			expLeadSupportUntil: ts(10),
+			expCanDefortify:     false,
+		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.RecordFortification(1, 10)
+				ft.RecordFortification(2, 20)
+			},
+			curTS:               ts(12),
+			expLeadSupportUntil: ts(10),
+			expCanDefortify:     true,
+		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.RecordFortification(1, 10)
+				ft.RecordFortification(2, 20)
+				ft.RecordFortification(3, 30)
+			},
+			curTS:               ts(12),
+			expLeadSupportUntil: ts(15),
+			expCanDefortify:     false,
+		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.RecordFortification(1, 10)
+				ft.RecordFortification(2, 20)
+				ft.RecordFortification(3, 30)
+			},
+			curTS:               ts(18),
+			expLeadSupportUntil: ts(15),
+			expCanDefortify:     true,
+		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.RecordFortification(1, 10)
+				ft.RecordFortification(2, 20)
+				ft.RecordFortification(3, 30)
+			},
+			curTS: ts(10),
+			// LeadSupportUntil = ts(15); however, because we don't call it explicitly,
+			// we should be able to de-fortify.
+			expCanDefortify: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		mockLiveness.curTS = tc.curTS
+		cfg := quorum.MakeEmptyConfig()
+
+		for _, id := range []pb.PeerID{1, 2, 3} {
+			cfg.Voters[0][id] = struct{}{}
+		}
+		ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
+
+		tc.setup(ft)
+		if !tc.expLeadSupportUntil.IsEmpty() {
+			require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
+		}
+		require.Equal(t, tc.expCanDefortify, ft.CanDefortify())
 	}
 }
 

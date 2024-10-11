@@ -231,7 +231,7 @@ export const DatabasesPageV2 = () => {
           loading={isLoading}
           error={error}
           actionButton={
-            <TableMetadataJobControl onDataUpdated={refreshDatabases} />
+            <TableMetadataJobControl onJobComplete={refreshDatabases} />
           }
           columns={colsWithSort}
           dataSource={tableData}

@@ -4,10 +4,15 @@
 // included in the /LICENSE file.
 
 import moment from "moment-timezone";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import useSWR from "swr";
 
 import { fetchDataJSON } from "../fetchData";
+
+import {
+  TableMetaUpdateJobResponseServer,
+  TriggerTableMetaUpdateJobResponseServer,
+} from "./serverTypes";
 
 const TABLE_META_JOB_API = "api/v2/table_metadata/updatejob/";
 
@@ -16,18 +21,8 @@ export enum TableMetadataJobStatus {
   RUNNING = "RUNNING",
 }
 
-type TableMetaUpdateJobResponse = {
-  current_status: TableMetadataJobStatus;
-  progress: number;
-  last_start_time: string | null;
-  last_completed_time: string | null;
-  last_updated_time: string | null;
-  data_valid_duration: number;
-  automatic_updates_enabled: boolean;
-};
-
-type TableMetaUpdateJobInfo = {
-  currentStatus: TableMetaUpdateJobResponse["current_status"];
+export type TableMetaUpdateJobInfo = {
+  currentStatus: TableMetadataJobStatus;
   progress: number;
   lastStartTime: moment.Moment | null;
   lastCompletedTime: moment.Moment | null;
@@ -37,78 +32,62 @@ type TableMetaUpdateJobInfo = {
 };
 
 const getTableMetaUpdateJobInfo = async () => {
-  return fetchDataJSON<TableMetaUpdateJobResponse, null>(TABLE_META_JOB_API);
+  return fetchDataJSON<TableMetaUpdateJobResponseServer, null>(
+    TABLE_META_JOB_API,
+  );
+};
+
+export const convertTableMetaUpdateJobFromServer = (
+  data: TableMetaUpdateJobResponseServer,
+): TableMetaUpdateJobInfo | null => {
+  if (!data) {
+    return null;
+  }
+
+  return {
+    currentStatus: (data.current_status ??
+      "NOT_RUNNING") as TableMetadataJobStatus,
+    progress: data.progress ?? 0,
+    lastStartTime: data.last_start_time
+      ? moment.utc(data.last_start_time)
+      : null,
+    lastCompletedTime: data.last_completed_time
+      ? moment.utc(data.last_completed_time)
+      : null,
+    lastUpdatedTime: data.last_updated_time
+      ? moment.utc(data.last_updated_time)
+      : null,
+    dataValidDuration: moment.duration(
+      data.data_valid_duration * 1e-6,
+      "millisecond",
+    ),
+    automaticUpdatesEnabled: data.automatic_updates_enabled,
+  };
 };
 
 // useTableMetaUpdateJob is a hook that fetches the current status of the table
 // metadata update job and returns the status and other relevant information.
-// The hook polls the API every 3 seconds if the job status is parsed as running.
+// The hook polls the API every 3 seconds if the job status is parsed as and every
+// 10 seconds otherwise.
 export const useTableMetaUpdateJob = () => {
   const { data, isLoading, mutate } = useSWR(
     "tableMetaUpdateJob",
     getTableMetaUpdateJobInfo,
     {
       focusThrottleInterval: 10000,
-      refreshInterval: (latest: TableMetaUpdateJobResponse) => {
+      refreshInterval: (latest: TableMetaUpdateJobResponseServer) => {
         return latest?.current_status === TableMetadataJobStatus.RUNNING
           ? 3000
-          : 0;
+          : 10000;
       },
       dedupingInterval: 3000,
     },
   );
 
-  const formattedResp: TableMetaUpdateJobInfo = useMemo(() => {
-    if (!data) {
-      return null;
-    }
-
-    return {
-      currentStatus: data.current_status,
-      progress: data.progress,
-      lastStartTime: data.last_start_time
-        ? moment.utc(data.last_start_time)
-        : null,
-      lastCompletedTime: data.last_completed_time
-        ? moment.utc(data.last_completed_time)
-        : null,
-      lastUpdatedTime: data.last_updated_time
-        ? moment.utc(data.last_updated_time)
-        : null,
-      dataValidDuration: moment.duration(
-        data.data_valid_duration * 1e-6,
-        "millisecond",
-      ),
-      automaticUpdatesEnabled: data.automatic_updates_enabled,
-    };
-  }, [data]);
-
-  const dataValidDurationMs = formattedResp?.dataValidDuration.asMilliseconds();
-  // Last completed is only non-null if the job has completed at least once.
-  const lastCompletedTimeUnixMs =
-    (formattedResp?.lastCompletedTime?.unix() ?? 0) * 1000;
-
-  useEffect(() => {
-    // This effect is triggered whenever the job's last completed time has changed.
-    // It will schedule a job trigger request a little after when the data is scheduled
-    // to expire: lastCompletedTime + dataValidDuration.
-    // We add a 3 second slack to the delay.
-    if (isLoading) {
-      return;
-    }
-
-    const msSinceLastCompletedWithSlack =
-      Date.now() - lastCompletedTimeUnixMs + 3000;
-    const delay = Math.max(
-      0,
-      dataValidDurationMs - msSinceLastCompletedWithSlack,
-    );
-    const nextUpdated = setTimeout(() => {
-      return mutate();
-    }, delay);
-
-    return () => clearTimeout(nextUpdated);
-  }, [dataValidDurationMs, isLoading, lastCompletedTimeUnixMs, mutate]);
+  const formattedResp: TableMetaUpdateJobInfo = useMemo(
+    () => convertTableMetaUpdateJobFromServer(data),
+    [data],
+  );
 
   return {
     jobStatus: formattedResp,
@@ -120,20 +99,30 @@ export const useTableMetaUpdateJob = () => {
 type TriggerTableMetaUpdateJobRequest = {
   onlyIfStale?: boolean;
 };
-type TriggerTableMetaUpdateJobResponse = {
-  job_triggered: boolean;
+
+export type TriggerTableMetaUpdateJobResponse = {
+  jobTriggered: boolean;
   message: string;
 };
 
+export const convertTriggerTableMetaUpdateJobResponseFromServer = (
+  data: TriggerTableMetaUpdateJobResponseServer,
+): TriggerTableMetaUpdateJobResponse => ({
+  jobTriggered: data?.job_triggered ?? false,
+  message: data?.message ?? "",
+});
+
 export const triggerUpdateTableMetaJobApi = async (
   req: TriggerTableMetaUpdateJobRequest,
-) => {
+): Promise<TriggerTableMetaUpdateJobResponse> => {
   const urlParams = new URLSearchParams();
   if (req.onlyIfStale) {
     urlParams.append("onlyIfStale", req.onlyIfStale.toString());
   }
   return fetchDataJSON<
-    TriggerTableMetaUpdateJobResponse,
+    TriggerTableMetaUpdateJobResponseServer,
     TriggerTableMetaUpdateJobRequest
-  >(TABLE_META_JOB_API + "?" + urlParams.toString(), req);
+  >(TABLE_META_JOB_API + "?" + urlParams.toString(), req).then(
+    convertTriggerTableMetaUpdateJobResponseFromServer,
+  );
 };
