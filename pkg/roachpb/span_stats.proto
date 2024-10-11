@@ -69,7 +69,11 @@ message SpanStats {
   // Unique store ids for the requested span.
   repeated int32 store_ids = 8 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
 
-  // NEXT ID: 9.
+  // ReplicaCount is the total number of `voting_replicas` and `non_voting_replicas`
+  // for the span's ranges. It does not include `learner_replicas`.
+  int32 replica_count = 9;
+
+  // NEXT ID: 10.
 }
 
 message SpanStatsResponse {

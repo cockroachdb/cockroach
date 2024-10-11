@@ -155,6 +155,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			if _, ok := responses[spanStr]; !ok {
 				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
 				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
+				res.SpanToStats[spanStr].ReplicaCount = spanStats.ReplicaCount
 				responses[spanStr] = struct{}{}
 			}
 		}
@@ -212,7 +213,6 @@ func (s *systemStatusServer) statsForSpan(
 
 	// First, get the approximate disk bytes from each store.
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		spanStats.StoreIDs = append(spanStats.StoreIDs, store.StoreID())
 		approxDiskBytes, remoteBytes, externalBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
 		if err != nil {
 			return err
@@ -221,10 +221,6 @@ func (s *systemStatusServer) statsForSpan(
 		spanStats.RemoteFileBytes += remoteBytes
 		spanStats.ExternalFileBytes += externalBytes
 		return nil
-	})
-
-	sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
-		return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
 	})
 
 	if err != nil {
@@ -251,6 +247,7 @@ func (s *systemStatusServer) statsForSpan(
 		return nil, err
 	}
 
+	storeIDs := make(map[roachpb.StoreID]struct{})
 	var fullyContainedKeysBatch []roachpb.Key
 	// Iterate through the span's ranges.
 	for _, desc := range descriptors {
@@ -258,6 +255,12 @@ func (s *systemStatusServer) statsForSpan(
 		// Get the descriptor for the current range of the span.
 		descSpan := desc.RSpan()
 		spanStats.RangeCount += 1
+
+		voterAndNonVoterReplicas := desc.Replicas().VoterAndNonVoterDescriptors()
+		spanStats.ReplicaCount += int32(len(voterAndNonVoterReplicas))
+		for _, repl := range voterAndNonVoterReplicas {
+			storeIDs[repl.StoreID] = struct{}{}
+		}
 
 		// Is the descriptor fully contained by the request span?
 		if rSpan.ContainsKeyRange(descSpan.Key, desc.EndKey) {
@@ -311,6 +314,15 @@ func (s *systemStatusServer) statsForSpan(
 				return nil, err
 			}
 		}
+
+		spanStats.StoreIDs = make([]roachpb.StoreID, 0, len(storeIDs))
+		for storeID := range storeIDs {
+			spanStats.StoreIDs = append(spanStats.StoreIDs, storeID)
+		}
+		sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
+			return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
+		})
+
 	}
 	// If we still have some remaining ranges, request range stats for the current batch.
 	if len(fullyContainedKeysBatch) > 0 {
