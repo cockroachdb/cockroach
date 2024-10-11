@@ -608,61 +608,72 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
 
 	ctx := context.Background()
-
-	filterVal := []bool{}
-	var filterValLock syncutil.Mutex
-
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				DistSQL: &execinfra.TestingKnobs{
-					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
-						BeforeClientSubscribe: func(_ string, _ string, _ span.Frontier, filterRangefeed bool) {
-							filterValLock.Lock()
-							defer filterValLock.Unlock()
-							filterVal = append(filterVal, filterRangefeed)
-						},
-					},
-				},
 			},
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbs, _ := setupServerWithNumDBs(t, ctx, clusterArgs, 1, 3)
 	defer server.Stopper().Stop(ctx)
+
+	dbA, dbB, dbC := dbs[0], dbs[1], dbs[2]
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
 
-	var (
-		jobAID jobspb.JobID
-		jobBID jobspb.JobID
-	)
+	var jobAID, jobBID, jobCID jobspb.JobID
 
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
+	// Add a TTL; it won't kick in the short-lived test and won't delete anything,
+	// but to enable filtering it has to be present since otherwise we think the
+	// user forgot it. We'll get a delete to ignore manually later so this is only
+	// for the creation check.
+	dbA.Exec(t, "ALTER TABLE a.tab SET (ttl_disable_changefeed_replication=true,ttl_expiration_expression='now()')")
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE b.public.tab ON $1 INTO TABLE a.tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE b.tab WITH DISCARD = 'ttl-deletes'", dbAURL.String()).Scan(&jobBID)
+	dbC.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a.tab ON $1 INTO TABLE c.tab WITH DISCARD = 'all-deletes'", dbAURL.String()).Scan(&jobCID)
+
+	dbA.Exec(t, "INSERT INTO a.tab VALUES (0, 'a'), (1, 'b'), (2, 'c')")
+	dbA.Exec(t, "UPDATE a.tab SET payload = 'x' WHERE pk = 0")
+
+	dbA.Exec(t, "DELETE FROM a.tab WHERE pk = 2")
+
+	// Delete a row with omit in rangefeeds true, the same way a TTL job with it
+	// set would.
+	dbA.Exec(t, "SET disable_changefeed_replication = true")
+	dbA.Exec(t, "DELETE FROM a.tab WHERE pk = 1")
+	dbA.Exec(t, "SET disable_changefeed_replication = false")
 
 	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+	t.Logf("waiting for replication job %d", jobCID)
+	WaitUntilReplicatedTime(t, now, dbB, jobCID)
 
 	// Verify that Job contains FilterRangeFeed
-	details := jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails()
-	require.False(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardNothing,
+		jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails().Discard)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes,
+		jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails().Discard)
+	require.Equal(t, jobspb.LogicalReplicationDetails_DiscardAllDeletes,
+		jobutils.GetJobPayload(t, dbC, jobCID).GetLogicalReplicationDetails().Discard)
 
-	details = jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails()
-	require.True(t, details.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes)
+	// A had both rows deleted, and zero updated.
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", [][]string{{"0", "x"}})
 
-	require.Equal(t, len(filterVal), 2)
+	// B ignored the delete of 'b' done in a session that had the omit bit similar
+	// to a TTL job, but did replicate the (normal) delete of 'c'.
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", [][]string{{"0", "x"}, {"1", "b"}})
 
-	// Only one should be true
-	require.True(t, filterVal[0] != filterVal[1])
+	// C ignored all deletes and still has all three rows.
+	dbC.CheckQueryResults(t, "SELECT * from c.tab", [][]string{{"0", "x"}, {"1", "b"}, {"2", "c"}})
 }
 
 func TestRandomTables(t *testing.T) {
