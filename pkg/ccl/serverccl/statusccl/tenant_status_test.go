@@ -21,11 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -40,9 +44,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1557,4 +1563,209 @@ func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.Tenan
 		require.Error(t, err)
 		require.Nil(t, resp)
 	})
+}
+
+func getStatusJSONProto(
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
+) error {
+	return serverutils.GetJSONProto(ts, "/_status/"+path, response)
+}
+
+func TestThrottlingMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testtime := timeutil.Now()
+
+	s := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					LicenseTestingKnobs: license.TestingKnobs{
+						Enable:            true,
+						OverrideStartTime: &testtime,
+					},
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	for i := range s.NodeIDs() {
+		s.Server(i).DiagnosticsReporter().(*diagnostics.Reporter).LastSuccessfulTelemetryPing.Store(testtime.Unix())
+	}
+
+	for _, tc := range []struct {
+		name                        string
+		license                     *licenseccl.License
+		lastSuccessfulTelemetryPing int64
+		expected                    serverpb.GetThrottlingMetadataResponse
+	}{
+		{
+			name:    "no license",
+			license: nil,
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add(7 * 24 * time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+			},
+		},
+		{
+			name: "free license",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Free,
+				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add((30 * 24 * time.Hour) + time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Unix(),
+				TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
+			},
+		},
+		{
+			name: "trial license",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Trial,
+				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add((7 * 24 * time.Hour) + time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Unix(),
+				TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
+			},
+		},
+		{
+			name: "enterprise license",
+			license: &licenseccl.License{
+				Type: licenseccl.License_Enterprise,
+			},
+			expected: serverpb.GetThrottlingMetadataResponse{
+				NodeIdsWithTelemetryProblems: []string{},
+			},
+		},
+		{
+			name: "evaluation license",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Evaluation,
+				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add((30 * 24 * time.Hour) + time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+				HasTelemetryDeadline:         false,
+			},
+		},
+		{
+			name: "free license with missing telemetry",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Free,
+				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Add(-2 * 24 * time.Hour).Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add((30 * 24 * time.Hour) + time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{"1", "2", "3"},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Add(-2 * 24 * time.Hour).Unix(),
+				TelemetryDeadlineSeconds:     testtime.Add(5 * 24 * time.Hour).Unix(), // 7 days from last ping.
+			},
+		},
+		{
+			name: "free license expired",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Free,
+				ValidUntilUnixSec: testtime.Add(-1 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add((30 * 24 * time.Hour) - time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Unix(),
+				TelemetryDeadlineSeconds:     testtime.Add(7 * 24 * time.Hour).Unix(), // 7 days from last ping.
+			},
+		},
+		{
+			name: "free license expired and grace period over",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Free,
+				ValidUntilUnixSec: testtime.Add(-40 * 24 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				Throttled:                    true,
+				ThrottleExplanation:          fmt.Sprintf("License expired on %s. The maximum number of concurrently open transactions has been reached.", timeutil.Unix(testtime.Add(-40*24*time.Hour).Unix(), 0)),
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add(-10 * 24 * time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Unix(),
+				TelemetryDeadlineSeconds:     testtime.Unix() + 604800,
+			},
+		},
+		{
+			name: "free license telemetry missing and telemetry deadline over",
+			license: &licenseccl.License{
+				Type:              licenseccl.License_Free,
+				ValidUntilUnixSec: testtime.Add(10 * 24 * time.Hour).Unix(),
+			},
+			lastSuccessfulTelemetryPing: testtime.Add(-8 * 24 * time.Hour).Unix(),
+			expected: serverpb.GetThrottlingMetadataResponse{
+				Throttled:                    true,
+				ThrottleExplanation:          "The maximum number of concurrently open transactions has been reached because the license requires diagnostic reporting, but none has been received by Cockroach Labs.",
+				HasGracePeriod:               true,
+				GracePeriodEndSeconds:        testtime.Add(40 * 24 * time.Hour).Unix(),
+				NodeIdsWithTelemetryProblems: []string{"1", "2", "3"},
+				HasTelemetryDeadline:         true,
+				LastTelemetryReceivedSeconds: testtime.Add(-8 * 24 * time.Hour).Unix(),
+				TelemetryDeadlineSeconds:     testtime.Add(-8*24*time.Hour).Unix() + 604800,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.license != nil {
+				lic, err := tc.license.Encode()
+				require.NoError(t, err)
+				_, err = s.ServerConn(0).Exec(
+					fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", lic),
+				)
+				require.NoError(t, err)
+			}
+
+			if tc.lastSuccessfulTelemetryPing != 0 {
+				for i := range s.NodeIDs() {
+					s.Server(i).DiagnosticsReporter().(*diagnostics.Reporter).LastSuccessfulTelemetryPing.Store(
+						tc.lastSuccessfulTelemetryPing,
+					)
+				}
+			}
+
+			testutils.SucceedsSoon(t, func() error {
+				var resp serverpb.GetThrottlingMetadataResponse
+				if err := getStatusJSONProto(s.Server(0), "throttling", &resp); err != nil {
+					t.Fatal(err)
+				}
+
+				sort.Strings(resp.NodeIdsWithTelemetryProblems)
+				if !assert.ObjectsAreEqual(tc.expected, resp) {
+					return errors.Newf("not equal: %v and %v", tc.expected, resp)
+				}
+				return nil
+			})
+		})
+	}
+
 }
