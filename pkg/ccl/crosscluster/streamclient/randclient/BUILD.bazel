@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/span",
         "//pkg/util/syncutil",
