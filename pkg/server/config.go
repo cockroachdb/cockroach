@@ -264,11 +264,6 @@ type BaseConfig struct {
 	// route SQL connections instead.
 	DisableSQLListener bool
 
-	// ObsServiceAddr is the address of the OTLP sink to send events to, if any.
-	// These events are meant for the Observability Service, but they might pass
-	// through an OpenTelemetry Collector.
-	ObsServiceAddr string
-
 	// RPCListenerFactory provides an alternate implementation of
 	// ListenAndUpdateAddrs for use when creating gPRC
 	// listeners. This is set by in-memory tenants if the user has

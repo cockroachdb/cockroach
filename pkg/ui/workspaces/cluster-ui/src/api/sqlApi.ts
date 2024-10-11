@@ -211,7 +211,6 @@ export function sqlApiErrorMessage(message: string): string {
 export function createSqlExecutionRequest(
   dbName: string,
   statements: SqlStatement[],
-  useObsService?: boolean,
 ): SqlExecutionRequest {
   return {
     execute: true,
@@ -219,7 +218,6 @@ export function createSqlExecutionRequest(
     database: dbName,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
-    use_obs_service: useObsService || false,
   };
 }
 

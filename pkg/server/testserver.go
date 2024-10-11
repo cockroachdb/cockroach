@@ -301,8 +301,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
-	cfg.ObsServiceAddr = params.ObsServiceAddr
-
 	return cfg
 }
 
