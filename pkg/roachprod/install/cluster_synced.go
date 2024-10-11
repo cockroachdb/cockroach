@@ -2597,15 +2597,24 @@ func (c *SyncedCluster) Get(
 		close(results)
 	}()
 
+	var errOnce sync.Once
+	var finalErr error
+	setErr := func(e error) {
+		if e != nil {
+			errOnce.Do(func() {
+				finalErr = e
+			})
+		}
+	}
+
 	defer spinner.Start()()
-	haveErr := false
 	for {
 		r, ok := <-results
 		if !ok {
 			break
 		}
 		if r.err != nil {
-			haveErr = true
+			setErr(r.err)
 			nodeTaskStatus(nodes[r.index], r.err.Error(), true)
 		} else {
 			nodeTaskStatus(nodes[r.index], "done", true)
@@ -2613,8 +2622,8 @@ func (c *SyncedCluster) Get(
 	}
 	spinner.MaybeLogTasks(l)
 
-	if haveErr {
-		return errors.Newf("get %s failed", src)
+	if finalErr != nil {
+		return errors.Wrapf(finalErr, "get %s failed", src)
 	}
 	return nil
 }
