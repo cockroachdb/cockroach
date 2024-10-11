@@ -69,7 +69,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Owner: registry.OwnerCDC,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
 		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          60 * time.Minute,
+		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
@@ -447,6 +447,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t, t.L(), c, tester.crdbNodes,
 		// Multi-tenant deployments are currently unsupported. See #127378.
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+		// We limit the number of upgrades to be performed in the test run because
+		// the test takes a significant amount of time to complete.
+		mixedversion.MaxUpgrades(3),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
