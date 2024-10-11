@@ -1009,10 +1009,6 @@ func prepareZoneConfig(
 	setters []func(c *zonepb.ZoneConfig),
 	obj zoneConfigObject,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	// TODO(annie): once we allow configuring zones for named zones/system ranges,
-	// we will need to guard against secondary tenants from configuring such
-	// ranges.
-
 	// Retrieve the partial zone configuration
 	partialZone := obj.retrievePartialZoneConfig(b)
 
@@ -1060,6 +1056,14 @@ func prepareZoneConfig(
 	oldZone := protoutil.Clone(completeZone).(*zonepb.ZoneConfig)
 
 	if n.SetDefault {
+		// ALTER RANGE default USING DEFAULT sets the default to the in
+		// memory default value.
+		if keys.RootNamespaceID == uint32(obj.getTargetID()) {
+			// TODO(reviewer callout): is it fine to use this? or do we want to
+			// plumb(?) planner.execCfg.DefaultZoneConfig here?
+			defaultZc := zonepb.DefaultZoneConfig()
+			finalZone = *protoutil.Clone(&defaultZc).(*zonepb.ZoneConfig)
+		}
 		finalZone = *zonepb.NewZoneConfig()
 	}
 
