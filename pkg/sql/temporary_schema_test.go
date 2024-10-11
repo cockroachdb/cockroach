@@ -34,15 +34,16 @@ import (
 func TestCleanupSchemaObjects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(arul): Investigate why we need this -- the job executes serially
-	// and we are just running drop statements in the job. Ideally this should
-	// not require disabling leases, but the test fails if we don't. See #52412.
-	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+
+	// TODO(arul): Investigate why we need this -- the job executes serially
+	// and we are just running drop statements in the job. Ideally this should
+	// not require disabling leases, but the test fails if we don't. See #52412.
+	defer lease.TestingDisableTableLeases()()
 
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)

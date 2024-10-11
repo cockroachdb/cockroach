@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -80,20 +79,17 @@ var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
 // keeping the entries private.
 type licenseCacheKey string
 
-// TestingEnableEnterprise allows overriding the license check in tests.
+// TestingEnableEnterprise allows overriding the license check in tests. This
+// function was deprecated when the core license was removed. We no longer
+// distinguish between features enabled only for enterprise. All features are
+// enabled, and if a license policy is violated, we throttle connections.
+// Callers can safely remove any reference to this function.
 //
-// Prefer using ccl.TestingEnableEnterprise instead when that's possible without
-// introducing a dependency cycle. This function is useful for packages that
-// can't import `ccl` without introducing a dependency cycle. However, it panics
-// if package `ccl` (which, in turn, imports all the other ccl/... packages)
-// wasn't linked into the binary. In tests, generally the right thing to do is
-// to import `ccl` from a file in the `foo_test` pkg (for example,
-// main_test.go). Frequently, calling ccl.TestingEnableEnterprise in TestMain is
-// used to enable the license for the tests in a whole package, so this
-// utilccl.TestingEnableEnterprise is not frequently used. Even if this function
-// didn't panic, CheckEnterpriseEnabled will panic if not all the CCL code is
-// linked in, so callers of this function would likely just have the panic
-// kicked down the road to the check call.
+// However, there is one exception to above mentioned. If a test is using
+// TestingCheckEnterpriseEnabledLegacy, then this function maintains its
+// original behaviour.
+//
+// Deprecated
 func TestingEnableEnterprise() func() {
 	if !AllCCLCodeImported {
 		panic("not all ccl code imported")
@@ -106,6 +102,10 @@ func TestingEnableEnterprise() func() {
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
+//
+// See description in TestingEnableEnterprise for rationale about deprecation.
+//
+// Deprecated
 func TestingDisableEnterprise() func() {
 	before := atomic.LoadInt32(&enterpriseStatus)
 	atomic.StoreInt32(&enterpriseStatus, deferToLicense)
@@ -114,50 +114,31 @@ func TestingDisableEnterprise() func() {
 	}
 }
 
-// ApplyTenantLicense verifies the COCKROACH_TENANT_LICENSE environment variable
-// and enables enterprise features for the process. This is a bit of a hack and
-// should be replaced once it is possible to read the host cluster's
-// enterprise.license setting.
-func ApplyTenantLicense() error {
-	license, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
-	if !ok {
-		return nil
-	}
-	if _, err := decode(license); err != nil {
-		return errors.Wrap(err, "COCKROACH_TENANT_LICENSE encoding is invalid")
-	}
-	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
+// CheckEnterpriseEnabled previously returned a non-nil error if the requested enterprise
+// feature was not enabled. It is now deprecated and always returns nil. Callers should
+// remove any usage of this function.
+//
+// Deprecated
+func CheckEnterpriseEnabled(*cluster.Settings, uuid.UUID, string) error {
 	return nil
 }
 
-// CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
-// feature is not enabled, including information or a link explaining how to
-// enable it.
-//
-// This should not be used in hot paths, since an unavailable feature will
-// result in a new error being instantiated for every call -- use
-// IsEnterpriseEnabled() instead.
-//
-// The ClusterID argument should be the tenant-specific logical
-// cluster ID.
-// `feature` is not used for the check itself; it is merely embedded
-// in the URL displayed in the error message.
-func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) error {
+// TestingCheckEnterpriseEnabledLegacy gives you the previous behaviour of
+// CheckEnterpriseEnabled. It is intended to be used in tests only. And only for
+// tests that relied on it to function properly.
+func TestingCheckEnterpriseEnabledLegacy(
+	st *cluster.Settings, cluster uuid.UUID, feature string,
+) error {
 	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, feature, true /* withDetails */)
 }
 
-// IsEnterpriseEnabled returns whether the requested enterprise feature is
-// enabled. It is faster than CheckEnterpriseEnabled, since it does not return
-// details about why the feature is unavailable, and can therefore be used in
-// hot paths.
+// IsEnterpriseEnabled previously returned whether the requested enterprise
+// feature was enabled. It is now deprecated and always returns true. Callers
+// should remove usage of this function.
 //
-// The ClusterID argument should be the tenant-specific logical
-// cluster ID.
-// `feature` is not used for the check itself; it is merely embedded
-// in the URL displayed in the error message.
-func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) bool {
-	return checkEnterpriseEnabledAt(
-		st, timeutil.Now(), cluster, feature, false /* withDetails */) == nil
+// Deprecated
+func IsEnterpriseEnabled(*cluster.Settings, uuid.UUID, string) bool {
+	return true
 }
 
 // GetLicenseTTL is a function which returns the TTL for the active cluster.

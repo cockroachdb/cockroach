@@ -534,7 +534,7 @@ func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
 // capabilities.
 func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
-	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
+	if err := base.TestingCheckEnterpriseEnabledLegacy(ts.st, clusterID(), "SQL servers"); err != nil {
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.
 		ts.cfg.DisableDefaultTestTenant = true

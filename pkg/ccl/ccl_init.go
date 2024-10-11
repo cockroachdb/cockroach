@@ -29,7 +29,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
 
@@ -42,9 +41,9 @@ func init() {
 	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
 	// this `ccl` pkg.
 	base.CheckEnterpriseEnabled = utilccl.CheckEnterpriseEnabled
+	base.TestingCheckEnterpriseEnabledLegacy = utilccl.TestingCheckEnterpriseEnabledLegacy
 	base.LicenseType = utilccl.GetLicenseType
 	base.GetLicenseTTL = utilccl.GetLicenseTTL
-	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
 	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
 }
 
