@@ -24,12 +24,18 @@ import (
 
 const pruneBatchSize = 512
 
+type spanStatsFetcher interface {
+	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
+}
+
 // tableMetadataUpdater encapsulates the logic for updating the table metadata cache.
 type tableMetadataUpdater struct {
-	ie             isql.Executor
-	metrics        *TableMetadataUpdateJobMetrics
-	updateProgress func(ctx context.Context, progress float32)
-	testKnobs      *tablemetadatacacheutil.TestingKnobs
+	ie               isql.Executor
+	timeSrc          timeutil.TimeSource
+	metrics          *TableMetadataUpdateJobMetrics
+	updateProgress   func(ctx context.Context, progress float32)
+	spanStatsFetcher spanStatsFetcher
+	testKnobs        *tablemetadatacacheutil.TestingKnobs
 }
 
 // tableMetadataDetails contains additional details for a table_metadata row that doesn't
@@ -50,14 +56,18 @@ var _ tablemetadatacacheutil.ITableMetadataUpdater = &tableMetadataUpdater{}
 func newTableMetadataUpdater(
 	onProgressUpdated func(ctx context.Context, progress float32),
 	metrics *TableMetadataUpdateJobMetrics,
+	spanStatsFetcher spanStatsFetcher,
 	ie isql.Executor,
+	timeSrc timeutil.TimeSource,
 	testKnobs *tablemetadatacacheutil.TestingKnobs,
 ) *tableMetadataUpdater {
 	return &tableMetadataUpdater{
-		ie:             ie,
-		metrics:        metrics,
-		updateProgress: onProgressUpdated,
-		testKnobs:      testKnobs,
+		ie:               ie,
+		metrics:          metrics,
+		updateProgress:   onProgressUpdated,
+		spanStatsFetcher: spanStatsFetcher,
+		timeSrc:          timeSrc,
+		testKnobs:        testKnobs,
 	}
 }
 
@@ -82,7 +92,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	// upsertQuery is the query used to upsert table metadata rows,
 	// it is reused for each batch to avoid allocations between batches.
 	upsert := newTableMetadataBatchUpsertQuery(tableBatchSize)
-	it := newTableMetadataBatchIterator(u.ie, u.testKnobs.GetAOSTClause())
+	it := newTableMetadataBatchIterator(u.ie, u.spanStatsFetcher, u.testKnobs.GetAOSTClause())
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
 	if err != nil {
 		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
@@ -90,22 +100,23 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	estimatedBatches := int(math.Ceil(float64(estimatedRowsToUpdate) / float64(tableBatchSize)))
 	batchNum := 0
 	for {
-		more, err := it.fetchNextBatch(ctx, tableBatchSize)
-		if err != nil {
-			// TODO (xinhaoz): add error handling for a batch failure in
-			// https://github.com/cockroachdb/cockroach/issues/130040. For now,
-			// we can't continue because the page key is in an invalid state.
-			log.Errorf(ctx, "failed to fetch next batch: %s", err.Error())
+		more, batchErr := it.fetchNextBatch(ctx, tableBatchSize)
+		if batchErr != nil {
+			log.Errorf(ctx, "failure in batch request: %s", batchErr.Error())
 			u.metrics.Errors.Inc(1)
-			return updated, err
+			if !more {
+				// If we were able to fetch some rows, we can proceed and move on to the next batch.
+				// Otherwise a non-recoverable error was encountered and we can't proceed.
+				return updated, batchErr
+			}
 		}
 
 		if !more {
-			// No more results.
 			break
 		}
+
 		batchNum++
-		count, err := u.upsertBatch(ctx, it.batchRows, upsert)
+		count, err := u.upsertBatch(ctx, it.batchRows, upsert, batchErr)
 		if err != nil {
 			// If an upsert fails, let's just continue to the next batch for now.
 			log.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
@@ -164,12 +175,17 @@ RETURNING table_id`, pruneBatchSize)
 // upsertBatch upserts the given batch of table metadata rows returning
 // the number of rows upserted and any error that occurred.
 func (u *tableMetadataUpdater) upsertBatch(
-	ctx context.Context, batch []tableMetadataIterRow, upsertQuery *tableMetadataBatchUpsertQuery,
+	ctx context.Context,
+	batch []tableMetadataIterRow,
+	upsertQuery *tableMetadataBatchUpsertQuery,
+	batchErr error,
 ) (int, error) {
-	upsertQuery.resetForBatch()
+	upsertQuery.prepare()
+	defer upsertQuery.reset()
 	upsertBatchSize := 0
+	lastUpdated := u.timeSrc.Now()
 	for _, row := range batch {
-		if err := upsertQuery.addRow(ctx, &row); err != nil {
+		if err := upsertQuery.addRow(ctx, &row, batchErr, lastUpdated); err != nil {
 			log.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
 			continue
 		}
@@ -185,7 +201,7 @@ func (u *tableMetadataUpdater) upsertBatch(
 		"batch-upsert-table-metadata",
 		nil, // txn
 		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
-		upsertQuery.getQuery(),
+		upsertQuery.getQuery(batchErr),
 		upsertQuery.args...,
 	)
 }
@@ -207,8 +223,9 @@ WHERE d."parentID" = 0 and t."parentSchemaID" != 0
 }
 
 type tableMetadataBatchUpsertQuery struct {
-	stmt bytes.Buffer
-	args []interface{}
+	stmt     bytes.Buffer
+	args     []interface{}
+	batchErr error
 }
 
 // newTableMetadataBatchUpsertQuery creates a new tableMetadataBatchUpsertQuery,
@@ -217,16 +234,20 @@ func newTableMetadataBatchUpsertQuery(batchLen int) *tableMetadataBatchUpsertQue
 	q := &tableMetadataBatchUpsertQuery{
 		args: make([]interface{}, 0, batchLen*iterCols),
 	}
-	q.resetForBatch()
 	return q
 }
 
-// resetForBatch resets the query to its initial state to be reused for
-// another batch.
-func (q *tableMetadataBatchUpsertQuery) resetForBatch() {
+// reset resets the upsert query state.
+func (q *tableMetadataBatchUpsertQuery) reset() {
 	q.stmt.Reset()
+	q.args = q.args[:0]
+	q.batchErr = nil
+}
+
+// prepare prepares the upsert query for a new batch of rows.
+func (q *tableMetadataBatchUpsertQuery) prepare() {
 	q.stmt.WriteString(`
-UPSERT INTO system.table_metadata (
+INSERT INTO system.table_metadata (
 	db_id,
 	table_id,
 	db_name,
@@ -242,21 +263,17 @@ UPSERT INTO system.table_metadata (
 	total_data_bytes,
 	perc_live_data,
 	details,
-  last_updated
+  last_updated,
+  last_update_error
 ) VALUES
 `)
-	q.args = q.args[:0]
 }
 
 // addRow adds a tableMetadataIterRow to the batch upsert query.
 func (q *tableMetadataBatchUpsertQuery) addRow(
-	ctx context.Context, row *tableMetadataIterRow,
+	ctx context.Context, row *tableMetadataIterRow, batchErr error, lastUpdatedTime time.Time,
 ) error {
-	var stats roachpb.SpanStats
-	if err := gojson.Unmarshal(row.spanStatsJSON, &stats); err != nil {
-		log.Errorf(ctx, "failed to decode span stats: %v", err)
-	}
-
+	stats := row.spanStats
 	livePercentage := float64(0)
 	total := stats.TotalStats.Total()
 	liveBytes := stats.TotalStats.LiveBytes
@@ -274,6 +291,12 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 	if err != nil {
 		log.Errorf(ctx, "failed to encode details: %v", err)
 	}
+
+	var errMsg string
+	if batchErr != nil {
+		errMsg = batchErr.Error()
+	}
+
 	args := []interface{}{
 		row.dbID,                   // db_id
 		row.tableID,                // table_id
@@ -289,7 +312,9 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		liveBytes,                  // total_live_data_bytes
 		total,                      // total_data_bytes
 		livePercentage,             // perc_live_data
-		string(detailsStr),
+		string(detailsStr),         // details
+		lastUpdatedTime,            // last_updated
+		errMsg,                     // last_update_error
 	}
 
 	if len(q.args) > 0 {
@@ -304,13 +329,44 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 		q.stmt.WriteString(fmt.Sprintf("$%d", len(q.args)+1))
 		q.args = append(q.args, a)
 	}
-	// Add now() as the last_updated column.
-	q.stmt.WriteString(", now()")
 	q.stmt.WriteString(")")
 
 	return nil
 }
 
-func (q *tableMetadataBatchUpsertQuery) getQuery() string {
+func (q *tableMetadataBatchUpsertQuery) getQuery(batchErr error) string {
+	if batchErr != nil {
+		// When an error is encounter we only want to update the columns below.
+		q.stmt.WriteString(`
+ON CONFLICT (db_id, table_id)
+DO UPDATE
+SET
+  db_name = EXCLUDED.db_name,
+  schema_name = EXCLUDED.schema_name,
+  table_name = EXCLUDED.table_name,
+  last_update_error = EXCLUDED.last_update_error;
+`)
+	} else {
+		q.stmt.WriteString(`
+ON CONFLICT (db_id, table_id)
+DO UPDATE
+SET
+  db_name = EXCLUDED.db_name,
+  schema_name = EXCLUDED.schema_name,
+  table_name = EXCLUDED.table_name,
+  total_columns = EXCLUDED.total_columns,
+  total_indexes = EXCLUDED.total_indexes,
+  table_type = EXCLUDED.table_type,
+  store_ids = EXCLUDED.store_ids,
+  replication_size_bytes = EXCLUDED.replication_size_bytes,
+  total_ranges = EXCLUDED.total_ranges,
+  total_live_data_bytes = EXCLUDED.total_live_data_bytes,
+  total_data_bytes = EXCLUDED.total_data_bytes,
+  perc_live_data = EXCLUDED.perc_live_data,
+  details = EXCLUDED.details,
+  last_updated = EXCLUDED.last_updated,
+  last_update_error = NULL
+`)
+	}
 	return q.stmt.String()
 }
