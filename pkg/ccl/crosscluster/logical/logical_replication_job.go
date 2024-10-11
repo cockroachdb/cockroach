@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -209,11 +210,6 @@ func (r *logicalReplicationResumer) ingest(
 	}()
 
 	execPlan := func(ctx context.Context) error {
-
-		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.VInfof(ctx, 2, "received producer meta: %v", meta)
-			return nil
-		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
@@ -221,11 +217,13 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
+			stats:                 map[int32]*streampb.StreamEvent_RangeStats{},
+			processorCount:        planInfo.writeProcessorCount,
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
@@ -294,9 +292,10 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans      []roachpb.Span
-	streamAddress    []string
-	destTableBySrcID map[descpb.ID]dstTableMetadata
+	sourceSpans         []roachpb.Span
+	streamAddress       []string
+	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	writeProcessorCount int
 }
 
 func makeLogicalReplicationPlanner(
@@ -448,6 +447,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	// TODO(ssd): Now that we have more than one processor per
 	// node, we might actually want a tree of frontier processors
 	// spread out CPU load.
+	info.writeProcessorCount = len(plan.Topology.Partitions)
 	processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, 0, len(plan.Topology.Partitions))
 	for nodeID, parts := range specs {
 		for _, part := range parts {
@@ -484,7 +484,38 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
+	stats          map[int32]*streampb.StreamEvent_RangeStats
+	processorCount int
+
 	lastPartitionUpdate time.Time
+}
+
+func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+	if meta.BulkProcessorProgress == nil {
+		log.VInfof(ctx, 2, "received unexpected producer meta: %v", meta)
+		return nil
+	}
+
+	var stats streampb.StreamEvent_RangeStats
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
+		return errors.Wrap(err, "unable to unmarshal progress details")
+	}
+
+	rh.stats[meta.BulkProcessorProgress.ProcessorId] = &stats
+
+	return nil
+}
+
+func (rh *rowHandler) rollupStats() (streampb.StreamEvent_RangeStats, bool) {
+	var total streampb.StreamEvent_RangeStats
+	for _, producerStats := range rh.stats {
+		total.RangeCount += producerStats.RangeCount
+		total.ScanningRangeCount += producerStats.ScanningRangeCount
+	}
+	if len(rh.stats) != rh.processorCount || total.RangeCount == 0 {
+		return streampb.StreamEvent_RangeStats{}, false
+	}
+	return total, true
 }
 
 func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
@@ -526,6 +557,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			progress := md.Progress
 			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
+
 			if rh.replicatedTimeAtStart.Less(replicatedTime) {
 				prog.ReplicatedTime = replicatedTime
 				// The HighWater is for informational purposes
@@ -533,8 +565,26 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 				progress.Progress = &jobspb.Progress_HighWater{
 					HighWater: &replicatedTime,
 				}
+				progress.RunningStatus = "logical replication running"
+			} else {
+				// Use a tiny fraction completed to start with a nearly empty
+				// progress bar until we get the first batch of range stats.
+				fractionCompleted := float32(0.0001)
+				stats, ok := rh.rollupStats()
+				if ok {
+					fractionCompleted = max(
+						fractionCompleted,
+						(float32(stats.RangeCount-stats.ScanningRangeCount) / float32(stats.RangeCount)),
+					)
+					progress.RunningStatus = fmt.Sprintf("initial scan (%d out of %d ranges)", stats.ScanningRangeCount, stats.RangeCount)
+				} else {
+					progress.RunningStatus = fmt.Sprintf("starting streams (%d out of %d)", len(rh.stats), rh.processorCount)
+				}
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: fractionCompleted,
+				}
 			}
-			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
+
 			ju.UpdateProgress(progress)
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
