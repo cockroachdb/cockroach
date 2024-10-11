@@ -729,3 +729,98 @@ set-tokens io-tokens=50 disk-write-tokens=110 tick-interval=250
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 11
+
+
+#####################################################################
+# Test store grant coordinator with snapshot ingests
+init-store-grant-coordinator
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930
+
+set-tokens io-tokens=50 disk-write-tokens=110 tick-interval=250
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 110
+
+# Try get disk write tokens for snapshots.
+try-get work=kv-snapshot v=50
+----
+kv-snapshot: tryGet(50) returned true
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+# Set waiting requests for all store requesters. Then test priority ordering of grants.
+set-has-waiting-requests work=kv v=true
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-return-value-from-granted work=kv v=10
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-has-waiting-requests work=kv-elastic v=true
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-return-value-from-granted work=kv-elastic v=5
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-has-waiting-requests work=kv-snapshot v=true
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-return-value-from-granted work=kv-snapshot v=20
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60
+
+set-tokens io-tokens=50 disk-write-tokens=10 tick-interval=250
+----
+kv-regular: granted in chain 0, and returning 10
+kv-regular: granted in chain 0, and returning 10
+kv-regular: granted in chain 0, and returning 10
+kv-regular: granted in chain 0, and returning 10
+kv-regular: granted in chain 0, and returning 10
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 0(0), disk-write-tokens-avail: -40
+
+set-has-waiting-requests work=kv v=false
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 0(0), disk-write-tokens-avail: -40
+
+set-tokens io-tokens=50 disk-write-tokens=50 tick-interval=250
+----
+kv-snapshot: granted in chain 0, and returning 20
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: -10
+
+set-has-waiting-requests work=kv-snapshot v=false
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: -10
+
+set-tokens io-tokens=10 disk-write-tokens=15 tick-interval=250
+----
+kv-elastic: granted in chain 0, and returning 5
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 0
+
+set-has-waiting-requests work=kv-elastic v=false
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 0
+
+# Return grant for snapshots, should only return disk tokens.
+return-grant work=kv-snapshot v=20
+----
+kv-snapshot: returnGrant(20)
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 20

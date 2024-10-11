@@ -44,12 +44,14 @@ func TestDiskBandwidthLimiter(t *testing.T) {
 					intProvisionedDiskBytes: int64(intProvisionedBytes),
 					elasticBandwidthMaxUtil: 0.9,
 				}
-				var regularTokensUsed, elasticTokensUsed int64
+				var regularTokensUsed, snapshotTokensUsed, elasticTokensUsed int64
 				d.ScanArgs(t, "regular-tokens-used", &regularTokensUsed)
+				d.ScanArgs(t, "snapshot-tokens-used", &snapshotTokensUsed)
 				d.ScanArgs(t, "elastic-tokens-used", &elasticTokensUsed)
-				usedTokens := [admissionpb.NumWorkClasses]diskTokens{
-					{writeByteTokens: regularTokensUsed}, // regular
-					{writeByteTokens: elasticTokensUsed}, // elastic
+				usedTokens := [admissionpb.NumStoreWorkTypes]diskTokens{
+					{writeByteTokens: regularTokensUsed},  // regular
+					{writeByteTokens: snapshotTokensUsed}, // snapshot
+					{writeByteTokens: elasticTokensUsed},  // elastic
 				}
 
 				dbl.computeElasticTokens(diskLoad, usedTokens)

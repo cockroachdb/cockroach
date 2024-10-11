@@ -92,7 +92,7 @@ type intervalDiskLoadInfo struct {
 type diskBandwidthLimiterState struct {
 	tokens     diskTokens
 	prevTokens diskTokens
-	usedTokens [admissionpb.NumWorkClasses]diskTokens
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens
 	diskBWUtil float64
 	diskLoad   intervalDiskLoadInfo
 }
@@ -120,7 +120,7 @@ type diskTokens struct {
 
 // computeElasticTokens is called every adjustmentInterval.
 func (d *diskBandwidthLimiter) computeElasticTokens(
-	id intervalDiskLoadInfo, usedTokens [admissionpb.NumWorkClasses]diskTokens,
+	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) diskTokens {
 	// We are using disk read bytes over the previous adjustment interval as a
 	// proxy for future reads. It is a somewhat bad proxy, but for now we are ok
@@ -138,7 +138,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	// elastic writes completely due to out-sized reads from above.
 	diskWriteTokens = int64(math.Max(0, float64(diskWriteTokens)))
 
-	totalUsedTokens := sumDiskTokens(usedTokens[admissionpb.ElasticWorkClass], usedTokens[admissionpb.RegularWorkClass])
+	totalUsedTokens := sumDiskTokens(usedTokens)
 	tokens := diskTokens{
 		readByteTokens:  0,
 		writeByteTokens: diskWriteTokens,
@@ -159,10 +159,12 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
-		"regular %s) tokens (write %s (prev %s)), writeBW %s/s, readBW %s/s, provisioned %s/s)",
+		"snapshot %s, regular %s) tokens (write %s (prev %s)), writeBW %s/s, readBW %s/s, "+
+		"provisioned %s/s)",
 		d.state.diskBWUtil,
-		ib(d.state.usedTokens[admissionpb.ElasticWorkClass].writeByteTokens),
-		ib(d.state.usedTokens[admissionpb.RegularWorkClass].writeByteTokens),
+		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
+		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
+		ib(d.state.usedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
 		ib(d.state.tokens.writeByteTokens),
 		ib(d.state.prevTokens.writeByteTokens),
 		ib(d.state.diskLoad.intWriteBytes/adjustmentInterval),
@@ -175,11 +177,13 @@ func (d *diskBandwidthLimiter) String() string {
 	return redact.StringWithoutMarkers(d)
 }
 
-func sumDiskTokens(l diskTokens, r diskTokens) diskTokens {
-	return diskTokens{
-		readByteTokens:  l.readByteTokens + r.readByteTokens,
-		writeByteTokens: l.writeByteTokens + r.writeByteTokens,
-		readIOPSTokens:  l.readIOPSTokens + r.readIOPSTokens,
-		writeIOPSTokens: l.writeIOPSTokens + r.writeIOPSTokens,
+func sumDiskTokens(tokens [admissionpb.NumStoreWorkTypes]diskTokens) diskTokens {
+	var sumTokens diskTokens
+	for i := 0; i < admissionpb.NumStoreWorkTypes; i++ {
+		sumTokens.readByteTokens += tokens[i].readByteTokens
+		sumTokens.writeByteTokens += tokens[i].writeByteTokens
+		sumTokens.readIOPSTokens += tokens[i].readIOPSTokens
+		sumTokens.writeIOPSTokens += tokens[i].writeIOPSTokens
 	}
+	return sumTokens
 }
