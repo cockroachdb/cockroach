@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-// databaseZoneConfigObj is used to represent a table-specific zone configuration
-// object.
+// databaseZoneConfigObj is used to represent a database-specific zone
+// configuration object.
 type databaseZoneConfigObj struct {
 	databaseID catid.DescID
 	zoneConfig *zonepb.ZoneConfig
@@ -140,9 +140,6 @@ func (dzo *databaseZoneConfigObj) retrieveCompleteZoneConfig(
 }
 
 func (dzo *databaseZoneConfigObj) completeZoneConfig(b BuildCtx, zone *zonepb.ZoneConfig) error {
-	if zone.IsComplete() {
-		return nil
-	}
 	// Check if zone is complete. If not, inherit from the default zone config
 	if zone.IsComplete() {
 		return nil

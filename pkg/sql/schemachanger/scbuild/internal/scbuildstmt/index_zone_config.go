@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// indexZoneConfigObj is used to represent a table-specific zone configuration
+// indexZoneConfigObj is used to represent an index-specific zone configuration
 // object.
 type indexZoneConfigObj struct {
 	tableZoneConfigObj
@@ -180,10 +180,6 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
 ) (*zonepb.ZoneConfig, error) {
-	// TODO(annie): once we allow configuring zones for named zones/system ranges,
-	// we will need to guard against secondary tenants from configuring such
-	// ranges.
-
 	// We are configuring an index. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
 	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)

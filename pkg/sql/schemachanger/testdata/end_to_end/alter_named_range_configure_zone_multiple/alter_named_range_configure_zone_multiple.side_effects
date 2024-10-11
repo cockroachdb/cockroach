@@ -1,0 +1,60 @@
+/* setup */
+----
+
+
+/* test */
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 7
+    target: RANGE default
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    statement: ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #0
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - '"gc.ttlseconds" = 10000'
+    target: RANGE default
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:7 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    statement: ALTER RANGE ‹default› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #0
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 10
+    target: RANGE default
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:10000 > num_replicas:7 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    statement: ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #0
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+upsert zone config for #0
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
