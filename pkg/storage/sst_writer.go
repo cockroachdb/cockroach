@@ -555,6 +555,13 @@ func (fw *SSTWriter) BufferedSize() int {
 	return 0
 }
 
+// EstimatedSize returns the underlying RawWriter's estimated size. Note that
+// this size is an estimate as if the writer were to be closed at the time of
+// calling.
+func (fw *SSTWriter) EstimatedSize() uint64 {
+	return fw.fw.Raw().EstimatedSize()
+}
+
 // MemObject is an in-memory implementation of objstorage.Writable, intended
 // use with SSTWriter.
 type MemObject struct {
