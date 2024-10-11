@@ -2221,9 +2221,6 @@ func (rss *replicaSendStream) closeLocked(ctx context.Context) {
 	rss.returnSendTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
 	rss.returnAllEvalTokensLocked(ctx)
 	rss.stopAttemptingToEmptySendQueueLocked(ctx, true)
-	if rss.mu.sendQueue.forceFlushScheduled {
-		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
-	}
 	rss.mu.closed = true
 }
 
@@ -2487,10 +2484,14 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 		} else {
 			tokensNeeded = 0
 		}
-		sendQueueMetrics := rss.parent.parent.opts.RangeControllerMetrics.SendQueue
 		afterDeductedTokens := rss.mu.sendQueue.deductedForSchedulerTokens
+		if buildutil.CrdbTestBuild && beforeDeductedTokens < afterDeductedTokens {
+			panic(errors.AssertionFailedf("beforeDeductedTokens %s < afterDeductedTokens %s",
+				beforeDeductedTokens, afterDeductedTokens))
+		}
 		if beforeDeductedTokens > afterDeductedTokens {
-			sendQueueMetrics.DeductedForSchedulerBytes.Dec(int64(afterDeductedTokens - beforeDeductedTokens))
+			sendQueueMetrics := rss.parent.parent.opts.RangeControllerMetrics.SendQueue
+			sendQueueMetrics.DeductedForSchedulerBytes.Dec(int64(beforeDeductedTokens - afterDeductedTokens))
 		}
 	}
 	if tokensNeeded > 0 {
@@ -2542,8 +2543,10 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 func (rss *replicaSendStream) stopAttemptingToEmptySendQueueLocked(
 	ctx context.Context, disconnect bool,
 ) {
-	rss.mu.sendQueue.forceFlushScheduled = false
-	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+	if rss.mu.sendQueue.forceFlushScheduled {
+		rss.mu.sendQueue.forceFlushScheduled = false
+		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+	}
 	rss.stopAttemptingToEmptySendQueueViaWatcherLocked(ctx, disconnect)
 }
 
