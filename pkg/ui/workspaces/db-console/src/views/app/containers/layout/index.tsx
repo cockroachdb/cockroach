@@ -29,6 +29,7 @@ import {
   Text,
   TextTypes,
 } from "src/components";
+import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 import { Badge } from "@cockroachlabs/cluster-ui";
 
 import "./layout.styl";
@@ -98,6 +99,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <TenantDropdown />
             </PageHeader>
           </div>
+          <ThrottleNotificationBar />
           <div className="layout-panel__body">
             <div className="layout-panel__sidebar">
               <NavigationBar />
