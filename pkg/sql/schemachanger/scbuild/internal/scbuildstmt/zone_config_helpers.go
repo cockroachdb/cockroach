@@ -1009,10 +1009,6 @@ func prepareZoneConfig(
 	setters []func(c *zonepb.ZoneConfig),
 	obj zoneConfigObject,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	// TODO(annie): once we allow configuring zones for named zones/system ranges,
-	// we will need to guard against secondary tenants from configuring such
-	// ranges.
-
 	// Retrieve the partial zone configuration
 	partialZone := obj.retrievePartialZoneConfig(b)
 
