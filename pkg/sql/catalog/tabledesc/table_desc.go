@@ -656,6 +656,11 @@ func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) 
 	return nil
 }
 
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *wrapper) MaybeRequiresTypeHydration() bool {
+	return len(desc.UserDefinedTypeColumns()) > 0
+}
+
 // IsSchemaLocked implements the TableDescriptor interface.
 func (desc *wrapper) IsSchemaLocked() bool {
 	return desc.SchemaLocked

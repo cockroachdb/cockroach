@@ -85,7 +85,7 @@ func (f *dbTableDescFetcher) FetchTableDesc(
 	// Immediately release the lease, since we only need it for the exact
 	// timestamp requested.
 	desc.Release(ctx)
-	if catalog.MaybeRequiresHydration(tableDesc) {
+	if tableDesc.MaybeRequiresTypeHydration() {
 		tableDesc, err = refreshUDT(ctx, tableID, f.db, f.collection, ts)
 		if err != nil {
 			return nil, err

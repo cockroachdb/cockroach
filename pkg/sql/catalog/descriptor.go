@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -261,6 +260,10 @@ type Descriptor interface {
 	// referenced by this descriptor which must be hydrated prior to using it.
 	// iterutil.StopIteration is supported.
 	ForEachUDTDependentForHydration(func(t *types.T) error) error
+
+	// MaybeRequiresTypeHydration returns false if the descriptor definitely does not
+	// depend on any types.T being hydrated.
+	MaybeRequiresTypeHydration() bool
 
 	// GetReplicatedPCRVersion return the version from the source
 	// tenant if this descriptor is replicated.
@@ -1116,14 +1119,4 @@ func IsSystemDescriptor(desc Descriptor) bool {
 // for the legacy schema changer).
 func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
-}
-
-// MaybeRequiresHydration returns false if the descriptor definitely does not
-// depend on any types.T being hydrated.
-func MaybeRequiresHydration(desc Descriptor) (ret bool) {
-	_ = desc.ForEachUDTDependentForHydration(func(t *types.T) error {
-		ret = true
-		return iterutil.StopIteration()
-	})
-	return ret
 }
