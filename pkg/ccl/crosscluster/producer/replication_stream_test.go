@@ -377,6 +377,9 @@ USE d;
 		// Observe resolved timestamp that's higher than the previous value timestamp.
 		feed.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 
+		stats := feed.ObserveRangeStats(ctx)
+		require.Greater(t, stats.RangeCount, int64(0))
+
 		// Update our row.
 		srcTenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
 		expected = replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42, nil, "world")
