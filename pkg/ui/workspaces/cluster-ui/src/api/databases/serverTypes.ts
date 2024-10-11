@@ -55,6 +55,7 @@ export type TableMetadataServer = {
   auto_stats_enabled: boolean;
   // Optimizer stats.
   stats_last_updated: string | null;
+  replica_count: number;
 };
 
 export type TableMetadataResponseServer =
