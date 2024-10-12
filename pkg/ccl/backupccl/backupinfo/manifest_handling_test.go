@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -371,6 +372,44 @@ func TestMakeBackupCodec(t *testing.T) {
 			c, err := backupinfo.MakeBackupCodec(tc.manifests)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedCodec, c)
+		})
+	}
+}
+
+func TestElideSkippedLayers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name     string
+		times    [][]int // len 2 slices of start and end time.
+		expected []int   // expected end times.
+	}{
+		{"single", [][]int{{0, 1}}, []int{1}},
+		{"double", [][]int{{0, 1}, {1, 2}}, []int{1, 2}},
+		{"simple chain", [][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {5, 8}}, []int{1, 2, 3, 5, 8}},
+		{"skip one", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {5, 8}}, []int{1, 3, 5, 8}},
+		{"skip all", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {1, 8}}, []int{1, 8}},
+		{"skip twice to first", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {3, 8}}, []int{1, 3, 8}},
+		{"skip twice to second", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {2, 8}}, []int{1, 2, 8}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			chain := make([]backuppb.BackupManifest, len(tc.times))
+			for i, ts := range tc.times {
+				chain[i].StartTime = hlc.Timestamp{WallTime: int64(ts[0])}
+				chain[i].EndTime = hlc.Timestamp{WallTime: int64(ts[1])}
+			}
+			uris, res, locs, err := backupinfo.ElideSkippedLayers(
+				make([]string, len(tc.times)),
+				chain,
+				make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.times)),
+			)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.expected), len(uris))
+			require.Equal(t, len(tc.expected), len(locs))
+			require.Equal(t, len(tc.expected), len(res))
+			for i := range tc.expected {
+				require.Equal(t, tc.expected[i], int(res[i].EndTime.WallTime), "expected %q\ngot: %q")
+			}
 		})
 	}
 }
