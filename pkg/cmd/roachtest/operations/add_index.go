@@ -20,6 +20,7 @@ import (
 
 type cleanupAddedIndex struct {
 	db, table, index string
+	locked           bool
 }
 
 func (cl *cleanupAddedIndex) Cleanup(
@@ -28,6 +29,10 @@ func (cl *cleanupAddedIndex) Cleanup(
 	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
+	if cl.locked {
+		setSchemaLocked(ctx, o, conn, cl.db, cl.table, false /* lock */)
+		defer setSchemaLocked(ctx, o, conn, cl.db, cl.table, true /* lock */)
+	}
 	o.Status(fmt.Sprintf("dropping index %s", cl.index))
 	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP INDEX %s.%s@%s", cl.db, cl.table, cl.index))
 	if err != nil {
@@ -58,6 +63,15 @@ func runAddIndex(
 		o.Fatal(err)
 	}
 
+	// If the table's schema is locked, then unlock the table and make sure it will
+	// be re-locked during cleanup.
+	// TODO(#129694): Remove schema unlocking/re-locking once automation is internalized.
+	locked := isSchemaLocked(o, conn, dbName, tableName)
+	if locked {
+		setSchemaLocked(ctx, o, conn, dbName, tableName, false /* lock */)
+		defer setSchemaLocked(ctx, o, conn, dbName, tableName, true /* lock */)
+	}
+
 	indexName := fmt.Sprintf("add_index_op_%d", rng.Uint32())
 	o.Status(fmt.Sprintf("adding index to column %s in table %s.%s", colName, dbName, tableName))
 	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s)", indexName, dbName, tableName, colName)
@@ -67,10 +81,12 @@ func runAddIndex(
 	}
 
 	o.Status(fmt.Sprintf("index %s created", indexName))
+
 	return &cleanupAddedIndex{
-		db:    dbName,
-		table: tableName,
-		index: indexName,
+		db:     dbName,
+		table:  tableName,
+		index:  indexName,
+		locked: locked,
 	}
 }
 
