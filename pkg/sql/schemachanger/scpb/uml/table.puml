@@ -405,6 +405,65 @@ TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
 TemporaryIndex :  Expr
 
+object Trigger
+
+Trigger :  TableID
+Trigger :  TriggerID
+
+object TriggerDeps
+
+TriggerDeps :  TableID
+TriggerDeps :  TriggerID
+TriggerDeps : []UsesRelationIDs
+TriggerDeps : []UsesTypeIDs
+TriggerDeps : []UsesRoutineIDs
+
+object TriggerEnabled
+
+TriggerEnabled :  TableID
+TriggerEnabled :  TriggerID
+TriggerEnabled :  Enabled
+
+object TriggerEvents
+
+TriggerEvents :  TableID
+TriggerEvents :  TriggerID
+TriggerEvents : []Events
+
+object TriggerFunctionCall
+
+TriggerFunctionCall :  TableID
+TriggerFunctionCall :  TriggerID
+TriggerFunctionCall :  FuncID
+TriggerFunctionCall : []FuncArgs
+TriggerFunctionCall :  FuncBody
+
+object TriggerName
+
+TriggerName :  TableID
+TriggerName :  TriggerID
+TriggerName :  Name
+
+object TriggerTiming
+
+TriggerTiming :  TableID
+TriggerTiming :  TriggerID
+TriggerTiming :  ActionTime
+TriggerTiming :  ForEachRow
+
+object TriggerTransition
+
+TriggerTransition :  TableID
+TriggerTransition :  TriggerID
+TriggerTransition :  NewTransitionAlias
+TriggerTransition :  OldTransitionAlias
+
+object TriggerWhen
+
+TriggerWhen :  TableID
+TriggerWhen :  TriggerID
+TriggerWhen :  WhenExpr
+
 object TypeComment
 
 TypeComment :  TypeID
@@ -538,6 +597,16 @@ Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
+Table <|-- Trigger
+View <|-- Trigger
+Trigger <|-- TriggerDeps
+Trigger <|-- TriggerEnabled
+Trigger <|-- TriggerEvents
+Trigger <|-- TriggerFunctionCall
+Trigger <|-- TriggerName
+Trigger <|-- TriggerTiming
+Trigger <|-- TriggerTransition
+Trigger <|-- TriggerWhen
 CompositeType,EnumType <|-- TypeComment
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- UniqueWithoutIndexConstraintUnvalidated

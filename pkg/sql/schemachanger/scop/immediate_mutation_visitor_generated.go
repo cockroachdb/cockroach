@@ -81,6 +81,16 @@ type ImmediateMutationVisitor interface {
 	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
 	AddColumnOnUpdateExpression(context.Context, AddColumnOnUpdateExpression) error
 	RemoveColumnOnUpdateExpression(context.Context, RemoveColumnOnUpdateExpression) error
+	AddTrigger(context.Context, AddTrigger) error
+	SetTriggerName(context.Context, SetTriggerName) error
+	SetTriggerEnabled(context.Context, SetTriggerEnabled) error
+	SetTriggerTiming(context.Context, SetTriggerTiming) error
+	SetTriggerEvents(context.Context, SetTriggerEvents) error
+	SetTriggerTransition(context.Context, SetTriggerTransition) error
+	SetTriggerWhen(context.Context, SetTriggerWhen) error
+	SetTriggerFunctionCall(context.Context, SetTriggerFunctionCall) error
+	SetTriggerForwardReferences(context.Context, SetTriggerForwardReferences) error
+	RemoveTrigger(context.Context, RemoveTrigger) error
 	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
 	UpdateTypeBackReferencesInTypes(context.Context, UpdateTypeBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
@@ -91,6 +101,8 @@ type ImmediateMutationVisitor interface {
 	RemoveTableConstraintBackReferencesFromFunctions(context.Context, RemoveTableConstraintBackReferencesFromFunctions) error
 	AddTableColumnBackReferencesInFunctions(context.Context, AddTableColumnBackReferencesInFunctions) error
 	RemoveTableColumnBackReferencesInFunctions(context.Context, RemoveTableColumnBackReferencesInFunctions) error
+	AddTriggerBackReferencesInRoutines(context.Context, AddTriggerBackReferencesInRoutines) error
+	RemoveTriggerBackReferencesInRoutines(context.Context, RemoveTriggerBackReferencesInRoutines) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
 	SetConstraintName(context.Context, SetConstraintName) error
@@ -124,6 +136,7 @@ type ImmediateMutationVisitor interface {
 	SetFunctionSecurity(context.Context, SetFunctionSecurity) error
 	UpdateFunctionTypeReferences(context.Context, UpdateFunctionTypeReferences) error
 	UpdateFunctionRelationReferences(context.Context, UpdateFunctionRelationReferences) error
+	UpdateTableBackReferencesInRelations(context.Context, UpdateTableBackReferencesInRelations) error
 	SetObjectParentID(context.Context, SetObjectParentID) error
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
@@ -459,6 +472,56 @@ func (op RemoveColumnOnUpdateExpression) Visit(ctx context.Context, v ImmediateM
 }
 
 // Visit is part of the ImmediateMutationOp interface.
+func (op AddTrigger) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddTrigger(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerEnabled) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerEnabled(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerTiming) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerTiming(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerEvents) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerEvents(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerTransition) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerTransition(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerWhen) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerWhen(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerFunctionCall) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerFunctionCall(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerForwardReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerForwardReferences(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveTrigger) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveTrigger(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
 func (op UpdateTableBackReferencesInTypes) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateTableBackReferencesInTypes(ctx, op)
 }
@@ -506,6 +569,16 @@ func (op AddTableColumnBackReferencesInFunctions) Visit(ctx context.Context, v I
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTableColumnBackReferencesInFunctions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTableColumnBackReferencesInFunctions(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddTriggerBackReferencesInRoutines) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddTriggerBackReferencesInRoutines(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveTriggerBackReferencesInRoutines) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveTriggerBackReferencesInRoutines(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -671,6 +744,11 @@ func (op UpdateFunctionTypeReferences) Visit(ctx context.Context, v ImmediateMut
 // Visit is part of the ImmediateMutationOp interface.
 func (op UpdateFunctionRelationReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateFunctionRelationReferences(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateTableBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateTableBackReferencesInRelations(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

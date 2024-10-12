@@ -14,6 +14,7 @@ import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/enum.proto";
 import "sql/sem/semenumpb/constraint.proto";
+import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
@@ -508,6 +509,71 @@ message IndexDescriptor {
   optional double invisibility = 29 [(gogoproto.nullable) = false];
 
   // Next ID: 30
+}
+
+// TriggerDescriptor describes a trigger on a table.
+message TriggerDescriptor {
+  option (gogoproto.equal) = true;
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.casttype) = "TriggerID", (gogoproto.nullable) = false];
+
+  // The name of the trigger. Unique within a table, and cannot be qualified.
+  optional string name = 2 [(gogoproto.nullable) = false];
+
+  // The timing of the trigger: before, after, or instead of the event.
+  optional cockroach.sql.sem.semenumpb.TriggerActionTime action_time = 3 [(gogoproto.nullable) = false];
+
+  message Event {
+    option (gogoproto.equal) = true;
+    optional cockroach.sql.sem.semenumpb.TriggerEventType type = 1 [(gogoproto.nullable) = false];
+    repeated string column_names = 2;
+  }
+  // The set of events that cause the trigger to fire: insert, update, delete,
+  // truncate, or upsert. For update, a list of target columns may be specified.
+  repeated Event events = 4;
+
+  // Optional alias for the mutated set of rows before the mutation. Empty if
+  // an alias was not specified.
+  optional string new_transition_alias = 5 [(gogoproto.nullable) = false];
+
+  // Optional alias for the mutated set of rows after the mutation. Empty if
+  // an alias was not specified.
+  optional string old_transition_alias = 6 [(gogoproto.nullable) = false];
+
+  // If true, indicates that the trigger is executed for each mutated row.
+  // Otherwise, the trigger is executed once for the entire statement.
+  optional bool for_each_row = 7 [(gogoproto.nullable) = false];
+
+  // An optional boolean condition that must be satisfied for the trigger to
+  // execute. Empty if a WHEN clause was not specified.
+  optional string when_expr = 8 [(gogoproto.nullable) = false];
+
+  // The ID of the function that is executed when the trigger is fired.
+  optional uint32 func_id = 9 [(gogoproto.customname) = "FuncID", (gogoproto.nullable) = false,(gogoproto.casttype) = "ID"];
+
+  // String constant arguments for the trigger function.
+  repeated string func_args = 10;
+
+  // The PL/pgSQL statements that make up the body of the trigger function. This
+  // is stored with the trigger descriptor with by-name references to
+  // user-defined objects replaced with ID references.
+  optional string func_body = 11 [(gogoproto.nullable) = false];
+
+  // If true, indicates that the trigger is active.
+  optional bool enabled = 12 [(gogoproto.nullable) = false];
+
+  // The IDs of all relations that this trigger depends on.
+  repeated uint32 depends_on = 13 [(gogoproto.casttype) = "ID"];
+
+  // The IDs of all user defined types that this trigger depends on.
+  repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
+
+  // DependsOnRoutines are the IDs of the user-defined routines that this
+  // trigger depends on.
+  repeated uint32 depends_on_routines = 15  [(gogoproto.casttype) = "ID"];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -1223,7 +1289,14 @@ message TableDescriptor {
   optional uint32 replicated_pcr_version = 63 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Next ID: 64
+  // Triggers is the unordered list of triggers defined for this table.
+  repeated TriggerDescriptor triggers = 64 [(gogoproto.nullable) = false];
+
+  // Trigger ID for the next trigger.
+  optional uint32 next_trigger_id = 65 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextTriggerID", (gogoproto.casttype) = "TriggerID"];
+
+  // Next ID: 66
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
@@ -1688,6 +1761,8 @@ message FunctionDescriptor {
     // If applicable, IDs of the inbound reference table's constraint.
     repeated uint32 constraint_ids = 4 [(gogoproto.customname) = "ConstraintIDs",
       (gogoproto.casttype) = "ConstraintID"];
+    repeated uint32 trigger_ids = 5 [(gogoproto.customname) = "TriggerIDs",
+      (gogoproto.casttype) = "TriggerID"];
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];

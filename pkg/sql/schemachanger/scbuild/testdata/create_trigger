@@ -1,0 +1,64 @@
+setup
+CREATE TABLE xy (x INT, y INT);
+CREATE TABLE ab (a INT, b INT);
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE SEQUENCE s;
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo typ = 'a';
+  BEGIN
+    INSERT INTO ab VALUES ((NEW).x, (NEW).y);
+    RAISE NOTICE '% %', g(), nextval('s');
+    RETURN NEW;
+  END
+$$;
+----
+
+build
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1}
+- [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {name: tr, tableId: 104, triggerId: 1}
+- [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {enabled: true, tableId: 104, triggerId: 1}
+- [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {actionTime: BEFORE, forEachRow: true, tableId: 104, triggerId: 1}
+- [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {events: [{columnNames: [], type: INSERT}, {columnNames: [], type: UPDATE}], tableId: 104, triggerId: 1}
+- [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {funcArgs: [], funcBody: "DECLARE\nfoo @100106 := 'a';\nBEGIN\nINSERT INTO defaultdb.public.ab VALUES ((new).x, (new).y);\nRAISE NOTICE '% %', public.g(), nextval(108:::REGCLASS);\nRETURN new;\nEND;\n", funcId: 110, tableId: 104, triggerId: 1}
+- [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1, usesRelationIds: [105, 108], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
+
+build
+CREATE TRIGGER tr AFTER DELETE ON xy REFERENCING OLD TABLE AS foo WHEN (1 = 1) EXECUTE FUNCTION f('a', 'bc');
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1}
+- [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {name: tr, tableId: 104, triggerId: 1}
+- [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {enabled: true, tableId: 104, triggerId: 1}
+- [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {actionTime: AFTER, tableId: 104, triggerId: 1}
+- [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {events: [{columnNames: [], type: DELETE}], tableId: 104, triggerId: 1}
+- [[TriggerTransition:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {oldTransitionAlias: foo, tableId: 104, triggerId: 1}
+- [[TriggerWhen:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1, whenExpr: '(1:::INT8 = 1:::INT8)'}
+- [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {funcArgs: [a, bc], funcBody: "DECLARE\nfoo @100106 := 'a';\nBEGIN\nINSERT INTO defaultdb.public.ab VALUES ((new).x, (new).y);\nRAISE NOTICE '% %', public.g(), nextval(108:::REGCLASS);\nRETURN new;\nEND;\n", funcId: 110, tableId: 104, triggerId: 1}
+- [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1, usesRelationIds: [105, 108], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}

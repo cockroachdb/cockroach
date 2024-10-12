@@ -126,7 +126,11 @@ func namespace(b buildCtx, id descpb.ID) (ns *scpb.Namespace) {
 }
 
 func fullyQualifiedName(b buildCtx, e scpb.Element) string {
-	ns := namespace(b, screl.GetDescID(e))
+	return fullyQualifiedNameFromID(b, screl.GetDescID(e))
+}
+
+func fullyQualifiedNameFromID(b buildCtx, id descpb.ID) string {
+	ns := namespace(b, id)
 	if ns.DatabaseID == descpb.InvalidID {
 		return ns.Name
 	}
@@ -176,6 +180,31 @@ func functionName(b buildCtx, e scpb.Element) string {
 	databaseNamespaceElem := namespace(b, schemaNamespaceElem.DatabaseID)
 	fnName := tree.MakeQualifiedRoutineName(databaseNamespaceElem.Name, schemaNamespaceElem.Name, fnNameElem.Name)
 	return fnName.FQString()
+}
+
+// triggerName returns the name of the trigger that element `e` belongs to.
+// `e` must therefore have a DescID and TriggerID attr and is a trigger-related
+// element.
+func triggerName(b buildCtx, e scpb.Element) string {
+	descID := screl.GetDescID(e)
+	triggerID, err := screl.Schema.GetAttribute(screl.TriggerID, e)
+	if err != nil {
+		panic(err)
+	}
+	var triggerNameElem *scpb.TriggerName
+	scpb.ForEachTriggerName(
+		b.QueryByID(descID),
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.TriggerName) {
+			if e.TriggerID == triggerID && (triggerNameElem == nil || target != scpb.ToAbsent) {
+				triggerNameElem = e
+			}
+		},
+	)
+	if triggerNameElem == nil {
+		panic(errors.AssertionFailedf("missing TriggerName element for table #%d and trigger ID #%s",
+			descID, triggerID))
+	}
+	return triggerNameElem.Name
 }
 
 // ownerName finds the owner of the descriptor that element `e` belongs to.
@@ -444,6 +473,18 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			}
 			return &eventpb.SetZoneConfig{
 				CommonZoneConfigDetails: zcDetails,
+			}
+		}
+	case *scpb.Trigger:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return &eventpb.CreateTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: triggerName(b, e),
+			}
+		} else {
+			return &eventpb.DropTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: triggerName(b, e),
 			}
 		}
 	}

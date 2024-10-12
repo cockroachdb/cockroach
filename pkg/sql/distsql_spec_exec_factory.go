@@ -1069,6 +1069,10 @@ func (e *distSQLSpecExecFactory) ConstructCreateFunction(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
 }
 
+func (e *distSQLSpecExecFactory) ConstructCreateTrigger(_ *tree.CreateTrigger) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create trigger")
+}
+
 func (e *distSQLSpecExecFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: sequence select")
 }

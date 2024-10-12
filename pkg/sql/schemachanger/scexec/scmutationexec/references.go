@@ -389,6 +389,34 @@ func (i *immediateVisitor) RemoveTableColumnBackReferencesInFunctions(
 	return nil
 }
 
+func (i *immediateVisitor) AddTriggerBackReferencesInRoutines(
+	ctx context.Context, op scop.AddTriggerBackReferencesInRoutines,
+) error {
+	for _, id := range op.RoutineIDs {
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := fnDesc.AddTriggerReference(op.BackReferencedTableID, op.BackReferencedTriggerID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveTriggerBackReferencesInRoutines(
+	ctx context.Context, op scop.RemoveTriggerBackReferencesInRoutines,
+) error {
+	for _, id := range op.RoutineIDs {
+		fnDesc, err := i.checkOutFunction(ctx, id)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveTriggerReference(op.BackReferencedTableID, op.BackReferencedTriggerID)
+	}
+	return nil
+}
+
 // Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
 // and update it to either
 //   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or
@@ -439,7 +467,7 @@ func (i *immediateVisitor) RemoveBackReferencesInRelations(
 	ctx context.Context, op scop.RemoveBackReferencesInRelations,
 ) error {
 	for _, relationID := range op.RelationIDs {
-		if err := removeViewBackReferencesInRelation(ctx, i, relationID, op.BackReferencedID); err != nil {
+		if err := removeBackReferencesInRelation(ctx, i, relationID, op.BackReferencedID); err != nil {
 			return err
 		}
 	}
@@ -464,7 +492,7 @@ func (i *immediateVisitor) RemoveBackReferenceInFunctions(
 	return nil
 }
 
-func removeViewBackReferencesInRelation(
+func removeBackReferencesInRelation(
 	ctx context.Context, m *immediateVisitor, relationID, backReferencedID descpb.ID,
 ) error {
 	tbl, err := m.checkOutTable(ctx, relationID)
@@ -600,6 +628,38 @@ func updateBackReferencesInRelation(
 
 	newRefs = append(newRefs, backRefs...)
 	rel.DependedOnBy = newRefs
+	return nil
+}
+
+func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
+	ctx context.Context, op scop.UpdateTableBackReferencesInRelations,
+) error {
+	backRefTbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	forwardRefs := backRefTbl.GetAllReferencedTableIDs()
+	for _, relID := range op.RelationIDs {
+		referenced, err := i.checkOutTable(ctx, relID)
+		if err != nil {
+			return err
+		}
+		newBackRefIsDupe := false
+		newBackRef := descpb.TableDescriptor_Reference{ID: op.TableID, ByID: referenced.IsSequence()}
+		removeBackRefs := !forwardRefs.Contains(referenced.GetID())
+		newDependedOnBy := referenced.DependedOnBy[:0]
+		for _, backRef := range referenced.DependedOnBy {
+			if removeBackRefs && backRef.ID == op.TableID {
+				continue
+			}
+			newBackRefIsDupe = newBackRefIsDupe || backRef.Equal(newBackRef)
+			newDependedOnBy = append(newDependedOnBy, backRef)
+		}
+		if !removeBackRefs && !newBackRefIsDupe {
+			newDependedOnBy = append(newDependedOnBy, newBackRef)
+		}
+		referenced.DependedOnBy = newDependedOnBy
+	}
 	return nil
 }
 

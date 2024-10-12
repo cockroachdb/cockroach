@@ -522,8 +522,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 // function creation, when the type of the NEW and OLD variables is not yet
 // known.
 var createTriggerFuncParams = append([]routineParam{
-	{name: "new", typ: types.Unknown, class: tree.RoutineParamIn},
-	{name: "old", typ: types.Unknown, class: tree.RoutineParamIn},
+	{name: triggerColNew, typ: types.Unknown, class: tree.RoutineParamIn},
+	{name: triggerColOld, typ: types.Unknown, class: tree.RoutineParamIn},
 }, triggerFuncStaticParams...)
 
 func formatFuncBodyStmt(

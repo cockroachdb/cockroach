@@ -122,6 +122,7 @@ PROTO_FILES = [
     "//pkg/sql/schemachanger/scpb:elements.proto",
     "//pkg/sql/schemachanger/scpb:scpb.proto",
     "//pkg/sql/sem/semenumpb:constraint.proto",
+    "//pkg/sql/sem/semenumpb:trigger.proto",
     "//pkg/sql/sessiondatapb:local_only_session_data.proto",
     "//pkg/sql/sessiondatapb:session_data.proto",
     "//pkg/sql/sessiondatapb:session_migration.proto",

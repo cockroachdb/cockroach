@@ -1,0 +1,101 @@
+/* setup */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+----
+...
+
+/* test */
+DROP TRIGGER tr ON defaultdb.t;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TRIGGER
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     replacementOf:
+       time: {}
+  -  triggers:
+  -  - actionTime: BEFORE
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    - type: UPDATE
+  -    - type: DELETE
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  -      RETURN COALESCE(old, new);
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: tr
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     replacementOf:
+       time: {}
+  -  triggers:
+  -  - actionTime: BEFORE
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    - type: UPDATE
+  -    - type: DELETE
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  -      RETURN COALESCE(old, new);
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: tr
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

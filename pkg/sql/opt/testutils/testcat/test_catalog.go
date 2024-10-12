@@ -735,6 +735,16 @@ func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
 	return nil, nil
 }
 
+// TriggerCount is a part of the cat.View interface.
+func (tv *View) TriggerCount() int {
+	return 0
+}
+
+// Trigger is a part of the cat.View interface.
+func (tv *View) Trigger(i int) cat.Trigger {
+	panic("not implemented")
+}
+
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
@@ -1033,6 +1043,16 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 // IsRefreshViewRequired is a part of the cat.Table interface.
 func (tt *Table) IsRefreshViewRequired() bool {
 	return false
+}
+
+// TriggerCount is a part of the cat.Table interface.
+func (tt *Table) TriggerCount() int {
+	return 0
+}
+
+// Trigger is a part of the cat.Table interface.
+func (tt *Table) Trigger(i int) cat.Trigger {
+	panic("not implemented")
 }
 
 // Index implements the cat.Index interface for testing purposes.

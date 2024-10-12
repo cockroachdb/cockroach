@@ -51,6 +51,22 @@ const (
 	Function DescriptorType = "function"
 )
 
+// DescExprType describes the type for a serialized expression or statement
+// within a descriptor. This determines how the serialized expression should be
+// interpreted.
+type DescExprType uint8
+
+const (
+	// SQLExpr is a serialized SQL expression, such as "1 * 2".
+	SQLExpr DescExprType = iota
+	// SQLStmt is a serialized SQL statement or series of statements. Ex:
+	//   INSERT INTO xy VALUES (1, 2)
+	SQLStmt
+	// PLpgSQLStmt is a serialized PLpgSQL statement or series of statements. Ex:
+	//   BEGIN RAISE NOTICE 'foo'; END;
+	PLpgSQLStmt
+)
+
 // MutationPublicationFilter is used by MakeFirstMutationPublic to filter the
 // mutation types published.
 type MutationPublicationFilter int
@@ -608,6 +624,12 @@ type TableDescriptor interface {
 	// Note: This was only used in pre-20.2 truncate and 20.2 mixed version and
 	// is now deprecated.
 	GetReplacementOf() descpb.TableDescriptor_Replacement
+
+	// GetAllReferencedTableIDs returns all relation IDs that this table
+	// references. Table references can be from foreign keys, triggers, or via
+	// direct references if the descriptor is a view.
+	GetAllReferencedTableIDs() descpb.IDs
+
 	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 	// this table references. It takes in a function that returns the TypeDescriptor
 	// with the desired ID.
@@ -624,6 +646,11 @@ type TableDescriptor interface {
 	GetAllReferencedFunctionIDsInConstraint(
 		cstID descpb.ConstraintID,
 	) (DescriptorIDSet, error)
+
+	// GetAllReferencedFunctionIDsInTrigger returns descriptor IDs of all user
+	// defined functions referenced in this trigger. This includes the trigger
+	// function as well as any functions it references transitively.
+	GetAllReferencedFunctionIDsInTrigger(triggerID descpb.TriggerID) DescriptorIDSet
 
 	// GetAllReferencedFunctionIDsInColumnExprs returns descriptor IDs of all user
 	// defined functions referenced by expressions in this column.
@@ -787,6 +814,11 @@ type TableDescriptor interface {
 	// ExternalRowData indicates where the row data for this object is stored if
 	// it is stored outside the span of the object.
 	ExternalRowData() *descpb.ExternalRowData
+	// GetTriggers returns a slice with all triggers defined on the table.
+	GetTriggers() []descpb.TriggerDescriptor
+	// GetNextTriggerID returns the next unused trigger ID for this table.
+	// Trigger IDs are unique per table, but not unique globally.
+	GetNextTriggerID() descpb.TriggerID
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
