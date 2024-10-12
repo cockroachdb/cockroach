@@ -369,6 +369,16 @@ $left
 =>
 $left
 
+# EliminateLeftJoin discards a LeftJoin operator when it's known that the right 
+# input never returns any rows.
+[EliminateLeftJoin, Normalize]
+(LeftJoin
+    $left:*
+    $right:* & (HasZeroRows $right)
+)
+=>
+$left
+
 # SimplifyZeroCardinalityAntiJoin converts an AntiJoin operator to an empty
 # Values when it's known that the right input never returns zero rows, and
 # there is no join condition.
