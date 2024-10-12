@@ -511,6 +511,27 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 	return colSet
 }
 
+// MakeNullProjections creates a projection for each column in the right input,
+// setting each to NULL.
+func (c *CustomFuncs) MakeNullProjections(right memo.RelExpr) memo.ProjectionsExpr {
+    // Get the output columns of the right input.
+    rightCols := right.Relational().OutputCols
+    projections := make(memo.ProjectionsExpr, 0, len(rightCols))
+
+    // For each column in the right input, create a NULL projection.
+    for _, col := range rightCols.Ordered() {
+        projections = append(projections, c.f.ConstructProjectionsItem(
+            memo.NullSingleton, col))
+    }
+
+    return projections
+}
+
+// PassthroughCols returns the set of columns from the left input to be passed through.
+func (c *CustomFuncs) PassthroughCols(left memo.RelExpr) opt.ColSet {
+    return left.Relational().OutputCols
+}
+
 // ----------------------------------------------------------------------
 //
 // Row functions
