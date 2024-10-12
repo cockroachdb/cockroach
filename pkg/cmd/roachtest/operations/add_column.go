@@ -20,6 +20,7 @@ import (
 
 type cleanupAddedColumn struct {
 	db, table, column string
+	locked            bool
 }
 
 func (cl *cleanupAddedColumn) Cleanup(
@@ -28,6 +29,10 @@ func (cl *cleanupAddedColumn) Cleanup(
 	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
+	if cl.locked {
+		setSchemaLocked(ctx, o, conn, cl.db, cl.table, false /* lock */)
+		defer setSchemaLocked(ctx, o, conn, cl.db, cl.table, true /* lock */)
+	}
 	o.Status(fmt.Sprintf("dropping column %s", cl.column))
 	_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DROP COLUMN %s CASCADE", cl.db, cl.table, cl.column))
 	if err != nil {
@@ -58,6 +63,17 @@ func runAddColumn(
 		colQualification += " NOT NULL"
 	}
 
+	// If the table's schema is locked, then unlock the table and make sure it will
+	// be re-locked during cleanup.
+	// TODO(#129694): Remove schema unlocking/re-locking once automation is internalized.
+	locked := isSchemaLocked(o, conn, dbName, tableName)
+	if locked {
+		setSchemaLocked(ctx, o, conn, dbName, tableName, false /* lock */)
+		// Re-lock the table if necessary, so that it stays locked during any wait
+		// period before cleanup.
+		defer setSchemaLocked(ctx, o, conn, dbName, tableName, true /* lock */)
+	}
+
 	o.Status(fmt.Sprintf("adding column %s to table %s.%s", colName, dbName, tableName))
 	addColStmt := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN %s VARCHAR %s", dbName, tableName, colName, colQualification)
 	_, err := conn.ExecContext(ctx, addColStmt)
@@ -66,10 +82,12 @@ func runAddColumn(
 	}
 
 	o.Status(fmt.Sprintf("column %s created", colName))
+
 	return &cleanupAddedColumn{
 		db:     dbName,
 		table:  tableName,
 		column: colName,
+		locked: locked,
 	}
 }
 
