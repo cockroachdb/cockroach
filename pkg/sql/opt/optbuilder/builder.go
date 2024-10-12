@@ -138,6 +138,10 @@ type Builder struct {
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
 
+	// If set, we are processing a trigger definition; in this case catalog caches
+	// are disabled.
+	insideTriggerDef bool
+
 	// insideUDF is true when the current expressions are being built within a
 	// UDF.
 	insideUDF bool

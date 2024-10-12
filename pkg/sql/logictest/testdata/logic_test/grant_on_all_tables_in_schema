@@ -74,6 +74,7 @@ test           s            t            table        testuser   CREATE         
 test           s            t            table        testuser   DELETE          false
 test           s            t            table        testuser   DROP            false
 test           s            t            table        testuser   INSERT          false
+test           s            t            table        testuser   TRIGGER         false
 test           s            t            table        testuser   UPDATE          false
 test           s            t            table        testuser   ZONECONFIG      false
 test           s            t            table        testuser2  BACKUP          false
@@ -82,6 +83,7 @@ test           s            t            table        testuser2  CREATE         
 test           s            t            table        testuser2  DELETE          false
 test           s            t            table        testuser2  DROP            false
 test           s            t            table        testuser2  INSERT          false
+test           s            t            table        testuser2  TRIGGER         false
 test           s            t            table        testuser2  UPDATE          false
 test           s            t            table        testuser2  ZONECONFIG      false
 test           s2           t            table        testuser   BACKUP          false
@@ -90,6 +92,7 @@ test           s2           t            table        testuser   CREATE         
 test           s2           t            table        testuser   DELETE          false
 test           s2           t            table        testuser   DROP            false
 test           s2           t            table        testuser   INSERT          false
+test           s2           t            table        testuser   TRIGGER         false
 test           s2           t            table        testuser   UPDATE          false
 test           s2           t            table        testuser   ZONECONFIG      false
 test           s2           t            table        testuser2  BACKUP          false
@@ -98,6 +101,7 @@ test           s2           t            table        testuser2  CREATE         
 test           s2           t            table        testuser2  DELETE          false
 test           s2           t            table        testuser2  DROP            false
 test           s2           t            table        testuser2  INSERT          false
+test           s2           t            table        testuser2  TRIGGER         false
 test           s2           t            table        testuser2  UPDATE          false
 test           s2           t            table        testuser2  ZONECONFIG      false
 

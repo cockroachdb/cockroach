@@ -794,3 +794,8 @@ define ShowCompletions {
 define Call {
     Proc *tree.RoutineExpr
 }
+
+# CreateTrigger implements CREATE TRIGGER.
+define CreateTrigger {
+    Ct *tree.CreateTrigger
+}

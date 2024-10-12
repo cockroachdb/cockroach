@@ -1166,6 +1166,19 @@ func MustFindConstraintWithName(tbl TableDescriptor, name string) (Constraint, e
 // silence the linter
 var _ = MustFindConstraintWithName
 
+// FindTriggerByID traverses the slice returned by the GetTriggers method on the
+// table descriptor and returns the first trigger that matches the desired ID,
+// or nil if none was found.
+func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDescriptor {
+	triggers := tbl.GetTriggers()
+	for i := range triggers {
+		if triggers[i].ID == id {
+			return &triggers[i]
+		}
+	}
+	return nil
+}
+
 // FindFamilyByID traverses the family descriptors on the table descriptor
 // and returns the first column family with the desired ID, or nil if none was
 // found.

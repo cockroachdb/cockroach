@@ -1393,6 +1393,30 @@ An event of type `create_table` is recorded when a table is created.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `create_trigger`
+
+An event of type `create_trigger` is recorded when a trigger is created.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the trigger's table. | yes |
+| `TriggerName` | Name of the created trigger. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ### `create_type`
 
 An event of type `create_type` is recorded when a user-defined type is created.
@@ -1473,7 +1497,7 @@ An event of type `drop_function` is recorded when a user-defined function is dro
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `FunctionName` | Name of the created function. | yes |
+| `FunctionName` | Name of the dropped function. | yes |
 
 
 #### Common fields
@@ -1570,6 +1594,30 @@ An event of type `drop_table` is recorded when a table is dropped.
 |--|--|--|
 | `TableName` | The name of the affected table. | yes |
 | `CascadeDroppedViews` | The names of the views dropped as a result of a cascade operation. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `drop_trigger`
+
+An event of type `drop_trigger` is recorded when a trigger is dropped.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the trigger's table. | yes |
+| `TriggerName` | Name of the dropped trigger. | yes |
 
 
 #### Common fields

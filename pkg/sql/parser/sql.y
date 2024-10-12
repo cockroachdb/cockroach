@@ -5407,7 +5407,7 @@ create_trigger_stmt:
       Transitions: $9.triggerTransitions(),
       ForEach: $10.triggerForEach(),
       When: $11.expr(),
-      FuncName: $14.resolvableFuncRefFromName(),
+      FuncName: $14.unresolvedName(),
       FuncArgs: $16.strs(),
     }
   }
@@ -5428,12 +5428,12 @@ trigger_event_list:
     events := append($1.triggerEvents(), $3.triggerEvent())
 
     // Validate that the trigger events are unique.
-    var seenEvents tree.TriggerEventType
+    var seenEvents tree.TriggerEventTypeSet
     for i := range events {
-      if events[i].EventType&seenEvents != 0 {
+      if seenEvents.Contains(events[i].EventType) {
         return setErr(sqllex, errors.New("duplicate trigger events specified"))
       }
-      seenEvents |= events[i].EventType
+      seenEvents.Add(events[i].EventType)
     }
     $$.val = events
   }
@@ -5458,10 +5458,6 @@ trigger_event:
 | TRUNCATE
   {
     $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventTruncate}
-  }
-| UPSERT
-  {
-    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpsert}
   }
 
 opt_trigger_transition_list:
