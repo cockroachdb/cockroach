@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -893,9 +894,13 @@ func ValidateEndTimeAndTruncate(
 	mainBackupManifests []backuppb.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
+	includeSkipped bool,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	if endTime.IsEmpty() {
-		return defaultURIs, mainBackupManifests, localityInfo, nil
+		if includeSkipped {
+			return defaultURIs, mainBackupManifests, localityInfo, nil
+		}
+		return ElideSkippedLayers(defaultURIs, mainBackupManifests, localityInfo)
 	}
 	for i, b := range mainBackupManifests {
 		// Find the backup that covers the requested time.
@@ -931,13 +936,40 @@ func ValidateEndTimeAndTruncate(
 				)
 			}
 		}
-		return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
+		if includeSkipped {
+			return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
+		}
+		return ElideSkippedLayers(defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1])
 
 	}
 
 	return nil, nil, nil, errors.Errorf(
 		"invalid RESTORE timestamp: supplied backups do not cover requested time",
 	)
+}
+
+// ElideSkippedLayers removes backups that are skipped in the backup chain.
+func ElideSkippedLayers(
+	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	i := len(backups) - 1
+	for i > 0 {
+		// Find j such that backups[j] is parent of backups[i].
+		j := i - 1
+		for j >= 0 && !backups[i].StartTime.Equal(backups[j].EndTime) {
+			j--
+		}
+		// If there are backups between i and j, remove them.
+		if j != i-1 {
+			uris = slices.Delete(uris, j+1, i)
+			backups = slices.Delete(backups, j+1, i)
+			loc = slices.Delete(loc, j+1, i)
+		}
+		// Move up to check the chain from j now.
+		i = j
+	}
+
+	return uris, backups, loc, nil
 }
 
 // GetBackupIndexAtTime returns the index of the latest backup in
