@@ -384,7 +384,6 @@ $left
     (PassthroughCols $left)          # Pass through all left input columns
 )
 
-
 # SimplifyZeroCardinalityAntiJoin converts an AntiJoin operator to an empty
 # Values when it's known that the right input never returns zero rows, and
 # there is no join condition.
