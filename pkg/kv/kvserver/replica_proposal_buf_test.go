@@ -301,7 +301,6 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 		}
 	}
 	p := &ProposalData{
-		ctx:   context.Background(),
 		idKey: kvserverbase.CmdIDKey("test-cmd"),
 		command: &kvserverpb.RaftCommand{
 			ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
@@ -313,6 +312,8 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 		Request:     ba,
 		leaseStatus: pc.lease,
 	}
+	ctx := context.Background()
+	p.ctx.Store(&ctx)
 	p.encodedCommand = pc.encodeProposal(p)
 	return p
 }

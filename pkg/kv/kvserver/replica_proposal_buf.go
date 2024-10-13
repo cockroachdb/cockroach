@@ -255,7 +255,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	}
 
 	if log.V(4) {
-		log.Infof(p.ctx, "submitting proposal %x", p.idKey)
+		log.Infof(p.Context(), "submitting proposal %x", p.idKey)
 	}
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
@@ -571,7 +571,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				Data: p.encodedCommand,
 			})
 			nextProp++
-			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
+			log.VEvent(p.Context(), 2, "flushing proposal to Raft")
 
 			// We don't want deduct flow tokens for reproposed commands, and of
 			// course for proposals that didn't integrate with kvflowcontrol.
@@ -581,7 +581,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			} else {
 				admitHandles = append(admitHandles, admitEntHandle{
 					handle: p.raftAdmissionMeta,
-					pCtx:   p.ctx,
+					pCtx:   p.Context(),
 				})
 			}
 		}
@@ -869,9 +869,7 @@ func proposeBatch(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 		for _, p := range props {
-			if p.ctx != nil {
-				log.Event(p.ctx, "entry dropped")
-			}
+			log.Event(p.Context(), "entry dropped")
 		}
 		p.onErrProposalDropped(ents, props, raftGroup.BasicStatus().RaftState)
 		return nil //nolint:returnerrcheck
