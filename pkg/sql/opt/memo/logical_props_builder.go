@@ -2360,6 +2360,12 @@ type joinPropsHelper struct {
 	filterIsTrue      bool
 	filterIsFalse     bool
 
+	tables struct {
+		left  []opt.TableID
+		right []opt.TableID
+		set   bool
+	}
+
 	selfJoinCols opt.ColSet
 }
 
@@ -2609,6 +2615,36 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 	}
 }
 
+// leftAndRightTables returns two lists of distinct base tables the produce
+// columns on the left and right side of the join.
+func (h *joinPropsHelper) leftAndRightTables() (left, right []opt.TableID) {
+	if h.tables.set {
+		return h.tables.left, h.tables.right
+	}
+	add := func(tables []opt.TableID, tab opt.TableID) []opt.TableID {
+		for i := range tables {
+			if tables[i] == tab {
+				// Do not add the table to the list if it already exists.
+				return tables
+			}
+		}
+		return append(tables, tab)
+	}
+	md := h.join.Memo().Metadata()
+	h.leftProps.OutputCols.ForEach(func(col opt.ColumnID) {
+		if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+			h.tables.left = add(h.tables.left, tab)
+		}
+	})
+	h.rightProps.OutputCols.ForEach(func(col opt.ColumnID) {
+		if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+			h.tables.right = add(h.tables.right, tab)
+		}
+	})
+	h.tables.set = true
+	return h.tables.left, h.tables.right
+}
+
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self
 // join equality between key columns on a table.
 func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
@@ -2618,27 +2654,15 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 		// There are no equalities between left and right columns.
 		return
 	}
-	// Retrieve the tables that originate the given columns.
-	getTables := func(cols opt.ColSet) intsets.Fast {
-		var tables intsets.Fast
-		cols.ForEach(func(col opt.ColumnID) {
-			if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
-				tables.Add(int(tab))
-			}
-		})
-		return tables
-	}
-	leftTables, rightTables := getTables(leftCols), getTables(rightCols)
-	if leftTables.Empty() || rightTables.Empty() {
+	leftTables, rightTables := h.leftAndRightTables()
+	if len(leftTables) == 0 || len(rightTables) == 0 {
 		return
 	}
-	leftTables.ForEach(func(left int) {
-		leftTable := opt.TableID(left)
+	for _, leftTable := range leftTables {
 		baseTabFDs := MakeTableFuncDep(md, leftTable)
-		rightTables.ForEach(func(right int) {
-			rightTable := opt.TableID(right)
+		for _, rightTable := range rightTables {
 			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {
-				return
+				continue
 			}
 			// This is a self-join. If there are equalities between columns at the
 			// same ordinal positions in each (meta) table and those columns form a
@@ -2664,8 +2688,8 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 					rel.FuncDeps.AddEquivalency(leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd))
 				})
 			}
-		})
-	})
+		}
+	}
 }
 
 func (h *joinPropsHelper) cardinality() props.Cardinality {
