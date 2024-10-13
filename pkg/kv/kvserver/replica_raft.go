@@ -123,7 +123,7 @@ func (r *Replica) evalAndPropose(
 	idKey := raftlog.MakeCmdIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
 	ba = proposal.Request // may have been updated
-	log.Event(proposal.ctx, "evaluated request")
+	log.Event(proposal.Context(), "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -168,7 +168,7 @@ func (r *Replica) evalAndPropose(
 	// from this point on.
 	proposal.ec = makeReplicatedEndCmds(r, g, *st, timeutil.Now())
 
-	log.VEventf(proposal.ctx, 2,
+	log.VEventf(proposal.Context(), 2,
 		"proposing command to write %d new keys, %d new values, %d new intents, "+
 			"write batch size=%d bytes",
 		proposal.command.ReplicatedEvalResult.Delta.KeyCount,
@@ -204,7 +204,9 @@ func (r *Replica) evalAndPropose(
 
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
-		proposal.ctx, proposal.sp = tracing.ForkSpan(ctx, "async consensus")
+		ctx, sp := tracing.ForkSpan(ctx, "async consensus")
+		proposal.ctx.Store(&ctx)
+		proposal.sp = sp
 		if proposal.sp != nil {
 			// We can't leak this span if we fail to hand the proposal to the
 			// replication layer, so finish it later in this method if we are to
@@ -279,7 +281,7 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
-	log.VEventf(proposal.ctx, 2, "acquiring proposal quota (%d bytes)", quotaSize)
+	log.VEventf(proposal.Context(), 2, "acquiring proposal quota (%d bytes)", quotaSize)
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
@@ -349,7 +351,8 @@ func (r *Replica) evalAndPropose(
 		}
 		// TODO(radu): Should this context be created via tracer.ForkSpan?
 		// We'd need to make sure the span is finished eventually.
-		last.ctx = r.AnnotateCtx(context.TODO())
+		ctx := r.AnnotateCtx(context.TODO())
+		last.ctx.Store(&ctx)
 	}
 	return proposalCh, abandon, idKey, writeBytes, nil
 }
@@ -396,12 +399,12 @@ func (r *Replica) propose(
 			log.Errorf(ctx, "%v", err)
 			return kvpb.NewError(err)
 		}
-		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
+		log.KvDistribution.Infof(p.Context(), "proposing %s", crt)
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
+		log.VEvent(p.Context(), 4, "sideloadable proposal detected")
 		r.store.metrics.AddSSTableProposals.Inc(1)
 	} else if log.V(4) {
-		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
+		log.Infof(p.Context(), "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
 	raftAdmissionMeta := p.raftAdmissionMeta
@@ -430,7 +433,7 @@ func (r *Replica) propose(
 	// Too verbose even for verbose logging, so manually enable if you want to
 	// debug proposal sizes.
 	if false {
-		log.Infof(p.ctx, `%s: proposal: %d
+		log.Infof(p.Context(), `%s: proposal: %d
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
@@ -447,7 +450,7 @@ func (r *Replica) propose(
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
 	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
 	if ln := len(p.encodedCommand); ln > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(ln)))
+		log.Eventf(p.Context(), "proposal is large: %s", humanizeutil.IBytes(int64(ln)))
 	}
 
 	// Insert into the proposal buffer, which passes the command to Raft to be
@@ -456,7 +459,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
-	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
+	log.VEvent(p.Context(), 2, "submitting proposal to proposal buffer")
 	if err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx)); err != nil {
 		return kvpb.NewError(err)
 	}
@@ -1657,7 +1660,7 @@ func (r *Replica) refreshProposalsLocked(
 			// up here too.
 			if p.command.MaxLeaseIndex <= r.shMu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
-				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
+				log.Eventf(p.Context(), "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(ctx, makeProposalResultErr(
 					kvpb.NewAmbiguousResultErrorf(
 						"unable to determine whether command was applied via snapshot",
@@ -1725,7 +1728,7 @@ func (r *Replica) refreshProposalsLocked(
 	// definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
-		log.Eventf(p.ctx, "re-submitting command %x (MLI %d, CT %s): %s",
+		log.Eventf(p.Context(), "re-submitting command %x (MLI %d, CT %s): %s",
 			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)

@@ -155,7 +155,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			}
 			// Expose proposal data for external test packages.
 			return store.cfg.TestingKnobs.TestingProposalSubmitFilter(kvserverbase.ProposalFilterArgs{
-				Ctx:        p.ctx,
+				Ctx:        p.Context(),
 				RangeID:    rangeID,
 				StoreID:    store.StoreID(),
 				ReplicaID:  replicaID,
