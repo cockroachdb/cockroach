@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -874,6 +875,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
 ) error {
 	defer f.releaseAlloc(ctx)
+	defer m.timers().DownstreamClientSend.Start()()
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive

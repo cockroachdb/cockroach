@@ -347,6 +347,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
+		defer s.metrics.timers().DownstreamClientSend.Start()()
+
 		return s.client.Flush(ctx, batch.payload)
 	}
 	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
