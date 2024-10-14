@@ -49,7 +49,7 @@ var (
 	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"diagnostics.reporting.enabled",
-		"enable reporting diagnostic metrics to cockroach labs",
+		"enable reporting diagnostic metrics to cockroach labs, but is ignored for Trial or Free licenses",
 		false,
 	).WithPublic()
 

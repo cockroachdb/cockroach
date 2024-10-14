@@ -31,7 +31,7 @@ import (
 // that have been installed on this cluster (past or present).
 var trialLicenseExpiryTimestamp atomic.Int64
 
-var enterpriseLicense = func() *settings.StringSetting {
+var EnterpriseLicense = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		settings.TenantWritable,
 		"enterprise.license",
@@ -168,7 +168,7 @@ var GetLicenseTTL = func(
 	st *cluster.Settings,
 	ts timeutil.TimeSource,
 ) int64 {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		log.Errorf(ctx, "unable to find license: %v", err)
 		return 0
@@ -190,7 +190,7 @@ func checkEnterpriseEnabledAt(
 	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return err
 	}
@@ -221,11 +221,11 @@ func checkEnterpriseEnabledAt(
 	return nil
 }
 
-// getLicense fetches the license from the given settings, using Settings.Cache
+// GetLicense fetches the license from the given settings, using Settings.Cache
 // to cache the decoded license (if any). The returned license must not be
 // modified by the caller.
-func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
-	str := enterpriseLicense.Get(&st.SV)
+func GetLicense(st *cluster.Settings) (*licenseccl.License, error) {
+	str := EnterpriseLicense.Get(&st.SV)
 	if str == "" {
 		return nil, nil
 	}
@@ -242,7 +242,7 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 }
 
 func GetLicenseType(st *cluster.Settings) (string, error) {
-	license, err := getLicense(st)
+	license, err := GetLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
@@ -349,7 +349,7 @@ func RegisterCallbackOnLicenseChange(
 	// The isChange parameter indicates whether the license is actually being updated,
 	// as opposed to merely refreshing the current license.
 	refreshFunc := func(ctx context.Context, isChange bool) {
-		lic, err := getLicense(st)
+		lic, err := GetLicense(st)
 		if err != nil {
 			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
 			return
@@ -381,7 +381,7 @@ func RegisterCallbackOnLicenseChange(
 		trialLicenseExpiryTimestamp.Store(expiry)
 	}
 	// Install the hook so that we refresh license details when the license changes.
-	enterpriseLicense.SetOnChange(&st.SV,
+	EnterpriseLicense.SetOnChange(&st.SV,
 		func(ctx context.Context) { refreshFunc(ctx, true /* isChange */) })
 	// Call the refresh function for the current license.
 	refreshFunc(ctx, false /* isChange */)

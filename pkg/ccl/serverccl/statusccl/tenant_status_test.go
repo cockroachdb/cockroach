@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1583,10 +1582,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					LicenseTestingKnobs: license.TestingKnobs{
-						OverrideStartTime: &testtime,
-					},
+				LicenseTestingKnobs: &license.TestingKnobs{
+					OverrideStartTime: &testtime,
 				},
 			},
 		},
