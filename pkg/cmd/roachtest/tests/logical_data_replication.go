@@ -736,7 +736,7 @@ func setupLDR(
 
 	startLDR := func(targetDB *sqlutils.SQLRunner, sourceURL string) int {
 		options := ""
-		if mode.String() != "" {
+		if mode != Default {
 			options = fmt.Sprintf("WITH mode='%s'", mode)
 		}
 		targetDB.Exec(t, fmt.Sprintf("USE %s", dbName))
