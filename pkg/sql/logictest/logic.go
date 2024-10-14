@@ -325,7 +325,8 @@ import (
 //            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
 //            results will be filtered to contain messages starting with
 //            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
-//            Cannot be combined with noticetrace.
+//            Tenant IDs do not need to be included in prefixes and will be
+//            removed from results. Cannot be combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
@@ -2801,6 +2802,9 @@ func (t *logicTest) processSubtest(
 							for _, c := range strings.Split(s, ",") {
 								if strings.HasPrefix(c, "prefix=") {
 									matched := strings.TrimPrefix(c, "prefix=")
+									if len(t.tenantApps) != 0 || t.cluster.StartedDefaultTestTenant() {
+										matched = "/Tenant/%" + matched
+									}
 									query.keyPrefixFilters = append(query.keyPrefixFilters, matched)
 								} else if isAllowedKVOp(c) {
 									query.kvOpTypes = append(query.kvOpTypes, c)
@@ -2982,7 +2986,11 @@ func (t *logicTest) processSubtest(
 						return err
 					}
 
-					queryPrefix := `SELECT message FROM [SHOW KV TRACE FOR SESSION] `
+					projection := `message`
+					if len(t.tenantApps) != 0 || t.cluster.StartedDefaultTestTenant() {
+						projection = `regexp_replace(message, '/Tenant/\d+', '')`
+					}
+					queryPrefix := fmt.Sprintf(`SELECT %s FROM [SHOW KV TRACE FOR SESSION] `, projection)
 					buildQuery := func(ops []string, keyFilters []string) string {
 						var sb strings.Builder
 						sb.WriteString(queryPrefix)
@@ -2996,7 +3004,7 @@ func (t *logicTest) processSubtest(
 								} else {
 									sb.WriteString("OR ")
 								}
-								sb.WriteString(fmt.Sprintf("message like '%s %s%%'", c, f))
+								sb.WriteString(fmt.Sprintf("message like '%s %s%%' ", c, f))
 							}
 						}
 						return sb.String()
