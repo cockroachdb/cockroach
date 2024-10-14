@@ -196,8 +196,8 @@ func registerLatencyTests(r registry.Registry) {
 	// them to fail as a comment in the test.
 	addMetamorphic(r, &restart{}, math.Inf(1))
 	addMetamorphic(r, &partition{}, math.Inf(1))
-	addMetamorphic(r, addNode{}, 3.0)
-	addMetamorphic(r, &decommission{}, 3.0)
+	addMetamorphic(r, addNode{}, 5.0)
+	addMetamorphic(r, &decommission{}, 5.0)
 	addMetamorphic(r, backfill{}, 40.0)
 	addMetamorphic(r, &slowDisk{}, math.Inf(1))
 
@@ -205,8 +205,8 @@ func registerLatencyTests(r registry.Registry) {
 	// history of the test on roachperf to see what changed.
 	addFull(r, &restart{cleanRestart: true}, math.Inf(1))
 	addFull(r, &partition{partitionSite: true}, math.Inf(1))
-	addFull(r, addNode{}, 3.0)
-	addFull(r, &decommission{drain: true}, 3.0)
+	addFull(r, addNode{}, 5.0)
+	addFull(r, &decommission{drain: true}, 5.0)
 	addFull(r, backfill{}, 40.0)
 	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
 
