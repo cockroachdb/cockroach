@@ -208,6 +208,13 @@ func TestCCLLogic_partitioning_implicit(
 	runCCLLogicTest(t, "partitioning_implicit")
 }
 
+func TestCCLLogic_partitioning_implicit_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "partitioning_implicit_read_committed")
+}
+
 func TestCCLLogic_partitioning_index(
 	t *testing.T,
 ) {

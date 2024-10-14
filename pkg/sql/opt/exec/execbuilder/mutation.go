@@ -110,6 +110,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 		insertOrds,
 		returnOrds,
 		checkOrds,
+		ins.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit && len(ins.UniqueChecks) == 0 &&
 			len(ins.FKChecks) == 0 && len(ins.FKCascades) == 0,
 	)
@@ -184,8 +185,7 @@ func (b *Builder) tryBuildFastPathInsert(
 
 		// If there is a unique index with implicit partitioning columns, the fast
 		// path can write tombstones to lock the row in all partitions.
-		allowPredicateLocks := execFastPathCheck.ReferencedIndex.ImplicitPartitioningColumnCount() > 0
-		locking, err := b.buildLockingImpl(ins.Table, c.Locking, allowPredicateLocks)
+		locking, err := b.buildLocking(ins.Table, c.Locking)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, false, err
 		}
@@ -339,6 +339,7 @@ func (b *Builder) tryBuildFastPathInsert(
 		checkOrds,
 		fkChecks,
 		uniqChecks,
+		ins.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -440,6 +441,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
+		upd.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0,
 	)

@@ -452,6 +452,7 @@ define Insert {
     InsertCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction, or there are
@@ -483,6 +484,7 @@ define InsertFastPath {
     CheckCols exec.CheckOrdinalSet
     FkChecks []exec.InsertFastPathCheck
     UniqChecks []exec.InsertFastPathCheck
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction.
@@ -518,6 +520,7 @@ define Update {
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
     Passthrough colinfo.ResultColumns
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     AutoCommit bool

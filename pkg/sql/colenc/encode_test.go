@@ -600,7 +600,7 @@ func buildRowKVs(
 	sv *settings.Values,
 	codec keys.SQLCodec,
 ) (kvs, error) {
-	inserter, err := row.MakeInserter(context.Background(), nil /*txn*/, codec, desc, cols, nil, sv, false, nil)
+	inserter, err := row.MakeInserter(context.Background(), nil /*txn*/, codec, desc, nil /* uniqueWithTombstoneIndexes */, cols, nil, sv, false, nil)
 	if err != nil {
 		return kvs{}, err
 	}
