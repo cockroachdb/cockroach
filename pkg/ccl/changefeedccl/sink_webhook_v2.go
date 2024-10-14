@@ -51,6 +51,7 @@ type webhookSinkClient struct {
 	authHeader string
 	batchCfg   sinkBatchConfig
 	client     *httputil.Client
+	metrics    metricsRecorder
 }
 
 var _ SinkClient = (*webhookSinkClient)(nil)
@@ -77,6 +78,7 @@ func makeWebhookSinkClient(
 		authHeader: opts.AuthHeader,
 		format:     encodingOpts.Format,
 		batchCfg:   batchCfg,
+		metrics:    m,
 	}
 
 	var connTimeout time.Duration
@@ -211,6 +213,8 @@ func (sc *webhookSinkClient) FlushResolvedPayload(
 
 // Flush implements the SinkClient interface
 func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error {
+	defer sc.metrics.timers().BatchingSinkClientFlush.Start()()
+
 	req := batch.(*http.Request)
 	b, err := req.GetBody()
 	if err != nil {

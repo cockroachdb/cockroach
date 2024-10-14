@@ -49,9 +49,10 @@ type kafkaSinkClientV2 struct {
 
 	knobs          kafkaSinkV2Knobs
 	canTryResizing bool
-	recordResize   func(numRecords int64)
 
 	topicsForConnectionCheck []string
+
+	metrics metricsRecorder
 
 	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
 	metadataMu struct {
@@ -74,6 +75,7 @@ func newKafkaSinkClientV2(
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
 ) (*kafkaSinkClientV2, error) {
+	metrics := mb(requiresResourceAccounting)
 
 	baseOpts := []kgo.Opt{
 		// Disable idempotency to maintain parity with the v1 sink and not add surface area for unknowns.
@@ -97,14 +99,7 @@ func newKafkaSinkClientV2(
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
 			log.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
-	}
-
-	recordResize := func(numRecords int64) {}
-	if m := mb(requiresResourceAccounting); m != nil { // `m` can be nil in tests.
-		baseOpts = append(baseOpts, kgo.WithHooks(&kgoMetricsAdapter{throttling: m.getKafkaThrottlingMetrics(settings)}))
-		recordResize = func(numRecords int64) {
-			m.recordInternalRetry(numRecords, true)
-		}
+		kgo.WithHooks(&kgoMetricsAdapter{throttling: metrics.getKafkaThrottlingMetrics(settings)}),
 	}
 
 	clientOpts = append(baseOpts, clientOpts...)
@@ -129,8 +124,8 @@ func newKafkaSinkClientV2(
 		knobs:                    knobs,
 		batchCfg:                 batchCfg,
 		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
-		recordResize:             recordResize,
 		topicsForConnectionCheck: topicsForConnectionCheck,
+		metrics:                  metrics,
 	}
 	c.metadataMu.allTopicPartitions = make(map[string][]int32)
 
@@ -145,6 +140,8 @@ func (k *kafkaSinkClientV2) Close() error {
 
 // Flush implements SinkClient. Does not retry -- retries will be handled either by kafka or ParallelIO.
 func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
+	defer k.metrics.timers().BatchingSinkClientFlush.Start()()
+
 	msgs := payload.([]*kgo.Record)
 
 	var flushMsgs func(msgs []*kgo.Record) error
@@ -160,11 +157,11 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				// Still, it should probably help.
 				// Ideally users would set kafka-side max bytes appropriately
 				// with respect to their average message sizes.
-				k.recordResize(int64(len(a)))
+				k.metrics.recordInternalRetry(int64(len(a)), true)
 				if err := flushMsgs(a); err != nil {
 					return err
 				}
-				k.recordResize(int64(len(b)))
+				k.metrics.recordInternalRetry(int64(len(b)), true)
 				if err := flushMsgs(b); err != nil {
 					return err
 				}
