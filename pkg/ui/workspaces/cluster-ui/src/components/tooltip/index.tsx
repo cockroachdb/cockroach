@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { Tooltip as AntdTooltip, TooltipProps } from "antd";
+import classNames from "classnames";
 import React from "react";
 
 import styles from "./tooltip.module.scss";
@@ -13,9 +14,12 @@ type Props = TooltipProps & {
 };
 
 export const Tooltip: React.FC<Props> = props => {
-  const style = props.noUnderline ? "" : styles.underline;
+  const underlineStyle = props.noUnderline ? "" : styles.underline;
   return (
-    <AntdTooltip className={style} title={props.title}>
+    <AntdTooltip
+      className={classNames(styles.container, underlineStyle)}
+      title={<div className={styles.title}>{props.title}</div>}
+    >
       {props.children}
     </AntdTooltip>
   );

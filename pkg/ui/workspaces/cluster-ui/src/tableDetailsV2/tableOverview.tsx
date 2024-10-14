@@ -11,14 +11,14 @@ import React, { useContext } from "react";
 import { useNodeStatuses } from "src/api";
 import { TableDetails } from "src/api/databases/getTableMetadataApi";
 import { Tooltip } from "src/components/tooltip";
+import { TABLE_METADATA_LAST_UPDATED_HELP } from "src/constants/tooltipMessages";
 import { ClusterDetailsContext } from "src/contexts";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Timestamp } from "src/timestamp";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
-
-import { mapStoreIDsToNodeRegions } from "../util/nodeUtils";
+import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
 
 type TableOverviewProps = {
   tableDetails: TableDetails;
@@ -61,7 +61,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
 
   const formattedErrorText = metadata.lastUpdateError
     ? "Update error: " + metadata.lastUpdateError
-    : "";
+    : null;
 
   return (
     <>
@@ -71,12 +71,17 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       <PageSection>
         <Row justify={"end"}>
           <Col>
-            <Tooltip title={formattedErrorText}>
+            <Tooltip
+              title={formattedErrorText ?? TABLE_METADATA_LAST_UPDATED_HELP}
+            >
               <Row gutter={8} align={"middle"} justify={"center"}>
-                {metadata.lastUpdateError && (
-                  <Icon fill="warning" iconName={"Caution"} />
+                {metadata.lastUpdateError ? (
+                  <Icon fill={"warning"} iconName={"Caution"} />
+                ) : (
+                  <Icon fill="info" iconName={"InfoCircle"} />
                 )}
                 <Col>
+                  {" "}
                   Last updated:{" "}
                   <Timestamp
                     format={DATE_WITH_SECONDS_FORMAT_24_TZ}
