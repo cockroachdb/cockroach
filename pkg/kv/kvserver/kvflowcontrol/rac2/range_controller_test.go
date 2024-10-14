@@ -427,8 +427,8 @@ func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 	r.mu.scheduleControllerEventCount++
 }
 
-func (r *testingRCRange) logSnapshot() RaftLogSnapshot {
-	return raftLogSnapshot(raft.MakeLogSnapshot(&r.raftLog))
+func (r *testingRCRange) logSnapshot() raft.LogSnapshot {
+	return raft.MakeLogSnapshot(&r.raftLog)
 }
 
 func (r *testingRCRange) SendMsgAppRaftMuLocked(
@@ -1538,7 +1538,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		},
 	}
 	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
-	logSnap := NewRaftLogSnapshot(raft.LogSnapshot{})
+	logSnap := raft.LogSnapshot{}
 	infoMap := map[roachpb.ReplicaID]ReplicaStateInfo{}
 	checkSnapAndMap := func(event RaftEvent) {
 		require.Equal(t, logSnap, event.LogSnapshot)
@@ -1557,7 +1557,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
 		MsgAppPush, 20, raftpb.Message{}, nil, logSnap, msgAppScratch, infoMap)
 	checkSnapAndMap(event)
-	event.LogSnapshot = nil
+	event.LogSnapshot = raft.LogSnapshot{}
 	event.ReplicasStateInfo = nil
 	require.Equal(t, RaftEvent{}, event)
 	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
@@ -2209,7 +2209,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 						tc.latestReplicaStateInfo,
 						tc.existingSendStreamState,
 						tc.msgApps,
-						nil,
+						raft.LogSnapshot{},
 						tc.scratchSendingEntries,
 					)
 				})
@@ -2221,7 +2221,7 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 					tc.latestReplicaStateInfo,
 					tc.existingSendStreamState,
 					tc.msgApps,
-					nil,
+					raft.LogSnapshot{},
 					tc.scratchSendingEntries,
 				)
 				require.Equal(t, tc.expectedRaftEventReplica, gotRaftEventReplica)
