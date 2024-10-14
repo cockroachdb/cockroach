@@ -176,6 +176,9 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableStoreRebalancer turns off the store rebalancer which moves replicas
+	// and leases.
+	DisableStoreRebalancer bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// LoadBasedSplittingOverrideKey returns a key which should be used for load
