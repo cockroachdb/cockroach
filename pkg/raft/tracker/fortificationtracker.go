@@ -159,6 +159,9 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 // the layers above. Or, more simply, without risking regression of leader
 // leases.
 func (ft *FortificationTracker) CanDefortify() bool {
+	if ft.term == 0 {
+		return false // nothing is being tracked
+	}
 	leaderMaxSupported := ft.leaderMaxSupported.Load()
 	if leaderMaxSupported.IsEmpty() {
 		// If leaderMaxSupported is empty, it means that we've never returned any

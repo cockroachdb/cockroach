@@ -391,14 +391,21 @@ type raft struct {
 	// term changes.
 	uncommittedSize entryPayloadSize
 
-	// number of ticks since it reached last electionTimeout when it is leader
-	// or candidate.
-	// number of ticks since it reached last electionTimeout or received a
-	// valid message from current leader when it is a follower.
+	// electionElapsed is the number of ticks since we last reached the
+	// electionTimeout. Tracked by both leaders and followers alike. Additionally,
+	// followers also reset this field whenever they receive a valid message from
+	// the current leader or if the leader is fortified when ticked.
 	electionElapsed int
 
-	// number of ticks since it reached last heartbeatTimeout.
-	// only leader keeps heartbeatElapsed.
+	// heartbeatElapsed is the number of ticks since we last reached the
+	// heartbeatTimeout. Leaders use this field to keep track of when they should
+	// broadcast fortification attempts, and in a pre-fortification world,
+	// heartbeats. Followers use this field to keep track of when they should
+	// broadcast de-fortification messages to peers.
+	//
+	// TODO(arul): consider renaming these to "fortifyElapsed" given heartbeats
+	// are no longer the first class concept they used to be pre-leader
+	// fortification.
 	heartbeatElapsed int
 
 	maxInflight      int
@@ -870,6 +877,26 @@ func (r *raft) bcastFortify() {
 	})
 }
 
+// bcastDeFortify attempts to de-fortify the current peer's last (post restart)
+// leadership term by sending an RPC to all peers (including itself).
+func (r *raft) bcastDeFortify() {
+	assertTrue(r.state != pb.StateLeader, "only leaders can fortify")
+	assertTrue(r.fortificationTracker.CanDefortify(), "unsafe to de-fortify")
+
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		r.sendDeFortify(id)
+	})
+}
+
+// shouldBCastDeFortify returns whether we should attempt to broadcast a
+// MsgDeFortifyLeader to all peers or not.
+func (r *raft) shouldBcastDeFortify() bool {
+	assertTrue(r.state != pb.StateLeader, "leaders should not be de-fortifying without stepping down")
+	// TODO(arul): expand this condition to ensure a new leader has committed an
+	// entry.
+	return r.fortificationTracker.FortificationEnabled() && r.fortificationTracker.CanDefortify()
+}
+
 // maybeUnpauseAndBcastAppend unpauses and attempts to send an MsgApp to all the
 // followers that provide store liveness support. If there is no store liveness
 // support, we skip unpausing and sending MsgApp because the message is likely
@@ -1045,6 +1072,14 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 // tickElection is run by followers and candidates after r.electionTimeout.
 func (r *raft) tickElection() {
 	assertTrue(r.state != pb.StateLeader, "tickElection called by leader")
+
+	r.heartbeatElapsed++
+	if r.heartbeatElapsed >= r.heartbeatTimeout {
+		r.heartbeatElapsed = 0
+		if r.shouldBcastDeFortify() {
+			r.bcastDeFortify()
+		}
+	}
 
 	if r.leadEpoch != 0 {
 		if r.supportingFortifiedLeader() {
@@ -2267,7 +2302,7 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 
 func (r *raft) handleDeFortify(m pb.Message) {
 	assertTrue(r.state != pb.StateLeader, "leaders should locally de-fortify without sending a message")
-	assertTrue(r.lead == m.From, "only the leader should send de-fortification requests")
+	assertTrue(r.lead == 0 || r.lead == m.From, "only the leader should send de-fortification requests")
 
 	if r.leadEpoch == 0 {
 		r.logger.Debugf("%d is not fortifying %d; de-fortification is a no-op", r.id, m.From)
