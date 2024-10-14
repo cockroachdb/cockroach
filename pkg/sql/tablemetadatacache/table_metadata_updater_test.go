@@ -147,21 +147,20 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
-	batchSize := updateJobBatchSizeSetting.Get(&s.ClusterSettings().SV)
 	metrics := newTableMetadataUpdateJobMetrics().(TableMetadataUpdateJobMetrics)
 	count := 0
+	onProgressUpdated := func(ctx context.Context, progress float32) {
+		require.Greater(t, progress, currentProgress, "progress should be greater than current progress")
+		currentProgress = progress
+		count++
+	}
 	updater := newTableMetadataUpdater(
-		func(ctx context.Context, progress float32) {
-			require.Greater(t, progress, currentProgress, "progress should be greater than current progress")
-			currentProgress = progress
-			count++
-		}, // onProgressUpdated
+		onProgressUpdated, // onProgressUpdated
 		&metrics,
 		s.TenantStatusServer().(serverpb.TenantStatusServer),
 		s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor(),
 		timeutil.DefaultTimeSource{},
-		batchSize,
+		defaultTableBatchSize,
 		knobs,
 	)
 	require.NoError(t, updater.RunUpdater(ctx))
@@ -176,22 +175,12 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 	require.Greater(t, metrics.Duration.CumulativeSnapshot().Mean(), float64(0))
 	count = 0
 	currentProgress = 0
-	sw := timeutil.NewStopWatch()
-	sw.Start()
-	// generate 500 random tables
-	conn.Exec(t,
-		`SELECT crdb_internal.generate_test_objects('{"names": "random_table_", "counts": [500], "randomize_columns": true}'::JSONB)`)
-	sw.Stop()
-	t.Logf("Time elapsed to generate tables: %s", sw.Elapsed())
-	sw.Start()
+	// Lower batch size to 2 so that "onProgressUpdated" is invoked
+	updater.batchSize = 2
 	require.NoError(t, updater.RunUpdater(ctx))
-	sw.Stop()
-	t.Logf("Time elapsed to run update job: %s", sw.Elapsed())
-	// The updated tables metric doesn't reset between runs, so it should increase by updatedTables + 500, because 500
-	// random tables were previously generated
-	expectedTablesUpdated := (updatedTables * 2) + 500
-	require.Equal(t, expectedTablesUpdated, metrics.UpdatedTables.Count())
-	estimatedBatches := int(math.Ceil(float64(expectedTablesUpdated) / float64(batchSize)))
+	// The updated tables metric doesn't reset between runs, so it should be doubled in the next run
+	require.Equal(t, updatedTables*2, metrics.UpdatedTables.Count())
+	estimatedBatches := int(math.Ceil(float64(updatedTables) / float64(2)))
 	estimatedProgressUpdates := estimatedBatches / batchesPerProgressUpdate
 	require.GreaterOrEqual(t, count, estimatedProgressUpdates)
 	require.Equal(t, int64(0), metrics.Errors.Count())
