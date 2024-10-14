@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rulebasedscanner
 
@@ -45,11 +40,11 @@ func TestScanner(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "scan"), func(t *testing.T, td *datadriven.TestData) string {
 		switch td.Cmd {
 		case "token":
-			remaining, tok, trailingComma, err := NextToken(td.Input)
+			remaining, tok, trailingComma, trailingEqualsOp, err := NextToken(td.Input)
 			if err != nil {
 				return fmt.Sprintf("error: %v", err)
 			}
-			return fmt.Sprintf("%# v %v %q", pretty.Formatter(tok), trailingComma, remaining)
+			return fmt.Sprintf("%# v %v %v %q", pretty.Formatter(tok), trailingComma, trailingEqualsOp, remaining)
 
 		case "field":
 			remaining, field, err := nextFieldExpand(td.Input)

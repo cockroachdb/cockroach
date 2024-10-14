@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobs
 
@@ -83,6 +78,14 @@ type TestingKnobs struct {
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
 	BeforeWaitForJobsQuery func(jobs []jobspb.JobID)
+
+	// Jobs updater will use this function to get the current time. If nil,
+	// "registry.clock.Now" will be used.
+	//
+	// TODO (xiaochen): currently only "Updater.canceled" uses this knob,
+	// we may want to extend this to other parts of the jobs package and
+	// give this knob a default value (so it won't be nil).
+	StubTimeNow func() time.Time
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -193,20 +193,18 @@ select
  │         ├── inverted expression: /6
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["C", "C"]
- │         │         └── ["\x89", "\x8b")
+ │         │         ├── [[], []]
+ │         │         └── [1, 3)
  │         ├── volatile
  │         ├── key: (1)
  │         └── scan inverted@b_inv,inverted
  │              ├── columns: a:1!null b_inverted_key:6!null
  │              ├── inverted constraint: /6/1
  │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x89", "\x8b")
+ │              │         ├── [[], []]
+ │              │         └── [1, 3)
  │              ├── locking: for-update
- │              ├── volatile
- │              ├── key: (1)
- │              └── fd: (1)-->(6)
+ │              └── volatile
  └── filters
       └── b:2 <@ ARRAY[1,2] [outer=(2), immutable]
 

@@ -1,0 +1,292 @@
+# LogicTest: 3node-tenant
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"
+
+statement ok
+SET CLUSTER SETTING server.identity_map.configuration = "crdb fake_external_userid fake_user"
+
+statement ok
+SET CLUSTER SETTING server.host_based_authentication.configuration =
+'host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust'
+
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = false
+
+# Verify that the sensitive cluster settings can be viewed. Even though testuser
+# does not have MODIFYCLUSTERSETTING, they can view the values since the redaction
+# cluster setting is disabled.
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+fake_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+fake_client_secret
+
+query T
+SHOW CLUSTER SETTING server.identity_map.configuration
+----
+crdb fake_external_userid fake_user
+
+query T
+SHOW CLUSTER SETTING server.host_based_authentication.configuration
+----
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
+----
+server.oidc_authentication.client_id      fake_client_id
+server.oidc_authentication.client_secret  fake_client_secret
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.identity_map.configuration'
+----
+server.identity_map.configuration crdb fake_external_userid fake_user
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.host_based_authentication.configuration'
+----
+server.host_based_authentication.configuration host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+                                               host all fake_user all cert map=crdb
+                                               host all all all trust
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = true
+
+# Verify that the sensitive cluster settings cannot be viewed now that
+# the redaction cluster setting is enabled.
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+<redacted>
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+<redacted>
+
+query T
+SHOW CLUSTER SETTING server.identity_map.configuration
+----
+<redacted>
+
+query T
+SHOW CLUSTER SETTING server.host_based_authentication.configuration
+----
+<redacted>
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
+----
+server.oidc_authentication.client_id      <redacted>
+server.oidc_authentication.client_secret  <redacted>
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.identity_map.configuration'
+----
+server.identity_map.configuration <redacted>
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.host_based_authentication.configuration'
+----
+server.host_based_authentication.configuration <redacted>
+
+user root
+
+# testuser should be able to see the values with the MODIFYCLUSTERSETTING privilege.
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+fake_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+fake_client_secret
+
+query T
+SHOW CLUSTER SETTING server.identity_map.configuration
+----
+crdb fake_external_userid fake_user
+
+query T
+SHOW CLUSTER SETTING server.host_based_authentication.configuration
+----
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
+----
+server.oidc_authentication.client_id      fake_client_id
+server.oidc_authentication.client_secret  fake_client_secret
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.identity_map.configuration'
+----
+server.identity_map.configuration crdb fake_external_userid fake_user
+
+query TT
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable = 'server.host_based_authentication.configuration'
+----
+server.host_based_authentication.configuration host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+                                               host all fake_user all cert map=crdb
+                                               host all all all trust
+
+# Verify that tenant overrides for sensitive settings can only be viewed with
+# the MANAGEVIRTUALCLUSTER privilege.
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_tenant_client_id"
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_tenant_client_secret"
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.identity_map.configuration = "crdb fake_external_userid fake_user"
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.host_based_authentication.configuration =
+'host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust'
+
+statement ok
+CREATE USER testuser
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING, VIEWCLUSTERMETADATA, VIEWSYSTEMTABLE TO testuser
+
+statement ok
+SET ROLE testuser
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW CLUSTER SETTING server.oidc_authentication.client_id FOR TENANT [10]
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret FOR TENANT [10]
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable = 'server.identity_map.configuration'
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable = 'server.host_based_authentication.configuration'
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW CLUSTER SETTING server.identity_map.configuration FOR TENANT [10]
+
+query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
+SHOW CLUSTER SETTING server.host_based_authentication.configuration FOR TENANT [10]
+
+statement ok
+RESET ROLE
+
+# testuser should be able to see the values with the MANAGEVIRTUALCLUSTER privilege.
+
+statement ok
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
+
+statement ok
+SET ROLE testuser
+
+query TTT rowsort
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
+----
+server.oidc_authentication.client_id      fake_tenant_client_id      per-tenant-override
+server.oidc_authentication.client_secret  fake_tenant_client_secret  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id FOR TENANT [10]
+----
+fake_tenant_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret FOR TENANT [10]
+----
+fake_tenant_client_secret
+
+query TTT
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable = 'server.identity_map.configuration'
+----
+server.identity_map.configuration crdb fake_external_userid fake_user per-tenant-override
+
+query TTT
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable = 'server.host_based_authentication.configuration'
+----
+server.host_based_authentication.configuration  host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)\nhost all fake_user all cert map=crdb\nhost all all all trust  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING server.identity_map.configuration FOR TENANT [10]
+----
+crdb fake_external_userid fake_user
+
+query T
+SHOW CLUSTER SETTING server.host_based_authentication.configuration FOR TENANT [10]
+----
+host all fake_user all ldap ldapserver=example.com ldapport=636 ldapbasedn="DC=example,DC=com" ldapbinddn="CN=testuser,DC=example,DC=com" ldapbindpasswd=pass ldapsearchattribute=cn ldapsearchfilter=(email=*)
+host all fake_user all cert map=crdb
+host all all all trust

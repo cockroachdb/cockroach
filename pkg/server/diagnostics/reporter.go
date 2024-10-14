@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package diagnostics
 
@@ -22,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -104,9 +101,35 @@ type Reporter struct {
 	LastSuccessfulTelemetryPing atomic.Int64
 }
 
+// shouldReportDiagnostics determines using the diagnostics report setting in
+// addition to the license value to determine whether to send telemetry data.
+// If the reporting value is true, or the cluster is on a Trial or Free license
+// it returns true.
+func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
+	if logcrash.DiagnosticsReportingEnabled.Get(&st.SV) {
+		return true
+	}
+
+	license, err := utilccl.GetLicense(st)
+	// If we cannot fetch the license, we do not send the report.
+	if err != nil {
+		log.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
+		return false
+	}
+	if license == nil {
+		return false
+	}
+	isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
+
+	return isLimited
+}
+
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
+	// Prior to starting the periodic report job, we store the current
+	// timestamp to initialize to a valid value.
+	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
@@ -117,7 +140,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 			// TODO(dt): we should allow tuning the reset and report intervals separately.
 			// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 			// stat reset periods for reporting.
-			if logcrash.DiagnosticsReportingEnabled.Get(&r.Settings.SV) {
+			if shouldReportDiagnostics(ctx, r.Settings) {
 				r.ReportDiagnostics(ctx)
 			}
 
@@ -144,7 +167,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
 
-	url := r.buildReportingURL(report)
+	license, err := utilccl.GetLicense(r.Settings)
+	if err != nil {
+		if log.V(2) {
+			log.Warningf(ctx, "failed to retrieve license while reporting diagnostics: %v", err)
+		}
+	}
+	url := r.buildReportingURL(report, license)
 	if url == nil {
 		return
 	}
@@ -185,6 +214,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		return
 	}
 	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+}
+
+// GetLastSuccessfulTelemetryPing will return the timestamp of when we last got
+// a ping back from the registration server.
+func (r *Reporter) GetLastSuccessfulTelemetryPing() time.Time {
+	ts := timeutil.Unix(r.LastSuccessfulTelemetryPing.Load(), 0)
+	return ts
 }
 
 // CreateReport generates a new diagnostics report containing information about
@@ -278,7 +314,7 @@ func (r *Reporter) CreateReport(
 		}
 	}
 
-	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx)
+	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx, 100 /* limit */)
 	if err != nil {
 		if log.V(2 /* level */) {
 			log.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)
@@ -372,13 +408,20 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 
 // buildReportingURL creates a URL to report diagnostics.
 // If an empty updates URL is set (via empty environment variable), returns nil.
-func (r *Reporter) buildReportingURL(report *diagnosticspb.DiagnosticReport) *url.URL {
+func (r *Reporter) buildReportingURL(
+	report *diagnosticspb.DiagnosticReport, license *licenseccl.License,
+) *url.URL {
+	if license == nil {
+		license = &licenseccl.License{}
+	}
+
 	clusterInfo := ClusterInfo{
 		StorageClusterID: r.StorageClusterID(),
 		LogicalClusterID: r.LogicalClusterID(),
 		TenantID:         r.TenantID,
 		IsInsecure:       r.Config.Insecure,
 		IsInternal:       sql.ClusterIsInternal(&r.Settings.SV),
+		License:          license,
 	}
 
 	url := reportingURL

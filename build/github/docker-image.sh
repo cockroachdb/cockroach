@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 #!/usr/bin/env bash
 set -euxo pipefail
 
@@ -26,7 +32,7 @@ cp _bazel/bin/pkg/cmd/cockroach/cockroach_/cockroach build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos.so build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos_c.so build/deploy
 
-cp -r licenses build/deploy/
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt build/deploy/
 
 chmod 755 build/deploy/cockroach
 

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
@@ -45,6 +41,11 @@ type tsQuery struct {
 	name      string
 	queryType tsQueryType
 	sources   []string
+	// tenantID specifies which tenant to query metrics for. If uninitialized,
+	// the query will be for all tenants (default). Use roachpb.SystemTenantID as
+	// the value here to query just the system tenant metrics, in a multi-tenant
+	// cluster.
+	tenantID roachpb.TenantID
 }
 
 func mustGetMetrics(
@@ -75,6 +76,26 @@ func getMetrics(
 	return getMetricsWithSamplePeriod(ctx, c, t, adminURL, virtualCluster, start, end, defaultSamplePeriod, tsQueries)
 }
 
+// sumCounterIncreases sums the increase in consecutive data points in the
+// provided series. It's intended for measuring how many times a counter in the
+// provided series, taking into account counter resets that are possible (eg,
+// when a process restarts). sumCounterIncreases should only be used with
+// counter metrics. If a value is smaller than it's predecessor, a counter
+// restart is presumed and the entire value of the counter post-restart is
+// incorporated into the sum.
+func sumCounterIncreases(dataPoints []tspb.TimeSeriesDatapoint) (sum float64) {
+	for i := 1; i < len(dataPoints); i++ {
+		if dataPoints[i-1].Value > dataPoints[i].Value {
+			// Counter reset. Interpret the data point at i as a delta from
+			// zero.
+			sum += dataPoints[i].Value
+			continue
+		}
+		sum += dataPoints[i].Value - dataPoints[0].Value
+	}
+	return sum
+}
+
 func getMetricsWithSamplePeriod(
 	ctx context.Context,
 	c cluster.Cluster,
@@ -95,6 +116,7 @@ func getMetricsWithSamplePeriod(
 				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
 				Sources:          tsQueries[i].sources,
+				TenantID:         tsQueries[i].tenantID,
 			}
 		case rate:
 			queries[i] = tspb.Query{
@@ -103,6 +125,7 @@ func getMetricsWithSamplePeriod(
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
 				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 				Sources:          tsQueries[i].sources,
+				TenantID:         tsQueries[i].tenantID,
 			}
 		default:
 			panic("unexpected")

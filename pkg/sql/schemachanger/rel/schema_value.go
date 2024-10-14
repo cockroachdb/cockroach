@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rel
 
@@ -41,7 +36,7 @@ func makeComparableValue(val interface{}) (typedValue, error) {
 		vvNew.Elem().Set(vv)
 		return typedValue{
 			typ:   vv.Type(),
-			value: vvNew.Convert(reflect.PtrTo(compType)).Interface(),
+			value: vvNew.Convert(reflect.PointerTo(compType)).Interface(),
 		}, nil
 	case typ.Kind() == reflect.Ptr:
 		switch {
@@ -49,7 +44,7 @@ func makeComparableValue(val interface{}) (typedValue, error) {
 			compType := getComparableType(typ.Elem())
 			return typedValue{
 				typ:   vv.Type().Elem(),
-				value: vv.Convert(reflect.PtrTo(compType)).Interface(),
+				value: vv.Convert(reflect.PointerTo(compType)).Interface(),
 			}, nil
 		case typ.Elem().Kind() == reflect.Struct:
 			return typedValue{

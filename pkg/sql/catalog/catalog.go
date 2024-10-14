@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package catalog
 
@@ -106,7 +101,7 @@ func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
 // NumSystemColumns defines the number of supported system columns and must be
 // equal to colinfo.numSystemColumns (enforced in colinfo package to avoid an
 // import cycle).
-const NumSystemColumns = 2
+const NumSystemColumns = 4
 
 // SmallestSystemColumnColumnID is a descpb.ColumnID with the smallest value
 // among all system columns (enforced in colinfo package to avoid an import

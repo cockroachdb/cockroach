@@ -1,0 +1,183 @@
+# This test demonstrates the effect of delayed commit on a follower node after a
+# network hiccup between the leader and this follower.
+
+# TODO(ibrahim): Remove this test once store liveness is on by default since we
+# have the test lagging_commit outside the mixedversions directory that assumes
+# that store liveness is enabled.
+
+# Skip logging the boilerplate. Set up a raft group of 3 nodes, and elect node 1
+# as the leader. Nodes 2 and 3 are the followers.
+log-level none
+----
+ok
+
+# Start 3 nodes, two of them has the older version 24.2.
+add-nodes 2 voters=(1,2,3) index=10 crdb-version=24.2
+----
+ok
+
+add-nodes 1 voters=(1,2,3) index=10 crdb-version=24.3
+----
+ok
+
+campaign 1
+----
+ok
+
+stabilize
+----
+ok
+
+# Propose a couple of entries.
+propose 1 data1
+----
+ok
+
+propose 1 data2
+----
+ok
+
+process-ready 1
+----
+ok
+
+# The interesting part starts below.
+log-level debug
+----
+ok
+
+deliver-msgs 2 3
+----
+1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "data1"]
+1->2 MsgApp Term:1 Log:1/12 Commit:11 Entries:[1/13 EntryNormal "data2"]
+1->3 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "data1"]
+1->3 MsgApp Term:1 Log:1/12 Commit:11 Entries:[1/13 EntryNormal "data2"]
+
+process-ready 3
+----
+Ready MustSync=true:
+Entries:
+1/12 EntryNormal "data1"
+1/13 EntryNormal "data2"
+Messages:
+3->1 MsgAppResp Term:1 Log:0/12 Commit:11
+3->1 MsgAppResp Term:1 Log:0/13 Commit:11
+
+# Suppose there is a network blip which prevents the leader learning that the
+# follower 3 has appended the proposed entries to the log.
+deliver-msgs drop=(1)
+----
+dropped: 3->1 MsgAppResp Term:1 Log:0/12 Commit:11
+dropped: 3->1 MsgAppResp Term:1 Log:0/13 Commit:11
+
+# In the meantime, the entries are committed, and the leader sends the commit
+# index to all the followers.
+stabilize 1 2
+----
+> 2 handling Ready
+  Ready MustSync=true:
+  Entries:
+  1/12 EntryNormal "data1"
+  1/13 EntryNormal "data2"
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:11
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:11
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:11
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  CommittedEntries:
+  1/12 EntryNormal "data1"
+  1/13 EntryNormal "data2"
+  Messages:
+  1->2 MsgApp Term:1 Log:1/13 Commit:12
+  1->3 MsgApp Term:1 Log:1/13 Commit:12
+  1->2 MsgApp Term:1 Log:1/13 Commit:13
+  1->3 MsgApp Term:1 Log:1/13 Commit:13
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/13 Commit:12
+  1->2 MsgApp Term:1 Log:1/13 Commit:13
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  CommittedEntries:
+  1/12 EntryNormal "data1"
+  1/13 EntryNormal "data2"
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:12
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:13
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:12
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:13
+
+# The network blip prevents the follower 3 from learning that the previously
+# appended entries are now committed.
+deliver-msgs drop=(3)
+----
+dropped: 1->3 MsgApp Term:1 Log:1/13 Commit:12
+dropped: 1->3 MsgApp Term:1 Log:1/13 Commit:13
+
+# The network blip ends here.
+
+status 1
+----
+1: StateReplicate match=13 next=14 sentCommit=11 matchCommit=11
+2: StateReplicate match=13 next=14 sentCommit=13 matchCommit=13
+3: StateReplicate match=11 next=14 sentCommit=13 matchCommit=11 inflight=2
+
+# The leader still observes that the entries are in-flight to the follower 3,
+# since it hasn't heard from it. Nothing triggers updating the follower's
+# commit index, so we have to wait up to the full heartbeat interval before
+# the leader sends the commit index.
+tick-heartbeat 1
+----
+ok
+
+# However, the leader does not push the real commit index to the follower 3. It
+# cuts the commit index at the Progress.Match mark, because it thinks that it is
+# unsafe to send a commit index higher than that.
+process-ready 1
+----
+Ready MustSync=false:
+Messages:
+1->2 MsgHeartbeat Term:1 Log:0/0 Commit:13
+1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+
+# Since the heartbeat message does not bump the follower's commit index, it will
+# take another roundtrip with the leader to update it. As such, the total time
+# it takes for the follower to learn the commit index is:
+#
+#   delay = HeartbeatInterval + 3/2 * RTT
+#
+# This is suboptimal. It could have taken HeartbeatInterval + 1/2 * RTT, if the
+# leader sent the up-to-date commit index in the heartbeat message.
+#
+# See https://github.com/etcd-io/raft/issues/138 which aims to fix this.
+stabilize 1 3
+----
+> 3 receiving messages
+  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->1 MsgHeartbeatResp Term:1 Log:0/0
+> 1 receiving messages
+  3->1 MsgHeartbeatResp Term:1 Log:0/0
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgApp Term:1 Log:1/13 Commit:13
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/13 Commit:13
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  CommittedEntries:
+  1/12 EntryNormal "data1"
+  1/13 EntryNormal "data2"
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/13 Commit:13
+> 1 receiving messages
+  3->1 MsgAppResp Term:1 Log:0/13 Commit:13

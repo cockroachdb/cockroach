@@ -1,18 +1,15 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package testcat
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -82,6 +79,31 @@ func (tc *Catalog) ResolveType(
 }
 
 // ResolveTypeByOID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
-	return nil, errors.Newf("ResolveTypeByOID not supported in the test catalog")
+func (tc *Catalog) ResolveTypeByOID(ctx context.Context, typID oid.Oid) (*types.T, error) {
+	// First look for a matching user-defined enum type.
+	for _, typ := range tc.enumTypes {
+		if typ.Oid() == typID {
+			return typ, nil
+		}
+	}
+	// Otherwise look for a matching implicit record type.
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok {
+			implicitTypID := typedesc.TableIDToImplicitTypeOID(descpb.ID(tab.ID()))
+			if implicitTypID != typID {
+				continue
+			}
+			contents := make([]*types.T, 0, tab.ColumnCount())
+			labels := make([]string, 0, tab.ColumnCount())
+			for i, n := 0, tab.ColumnCount(); i < n; i++ {
+				col := tab.Column(i)
+				if col.Kind() == cat.Ordinary {
+					contents = append(contents, col.DatumType())
+					labels = append(labels, string(col.ColName()))
+				}
+			}
+			return types.MakeLabeledTuple(contents, labels), nil
+		}
+	}
+	return nil, errors.Newf("type %d does not exist", typID)
 }

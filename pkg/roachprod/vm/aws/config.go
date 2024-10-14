@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package aws
 
@@ -53,14 +48,14 @@ import (
 // but it was deemed more straightforward to utilize the json.Unmarshaler
 // interface to construct a well formed value from the terraform output.
 type awsConfig struct {
-	// regions is a slice of region structs sorted by name.
-	regions []awsRegion
-	// azByName maps from availability zone name to a struct which itself refers
+	// Regions is a slice of region structs sorted by name.
+	Regions []AWSRegion
+	// AZByName maps from availability zone name to a struct which itself refers
 	// back to a region.
-	azByName map[string]*availabilityZone
+	AZByName map[string]*availabilityZone
 }
 
-type awsRegion struct {
+type AWSRegion struct {
 	Name              string            `json:"region"`
 	SecurityGroup     string            `json:"security_group"`
 	AMI_X86_64        string            `json:"ami_id"`
@@ -70,9 +65,9 @@ type awsRegion struct {
 }
 
 type availabilityZone struct {
-	name     string
-	subnetID string
-	region   *awsRegion // set up in awsConfig.UnmarshalJSON
+	Name     string
+	SubnetID string
+	Region   *AWSRegion // set up in awsConfig.UnmarshalJSON
 }
 
 // UnmarshalJSON implement json.Unmarshaler.
@@ -83,7 +78,7 @@ type availabilityZone struct {
 func (c *awsConfig) UnmarshalJSON(data []byte) error {
 	type raw struct {
 		Regions struct {
-			Value []awsRegion `json:"value"`
+			Value []AWSRegion `json:"value"`
 		} `json:"regions"`
 	}
 	var v raw
@@ -91,48 +86,38 @@ func (c *awsConfig) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = awsConfig{
-		regions:  v.Regions.Value,
-		azByName: make(map[string]*availabilityZone),
+		Regions:  v.Regions.Value,
+		AZByName: make(map[string]*availabilityZone),
 	}
-	sort.Slice(c.regions, func(i, j int) bool {
-		return c.regions[i].Name < c.regions[j].Name
+	sort.Slice(c.Regions, func(i, j int) bool {
+		return c.Regions[i].Name < c.Regions[j].Name
 	})
-	for i := range c.regions {
-		r := &c.regions[i]
+	for i := range c.Regions {
+		r := &c.Regions[i]
 		for i := range r.AvailabilityZones {
 			az := &r.AvailabilityZones[i]
-			az.region = r
-			c.azByName[az.name] = az
+			az.Region = r
+			c.AZByName[az.Name] = az
 		}
 	}
 	return nil
 }
 
-func (c *awsConfig) getRegion(name string) *awsRegion {
-	i := sort.Search(len(c.regions), func(i int) bool {
-		return c.regions[i].Name >= name
-	})
-	if i < len(c.regions) && c.regions[i].Name == name {
-		return &c.regions[i]
-	}
-	return nil
-}
-
 func (c *awsConfig) regionNames() (names []string) {
-	for _, r := range c.regions {
+	for _, r := range c.Regions {
 		names = append(names, r.Name)
 	}
 	return names
 }
 
 func (c *awsConfig) getAvailabilityZone(azName string) *availabilityZone {
-	return c.azByName[azName]
+	return c.AZByName[azName]
 }
 
 func (c *awsConfig) availabilityZoneNames() (zoneNames []string) {
-	for _, r := range c.regions {
+	for _, r := range c.Regions {
 		for _, az := range r.AvailabilityZones {
-			zoneNames = append(zoneNames, az.name)
+			zoneNames = append(zoneNames, az.Name)
 		}
 	}
 	sort.Strings(zoneNames)
@@ -151,12 +136,12 @@ func (s *availabilityZones) UnmarshalJSON(data []byte) error {
 	*s = make(availabilityZones, 0, len(m))
 	for az, sn := range m {
 		*s = append(*s, availabilityZone{
-			name:     az,
-			subnetID: sn,
+			Name:     az,
+			SubnetID: sn,
 		})
 	}
 	sort.Slice(*s, func(i, j int) bool {
-		return (*s)[i].name < (*s)[j].name
+		return (*s)[i].Name < (*s)[j].Name
 	})
 	return nil
 }

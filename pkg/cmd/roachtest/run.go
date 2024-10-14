@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -214,7 +209,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 
 	if roachtestflags.TeamCity {
 		// Collect the runner logs.
-		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir))
+		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
 
 	if summaryErr := maybeDumpSummaryMarkdown(runner); summaryErr != nil {
@@ -514,7 +509,7 @@ func maybeEmitDatadogEvent(
 	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
 		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
 		AlertType:      &alertType,
-		DateHappened:   datadog.PtrInt64(timeutil.Now().UnixNano()),
+		DateHappened:   datadog.PtrInt64(timeutil.Now().Unix()),
 		Host:           &hostname,
 		SourceTypeName: datadog.PtrString("roachtest"),
 		Tags: append(datadogTags,
@@ -677,7 +672,7 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	}
 	op.spec = opSpec
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Cancel this context if we get an interrupt.
 	CtrlC(ctx, l, cancel, nil /* registry */)

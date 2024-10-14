@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import classNames from "classnames";
 import flow from "lodash/flow";
@@ -121,8 +116,8 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   const ids = flow(
     keys,
     nodeIds => map(nodeIds, id => parseInt(id, 10)),
-    nodeIds => sortBy(nodeIds, id => id)
-  )(data.problems_by_node_id)
+    nodeIds => sortBy(nodeIds, id => id),
+  )(data.problems_by_node_id);
 
   return (
     <div>

@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rel
 
@@ -431,7 +426,7 @@ func (sb *schemaBuilder) addTypeAttrMapping(
 			} else if !f.isSlice() {
 				compType := getComparableType(typ)
 				if f.isPtr() && f.isScalar() {
-					compType = reflect.PtrTo(compType)
+					compType = reflect.PointerTo(compType)
 				}
 				vg := makeValueGetter(compType, offset)
 				if f.isPtr() && f.isScalar() {
@@ -526,5 +521,5 @@ func makeSliceMemberType(srcType, sliceType reflect.Type, valueFieldName string)
 			Name: valueFieldName, Type: sliceType.Elem(),
 		},
 	}
-	return reflect.PtrTo(reflect.StructOf(fields[:]))
+	return reflect.PointerTo(reflect.StructOf(fields[:]))
 }

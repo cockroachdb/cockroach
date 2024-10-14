@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package queue
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -161,4 +157,7 @@ func (sr *SimulatorReplica) Desc() *roachpb.RangeDescriptor {
 // the allocator to make rebalancing decisions for a given range.
 func (sr *SimulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 	return sr.usage
+}
+
+func (sr *SimulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 }

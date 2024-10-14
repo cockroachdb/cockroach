@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -49,7 +44,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, pm, nil, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the

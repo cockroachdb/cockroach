@@ -1578,3 +1578,52 @@ query I
 SELECT count(v) FROM l_101823 LEFT LOOKUP JOIN r_101823 ON a = u AND b = v;
 ----
 1
+
+subtest regression_124732
+
+# Regression test for incorrectly remapping equal columns with non-identical
+# types (#124732).
+statement ok
+CREATE TABLE table_1_124732 (col1_6 REGCLASS);
+
+statement ok
+CREATE TABLE table_3_124732 (
+  col3_0 OID,
+  col3_7 STRING AS (col3_0::STRING) VIRTUAL PRIMARY KEY
+);
+
+statement ok
+INSERT INTO table_1_124732 (col1_6) VALUES (0);
+INSERT INTO table_3_124732 (col3_0) VALUES (0);
+
+query T
+SELECT col1_6 FROM table_1_124732 INNER HASH JOIN table_3_124732 ON col3_0 = col1_6;
+----
+-
+
+statement error pgcode XXUUU pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT col1_6 FROM table_1_124732 INNER LOOKUP JOIN table_3_124732 ON col3_0 = col1_6;
+
+# Regression test for incorrectly remapping columns in a composite-sensitive
+# expression to produce a lookup join (#124732).
+statement ok
+CREATE TABLE t_124732 (
+  i DECIMAL,
+  v STRING AS (i::STRING) VIRTUAL,
+  PRIMARY KEY (v, i)
+);
+
+statement ok
+INSERT INTO t_124732 VALUES (1.000);
+
+statement error pgcode XXUUU pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT * FROM (VALUES (1::DECIMAL)) AS v(i)
+INNER LOOKUP JOIN t_124732 ON v.i = t_124732.i;
+
+query RRT
+SELECT * FROM (VALUES (1::DECIMAL)) AS v(i)
+INNER HASH JOIN t_124732 ON v.i = t_124732.i;
+----
+1  1.000  1.000
+
+subtest end

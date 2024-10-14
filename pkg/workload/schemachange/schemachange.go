@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package schemachange implements the schemachange workload.
 package schemachange
@@ -20,6 +15,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -508,6 +504,15 @@ func (w *schemaChangeWorker) runInTxn(
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 					w.recordInHist(timeutil.Since(start), txnRollback)
+					return errors.Mark(
+						err,
+						errRunInTxnRbkSentinel,
+					)
+				}
+				// Command is too large errors are allowed on DML operations since,
+				// some of the tables can be pretty wide in this test.
+				if op.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+					strings.Contains(pgErr.Error(), "command is too large") {
 					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,

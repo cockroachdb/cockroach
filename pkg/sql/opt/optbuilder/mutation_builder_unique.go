@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -48,7 +43,8 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -89,7 +85,8 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint doesn't include the updated columns we don't need to
@@ -124,7 +121,8 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -149,11 +147,16 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
 }
 
-// hasUniqueWithoutIndexConstraints returns true if there are any
-// UNIQUE WITHOUT INDEX constraints on the table.
+// hasUniqueWithoutIndexConstraints returns true if there are any UNIQUE WITHOUT
+// INDEX constraints on the table for which uniqueness is not guaranteed by
+// another index. Currently, UNIQUE WITHOUT INDEX constraints that are
+// synthesized for unique, hash-sharded indexes in the opt catalog are the only
+// constraints that are guaranteed by another index, i.e., the physical unique,
+// hash-sharded index they are synthesized from.
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		if mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if u.WithoutIndex() && !u.UniquenessGuaranteedByAnotherIndex() {
 			return true
 		}
 	}

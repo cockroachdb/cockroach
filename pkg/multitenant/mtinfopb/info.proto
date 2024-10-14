@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto2";
 package cockroach.multitenant;
@@ -83,7 +78,12 @@ message ProtoInfo {
   // VIRTUAL CLUSTER FROM REPLICATION STREAM.
   optional util.hlc.Timestamp last_revert_tenant_timestamp = 8 [(gogoproto.nullable) = false];
 
-  // Next ID: 9
+  // ReadFromTenant is the ID, if any, of another tenant from which this tenant
+  // should be configured to serve read-only SQL requests (by configuring and
+  // maintaining its catalog accordingly).
+  optional roachpb.TenantID read_from_tenant = 9 ;
+
+  // Next ID: 10.
 }
 
 message PreviousSourceTenant {

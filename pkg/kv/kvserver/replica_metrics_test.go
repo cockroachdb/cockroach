@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -55,7 +50,7 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		}))
 
 	{
-		ctr, down, under, over, _ := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(true), // by NodeID
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
@@ -63,10 +58,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.True(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
-		ctr, down, under, over, _ := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(false),
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
@@ -76,10 +72,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
-		ctr, down, under, over, _ := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(true),
@@ -90,11 +87,12 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// Single non-voter dead
-		ctr, down, under, over, _ := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(false),
@@ -105,11 +103,12 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// All non-voters are dead, but range is not unavailable
-		ctr, down, under, over, _ := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(false),
 			1000: livenesspb.FakeNodeVitality(false),
@@ -120,11 +119,12 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// More non-voters than needed
-		ctr, down, under, over, _ := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(true),
@@ -135,11 +135,12 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.False(t, under)
 		require.True(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// Range larger than the threshold.
-		ctr, _, _, _, large := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, _, _, _, large, _ := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(true), // by NodeID
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 1000 /* rangeTooLargeThreshold */, 2000 /* rangeSize */)
 
@@ -148,13 +149,27 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	}
 
 	{
-		ctr, _, _, _, large := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, _, _, _, large, _ := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(false),
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 1000 /* rangeTooLargeThreshold */, 2000 /* rangeSize */)
 		require.False(t, ctr)
 		// Only the node responsible for the range can report if the range is too
 		// large.
 		require.False(t, large)
+	}
+
+	{
+		// Decommissioning node.
+		vitality := livenesspb.TestCreateNodeVitality(10, 100, 1000, 2000)
+		vitality.Decommissioning(100, true /* alive */)
+		ctr, down, under, over, _, decom := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, vitality.ScanNodeVitalityFromCache(),
+			3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.False(t, over)
+		require.True(t, decom)
 	}
 }
 
@@ -262,7 +277,7 @@ func TestCalcRangeCounterLeaseHolder(t *testing.T) {
 			for _, nodeID := range tc.liveNodes {
 				livenessMap[nodeID] = livenesspb.FakeNodeVitality(true)
 			}
-			ctr, _, _, _, _ := calcRangeCounter(tc.storeID, rangeDesc, tc.leaseStatus, livenessMap,
+			ctr, _, _, _, _, _ := calcRangeCounter(tc.storeID, rangeDesc, tc.leaseStatus, livenessMap,
 				3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 			require.Equal(t, tc.expectCounter, ctr)
 		})

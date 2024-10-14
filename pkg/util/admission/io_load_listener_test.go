@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
@@ -55,11 +50,12 @@ func TestIOLoadListener(t *testing.T) {
 			case "init":
 				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 				walFailoverUnlimitedTokens.Override(ctx, &st.SV, false)
+				ElasticBandwidthMaxUtil.Override(ctx, &st.SV, 1)
 				ioll = &ioLoadListener{
 					settings:              st,
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+					diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
 					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 				}
@@ -201,14 +197,14 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("bytes-written") {
 					d.ScanArgs(t, "bytes-written", &bytesWritten)
 				}
-				if d.HasArg("disk-bw-tokens-used") {
-					var regularTokensUsed, elasticTokensUsed int
-					d.ScanArgs(t, "disk-bw-tokens-used", &regularTokensUsed, &elasticTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = int64(regularTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = int64(elasticTokensUsed)
+				if d.HasArg("disk-write-tokens-used") {
+					var regularTokensUsed, elasticTokensUsed int64
+					d.ScanArgs(t, "disk-write-tokens-used", &regularTokensUsed, &elasticTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{writeByteTokens: regularTokensUsed}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{writeByteTokens: elasticTokensUsed}
 				} else {
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = 0
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{}
 				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
@@ -232,6 +228,7 @@ func TestIOLoadListener(t *testing.T) {
 				// Do the ticks until just before next adjustment.
 				res := ioll.adjustTokensResult
 				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
+				fmt.Fprintln(&buf, redact.StringWithoutMarkers(ioll.diskBandwidthLimiter))
 				res.ioThreshold = nil // avoid nondeterminism
 				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(res))
 				if req.buf.Len() > 0 {
@@ -368,7 +365,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		settings:              st,
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
 		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 	}
@@ -387,8 +384,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.elasticDiskBWTokens)
-			require.LessOrEqual(t, int64(0), ioll.elasticDiskBWTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokens)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokensAllocated)
 		}
 	}
 }
@@ -417,7 +414,7 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 type testGranterWithIOTokens struct {
 	buf                     strings.Builder
 	allTokensUsed           bool
-	diskBandwidthTokensUsed [admissionpb.NumWorkClasses]int64
+	diskBandwidthTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -447,12 +444,17 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 	return 0, 0
 }
 
-func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+) {
 	return g.diskBandwidthTokensUsed
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
-	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
+	l0WriteLM tokensLinearModel,
+	l0IngestLM tokensLinearModel,
+	ingestLM tokensLinearModel,
+	writeAmpLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
 	printLinearModel(&g.buf, l0WriteLM)
@@ -460,6 +462,8 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	printLinearModel(&g.buf, l0IngestLM)
 	fmt.Fprintf(&g.buf, " ingest-lm: ")
 	printLinearModel(&g.buf, ingestLM)
+	fmt.Fprintf(&g.buf, " write-amp-lm: ")
+	printLinearModel(&g.buf, writeAmpLM)
 	fmt.Fprintf(&g.buf, "\n")
 }
 
@@ -493,12 +497,17 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	return 0, 0
 }
 
-func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
-	return [admissionpb.NumWorkClasses]int64{}
+func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+) {
+	return [admissionpb.NumStoreWorkTypes]diskTokens{}
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(
-	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
+	l0WriteLM tokensLinearModel,
+	l0IngestLM tokensLinearModel,
+	ingestLM tokensLinearModel,
+	writeAmpLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), l0WriteLM.constant)
@@ -506,6 +515,8 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), l0IngestLM.constant)
 	require.LessOrEqual(g.t, 0.5, ingestLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
+	require.LessOrEqual(g.t, 1.0, writeAmpLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), writeAmpLM.constant)
 }
 
 // Tests if the tokenAllocationTicker produces correct adjustment interval

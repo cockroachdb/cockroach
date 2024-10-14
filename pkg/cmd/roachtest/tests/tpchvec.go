@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -27,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -555,7 +551,7 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	err := WaitFor3XReplication(ctx, t, t.L(), conn)
+	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn)
 	require.NoError(t, err)
 
 	runConfig := testCase.getRunConfig()

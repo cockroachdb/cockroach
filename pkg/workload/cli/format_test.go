@@ -1,18 +1,15 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,4 +115,41 @@ func TestJSONStructure(t *testing.T) {
 "type":"read"
 }`
 	require.JSONEq(t, expected, buf.String())
+}
+
+// TestParseJson ensures that all the fields in the JSON output can be parsed.
+func TestParseJSON(t *testing.T) {
+	// A line taken directly from a test run output.
+	jsonStr := `{"time":"2024-08-30T19:40:31.913393Z","errs":1,"avgt":4531.0,"avgl":1120.2,"p50l":2.4,"p95l":19.9,"p99l":37.7,"maxl":62.9,"type":"read"}`
+	tick, err := fromJson(jsonStr)
+	require.NoError(t, err)
+
+	expectedTick := Tick{
+		Time:       time.Date(2024, 8, 30, 19, 40, 31, 913393000, time.UTC),
+		Errs:       1,
+		Throughput: 4531.0,
+		P50:        2400 * time.Microsecond,
+		P95:        19900 * time.Microsecond,
+		P99:        37700 * time.Microsecond,
+		PMax:       62900 * time.Microsecond,
+		Type:       "read",
+	}
+	require.Equal(t, expectedTick, tick)
+}
+
+// TestParseOutput ensures that the valid json can be extracted from a file.
+// The output is an snippet from a test run output with associated non-JSON
+// garbage in the file.
+func TestParseOutput(t *testing.T) {
+	output := `
+	W240830 19:40:30.523513 3604 workload/pgx_helpers.go:240  [-] 4953  error preparing statement. name=kv-2 sql=SELECT k, v FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN ($1) ERROR: database "kv" does not exist (SQLSTATE 3D000)
+{"time":"2024-08-30T19:40:30.915598Z","errs":0,"avgt":242.1,"avgl":269.9,"p50l":13.6,"p95l":3758.1,"p99l":3892.3,"maxl":3892.3,"type":"follower-read"}
+{"time":"2024-08-30T19:40:30.915598Z","errs":0,"avgt":223.9,"avgl":249.7,"p50l":31.5,"p95l":3758.1,"p99l":3892.3,"maxl":3892.3,"type":"read"}
+Number of reads that didn't return any results: 40661.
+Write sequence could be resumed by passing --write-seq=R133867 to the next run.`
+	ticks := ParseOutput(strings.NewReader(output))
+	fmt.Println(ticks)
+	require.Equal(t, 2, len(ticks))
+	require.Equal(t, ticks[0].Type, "follower-read")
+	require.Equal(t, ticks[1].Type, "read")
 }

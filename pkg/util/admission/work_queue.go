@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
@@ -759,9 +754,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
+			q.mu.Lock()
+			queueLen := tenant.waitingWorkHeap.Len()
+			q.mu.Unlock()
+
 			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				tenant.waitingWorkHeap.Len(),
-				tenant.id, info.Priority,
+				queueLen, tenant.id, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.Origin,
 				info.ReplicatedWorkInfo.LogPosition,
@@ -919,9 +917,12 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		// NB: We don't use grant chains for store tokens, so they don't apply
 		// to replicated writes.
 		if log.V(1) {
+			q.mu.Lock()
+			queueLen := tenant.waitingWorkHeap.Len()
+			q.mu.Unlock()
+
 			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				tenant.waitingWorkHeap.Len(),
-				tenant.id, item.priority,
+				queueLen, tenant.id, item.priority,
 				item.replicated.RangeID,
 				item.replicated.Origin,
 				item.replicated.LogPosition,
@@ -2124,7 +2125,7 @@ type LogEntryAdmittedCallbackState struct {
 	// Pos is the position of the entry in the log.
 	//
 	// TODO(sumeer): when the RACv1 protocol is deleted, drop the Term from this
-	// struct.
+	// struct, and replace LeaderTerm/Pos.Index with a LogMark.
 	Pos LogPosition
 	// Pri is the admission priority used for admission.
 	Pri admissionpb.WorkPriority

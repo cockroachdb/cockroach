@@ -1,24 +1,21 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
 import (
-	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
+// TODO(aaditya): Update this comment once read and IOPS are integrated to this.
+// Issue: https://github.com/cockroachdb/cockroach/issues/107623
+//
 // The functionality in this file is geared towards preventing chronic overload
 // of disk bandwidth which typically results in severely high latency for all work.
 //
@@ -47,17 +44,14 @@ import (
 //   latency effects, presumably because the queue buildup is different. So it
 //   is non-trivial to approach full utilization without risking high latency.
 //
-// Due to these challenges, we adopt a goal of simplicity of design, and
-// strong abstraction boundaries.
+// Due to these challenges, we adopt a goal of simplicity of design.
 //
-// - The disk load is abstracted using an enum, diskLoadLevel. The
-//   diskLoadWatcher, that maps load signals to this enum, can be evolved
-//   independently.
+// - The disk bandwidth limiter estimates disk write byte tokens using the
+//   provisioned value and subtracts away reads seen in the previous interval.
 //
-// - The approach uses easy to understand small multiplicative increase and
-//   large multiplicative decrease, (unlike what we do for flush and
-//   compaction tokens, where we try to more precisely calculate the
-//   sustainable rates).
+// - We estimate the write amplification using a model of the incoming 	 writes
+//   and actual bytes written to disk in the previous interval. We then use this
+//   model when deducting tokens for disk writes.
 //
 // Since we are using a simple approach that is somewhat coarse in its behavior,
 // we start by limiting its application to two kinds of writes (the second one
@@ -79,289 +73,117 @@ import (
 //
 // Extending this to all incoming writes is future work.
 
-// The load level of a disk.
-type diskLoadLevel int8
-
-const (
-	// diskLoadLow implies no need to shape anything.
-	diskLoadLow diskLoadLevel = iota
-	// diskLoadModerate implies shaping and small multiplicative increase.
-	diskLoadModerate
-	// diskLoadHigh implies shaping and hold steady.
-	diskLoadHigh
-	// diskLoadOverload implies shaping and large multiplicative decrease.
-	diskLoadOverload
-)
-
-func diskLoadLevelString(level diskLoadLevel) redact.SafeString {
-	switch level {
-	case diskLoadLow:
-		return "low"
-	case diskLoadModerate:
-		return "moderate"
-	case diskLoadHigh:
-		return "high"
-	case diskLoadOverload:
-		return "overload"
-	}
-	return ""
-}
-
-// diskLoadWatcher computes the diskLoadLevel based on provided stats.
-type diskLoadWatcher struct {
-	lastInterval intervalDiskLoadInfo
-	lastUtil     float64
-	loadLevel    diskLoadLevel
-}
-
 // intervalDiskLoadInfo provides disk stats over an adjustmentInterval.
 type intervalDiskLoadInfo struct {
-	// readBandwidth is the measure disk read bandwidth in bytes/s.
-	readBandwidth int64
-	// writeBandwidth is the measured disk write bandwidth in bytes/s.
-	writeBandwidth int64
-	// provisionedBandwidth is the aggregate (read+write) provisioned bandwidth
-	// in bytes/s.
-	provisionedBandwidth int64
+	// intReadBytes represents measured disk read bytes in a given interval.
+	intReadBytes int64
+	// intWriteBytes represents measured write bytes in a given interval.
+	intWriteBytes int64
+	// intProvisionedDiskBytes represents the disk writes (in bytes) available in
+	// an adjustmentInterval.
+	intProvisionedDiskBytes int64
+	// elasticBandwidthMaxUtil sets the maximum disk bandwidth utilization for
+	// elastic requests
+	elasticBandwidthMaxUtil float64
 }
 
-// setIntervalInfo is called at the same time as ioLoadListener.pebbleMetricsTick.
-func (d *diskLoadWatcher) setIntervalInfo(load intervalDiskLoadInfo) {
-	lastInterval := load
-	util := float64(load.readBandwidth+load.writeBandwidth) / float64(load.provisionedBandwidth)
-	// The constants and other heuristics in the following logic can seem
-	// extremely arbitrary: they were subject to some tuning and evolution based
-	// on the experiments in https://github.com/cockroachdb/cockroach/pull/82813
-	// that used (a) an artificial provisioned bandwidth limit lower than the
-	// actual, to see how well the system stayed within that limit, (b) an
-	// actual provisioned bandwidth limit. The difficulty in general is that
-	// small changes can have outsize influence if a higher number of
-	// compactions start happening.
-	var loadLevel diskLoadLevel
-	const lowUtilThreshold = 0.3
-	const moderateUtilThreshold = 0.7
-	const highUtilThreshold = 0.95
-	const highlyOverUtilizedThreshold = 2.0
-	const smallDelta = 0.05
-	if util < lowUtilThreshold {
-		// Were at moderate or lower and have not increased significantly and the
-		// lastUtil was also low, then we can afford to stop limiting tokens. We
-		// are trying to carefully narrow this case since not limiting tokens can
-		// blow up bandwidth.
-		//
-		// An alternative would be to never have unlimited tokens, since that
-		// ensures there is always some reasonable bound in place. It may mean
-		// that the initial tokens are insufficient and the tokens catch up to
-		// what is needed with some lag, and during that time there is unnecessary
-		// queueing. This downside could be avoided by ramping up faster. This
-		// alternative is worth investigating.
-
-		if d.loadLevel <= diskLoadModerate && util < d.lastUtil+smallDelta &&
-			d.lastUtil < lowUtilThreshold {
-			loadLevel = diskLoadLow
-		} else {
-			// util is increasing, or we just dropped from something higher than
-			// moderate. Give it more time at moderate, where we will gradually
-			// increase tokens.
-			loadLevel = diskLoadModerate
-		}
-	} else if util < moderateUtilThreshold {
-		// Wide band from [0.3,0.7) where we gradually increase tokens. Also, 0.7
-		// is deliberately a lowish fraction since the effect on compactions can
-		// lag and kick in later. We are ok with accepting a lower utilization for
-		// elastic work to make progress.
-		loadLevel = diskLoadModerate
-	} else if util < highUtilThreshold ||
-		(util < highlyOverUtilizedThreshold && util < d.lastUtil-smallDelta) {
-		// Wide band from [0.7,0.95) where we will hold the number of tokens
-		// steady. We don't want to overreact and decrease too early since
-		// compaction bandwidth usage can be lumpy. For this same reason, if we
-		// are trending downward, we want to hold. Note that util < 2 will always
-		// be true in typical configurations where one cannot actually exceed
-		// provisioned bandwidth -- but we also run experiments where we
-		// artificially constrain the provisioned bandwidth, where this is useful.
-		// And it is possible that some production settings may set a slightly
-		// lower value of provisioned bandwidth, if they want to further reduce
-		// the probability of hitting the real provisioned bandwidth due to
-		// elastic work.
-		loadLevel = diskLoadHigh
-	} else {
-		// Overloaded. We will reduce tokens.
-		loadLevel = diskLoadOverload
-	}
-	*d = diskLoadWatcher{
-		lastInterval: lastInterval,
-		lastUtil:     util,
-		loadLevel:    loadLevel,
-	}
-	// TODO(sumeer): Use the history of fsync latency and the value in the
-	// current interval, and if high, increase the load level computed earlier.
-	// We shouldn't rely fully on syncLatencyMicros since (a) sync latency could
-	// arise due to an external unrelated outage, (b) some customers may set
-	// fsync to be a noop. As an alternative to sync latency, we could also
-	// consider looking at fluctuations of peak-rate that the WAL writer can
-	// sustain.
-}
-
-func (d *diskLoadWatcher) getLoadLevel() diskLoadLevel {
-	return d.loadLevel
-}
-
-func (d diskLoadWatcher) SafeFormat(p redact.SafePrinter, _ rune) {
-	p.Printf("disk bandwidth: read: %s/s, write: %s/s, provisioned: %s/s, util: %.2f",
-		humanizeutil.IBytes(d.lastInterval.readBandwidth),
-		humanizeutil.IBytes(d.lastInterval.writeBandwidth),
-		humanizeutil.IBytes(d.lastInterval.provisionedBandwidth), d.lastUtil)
-}
-
-// intervalLSMInfo provides stats about the LSM over an adjustmentInterval.
-type intervalLSMInfo struct {
-	// Flushed bytes + Ingested bytes seen by the LSM. Ingested bytes incur the
-	// cost of writing a sstable, even though that is done outside Pebble, so
-	// ingestion is similar in cost to flushing. Ingested bytes don't cause WAL
-	// writes, but we ignore that difference for simplicity, and just work with
-	// the sum of flushed and ingested bytes.
-	incomingBytes int64
-	// regularTokensUsed and elasticTokensUsed are the byte tokens used for
-	// regular and elastic work respectively. Each of these includes both
-	// writes that will get flushed and ingested bytes. The
-	// regularTokensUsed+elasticTokensUsed do not need to sum up to
-	// incomingBytes, since these stats are produced by different sources.
-	regularTokensUsed int64
-	elasticTokensUsed int64
-}
-
+// diskBandwidthLimiterState is used as auxiliary information for logging
+// purposes and keeping past state.
 type diskBandwidthLimiterState struct {
-	smoothedIncomingBytes   float64
-	smoothedElasticFraction float64
-	elasticTokens           int64
-
-	prevElasticTokensUsed int64
+	tokens     diskTokens
+	prevTokens diskTokens
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens
+	diskBWUtil float64
+	diskLoad   intervalDiskLoadInfo
 }
 
 // diskBandwidthLimiter produces tokens for elastic work.
 type diskBandwidthLimiter struct {
-	diskLoadWatcher diskLoadWatcher
-	state           diskBandwidthLimiterState
+	state diskBandwidthLimiterState
 }
 
-func makeDiskBandwidthLimiter() diskBandwidthLimiter {
-	return diskBandwidthLimiter{
-		state: diskBandwidthLimiterState{
-			elasticTokens: math.MaxInt64,
-		},
+func newDiskBandwidthLimiter() *diskBandwidthLimiter {
+	return &diskBandwidthLimiter{
+		state: diskBandwidthLimiterState{},
 	}
+}
+
+// diskTokens tokens represent actual bytes and IO on physical disks. Currently,
+// these are used to impose disk bandwidth limits on elastic traffic, but
+// regular traffic will also deduct from these buckets.
+type diskTokens struct {
+	readByteTokens  int64
+	writeByteTokens int64
+	readIOPSTokens  int64
+	writeIOPSTokens int64
 }
 
 // computeElasticTokens is called every adjustmentInterval.
 func (d *diskBandwidthLimiter) computeElasticTokens(
-	ctx context.Context, id intervalDiskLoadInfo, il intervalLSMInfo,
-) (elasticTokens int64) {
-	d.diskLoadWatcher.setIntervalInfo(id)
+	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+) diskTokens {
+	// We are using disk read bytes over the previous adjustment interval as a
+	// proxy for future reads. It is a somewhat bad proxy, but for now we are ok
+	// with the inaccuracy. This will be improved once we start to account for
+	// disk reads in AC.
+	// TODO(aaditya): Include calculation for read and IOPS.
+	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
 	const alpha = 0.5
-	prev := d.state
-	smoothedIncomingBytes := alpha*float64(il.incomingBytes) + (1-alpha)*prev.smoothedIncomingBytes
-	smoothedElasticFraction := prev.smoothedElasticFraction
-	var intElasticFraction float64
-	if il.regularTokensUsed+il.elasticTokensUsed > 0 {
-		intElasticFraction =
-			float64(il.elasticTokensUsed) / float64(il.regularTokensUsed+il.elasticTokensUsed)
-		smoothedElasticFraction = alpha*intElasticFraction + (1-alpha)*prev.smoothedElasticFraction
-	}
-	intElasticBytes := int64(float64(il.incomingBytes) * intElasticFraction)
-	ll := d.diskLoadWatcher.getLoadLevel()
+	smoothedReadBytes := alpha*float64(id.intReadBytes) + alpha*float64(d.state.diskLoad.intReadBytes)
+	// Pessimistic approach using the max value between the smoothed and current
+	// reads.
+	intReadBytes := int64(math.Max(smoothedReadBytes, float64(id.intReadBytes)))
+	diskWriteTokens := int64(float64(id.intProvisionedDiskBytes)*id.elasticBandwidthMaxUtil) - intReadBytes
+	// TODO(aaditya): consider setting a different floor to avoid starving out
+	// elastic writes completely due to out-sized reads from above.
+	diskWriteTokens = int64(math.Max(0, float64(diskWriteTokens)))
 
-	// The constants and other heuristics in the following logic can seem
-	// arbitrary: they were subject to some tuning and evolution based on the
-	// experiments in https://github.com/cockroachdb/cockroach/pull/82813 that
-	// used (a) an artificial provisioned bandwidth limit lower than the actual,
-	// to see how well the system stayed within that limit, (b) an actual
-	// provisioned bandwidth limit. The difficulty in general is that small
-	// changes can have outsize influence if a higher number of compactions
-	// start happening, or the compaction backlog is cleared.
-	//
-	// TODO(sumeer): experiment with a more sophisticated controller for the
-	// elastic token adjustment, e.g. a PID (Proportional-Integral-Derivative)
-	// controller.
-	doLog := true
-	switch ll {
-	case diskLoadLow:
-		elasticTokens = math.MaxInt64
-		if elasticTokens == prev.elasticTokens {
-			doLog = false
-		}
-		// else we stay in the common case of low bandwidth usage.
-	case diskLoadModerate:
-		tokensFullyUtilized :=
-			// elasticTokens == MaxInt64 is also considered fully utilized since we
-			// can never fully utilize unlimited tokens.
-			prev.elasticTokens == math.MaxInt64 ||
-				(prev.elasticTokens > 0 && float64(il.elasticTokensUsed)/float64(prev.elasticTokens) >= 0.8)
-
-		if tokensFullyUtilized {
-			// Smoothed elastic bytes plus 10% of smoothedIncomingBytes is given to
-			// elastic work. That is, we are increasing the total incoming bytes by
-			// 10% (not just the elastic bytes by 10%). Note that each token
-			// represents 1 incoming byte.
-			elasticBytes := (smoothedElasticFraction + 0.1) * smoothedIncomingBytes
-			// Sometimes we see the tokens not increasing even though we are staying
-			// for multiple intervals at moderate. This is because the smoothed
-			// fraction and incoming bytes can be decreasing. We do want to increase
-			// tokens since we know there is spare capacity, so we try many ways
-			// (that don't look at smoothed numbers only). Also, we sometimes come
-			// here due to an overload=>moderate transition because compaction
-			// bandwidth usage can be lumpy (high when there is a backlog and then
-			// dropping severely) -- in that case we want to start increasing
-			// immediately, since we have likely decreased too much.
-			intBasedElasticTokens := (smoothedElasticFraction + 0.1) * float64(il.incomingBytes)
-			elasticBytes = math.Max(elasticBytes, intBasedElasticTokens)
-			elasticBytes = math.Max(elasticBytes, 1.1*float64(il.elasticTokensUsed))
-			elasticTokens = int64(elasticBytes)
-			if elasticTokens == 0 {
-				// Don't get stuck in a situation where smoothedIncomingBytes are 0.
-				elasticTokens = math.MaxInt64
-			}
-		} else {
-			// No change.
-			elasticTokens = prev.elasticTokens
-		}
-	case diskLoadHigh:
-		// No change.
-		elasticTokens = prev.elasticTokens
-	case diskLoadOverload:
-		// Sometimes we come here after a low => overload transition. The
-		// intElasticBytes will be very high because tokens were unlimited. We
-		// don't want to use that as the starting point of the decrease if the
-		// smoothed value is lower. Hence, the min logic below, to try to dampen
-		// the increase quickly.
-		elasticTokens = int64(0.5 * math.Min(float64(intElasticBytes),
-			smoothedElasticFraction*smoothedIncomingBytes))
+	totalUsedTokens := sumDiskTokens(usedTokens)
+	tokens := diskTokens{
+		readByteTokens:  0,
+		writeByteTokens: diskWriteTokens,
+		readIOPSTokens:  0,
+		writeIOPSTokens: 0,
 	}
-	// We can end up with 0 elastic tokens here -- e.g. if intElasticBytes was 0
-	// but we were still overloaded because of compactions. The trouble with 0
-	// elastic tokens is that if we don't admit anything, we cannot correct an
-	// occasional poor estimate of the per-request bytes. So we decide to give
-	// out at least 1 token. A single elastic request should not be too big for
-	// this to matter.
-	elasticTokens = max(1, elasticTokens)
+	prevState := d.state
 	d.state = diskBandwidthLimiterState{
-		smoothedIncomingBytes:   smoothedIncomingBytes,
-		smoothedElasticFraction: smoothedElasticFraction,
-		elasticTokens:           elasticTokens,
-		prevElasticTokensUsed:   il.elasticTokensUsed,
+		tokens:     tokens,
+		prevTokens: prevState.tokens,
+		usedTokens: usedTokens,
+		diskBWUtil: float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
+		diskLoad:   id,
 	}
-	if doLog {
-		log.Infof(ctx, "%v", d)
-	}
-	return elasticTokens
+	return tokens
 }
 
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
-	level := d.diskLoadWatcher.getLoadLevel()
-	p.Printf("diskBandwidthLimiter %s (%v): elastic-frac: %.2f, incoming: %s, "+
-		"elastic-tokens (used %s): %s",
-		diskLoadLevelString(level), d.diskLoadWatcher, d.state.smoothedElasticFraction,
-		ib(int64(d.state.smoothedIncomingBytes)), ib(d.state.prevElasticTokensUsed),
-		ib(d.state.elasticTokens))
+	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
+		"snapshot %s, regular %s) tokens (write %s (prev %s)), writeBW %s/s, readBW %s/s, "+
+		"provisioned %s/s)",
+		d.state.diskBWUtil,
+		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
+		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
+		ib(d.state.usedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
+		ib(d.state.tokens.writeByteTokens),
+		ib(d.state.prevTokens.writeByteTokens),
+		ib(d.state.diskLoad.intWriteBytes/adjustmentInterval),
+		ib(d.state.diskLoad.intReadBytes/adjustmentInterval),
+		ib(d.state.diskLoad.intProvisionedDiskBytes/adjustmentInterval),
+	)
+}
+
+func (d *diskBandwidthLimiter) String() string {
+	return redact.StringWithoutMarkers(d)
+}
+
+func sumDiskTokens(tokens [admissionpb.NumStoreWorkTypes]diskTokens) diskTokens {
+	var sumTokens diskTokens
+	for i := 0; i < admissionpb.NumStoreWorkTypes; i++ {
+		sumTokens.readByteTokens += tokens[i].readByteTokens
+		sumTokens.writeByteTokens += tokens[i].writeByteTokens
+		sumTokens.readIOPSTokens += tokens[i].readIOPSTokens
+		sumTokens.writeIOPSTokens += tokens[i].writeIOPSTokens
+	}
+	return sumTokens
 }

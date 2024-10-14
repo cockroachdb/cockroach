@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tabledesc
 
@@ -149,6 +144,39 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 			validJobIDs:                    map[jobspb.JobID]struct{}{111222333444: {}},
 			strippedDanglingBackReferences: true,
 			strippedNonExistentRoles:       true,
+		},
+		{
+			name: "LDR job IDs",
+			input: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				LDRJobIDs:  []catpb.JobID{1, 2, 3},
+				Privileges: goodPrivilege,
+			},
+			expectedOutput: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				LDRJobIDs:  []catpb.JobID{},
+				Privileges: goodPrivilege,
+			},
+			validDescIDs:                   catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validJobIDs:                    map[jobspb.JobID]struct{}{111222333444: {}},
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       false,
 		},
 		{
 			name: "missing owner",

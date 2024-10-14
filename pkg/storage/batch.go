@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -20,11 +15,11 @@ import (
 )
 
 // Ensure that we always update the batch reader to consider any necessary
-// updates when a new key kind is introduced. To do this, we assert
-// InternalKeyKindMax=23, ensuring that compilation will fail if it's not.
-// Unfortunately, this doesn't protect against reusing a currently unused
-// RocksDB key kind.
-const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
+// updates when a new key kind is introduced. To do this, we assert that the
+// latest key we considered equals InternalKeyKindMax, ensuring that compilation
+// will fail if it's not. Unfortunately, this doesn't protect against reusing a
+// currently unused RocksDB key kind.
+const _ = uint(pebble.InternalKeyKindExcise - pebble.InternalKeyKindMax)
 
 // decodeBatchHeader decodes the header of Pebble batch representation,
 // returning the parsed header and a batchrepr.Reader into the contents of the

@@ -1,0 +1,70 @@
+# This test checks that if a fully caught-up follower transitions
+# into StateProbe (for example due to a call to ReportUnreachable), the
+# leader will react to a subsequent heartbeat response from the probing
+# follower by sending an empty MsgApp, the response of which restores
+# StateReplicate for the follower. In other words, we don't end up in
+# a stable state with a fully caught up follower in StateProbe.
+
+# Turn off output during the setup of the test.
+log-level none
+----
+ok
+
+add-nodes 3 voters=(1,2,3) index=10
+----
+ok
+
+campaign 1
+----
+ok
+
+stabilize
+----
+ok
+
+log-level debug
+----
+ok
+
+status 1
+----
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+
+# On the first replica, report the second one as not reachable.
+report-unreachable 1 2
+----
+DEBUG 1 failed to send message to 2 because it is unreachable [StateProbe match=11 next=12 sentCommit=11 matchCommit=11]
+
+status 1
+----
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateProbe match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+
+tick-heartbeat 1
+----
+ok
+
+# HeartbeatTimeout -> MsgApp -> MsgAppResp -> StateReplicate.
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+> 2 handling Ready
+  Ready MustSync=false:
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+
+status 1
+----
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11

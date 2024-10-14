@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package explain
 
@@ -36,7 +31,7 @@ import (
 )
 
 func init() {
-	if numOperators != 62 {
+	if numOperators != 63 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -628,6 +623,16 @@ func (u *unknownTable) IsHypothetical() bool {
 	return false
 }
 
+// TriggerCount is part of the cat.Table interface.
+func (u *unknownTable) TriggerCount() int {
+	return 0
+}
+
+// Trigger is part of the cat.Table interface.
+func (u *unknownTable) Trigger(i int) cat.Trigger {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
@@ -644,7 +649,7 @@ func (u *unknownIndex) Name() tree.Name {
 }
 
 func (u *unknownIndex) Table() cat.Table {
-	panic(errors.AssertionFailedf("not implemented"))
+	return &unknownTable{}
 }
 
 func (u *unknownIndex) Ordinal() cat.IndexOrdinal {
@@ -687,7 +692,7 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 	var col cat.Column
 	col.Init(
 		i,
-		cat.StableID(0),
+		cat.DefaultStableID,
 		"?",
 		cat.Ordinary,
 		types.Int,

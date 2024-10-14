@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -200,7 +195,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	var sb span.Builder
-	sb.Init(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
+	sb.InitAllowingExternalRowData(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 
 	cols := make([]catalog.Column, 0, params.NeededCols.Len())
 	allCols := tabDesc.AllColumns()
@@ -234,7 +229,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
-		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, idx.GetID()),
+		tabDesc.IndexSpanAllowingExternalRowData(e.planner.ExecCfg().Codec, idx.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -1072,6 +1067,10 @@ func (e *distSQLSpecExecFactory) ConstructCreateFunction(
 	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCreateTrigger(_ *tree.CreateTrigger) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create trigger")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {

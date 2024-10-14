@@ -344,7 +344,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <plpgsqltree.Statement>	stmt_commit stmt_rollback
 %type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
 
-%type <plpgsqltree.Statement> decl_stmt decl_statement
+%type <plpgsqltree.Statement> decl_statement
 %type <[]plpgsqltree.Statement> decl_sect opt_decl_stmts decl_stmts
 
 %type <[]plpgsqltree.Exception> exception_sect proc_exceptions
@@ -419,34 +419,21 @@ opt_decl_stmts: decl_stmts
   }
 ;
 
-decl_stmts: decl_stmts decl_stmt
+opt_declare: DECLARE {}
+| {}
+;
+
+decl_stmts: decl_stmts opt_declare decl_statement
   {
     decs := $1.statements()
-    dec := $2.statement()
+    dec := $3.statement()
     $$.val = append(decs, dec)
   }
-| decl_stmt
+| decl_statement
   {
     dec := $1.statement()
     $$.val = []plpgsqltree.Statement{dec}
 	}
-;
-
-decl_stmt	: decl_statement
-  {
-    $$.val = $1.statement()
-  }
-| DECLARE
-  {
-    // This is to allow useless extra "DECLARE" keywords in the declare section.
-    $$.val = (plpgsqltree.Statement)(nil)
-  }
-// TODO(drewk): turn this block on and throw useful error if user
-// tries to put the block label just before BEGIN instead of before
-// DECLARE.
-//| LESS_LESS any_identifier GREATER_GREATER
-//  {
-//  }
 ;
 
 decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull decl_defval

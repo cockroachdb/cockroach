@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -23,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -35,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -673,7 +670,7 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider())
+	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider(), math.MaxInt32)
 }
 
 // Avoid lint errors.
@@ -720,18 +717,22 @@ func (s *Server) GetUnscrubbedTxnStats(
 // GetScrubbedReportingStats does the same thing as GetScrubbedStmtStats but
 // returns statistics from the reported stats pool.
 func (s *Server) GetScrubbedReportingStats(
-	ctx context.Context,
+	ctx context.Context, limit int,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.reportedStats)
+	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit)
 }
 
 func (s *Server) getScrubbedStmtStats(
-	ctx context.Context, statsProvider sqlstats.Provider,
+	ctx context.Context, statsProvider sqlstats.Provider, limit int,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []appstatspb.CollectedStatementStatistics
 	stmtStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedStatementStatistics) error {
+		if limit <= (len(scrubbedStats)) {
+			return nil
+		}
+
 		// Scrub the statement itself.
 		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query, nil)
 
@@ -825,6 +826,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx,
+		executorTypeExec,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
@@ -973,13 +975,14 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 			UserProto: args.User.EncodeProto(),
 		},
 		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
-			RemoteAddr: args.RemoteAddr,
-			IsSSL:      args.IsSSL,
+			RemoteAddr:           args.RemoteAddr,
+			IsSSL:                args.IsSSL,
+			AuthenticationMethod: args.AuthenticationMethod,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize:   args.ConnResultsBufferSize,
 			IsSuperuser:         args.IsSuperuser,
-			SystemIdentityProto: args.SystemIdentity.EncodeProto(),
+			SystemIdentityProto: args.SystemIdentity,
 		},
 	}
 	if len(args.CustomOptionSessionDefaults) > 0 {
@@ -1011,6 +1014,7 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 // executor with non-nil txn.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
+	executorType executorType,
 	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
@@ -1087,7 +1091,7 @@ func (s *Server) newConnExecutor(
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx, goroutineID: goid.Get()},
 		phaseTimes:                sessionphase.NewTimes(),
-		executorType:              executorTypeExec,
+		executorType:              executorType,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
@@ -1188,6 +1192,18 @@ func (s *Server) newConnExecutor(
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+
+	if lm := ex.server.cfg.LeaseManager; executorType == executorTypeExec && lm != nil {
+		if desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID); err != nil {
+			log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+		} else {
+			defer desc.Release(ctx)
+			// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
+			// which guarantees that all user tenant sql connections to the reader tenant will
+			// correctly set this
+			ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
+		}
+	}
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -1781,6 +1797,11 @@ type connExecutor struct {
 	// transaction which committed. It is zero-valued when there is a transaction
 	// open or the previous transaction did not successfully commit.
 	previousTransactionCommitTimestamp hlc.Timestamp
+
+	// isPCRReader catalog indicates this connection executor is for
+	// PCR reader catalog, which is done by checking for the ReplicatedPCRVersion
+	// field on the system database (which is set during tenant bootstrap).
+	isPCRReaderCatalog bool
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -3533,10 +3554,10 @@ var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation.enabled",
 	"set to true to allow transactions to use the REPEATABLE READ isolation "+
-		"level. At the time of writing, this setting is intended only for usage by "+
-		"CockroachDB developers.",
+		"level if specified by BEGIN/SET commands",
 	false,
 	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
+	settings.WithPublic,
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
@@ -3716,6 +3737,16 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
+}
+
+// GetPCRReaderTimestamp if the system database is setup as PCR
+// catalog reader, then this function will return an non-zero timestamp
+// to use for all read operations.
+func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
+	if ex.isPCRReaderCatalog {
+		return ex.server.cfg.LeaseManager.GetSafeReplicationTS()
+	}
+	return hlc.Timestamp{}
 }
 
 // resetEvalCtx initializes the fields of evalCtx that can change
@@ -4331,6 +4362,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		PGBackendPID:               ex.planner.extendedEvalCtx.QueryCancelKey.GetPGBackendPID(),
 		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
 		GoroutineID:                ex.ctxHolder.goroutineID,
+		AuthenticationMethod:       sd.AuthenticationMethod,
 	}
 }
 

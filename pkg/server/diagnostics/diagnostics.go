@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package diagnostics
 
@@ -17,10 +12,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -76,6 +73,7 @@ type ClusterInfo struct {
 	TenantID         roachpb.TenantID
 	IsInsecure       bool
 	IsInternal       bool
+	License          *licenseccl.License
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If
@@ -99,10 +97,33 @@ func addInfoToURL(
 		q.Set("nodeid", strconv.Itoa(int(nodeID)))
 	}
 
+	environment := ""
+	licenseExpiry := ""
+	organizationID := ""
+	licenseID := ""
+	if clusterInfo.License != nil {
+		license := clusterInfo.License
+		environment = license.Environment.String()
+		if license.OrganizationId != nil {
+			organizationUUID, err := uuid.FromBytes(license.OrganizationId)
+			if err != nil {
+				log.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
+			}
+			organizationID = organizationUUID.String()
+		}
+		if license.LicenseId != nil {
+			licenseExpiry = strconv.Itoa(int(license.ValidUntilUnixSec))
+			licenseUUID, err := uuid.FromBytes(license.LicenseId)
+			if err != nil {
+				log.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
+			}
+			licenseID = licenseUUID.String()
+		}
+	}
+
 	b := env.Build
 	q.Set("sqlid", strconv.Itoa(int(sqlInfo.SQLInstanceID)))
 	q.Set("uptime", strconv.Itoa(int(sqlInfo.Uptime)))
-	q.Set("licensetype", env.LicenseType)
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", clusterInfo.StorageClusterID.String())
@@ -112,6 +133,12 @@ func addInfoToURL(
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
+	// license type must come from the environment because it uses the base package.
+	q.Set("licensetype", env.LicenseType)
+	q.Set("organization_id", organizationID)
+	q.Set("license_id", licenseID)
+	q.Set("license_expiry_seconds", licenseExpiry)
+	q.Set("environment", environment)
 	result.RawQuery = q.Encode()
 	return &result
 }

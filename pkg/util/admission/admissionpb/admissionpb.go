@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admissionpb
 
@@ -188,6 +183,37 @@ const (
 	// NumWorkClasses is the number of work classes.
 	NumWorkClasses
 )
+
+// StoreWorkType represents the type of work,
+type StoreWorkType int8
+
+const (
+	// RegularStoreWorkType is for type of store-specific work that corresponds to
+	// RegularWorkClass.
+	RegularStoreWorkType StoreWorkType = iota
+	// SnapshotIngestStoreWorkType is for snapshot work type. It is classified as
+	// ElasticWorkClass, but is prioritized higher than other work of that class.
+	SnapshotIngestStoreWorkType = 1
+	// ElasticStoreWorkType is for store-specific work that corresponds to
+	// ElasticWorkClass, excluding SnapshotIngestStoreWorkType.
+	ElasticStoreWorkType = 2
+	// NumStoreWorkTypes is the number of store work types.
+	NumStoreWorkTypes = 3
+)
+
+// WorkClassFromStoreWorkType translates StoreWorkType to a WorkClass
+func WorkClassFromStoreWorkType(workType StoreWorkType) WorkClass {
+	var class WorkClass
+	switch workType {
+	case RegularStoreWorkType:
+		class = RegularWorkClass
+	case ElasticStoreWorkType:
+		class = ElasticWorkClass
+	case SnapshotIngestStoreWorkType:
+		class = ElasticWorkClass
+	}
+	return class
+}
 
 // WorkClassFromPri translates a WorkPriority to its given WorkClass.
 func WorkClassFromPri(pri WorkPriority) WorkClass {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
 import has from "lodash/has";
@@ -43,7 +38,8 @@ import {
   livenessStatusByNodeIDSelector,
   nodeIDsSelector,
   nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID, nodeDisplayNameByIDSelectorWithoutAddress,
+  selectStoreIDsByNodeID,
+  nodeDisplayNameByIDSelectorWithoutAddress,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -521,20 +517,21 @@ export class NodeGraphs extends React.Component<
  */
 const nodeDropdownOptionsSelector = createSelector(
   nodeIDsSelector,
-    (state) => nodeDisplayNameByIDSelector(state),
+  state => nodeDisplayNameByIDSelector(state),
   livenessStatusByNodeIDSelector,
   (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
     return base.concat(
-      nodeIds.filter(
-        id =>
-          livenessStatusByNodeID[id] !==
-          LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-      )
-      .map(id => ({
-        value: id.toString(),
-        label: nodeDisplayNameByID[id],
-      }))
+      nodeIds
+        .filter(
+          id =>
+            livenessStatusByNodeID[id] !==
+            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        )
+        .map(id => ({
+          value: id.toString(),
+          label: nodeDisplayNameByID[id],
+        })),
     );
   },
 );

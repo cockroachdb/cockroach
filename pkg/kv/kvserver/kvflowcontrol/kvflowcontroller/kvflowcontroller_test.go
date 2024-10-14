@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowcontroller
 
@@ -317,8 +312,8 @@ func TestBucketSignalingBug(t *testing.T) {
 	controller.DeductTokens(ctx, admissionpb.NormalPri, 10, stream)
 	controller.DeductTokens(ctx, admissionpb.BulkNormalPri, 10, stream)
 	streamState := controller.InspectStream(ctx, stream)
-	require.Equal(t, int64(0), streamState.AvailableRegularTokens)
-	require.Equal(t, int64(-15), streamState.AvailableElasticTokens)
+	require.Equal(t, int64(0), streamState.AvailableEvalRegularTokens)
+	require.Equal(t, int64(-15), streamState.AvailableEvalElasticTokens)
 
 	connectedStream := &mockConnectedStream{
 		stream: stream,
@@ -357,8 +352,8 @@ func TestBucketSignalingBug(t *testing.T) {
 
 	controller.ReturnTokens(ctx, admissionpb.NormalPri, 1, stream)
 	streamState = controller.InspectStream(ctx, stream)
-	require.Equal(t, int64(1), streamState.AvailableRegularTokens)
-	require.Equal(t, int64(-14), streamState.AvailableElasticTokens)
+	require.Equal(t, int64(1), streamState.AvailableEvalRegularTokens)
+	require.Equal(t, int64(-14), streamState.AvailableEvalElasticTokens)
 
 	// Sleep to give enough time for regular work to get admitted.
 	time.Sleep(2 * time.Second)
@@ -373,13 +368,13 @@ func TestBucketSignalingBug(t *testing.T) {
 	// Return enough tokens that the elastic work gets admitted.
 	controller.ReturnTokens(ctx, admissionpb.NormalPri, 9, stream)
 	streamState = controller.InspectStream(ctx, stream)
-	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
-	require.Equal(t, int64(-5), streamState.AvailableElasticTokens)
+	require.Equal(t, int64(10), streamState.AvailableEvalRegularTokens)
+	require.Equal(t, int64(-5), streamState.AvailableEvalElasticTokens)
 
 	controller.ReturnTokens(ctx, admissionpb.BulkNormalPri, 7, stream)
 	streamState = controller.InspectStream(ctx, stream)
-	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
-	require.Equal(t, int64(2), streamState.AvailableElasticTokens)
+	require.Equal(t, int64(10), streamState.AvailableEvalRegularTokens)
+	require.Equal(t, int64(2), streamState.AvailableEvalElasticTokens)
 	<-lowPriAdmitted
 }
 
@@ -398,10 +393,10 @@ func TestInspectController(t *testing.T) {
 	}
 	makeInspectStream := func(id uint64, availableElastic, availableRegular int64) kvflowinspectpb.Stream {
 		return kvflowinspectpb.Stream{
-			TenantID:               roachpb.MustMakeTenantID(id),
-			StoreID:                roachpb.StoreID(id),
-			AvailableElasticTokens: availableElastic,
-			AvailableRegularTokens: availableRegular,
+			TenantID:                   roachpb.MustMakeTenantID(id),
+			StoreID:                    roachpb.StoreID(id),
+			AvailableEvalRegularTokens: availableRegular,
+			AvailableEvalElasticTokens: availableElastic,
 		}
 	}
 	makeConnectedStream := func(id uint64) kvflowcontrol.ConnectedStream {

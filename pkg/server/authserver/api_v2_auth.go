@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package authserver
 
@@ -148,8 +143,19 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
+	// Verify the user and check if DB console session could be started.
+	verified, pwRetrieveFn, err := a.authServer.VerifyUserSessionDBConsole(a.ctx, username)
+	if err != nil {
+		srverrors.APIV2InternalError(r.Context(), err, w)
+		return
+	}
+	if !verified {
+		http.Error(w, "the provided credentials did not match any account on the server", http.StatusUnauthorized)
+		return
+	}
+
 	// Verify the provided username/password pair.
-	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
+	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"), pwRetrieveFn)
 	if err != nil {
 		srverrors.APIV2InternalError(r.Context(), err, w)
 		return

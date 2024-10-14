@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobspb
 
@@ -50,6 +45,7 @@ var (
 	_ Details = HistoryRetentionDetails{}
 	_ Details = LogicalReplicationDetails{}
 	_ Details = UpdateTableMetadataCacheDetails{}
+	_ Details = StandbyReadTSPollerDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -79,6 +75,7 @@ var (
 	_ ProgressDetails = HistoryRetentionProgress{}
 	_ ProgressDetails = LogicalReplicationProgress{}
 	_ ProgressDetails = UpdateTableMetadataCacheProgress{}
+	_ ProgressDetails = StandbyReadTSPollerProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -237,6 +234,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeLogicalReplication, nil
 	case *Payload_UpdateTableMetadataCacheDetails:
 		return TypeUpdateTableMetadataCache, nil
+	case *Payload_StandbyReadTsPollerDetails:
+		return TypeStandbyReadTSPoller, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -289,6 +288,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeHistoryRetention:             HistoryRetentionDetails{},
 	TypeLogicalReplication:           LogicalReplicationDetails{},
 	TypeUpdateTableMetadataCache:     UpdateTableMetadataCacheDetails{},
+	TypeStandbyReadTSPoller:          StandbyReadTSPollerDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -354,6 +354,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_LogicalReplication{LogicalReplication: &d}
 	case UpdateTableMetadataCacheProgress:
 		return &Progress_TableMetadataCache{TableMetadataCache: &d}
+	case StandbyReadTSPollerProgress:
+		return &Progress_StandbyReadTsPoller{StandbyReadTsPoller: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -417,6 +419,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.LogicalReplicationDetails
 	case *Payload_UpdateTableMetadataCacheDetails:
 		return *d.UpdateTableMetadataCacheDetails
+	case *Payload_StandbyReadTsPollerDetails:
+		return *d.StandbyReadTsPollerDetails
 	default:
 		return nil
 	}
@@ -480,6 +484,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.LogicalReplication
 	case *Progress_TableMetadataCache:
 		return *d.TableMetadataCache
+	case *Progress_StandbyReadTsPoller:
+		return *d.StandbyReadTsPoller
 	default:
 		return nil
 	}
@@ -567,6 +573,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_LogicalReplicationDetails{LogicalReplicationDetails: &d}
 	case UpdateTableMetadataCacheDetails:
 		return &Payload_UpdateTableMetadataCacheDetails{UpdateTableMetadataCacheDetails: &d}
+	case StandbyReadTSPollerDetails:
+		return &Payload_StandbyReadTsPollerDetails{StandbyReadTsPollerDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -602,7 +610,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 30
+const NumJobTypes = 31
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

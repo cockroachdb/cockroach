@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
@@ -102,6 +97,11 @@ import "github.com/cockroachdb/pebble"
 // modeled via the a.x term, and not via the b term, since workloads are
 // likely (at least for regular writes) to vary significantly in x.
 
+// In addition to the models above, we have one for estimating write
+// amplification. writeAmpLM maps the incoming writes to the LSM (L0 writes +
+// ingests) to actual disk writes. We use this model to deduct from disk write
+// tokens from disk_bandwidth.go.
+
 // See the comment above for the justification of these constants.
 const l0WriteMultiplierMin = 0.5
 const l0WriteMultiplierMax = 3.0
@@ -109,6 +109,8 @@ const l0IngestMultiplierMin = 0.001
 const l0IngestMultiplierMax = 1.5
 const ingestMultiplierMin = 0.5
 const ingestMultiplierMax = 1.5
+const writeAmpMultiplierMin = 1.0
+const writeAmpMultiplierMax = 100.0
 
 type storePerWorkTokenEstimator struct {
 	atAdmissionWorkTokens int64
@@ -121,11 +123,18 @@ type storePerWorkTokenEstimator struct {
 	// Unlike the models above that model bytes into L0, this model computes all
 	// ingested bytes into the LSM.
 	atDoneIngestTokensLinearModel tokensLinearModelFitter
+	// This model is used to estimate the write amplification due to asynchronous
+	// compactions after bytes are written to L0. It models the relationship
+	// between ingests (not including range snapshots) plus incoming L0 bytes and
+	// total disk write throughput in a given interval. We ignore range snapshots
+	// here, since they land into lower levels (usually L6) of the LSM.
+	atDoneWriteAmpLinearModel tokensLinearModelFitter
 
 	cumStoreAdmissionStats storeAdmissionStats
 	cumL0WriteBytes        uint64
 	cumL0IngestedBytes     uint64
 	cumLSMIngestedBytes    uint64
+	cumDiskWrites          uint64
 
 	// Tracked for logging and copied out of here.
 	aux perWorkTokensAux
@@ -143,6 +152,7 @@ type perWorkTokensAux struct {
 	intL0WriteLinearModel     tokensLinearModel
 	intL0IngestedLinearModel  tokensLinearModel
 	intIngestedLinearModel    tokensLinearModel
+	intWriteAmpLinearModel    tokensLinearModel
 
 	// The bypassed count and bytes are also included in the overall interval
 	// stats.
@@ -158,6 +168,13 @@ type perWorkTokensAux struct {
 	// intLSMIngestedBytes, and may even be higher than that value because these
 	// are from a different source.
 	intL0IgnoredIngestedBytes int64
+
+	// These are used for write amplification estimation. intAdjustedLSMWrites
+	// represent the accounted LSM writes (ingestion + regular writes).
+	// intAdjustedDiskWriteBytes represent the total write bytes for the interval,
+	// excluding ignored bytes.
+	intAdjustedLSMWrites      int64
+	intAdjustedDiskWriteBytes int64
 }
 
 func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
@@ -169,18 +186,24 @@ func makeStorePerWorkTokenEstimator() storePerWorkTokenEstimator {
 			l0IngestMultiplierMin, l0IngestMultiplierMax, true),
 		atDoneIngestTokensLinearModel: makeTokensLinearModelFitter(
 			ingestMultiplierMin, ingestMultiplierMax, false),
+		atDoneWriteAmpLinearModel: makeTokensLinearModelFitter(
+			writeAmpMultiplierMin, writeAmpMultiplierMax, false),
 	}
 }
 
 // NB: first call to updateEstimates only initializes the cumulative values.
 func (e *storePerWorkTokenEstimator) updateEstimates(
-	l0Metrics pebble.LevelMetrics, cumLSMIngestedBytes uint64, admissionStats storeAdmissionStats,
+	l0Metrics pebble.LevelMetrics,
+	cumLSMIngestedBytes uint64,
+	cumDiskWrite uint64,
+	admissionStats storeAdmissionStats,
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
 		e.cumL0WriteBytes = l0Metrics.BytesFlushed
 		e.cumL0IngestedBytes = l0Metrics.BytesIngested
 		e.cumLSMIngestedBytes = cumLSMIngestedBytes
+		e.cumDiskWrites = cumDiskWrite
 		return
 	}
 	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
@@ -220,6 +243,15 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	}
 	e.atDoneIngestTokensLinearModel.updateModelUsingIntervalStats(
 		intIngestedAccountedBytes, adjustedIntLSMIngestedBytes, intWorkCount)
+
+	// Write amplification model.
+	intDiskWrite := int64(cumDiskWrite - e.cumDiskWrites)
+	adjustedIntLSMWrites := adjustedIntL0WriteBytes + adjustedIntLSMIngestedBytes
+	adjustedIntDiskWrites := intDiskWrite - intIgnoredIngestedBytes - intL0IgnoredWriteBytes
+	if adjustedIntDiskWrites < 0 {
+		adjustedIntDiskWrites = 0
+	}
+	e.atDoneWriteAmpLinearModel.updateModelUsingIntervalStats(adjustedIntLSMWrites, adjustedIntDiskWrites, intWorkCount)
 
 	intL0TotalBytes := adjustedIntL0WriteBytes + adjustedIntL0IngestedBytes
 	intAboveRaftWorkCount := int64(admissionStats.aboveRaftStats.workCount) -
@@ -265,6 +297,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intL0WriteLinearModel:     e.atDoneL0WriteTokensLinearModel.intLinearModel,
 		intL0IngestedLinearModel:  e.atDoneL0IngestTokensLinearModel.intLinearModel,
 		intIngestedLinearModel:    e.atDoneIngestTokensLinearModel.intLinearModel,
+		intWriteAmpLinearModel:    e.atDoneWriteAmpLinearModel.intLinearModel,
 		intBypassedWorkCount: int64(admissionStats.aux.bypassedCount) -
 			int64(e.cumStoreAdmissionStats.aux.bypassedCount),
 		intL0WriteBypassedAccountedBytes: int64(admissionStats.aux.writeBypassedAccountedBytes) -
@@ -273,12 +306,15 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 			int64(e.cumStoreAdmissionStats.aux.ingestedBypassedAccountedBytes),
 		intL0IgnoredWriteBytes:    intL0IgnoredWriteBytes,
 		intL0IgnoredIngestedBytes: intL0IgnoredIngestedBytes,
+		intAdjustedDiskWriteBytes: adjustedIntDiskWrites,
+		intAdjustedLSMWrites:      adjustedIntLSMWrites,
 	}
 	// Store the latest cumulative values.
 	e.cumStoreAdmissionStats = admissionStats
 	e.cumL0WriteBytes = l0Metrics.BytesFlushed
 	e.cumL0IngestedBytes = l0Metrics.BytesIngested
 	e.cumLSMIngestedBytes = cumLSMIngestedBytes
+	e.cumDiskWrites = cumDiskWrite
 }
 
 func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() storeRequestEstimates {
@@ -289,8 +325,10 @@ func (e *storePerWorkTokenEstimator) getModelsAtDone() (
 	l0WriteLM tokensLinearModel,
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
+	writeAmpLM tokensLinearModel,
 ) {
 	return e.atDoneL0WriteTokensLinearModel.smoothedLinearModel,
 		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
-		e.atDoneIngestTokensLinearModel.smoothedLinearModel
+		e.atDoneIngestTokensLinearModel.smoothedLinearModel,
+		e.atDoneWriteAmpLinearModel.smoothedLinearModel
 }

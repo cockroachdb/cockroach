@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package install
 
@@ -47,6 +42,27 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
+
+// scpTimeout is the timeout enforced on every `scp` command performed
+// by roachprod. The default of 10 minutes should be more than
+// sufficient for roachtests and common roachprod operations.
+//
+// Callers can customize the timeout using the ROACHPROD_SCP_TIMEOUT
+// environment variable.
+var scpTimeout = func() time.Duration {
+	var defaultTimeout = 10 * time.Minute
+
+	if durStr := os.Getenv("ROACHPROD_SCP_TIMEOUT"); durStr != "" {
+		dur, err := time.ParseDuration(durStr)
+		if err != nil {
+			panic(fmt.Errorf("invalid scp timeout %q: %w", durStr, err))
+		}
+
+		return dur
+	}
+
+	return defaultTimeout
+}()
 
 // A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
@@ -193,8 +209,11 @@ func runWithMaybeRetry(
 func scpWithRetry(
 	ctx context.Context, l *logger.Logger, src, dest string,
 ) (*RunResultDetails, error) {
-	return runWithMaybeRetry(ctx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
-		func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
+	scpCtx, cancel := context.WithTimeout(ctx, scpTimeout)
+	defer cancel()
+
+	return runWithMaybeRetry(scpCtx, l, DefaultRetryOpt, defaultSCPShouldRetryFn,
+		func(ctx context.Context) (*RunResultDetails, error) { return scp(ctx, l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -1380,6 +1399,7 @@ func (c *SyncedCluster) RunWithDetails(
 			includeRoachprodEnvVars: true,
 			stdout:                  l.Stdout,
 			stderr:                  l.Stderr,
+			expanderConfig:          options.ExpanderConfig,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -1406,7 +1426,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
-			cmd := fmt.Sprintf("test -e %s", vm.DisksInitializedFile)
+			cmd := fmt.Sprintf("test -e %s -a -e %s", vm.DisksInitializedFile, vm.OSInitializedFile)
 			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
 			opts := cmdOptsWithDebugDisabled()
 			for j := 0; j < 600; j++ {
@@ -1422,6 +1442,13 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 				return res, nil
 			}
 			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
+			logContent, err := c.runCmdOnSingleNode(ctx, nil, node, fmt.Sprintf("tail -n %d %s", 20, vm.StartupLogs), cmdOptsWithDebugDisabled())
+			if err = errors.CombineErrors(err, logContent.Err); err != nil {
+				l.Printf("could not fetch startup logs: %v", err)
+			} else {
+				l.Printf("  %2d: startup failed, last 20 lines of output:\n%s", node, logContent.CombinedOut)
+				l.Printf("  %2d: view the full log in %s", node, vm.StartupLogs)
+			}
 			l.Printf("  %2d: %v", node, res.Err)
 			return res, nil
 		})
@@ -2253,7 +2280,7 @@ func (c *SyncedCluster) Put(
 	return nil
 }
 
-// Logs will sync the logs from c to dest with each nodes logs under dest in
+// Logs will sync the logs from src to dest with each node's logs under dest in
 // directories per node and stream the merged logs to out.
 // For example, if dest is "tpcc-test.logs" then the logs for each node will be
 // stored like:
@@ -2269,13 +2296,10 @@ func (c *SyncedCluster) Put(
 // iterations and takes some care with the from/to flags in merge-logs to make
 // new logs appear to be streamed. If <from> is zero streaming begins from now.
 // If to is non-zero, when the stream of logs passes to, the function returns.
-// <user> allows retrieval of logs from a roachprod cluster being run by another
-// user and assumes that the current user used to create c has the ability to
-// sudo into <user>.
 // TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) Logs(
 	l *logger.Logger,
-	src, dest, user, filter, programFilter string,
+	src, dest, filter, programFilter string,
 	interval time.Duration,
 	from, to time.Time,
 	out io.Writer,
@@ -2283,12 +2307,14 @@ func (c *SyncedCluster) Logs(
 	if err := c.validateHost(context.TODO(), l, c.Nodes[0]); err != nil {
 		return err
 	}
-
 	rsyncNodeLogs := func(ctx context.Context, node Node) error {
 		base := fmt.Sprintf("%d.logs", node)
 		local := filepath.Join(dest, base) + "/"
-		sshUser := c.user(node)
 		rsyncArgs := []string{"-az", "--size-only"}
+		userHomeDir := ""
+		if !config.UseSharedUser {
+			userHomeDir = config.OSUser.HomeDir
+		}
 		var remote string
 		if c.IsLocal() {
 			// This here is a bit of a hack to guess that the parent of the log dir is
@@ -2297,8 +2323,8 @@ func (c *SyncedCluster) Logs(
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
-			if !filepath.IsAbs(logDir) && user != "" && user != sshUser {
-				logDir = "~" + user + "/" + logDir
+			if !filepath.IsAbs(logDir) && userHomeDir != "" {
+				logDir = filepath.Join(userHomeDir, logDir)
 			}
 			remote = fmt.Sprintf("%s@%s:%s/", c.user(node), c.Host(node), logDir)
 			// Use control master to mitigate SSH connection setup cost.
@@ -2309,11 +2335,6 @@ func (c *SyncedCluster) Logs(
 				"-o UserKnownHostsFile=/dev/null "+
 				"-o ControlPersist=2m "+
 				strings.Join(sshAuthArgs(), " "))
-			// Use rsync-path flag to sudo into user if different from sshUser.
-			if user != "" && user != sshUser {
-				rsyncArgs = append(rsyncArgs, "--rsync-path",
-					fmt.Sprintf("sudo -u %s rsync", user))
-			}
 		}
 		rsyncArgs = append(rsyncArgs, remote, local)
 		cmd := exec.CommandContext(ctx, "rsync", rsyncArgs...)
@@ -2361,7 +2382,6 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = out
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
-
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
 			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
 		}
@@ -2762,7 +2782,7 @@ func sshVersion3() bool {
 // scp return type conforms to what runWithMaybeRetry expects. A nil error
 // is always returned here since the only error that can happen is an scp error
 // which we do want to be able to retry.
-func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
+func scp(ctx context.Context, l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args := []string{
 		// Enable recursive copies, compression.
 		"scp", "-r", "-C",
@@ -2776,7 +2796,8 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.WaitDelay = time.Second // make sure the call below returns when the context is canceled
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -66,6 +66,7 @@ go_test(
         "cert_expiry_cache_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",
+        "certificate_metrics_test.go",
         "certs_rotation_test.go",
         "certs_tenant_test.go",
         "certs_test.go",
@@ -164,7 +165,17 @@ go_test(
             "@com_github_prometheus_client_model//go",
             "@org_golang_x_sys//unix",
         ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "//pkg/util/log/eventpb",
+            "@com_github_prometheus_client_model//go",
+            "@org_golang_x_sys//unix",
+        ],
         "@io_bazel_rules_go//go/platform:plan9": [
+            "//pkg/util/log/eventpb",
+            "@com_github_prometheus_client_model//go",
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
             "//pkg/util/log/eventpb",
             "@com_github_prometheus_client_model//go",
             "@org_golang_x_sys//unix",

@@ -1,10 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvfollowerreadsccl
 
@@ -68,10 +65,7 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 	}
 	disableEnterprise()
 	_, err := evalFollowerReadOffset(st)
-	if !testutils.IsError(err, "requires an enterprise license") {
-		t.Fatalf("failed to get error when evaluating follower read offset without " +
-			"an enterprise license")
-	}
+	require.NoError(t, err)
 }
 
 func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
@@ -93,7 +87,7 @@ func TestCanSendToFollower(t *testing.T) {
 	skip.UnderDeadlock(t, "test is flaky under deadlock+stress")
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset, base.DefaultMaxClockOffset, hlc.PanicLogger)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
@@ -132,7 +126,6 @@ func TestCanSendToFollower(t *testing.T) {
 		name                  string
 		ba                    *kvpb.BatchRequest
 		ctPolicy              roachpb.RangeClosedTimestampPolicy
-		disabledEnterprise    bool
 		disabledFollowerReads bool
 		zeroTargetDuration    bool
 		exp                   bool
@@ -459,12 +452,6 @@ func TestCanSendToFollower(t *testing.T) {
 			exp:      false,
 		},
 		{
-			name:               "non-enterprise",
-			ba:                 withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
-			disabledEnterprise: true,
-			exp:                false,
-		},
-		{
 			name:                  "follower reads disabled",
 			ba:                    withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			disabledFollowerReads: true,
@@ -473,9 +460,6 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.disabledEnterprise {
-				defer utilccl.TestingEnableEnterprise()()
-			}
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, !c.disabledFollowerReads)
 			if c.zeroTargetDuration {
@@ -516,7 +500,7 @@ func TestOracle(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset, base.DefaultMaxClockOffset, hlc.PanicLogger)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
@@ -566,7 +550,6 @@ func TestOracle(t *testing.T) {
 		txn                   *kv.Txn
 		lh                    *roachpb.ReplicaDescriptor
 		ctPolicy              roachpb.RangeClosedTimestampPolicy
-		disabledEnterprise    bool
 		disabledFollowerReads bool
 		exp                   roachpb.ReplicaDescriptor
 	}{
@@ -654,13 +637,6 @@ func TestOracle(t *testing.T) {
 			exp:      closestFollower,
 		},
 		{
-			name:               "stale txn, non-enterprise",
-			txn:                staleTxn,
-			lh:                 &leaseholder,
-			disabledEnterprise: true,
-			exp:                leaseholder,
-		},
-		{
 			name:                  "stale txn, follower reads disabled",
 			txn:                   staleTxn,
 			lh:                    &leaseholder,
@@ -680,9 +656,6 @@ func TestOracle(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.disabledEnterprise {
-				defer utilccl.TestingEnableEnterprise()()
-			}
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, !c.disabledFollowerReads)
 
@@ -896,7 +869,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.QueryRow(t, `SELECT id from system.namespace WHERE name='test'`).Scan(&tableID)
 	tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 	n4Cache := tc.Server(3).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-	entry, err := n4Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	entry, err := n4Cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.False(t, entry.Lease.Empty())
 	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
@@ -919,7 +892,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	rec := <-recCh
 	require.False(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
 	// Check that the cache was properly updated.
-	entry, err = n4Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	entry, err = n4Cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.False(t, entry.Lease.Empty())
 	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
@@ -962,7 +935,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n3 := sqlutils.MakeSQLRunner(tc.Conns[2])
 	n3.Exec(t, "SELECT * from test WHERE k=1")
 	n3Cache := tc.Server(2).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-	entry, err = n3Cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+	entry, err = n3Cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.False(t, entry.Lease.Empty())
 	require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)
@@ -1216,7 +1189,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)
 			tablePrefix := keys.MustAddr(codec.TenantPrefix())
 			cache := tenants[gatewayNode].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-			entry, err := cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+			entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 			require.NoError(t, err)
 			require.False(t, entry.Lease.Empty())
 			require.Equal(t, roachpb.StoreID(1), entry.Lease.Replica.StoreID)

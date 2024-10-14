@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import {
   IndexDetailPageActions,
@@ -158,6 +153,7 @@ describe("Index Details Page", function () {
           indexID: undefined,
           lastRead: util.minDate,
           lastReset: util.minDate,
+          databaseID: undefined,
         },
         breadcrumbItems: null,
       },
@@ -190,6 +186,7 @@ describe("Index Details Page", function () {
         },
       ],
       last_reset: util.stringToTimestamp("2021-11-12T20:18:22.167627Z"),
+      database_id: 10,
     });
 
     await driver.refreshIndexStats();
@@ -218,6 +215,7 @@ describe("Index Details Page", function () {
           util.stringToTimestamp("2021-11-12T20:18:22.167627Z"),
         ),
         indexRecommendations: [],
+        databaseID: 10,
       },
       breadcrumbItems: null,
     });

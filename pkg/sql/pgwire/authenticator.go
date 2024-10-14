@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire
 
@@ -14,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/go-ldap/ldap/v3"
 )
 
@@ -23,7 +17,7 @@ import (
 // username, etc) is who it claims to be.
 type Authenticator = func(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	roleSubject *ldap.DN,

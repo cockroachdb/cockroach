@@ -8,7 +8,7 @@
 
 support-from node-id=2 store-id=2
 ----
-epoch: 0, expiration: 0,0, support provided: false
+epoch: 0, expiration: 0,0
 
 send-heartbeats now=100 liveness-interval=10s
 ----
@@ -24,7 +24,7 @@ responses:
 
 support-from node-id=2 store-id=2
 ----
-epoch: 1, expiration: 110.000000000,0, support provided: true
+epoch: 1, expiration: 110.000000000,0
 
 support-for node-id=2 store-id=2
 ----
@@ -35,7 +35,7 @@ withdraw-support now=201
 
 support-for node-id=2 store-id=2
 ----
-epoch: 0, support provided: false
+epoch: 3, support provided: false
 
 debug-requester-state
 ----
@@ -50,3 +50,10 @@ meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
 {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 1, HeartbeatFailure: 0
+MessageHandleSuccess: 2, MessageHandleFailure: 0
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 1

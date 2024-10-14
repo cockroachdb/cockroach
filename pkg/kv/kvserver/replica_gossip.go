@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -49,10 +44,10 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	}
 	if log.V(1) {
 		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
-			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas())
+			r.store.StoreID(), r.RangeID, r.shMu.state.Desc.Replicas())
 	}
 	if err := r.store.Gossip().AddInfoProto(
-		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {
+		gossip.KeyFirstRangeDescriptor, r.shMu.state.Desc, configGossipTTL); err != nil {
 		log.Errorf(ctx, "failed to gossip first range metadata: %+v", err)
 	}
 }

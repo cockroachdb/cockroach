@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowtokentracker
 
@@ -112,7 +107,7 @@ func TestTracker(t *testing.T) {
 				count := 0
 				var buf strings.Builder
 				buf.WriteString(fmt.Sprintf("pri=%s\n", pri))
-				knobs.UntrackTokensInterceptor = func(tokens kvflowcontrol.Tokens, position kvflowcontrolpb.RaftLogPosition) {
+				knobs.V1.UntrackTokensInterceptor = func(tokens kvflowcontrol.Tokens, position kvflowcontrolpb.RaftLogPosition) {
 					count += 1
 					buf.WriteString(fmt.Sprintf("  tokens=%s %s\n",
 						testingPrintTrimmedTokens(tokens), position))

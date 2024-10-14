@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlutils
 
@@ -29,6 +24,15 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	for i := range stmts {
 		origStmt := stmts[i].AST
 		verifyStatementPrettyRoundTrip(t, sql, origStmt, false /* plpgsql */)
+
+		// Verify that the AST can be walked.
+		if _, err := tree.SimpleStmtVisit(
+			origStmt,
+			func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) { return },
+		); err != nil {
+			t.Fatalf("cannot walk stmt %s %v", stmts[i].SQL, err)
+		}
+
 	}
 }
 

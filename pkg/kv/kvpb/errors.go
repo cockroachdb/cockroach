@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvpb
 
@@ -1186,7 +1181,13 @@ func (e *ConditionFailedError) Error() string {
 }
 
 func (e *ConditionFailedError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("unexpected value: %s", e.ActualValue)
+	if e.HadNewerOriginTimestamp {
+		p.Printf("higher OriginTimestamp but unexpected value: %s", e.ActualValue)
+	} else if e.OriginTimestampOlderThan.IsSet() {
+		p.Printf("OriginTimestamp older than %s", e.OriginTimestampOlderThan)
+	} else {
+		p.Printf("unexpected value: %s", e.ActualValue)
+	}
 	return nil
 }
 
@@ -1359,7 +1360,11 @@ func (e *BatchTimestampBeforeGCError) Error() string {
 }
 
 func (e *BatchTimestampBeforeGCError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("batch timestamp %v must be after replica GC threshold %v", e.Timestamp, e.Threshold)
+	p.Printf(
+		"batch timestamp %v must be after replica GC threshold %v (r%d: %s)",
+		e.Timestamp, e.Threshold, e.RangeID,
+		roachpb.RSpan{Key: []byte(e.StartKey), EndKey: []byte(e.EndKey)},
+	)
 	return nil
 }
 

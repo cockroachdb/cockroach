@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -177,7 +172,7 @@ func runAdmissionControlFollowerOverload(
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 	db := c.Conn(ctx, t.L(), 1)
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), db))
 
 	{
 		_, err := c.Conn(ctx, t.L(), 1).ExecContext(ctx, `SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.8`)

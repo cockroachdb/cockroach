@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -21,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -387,7 +383,7 @@ func registerLoadSplits(r registry.Registry) {
 				// hashed - this will lead to many hotspots over the keyspace that
 				// move. Expect a few less splits than A and B.
 				minimumRanges:     15,
-				maximumRanges:     25,
+				maximumRanges:     30,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "d",
@@ -496,7 +492,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		setRangeMaxBytes(params.maxSize)
 
 		require.NoError(t,
-			WaitForReplication(ctx, t, t.L(), db, 3 /* repicationFactor */, exactlyReplicationFactor))
+			roachtestutil.WaitForReplication(ctx, t.L(), db, 3 /* repicationFactor */, roachtestutil.ExactlyReplicationFactor))
 
 		// Init the split workload.
 		if err := params.load.init(ctx, t, c); err != nil {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -39,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -81,11 +75,17 @@ var (
 	// *and* VMs were preempted. These errors are directed to Test Eng
 	// instead of owning teams.
 	vmPreemptionError = func(preemptedVMs string) error {
-		return registry.ErrorWithOwner(
+		infraFlakeErr := registry.ErrorWithOwner(
 			registry.OwnerTestEng, fmt.Errorf("preempted VMs: %s", preemptedVMs),
 			registry.WithTitleOverride("vm_preemption"),
 			registry.InfraFlake,
 		)
+
+		// The returned error is marked as non-reportable to avoid the
+		// noise, as we get dozens of preemptions on each nightly run.  We
+		// have dashboards that can be used to check how often we get
+		// preemptions in test runs.
+		return registry.NonReportable(infraFlakeErr)
 	}
 
 	// vmHostError is the error that indicates that a test failed
@@ -109,6 +109,9 @@ const VmLabelTestName string = "test_name"
 
 // VmLabelTestRunID is the label used to identify the test run id in the VM metadata
 const VmLabelTestRunID string = "test_run_id"
+
+// VmLabelTestOwner is the label used to identify the test owner in the VM metadata
+const VmLabelTestOwner string = "test_owner"
 
 // testRunner runs tests.
 type testRunner struct {
@@ -1072,7 +1075,7 @@ func (r *testRunner) runTest(
 	s := t.Spec().(*registry.TestSpec)
 
 	grafanaAvailable := roachtestflags.Cloud == spec.GCE
-	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
+	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID, VmLabelTestOwner: t.Owner()}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false
 	}
@@ -1089,7 +1092,7 @@ func (r *testRunner) runTest(
 	sideEyeTimeoutSnapshotURL := ""
 	defer func() {
 		t.end = timeutil.Now()
-		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
+		if err := c.removeLabels([]string{VmLabelTestName, VmLabelTestOwner}); err != nil {
 			shout(ctx, l, stdout, "failed to remove label from cluster [%s] - %s", c.Name(), err)
 		}
 
@@ -1135,14 +1138,6 @@ func (r *testRunner) runTest(
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
-					// Reset failures in the test so that the VM preemption
-					// error is the one that is taken into account when
-					// reporting the failure. Note any other failures that
-					// happened during the test will be present in the
-					// `failureMsg` used when reporting the issue. In addition,
-					// `failure_N.log` files should also already exist at this
-					// point.
-					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
@@ -1310,20 +1305,7 @@ func (r *testRunner) runTest(
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
-		//
-		// Temporarily route all runtime assertion timeouts to test-eng while
-		// we gauge the frequency they occur and adjust test timeouts accordingly.
-		// TODO(darryl): once we are more confident in the stability of runtime
-		// assertions we can remove this.
-		if tests.UsingRuntimeAssertions(t) {
-			timeoutErr := registry.ErrorWithOwnership{
-				Err:   errors.Newf("test timed out (%s)", timeout),
-				Owner: registry.OwnerTestEng,
-			}
-			t.addFailure(0, "", timeoutErr)
-		} else {
-			t.addFailure(0, "test timed out (%s)", timeout)
-		}
+		t.addFailure(0, "test timed out (%s)", timeout)
 
 		// We suppress other failures from being surfaced to the top as the timeout is always going
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
@@ -1532,7 +1514,7 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) (string, error) {
-	if timedOut || t.Failed() {
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		snapURL := ""
 		if timedOut {
 			// If the Side-Eye integration was configured, capture a snapshot of the

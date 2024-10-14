@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -20,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
-	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -47,8 +41,6 @@ type TestingKnobs struct {
 	ContextTestingKnobs rpc.ContextTestingKnobs
 	// DiagnosticsTestingKnobs allows customization of diagnostics testing knobs.
 	DiagnosticsTestingKnobs diagnostics.TestingKnobs
-	// LicenseTestingKnobs allows customization of license testing knobs.
-	LicenseTestingKnobs license.TestingKnobs
 
 	// If set, use this listener for RPC (and possibly SQL, depending on
 	// the SplitListenSQL setting), instead of binding a new listener.

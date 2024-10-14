@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package common contains shared structures / helper functions
 // for implementing rules in the current and previous releases
@@ -32,10 +27,15 @@ import (
 // ApplyDepRules adds dependency edges to the graph according to the
 // registered dependency rules.
 func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
+	// If expensive logging is enabled, we'll collect stats on the query and
+	// report on how each dep rule performed.
+	var stats *rel.QueryStats
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		stats = &rel.QueryStats{}
+	}
+
 	for _, dr := range r.depRules {
-		start := timeutil.Now()
-		var added int
-		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
+		if err := dr.q.Iterate(g.Database(), stats, func(r rel.Result) error {
 			// Applying the dep rules can be slow in some cases. Check for
 			// cancellation when applying the rules to ensure we don't spin for
 			// too long while the user is waiting for the task to exit cleanly.
@@ -44,18 +44,30 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 			}
 			from := r.Var(dr.from).(*screl.Node)
 			to := r.Var(dr.to).(*screl.Node)
-			added++
 			return g.AddDepEdge(
 				dr.name, dr.kind, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
 			)
 		}); err != nil {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
 		}
-		if log.ExpensiveLogEnabled(ctx, 2) {
+		if stats != nil {
 			log.Infof(
-				ctx, "applying dep rule %s %d took %v",
-				dr.name, added, timeutil.Since(start),
+				ctx, "applying dep rule %q, %d results found that took %v",
+				dr.name, stats.ResultsFound, timeutil.Since(stats.StartTime),
 			)
+			if stats.ResultsFound == 0 {
+				cl := dr.q.Clauses()
+				if stats.FirstUnsatisfiedClause >= len(cl) {
+					return errors.AssertionFailedf("no unsatisfied clause found: %d >= %d",
+						stats.FirstUnsatisfiedClause, len(cl))
+				}
+				clauseStr, err := yaml.Marshal(cl[stats.FirstUnsatisfiedClause])
+				if err != nil {
+					return errors.Wrapf(err, "failed to marshal clause %d", stats.FirstUnsatisfiedClause)
+				}
+				log.Infof(ctx, "dep rule %q did not apply. The first unsatisfied clause is: %s",
+					dr.name, clauseStr)
+			}
 		}
 	}
 	return nil

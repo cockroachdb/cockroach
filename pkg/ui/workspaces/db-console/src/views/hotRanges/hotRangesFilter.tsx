@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import {
   Button,
@@ -265,17 +260,16 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
       [indexName, filterIndexName],
       [localities, filterLocalities],
     ];
-    filters.filter(f => !isEmpty(f[1]))
-      .forEach(
-        ([name, value]) => {
-          if (isArray(value)) {
-            params.set(name, value.map(f => f.value).join("|"));
-          }
-          if (isString(value)) {
-            params.set(name, value);
-          }
-        },
-      );
+    filters
+      .filter(f => !isEmpty(f[1]))
+      .forEach(([name, value]) => {
+        if (isArray(value)) {
+          params.set(name, value.map(f => f.value).join("|"));
+        }
+        if (isString(value)) {
+          params.set(name, value);
+        }
+      });
     return params;
   }, [
     filterNodeIds,

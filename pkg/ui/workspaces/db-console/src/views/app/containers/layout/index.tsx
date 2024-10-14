@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { Badge } from "@cockroachlabs/cluster-ui";
 import React from "react";
@@ -36,6 +31,7 @@ import LoginIndicator from "src/views/app/components/loginIndicator";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
+import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
@@ -104,6 +100,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <TenantDropdown />
             </PageHeader>
           </div>
+          <ThrottleNotificationBar />
           <div className="layout-panel__body">
             <div className="layout-panel__sidebar">
               <NavigationBar />

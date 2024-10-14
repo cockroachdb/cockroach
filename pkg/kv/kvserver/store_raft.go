@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -449,7 +444,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// the snapshot is targeting an uninitialized replica. The only known reason
 			// for raft to ignore a snapshot is if it doesn't move the applied index
 			// forward, but an uninitialized replica's applied index is zero (and a
-			// snapshot's is at least raftInitialLogIndex).
+			// snapshot's is at least RaftInitialLogIndex).
 			if inSnap.placeholder != nil {
 				if _, err := s.removePlaceholder(ctx, inSnap.placeholder, typ); err != nil {
 					log.Fatalf(ctx, "unable to remove placeholder: %s", err)
@@ -721,12 +716,16 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
-func (s *Store) processRACv2PiggybackedAdmitted(ctx context.Context, rangeID roachpb.RangeID) bool {
-	r, ok := s.mu.replicasByRangeID.Load(rangeID)
-	if !ok {
-		return false
+func (s *Store) processRACv2PiggybackedAdmitted(ctx context.Context, rangeID roachpb.RangeID) {
+	if r, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
+		r.processRACv2PiggybackedAdmitted(ctx)
 	}
-	return r.processRACv2PiggybackedAdmitted(ctx)
+}
+
+func (s *Store) processRACv2RangeController(ctx context.Context, rangeID roachpb.RangeID) {
+	if r, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
+		r.processRACv2RangeController(ctx)
+	}
 }
 
 // nodeIsLiveCallback is invoked when a node transitions from non-live to live.

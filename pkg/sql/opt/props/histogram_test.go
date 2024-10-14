@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package props
 
@@ -1164,8 +1159,6 @@ func BenchmarkHistogram(b *testing.B) {
 		return &c
 	}
 
-	selectivity := MakeSelectivity(0.5)
-
 	for _, typ := range typs {
 		b.Run(typ.Name(), func(b *testing.B) {
 			for _, bucketCount := range bucketCounts {
@@ -1173,29 +1166,14 @@ func BenchmarkHistogram(b *testing.B) {
 					h := Histogram{}
 					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount))
 					c := makeConstraint(typ, bucketCount)
-					b.Run("ValuesCount", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ValuesCount()
-						}
-					})
 					b.Run("DistinctValuesCount", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.DistinctValuesCount()
 						}
 					})
-					b.Run("MaxFrequency", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.MaxFrequency()
-						}
-					})
 					b.Run("Filter", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.Filter(ctx, c)
-						}
-					})
-					b.Run("ApplySelectivity", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ApplySelectivity(selectivity)
 						}
 					})
 				})

@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire
 
@@ -509,6 +504,10 @@ func benchmarkWriteColumnarString(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteColumnar(b, getBatch(types.String), format)
 }
 
+func benchmarkWriteColumnarChar(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.MakeChar(16)), format)
+}
+
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
 	d, _, err := tree.ParseDDate(nil, "2010-09-28")
 	if err != nil {
@@ -674,6 +673,13 @@ func BenchmarkWriteTextColumnarString(b *testing.B) {
 }
 func BenchmarkWriteBinaryColumnarString(b *testing.B) {
 	benchmarkWriteColumnarString(b, pgwirebase.FormatBinary)
+}
+
+func BenchmarkWriteTextColumnarChar(b *testing.B) {
+	benchmarkWriteColumnarChar(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarChar(b *testing.B) {
+	benchmarkWriteColumnarChar(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDate(b *testing.B) {

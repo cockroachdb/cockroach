@@ -872,9 +872,6 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
     return u.val.(*tree.TenantSpec)
 }
-func (u *sqlSymUnion) likeTenantSpec() *tree.LikeTenantSpec {
-    return u.val.(*tree.LikeTenantSpec)
-}
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
@@ -977,7 +974,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS IGNORE_CDC_IGNORED_TTL_DELETES ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -1238,7 +1235,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> create_proc_stmt
 %type <tree.Statement> create_trigger_stmt
 
-%type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
 
@@ -2084,6 +2080,7 @@ alter_database_stmt:
 //    CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT
 //    IMMUTABLE | STABLE | VOLATILE
 //    [ NOT ] LEAKPROOF
+//    [ EXTERNAL ] SECURITY { INVOKER | DEFINER }
 // %SeeAlso: WEBDOCS/alter-function.html
 alter_func_stmt:
   alter_func_options_stmt
@@ -2690,8 +2687,8 @@ alter_zone_partition_stmt:
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: tree.TableIndexName{Table: name},
        Partition: tree.Name($3),
+       StarIndex: true,
     }
-    s.AllIndexes = true
     $$.val = s
   }
 | ALTER PARTITION partition_name OF TABLE table_name '@' error
@@ -4638,7 +4635,7 @@ create_stmt:
 //  < CURSOR = start_time > |
 //  < DEFAULT FUNCTION = lww | dlq | udf
 //  < FUNCTION 'udf' FOR TABLE local_name  , ... > |
-//  < IGNORE_CDC_IGNORED_TTL_DELETES >
+//  < DISCARD = 'ttl-deletes' >
 // ]
 create_logical_replication_stream_stmt:
   CREATE LOGICAL REPLICATION STREAM FROM logical_replication_resources ON string_or_placeholder INTO logical_replication_resources opt_logical_replication_options
@@ -4736,57 +4733,61 @@ logical_replication_options:
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
   }
-| IGNORE_CDC_IGNORED_TTL_DELETES
+ | DISCARD '=' string_or_placeholder
   {
-    $$.val = &tree.LogicalReplicationOptions{IgnoreCDCIgnoredTTLDeletes: tree.MakeDBool(true)}
+    $$.val = &tree.LogicalReplicationOptions{Discard: $3.expr()}
+  }
+| SKIP SCHEMA CHECK
+  {
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+  }
+| LABEL '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
 // %Text:
-// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <virtual_cluster_spec> ] [ <replication> ]
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ <replication> ]
 //
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_virtual_cluster
+  CREATE virtual_cluster d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
+| CREATE virtual_cluster IF NOT EXISTS d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      Like: $7.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $8.expr()},
-      ReplicationSourceAddress: $10.expr(),
-      Options: *$11.tenantReplicationOptions(),
-      Like: $4.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
+      ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $11.expr()},
-      ReplicationSourceAddress: $13.expr(),
-      Options: *$14.tenantReplicationOptions(),
-      Like: $7.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
+      ReplicationSourceAddress: $12.expr(),
+      Options: *$13.tenantReplicationOptions(),
     }
   }
 | CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
@@ -4794,19 +4795,6 @@ create_virtual_cluster_stmt:
 virtual_cluster:
   TENANT { /* SKIP DOC */ }
 | VIRTUAL CLUSTER
-
-// opt_like_virtual_cluster defines a LIKE clause for CREATE VIRTUAL CLUSTER.
-// Eventually this can grow to support INCLUDING/EXCLUDING options
-// like in CREATE TABLE.
-opt_like_virtual_cluster:
-  /* EMPTY */
-  {
-     $$.val = &tree.LikeTenantSpec{}
-  }
-| LIKE virtual_cluster_spec
-  {
-      $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
-  }
 
 // Optional tenant replication options.
 opt_with_replication_options:
@@ -4846,6 +4834,10 @@ replication_options:
   EXPIRATION WINDOW '=' d_expr
   {
       $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
+  }
+| READ VIRTUAL CLUSTER
+  {
+    $$.val = &tree.TenantReplicationOptions{EnableReaderTenant: tree.MakeDBool(true)}
   }
 
 // %Help: CREATE SCHEDULE
@@ -4889,7 +4881,7 @@ create_extension_stmt:
 //    | [ NOT ] LEAKPROOF
 //    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
 //    | AS 'definition'
-//    | { [ EXTERNAL ] SECURITY DEFINER }
+//    | { [ EXTERNAL ] SECURITY { INVOKER | DEFINER } }
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
@@ -5415,7 +5407,7 @@ create_trigger_stmt:
       Transitions: $9.triggerTransitions(),
       ForEach: $10.triggerForEach(),
       When: $11.expr(),
-      FuncName: $14.resolvableFuncRefFromName(),
+      FuncName: $14.unresolvedName(),
       FuncArgs: $16.strs(),
     }
   }
@@ -5436,12 +5428,12 @@ trigger_event_list:
     events := append($1.triggerEvents(), $3.triggerEvent())
 
     // Validate that the trigger events are unique.
-    var seenEvents tree.TriggerEventType
+    var seenEvents tree.TriggerEventTypeSet
     for i := range events {
-      if events[i].EventType&seenEvents != 0 {
+      if seenEvents.Contains(events[i].EventType) {
         return setErr(sqllex, errors.New("duplicate trigger events specified"))
       }
-      seenEvents |= events[i].EventType
+      seenEvents.Add(events[i].EventType)
     }
     $$.val = events
   }
@@ -5466,10 +5458,6 @@ trigger_event:
 | TRUNCATE
   {
     $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventTruncate}
-  }
-| UPSERT
-  {
-    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpsert}
   }
 
 opt_trigger_transition_list:
@@ -8640,11 +8628,11 @@ show_external_connections_stmt:
 
 // %Help: SHOW TYPES - list user defined types
 // %Category: Misc
-// %Text: SHOW TYPES
+// %Text: SHOW TYPES [WITH_COMMENT]
 show_types_stmt:
-  SHOW TYPES
+  SHOW TYPES with_comment
   {
-    $$.val = &tree.ShowTypes{}
+    $$.val = &tree.ShowTypes{WithComment: $3.bool()}
   }
 | SHOW TYPES error // SHOW HELP: SHOW TYPES
 
@@ -17753,7 +17741,6 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
-| IGNORE_CDC_IGNORED_TTL_DELETES
 | INSENSITIVE
 | OF
 | OFF
@@ -18181,7 +18168,6 @@ bare_label_keywords:
 | IFERROR
 | IFNULL
 | IGNORE_FOREIGN_KEYS
-| IGNORE_CDC_IGNORED_TTL_DELETES
 | ILIKE
 | IMMEDIATE
 | IMMEDIATELY

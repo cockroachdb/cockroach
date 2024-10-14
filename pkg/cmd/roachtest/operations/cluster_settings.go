@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 
 package operations
@@ -107,11 +102,12 @@ func registerClusterSettings(r registry.Registry) {
 	}
 	for _, op := range ops {
 		r.AddOperation(registry.OperationSpec{
-			Name:             "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
-			Owner:            op.Owner,
-			Timeout:          5 * time.Minute,
-			CompatibleClouds: registry.AllClouds,
-			Dependencies:     []registry.OperationDependency{registry.OperationRequiresNodes},
+			Name:               "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
+			Owner:              op.Owner,
+			Timeout:            5 * time.Minute,
+			CompatibleClouds:   registry.AllClouds,
+			CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+			Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 			Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 				return setClusterSetting(ctx, o, c, op)
 			},

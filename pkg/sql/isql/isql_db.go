@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package isql
 
@@ -14,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -50,6 +46,9 @@ type Txn interface {
 
 	// SessionData returns the transaction's SessionData.
 	SessionData() *sessiondata.SessionData
+
+	// GetSystemSchemaVersion exposes the schema version from the system db desc.
+	GetSystemSchemaVersion(context.Context) (roachpb.Version, error)
 
 	// Executor allows the user to execute transactional SQL statements.
 	Executor
@@ -263,9 +262,6 @@ type Rows interface {
 	// Types returns the types of the columns returned by this iterator. The
 	// returned array is guaranteed to correspond 1:1 with the tree.Datums rows
 	// returned by Cur().
-	//
-	// WARNING: this method is safe to call anytime *after* the first call to
-	// Next() (including after Close() was called).
 	Types() colinfo.ResultColumns
 
 	// HasResults returns true if there are results to the query, false otherwise.

@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire
 
@@ -520,9 +515,30 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 	}
 }
 
-func writeBinaryBytes(b *writeBuffer, v []byte) {
-	b.putInt32(int32(len(v)))
+// spaces is used for padding CHAR(N) datums.
+var spaces = [16]byte{
+	' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+}
+
+func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
+	if t.Oid() == oid.T_char && len(v) == 0 {
+		// Match Postgres and always explicitly include a null byte if we have
+		// an empty string for the "char" type in the binary format.
+		v = []byte{0}
+	}
+	pad := 0
+	if t.Oid() == oid.T_bpchar && len(v) < int(t.Width()) {
+		// Pad spaces on the right of the byte slice to make it of length
+		// specified in the type t.
+		pad = int(t.Width()) - len(v)
+	}
+	b.putInt32(int32(len(v) + pad))
 	b.write(v)
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
+	}
 }
 
 func writeBinaryString(b *writeBuffer, v string, t *types.T) {
@@ -638,10 +654,10 @@ func writeBinaryDatumNotNull(
 		writeBinaryDecimal(b, &v.Decimal)
 
 	case *tree.DBytes:
-		writeBinaryBytes(b, []byte(*v))
+		writeBinaryBytes(b, []byte(*v), t)
 
 	case *tree.DUuid:
-		writeBinaryBytes(b, v.GetBytes())
+		writeBinaryBytes(b, v.GetBytes(), t)
 
 	case *tree.DIPAddr:
 		// We calculate the Postgres binary format for an IPAddr. For the spec see,
@@ -864,13 +880,13 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		writeBinaryDecimal(b, &v)
 
 	case types.BytesFamily:
-		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx))
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.UuidFamily:
-		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx))
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.StringFamily:
-		writeBinaryString(b, string(vecs.BytesCols[colIdx].Get(rowIdx)), typ)
+		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx), typ)
 
 	case types.TimestampFamily:
 		writeBinaryTimestamp(b, vecs.TimestampCols[colIdx].Get(rowIdx))

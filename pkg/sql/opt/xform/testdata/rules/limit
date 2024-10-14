@@ -65,6 +65,17 @@ CREATE TABLE partial_index_tab
 )
 ----
 
+exec-ddl
+CREATE TABLE partial_index_const
+(
+    a INT,
+    b INT,
+    c INT,
+    INDEX (a) STORING (c) WHERE b = 1,
+    INDEX (a) STORING (c) WHERE b IS NULL
+)
+----
+
 # Insert statistics for index_tab. Histogram buckets are included for the
 # latitude column in order to make the optimizer choose specific plans for
 # SplitLimitedScanIntoUnionScans tests.
@@ -272,6 +283,195 @@ scan a@s_idx
  ├── volatile
  ├── key: ()
  └── fd: ()-->(4)
+
+# --------------------------------------------------
+# PushLimitIntoProjectFilteredScan
+# --------------------------------------------------
+
+opt expect=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 5]
+ ├── fd: ()-->(2)
+ ├── scan partial_index_const@partial_index_const_a_idx,partial
+ │    ├── columns: a:1!null c:3
+ │    ├── constraint: /1/4: [/1 - ]
+ │    └── limit: 5
+ └── projections
+      └── 1 [as=b:2]
+
+opt expect=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b IS NULL LIMIT 5
+----
+project
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 5]
+ ├── fd: ()-->(2)
+ ├── scan partial_index_const@partial_index_const_a_idx1,partial
+ │    ├── columns: a:1!null c:3
+ │    ├── constraint: /1/4: [/1 - ]
+ │    └── limit: 5
+ └── projections
+      └── CAST(NULL AS INT8) [as=b:2]
+
+opt expect=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5 OFFSET 10
+----
+offset
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 5]
+ ├── fd: ()-->(2)
+ ├── project
+ │    ├── columns: b:2!null a:1!null c:3
+ │    ├── cardinality: [0 - 15]
+ │    ├── fd: ()-->(2)
+ │    ├── scan partial_index_const@partial_index_const_a_idx,partial
+ │    │    ├── columns: a:1!null c:3
+ │    │    ├── constraint: /1/4: [/1 - ]
+ │    │    └── limit: 15
+ │    └── projections
+ │         └── 1 [as=b:2]
+ └── 10
+
+# PushLimitIntoProjectFilteredScan propagates row-level locking information.
+opt expect=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5 FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 5]
+ ├── volatile
+ ├── fd: ()-->(2)
+ ├── scan partial_index_const@partial_index_const_a_idx,partial
+ │    ├── columns: a:1!null c:3
+ │    ├── constraint: /1/4: [/1 - ]
+ │    ├── limit: 5
+ │    ├── locking: for-update
+ │    └── volatile
+ └── projections
+      └── 1 [as=b:2]
+
+opt set=(optimizer_use_lock_op_for_serializable=true) expect=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5 FOR UPDATE
+----
+lock partial_index_const
+ ├── columns: a:1!null b:2!null c:3  [hidden: rowid:4!null]
+ ├── key columns: rowid:4
+ ├── lock columns: (7-10)
+ ├── locking: for-update
+ ├── cardinality: [0 - 5]
+ ├── volatile, mutations
+ ├── key: (4)
+ ├── fd: ()-->(2), (4)-->(1,3)
+ └── project
+      ├── columns: b:2!null a:1!null c:3 rowid:4!null
+      ├── cardinality: [0 - 5]
+      ├── key: (4)
+      ├── fd: ()-->(2), (4)-->(1,3)
+      ├── scan partial_index_const@partial_index_const_a_idx,partial
+      │    ├── columns: a:1!null c:3 rowid:4!null
+      │    ├── constraint: /1/4: [/1 - ]
+      │    ├── limit: 5
+      │    ├── key: (4)
+      │    └── fd: (4)-->(1,3)
+      └── projections
+           └── 1 [as=b:2]
+
+opt set=(optimizer_push_limit_into_project_filtered_scan=off) expect-not=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 5]
+ ├── fd: ()-->(2)
+ ├── project
+ │    ├── columns: b:2!null a:1!null c:3
+ │    ├── fd: ()-->(2)
+ │    ├── limit hint: 5.00
+ │    ├── scan partial_index_const@partial_index_const_a_idx,partial
+ │    │    ├── columns: a:1!null c:3
+ │    │    ├── constraint: /1/4: [/1 - ]
+ │    │    └── limit hint: 5.00
+ │    └── projections
+ │         └── 1 [as=b:2]
+ └── 5
+
+# The rule does not apply when the limit is non-positive.
+opt expect-not=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT -5
+----
+limit
+ ├── columns: a:1!null b:2!null c:3
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── project
+ │    ├── columns: b:2!null a:1!null c:3
+ │    ├── fd: ()-->(2)
+ │    ├── limit hint: 1.00
+ │    ├── scan partial_index_const@partial_index_const_a_idx,partial
+ │    │    ├── columns: a:1!null c:3
+ │    │    ├── constraint: /1/4: [/1 - ]
+ │    │    └── limit hint: 1.00
+ │    └── projections
+ │         └── 1 [as=b:2]
+ └── -5
+
+# The rule does not apply to non-filtered scans.
+opt disable=PushLimitIntoProject expect-not=PushLimitIntoProjectFilteredScan
+SELECT a, b, a+1 FROM partial_index_const LIMIT 5
+----
+limit
+ ├── columns: a:1 b:2 "?column?":7
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── fd: (1)-->(7)
+ ├── project
+ │    ├── columns: "?column?":7 a:1 b:2
+ │    ├── immutable
+ │    ├── fd: (1)-->(7)
+ │    ├── limit hint: 5.00
+ │    ├── scan partial_index_const
+ │    │    ├── columns: a:1 b:2
+ │    │    ├── partial index predicates
+ │    │    │    ├── partial_index_const_a_idx: filters
+ │    │    │    │    └── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │    │    │    └── partial_index_const_a_idx1: filters
+ │    │    │         └── b:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+ │    │    └── limit hint: 5.00
+ │    └── projections
+ │         └── a:1 + 1 [as="?column?":7, outer=(1), immutable]
+ └── 5
+
+# The rule does not apply to filtered scans that cannot provide the desired
+# ordering.
+opt disable=GenerateTopK expect-not=PushLimitIntoProjectFilteredScan
+SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 ORDER BY c LIMIT 5
+----
+limit
+ ├── columns: a:1!null b:2!null c:3
+ ├── internal-ordering: +3 opt(2)
+ ├── cardinality: [0 - 5]
+ ├── fd: ()-->(2)
+ ├── ordering: +3 opt(2) [actual: +3]
+ ├── project
+ │    ├── columns: b:2!null a:1!null c:3
+ │    ├── fd: ()-->(2)
+ │    ├── ordering: +3 opt(2) [actual: +3]
+ │    ├── limit hint: 5.00
+ │    ├── sort
+ │    │    ├── columns: a:1!null c:3
+ │    │    ├── ordering: +3
+ │    │    ├── limit hint: 5.00
+ │    │    └── scan partial_index_const@partial_index_const_a_idx,partial
+ │    │         ├── columns: a:1!null c:3
+ │    │         └── constraint: /1/4: [/1 - ]
+ │    └── projections
+ │         └── 1 [as=b:2]
+ └── 5
 
 # --------------------------------------------------
 # PushLimitIntoIndexJoin
@@ -1652,13 +1852,11 @@ select
  │         ├── key: (1)
  │         └── scan index_tab@geomidx,inverted
  │              ├── columns: id:1!null geom_inverted_key:11!null
- │              ├── inverted constraint: /11/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (1)
- │              └── fd: (1)-->(11)
+ │              └── inverted constraint: /11/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_intersects('010100000000000000000008400000000000000840', geom:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 

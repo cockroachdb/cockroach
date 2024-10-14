@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlutils
 
@@ -279,16 +274,28 @@ func (sr *SQLRunner) QueryRow(t Fataler, query string, args ...interface{}) *Row
 	return &Row{t, sr.DB.QueryRowContext(context.Background(), query, args...)}
 }
 
-// QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
-// the test on errors.
-func (sr *SQLRunner) QueryStr(t Fataler, query string, args ...interface{}) [][]string {
+// QueryStrMeta runs a Query and converts the result using RowsToStrMatrix. Kills
+// the test on errors, including meta string in error message.
+func (sr *SQLRunner) QueryStrMeta(
+	t Fataler, meta string, query string, args ...interface{},
+) [][]string {
 	helperOrNoop(t)()
 	rows := sr.Query(t, query, args...)
 	r, err := RowsToStrMatrix(rows)
 	if err != nil {
-		t.Fatalf("%v", err)
+		if meta == "" {
+			t.Fatalf("%v", err)
+		} else {
+			t.Fatalf("%s: %v", meta, err)
+		}
 	}
 	return r
+}
+
+// QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
+// the test on errors.
+func (sr *SQLRunner) QueryStr(t Fataler, query string, args ...interface{}) [][]string {
+	return sr.QueryStrMeta(t, "", query, args...)
 }
 
 // RowsToStrMatrix converts the given result rows to a string matrix; nulls are

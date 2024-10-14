@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachprod
 
@@ -36,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
@@ -1776,13 +1772,13 @@ type LogsOpts struct {
 }
 
 // Logs TODO
-func Logs(l *logger.Logger, clusterName, dest, username string, logsOpts LogsOpts) error {
+func Logs(l *logger.Logger, clusterName, dest string, logsOpts LogsOpts) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}
 	return c.Logs(
-		l, logsOpts.Dir, dest, username, logsOpts.Filter, logsOpts.ProgramFilter,
+		l, logsOpts.Dir, dest, logsOpts.Filter, logsOpts.ProgramFilter,
 		logsOpts.Interval, logsOpts.From, logsOpts.To, logsOpts.Out,
 	)
 }
@@ -2972,4 +2968,67 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	}
 
 	return c, nil
+}
+
+// FetchLogs downloads the logs from the cluster using `roachprod get`.
+// The logs will be placed in the "destination" directory.
+// The command times out after the fetchLogsTimeout time.
+func FetchLogs(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName, destination string,
+	fetchLogsTimeout time.Duration,
+) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("fetching logs")
+
+	// Don't hang forever if we can't fetch the logs.
+	return timeutil.RunWithTimeout(ctx, "fetch logs", fetchLogsTimeout,
+		func(ctx context.Context) error {
+			// Find all log directories, which might include logs for
+			// external-process virtual clusters.
+			listLogDirsCmd := "find logs* -maxdepth 0 -type d"
+			results, err := c.RunWithDetails(ctx, l, install.WithNodes(c.Nodes), "", listLogDirsCmd)
+			if err != nil {
+				return err
+			}
+
+			logDirs := make(map[string]struct{})
+			for _, r := range results {
+				if r.Err != nil {
+					l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
+				}
+
+				for _, logDir := range strings.Fields(r.Stdout) {
+					logDirs[logDir] = struct{}{}
+				}
+			}
+
+			for logDir := range logDirs {
+				dirPath := filepath.Join(destination, logDir, "unredacted")
+				if err := os.MkdirAll(filepath.Dir(dirPath), 0755); err != nil {
+					return err
+				}
+
+				if err := c.Get(ctx, l, c.Nodes, logDir /* src */, dirPath /* dest */); err != nil {
+					l.Printf("failed to fetch log directory %s: %v", logDir, err)
+					if ctx.Err() != nil {
+						return errors.Wrap(err, "cluster.FetchLogs")
+					}
+				}
+			}
+
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
+				l.Printf("failed to redact logs: %v", err)
+				if ctx.Err() != nil {
+					return err
+				}
+			}
+			dest := filepath.Join(destination, "logs/cockroach.log")
+			return errors.Wrap(c.Get(ctx, l, c.Nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
+		})
 }

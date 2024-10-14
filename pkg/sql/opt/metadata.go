@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package opt
 
@@ -509,7 +504,7 @@ func (md *Metadata) CheckDependencies(
 		return false, err
 	}
 	for _, dep := range md.udfDeps {
-		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, optCatalog.GetCurrentUser()); err != nil {
 			return false, err
 		}
 	}
@@ -549,7 +544,7 @@ func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog ca
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err := optCatalog.CheckPrivilege(ctx, dataSource, priv); err != nil {
+				if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
 					return err
 				}
 			}

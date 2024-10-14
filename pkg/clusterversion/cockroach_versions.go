@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clusterversion
 
@@ -237,6 +232,29 @@ const (
 	// index advancement using MsgApps only, and not MsgHeartbeat.
 	V24_3_AdvanceCommitIndexViaMsgApps
 
+	// V24_3_SQLInstancesAddDraining is the migration to add the `is_draining`
+	// column to the system.sql_instances table.
+	V24_3_SQLInstancesAddDraining
+
+	// V24_3_MaybePreventUpgradeForCoreLicenseDeprecation is the migration step
+	// that checks for the core license deprecation. It checks to make sure that
+	// the cluster would not be unknowingly in violation of the new license
+	// policies.
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
+
+	// V24_3_UseRACV2WithV1EntryEncoding is the earliest version which supports
+	// ranges using replication flow control v2, still with v1 entry encoding.
+	V24_3_UseRACV2WithV1EntryEncoding
+
+	// V24_3_UseRACV2Full is the earliest version which supports ranges using
+	// replication flow control v2, with v2 entry encoding. Replication flow
+	// control v1 is unsupported at this version.
+	V24_3_UseRACV2Full
+
+	// V24_3_AddTableMetadataCols is the migration to add additional columns
+	// to the system.table_metadata table
+	V24_3_AddTableMetadataCols
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -285,11 +303,16 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.3 versions. Internal versions must be even.
 	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
 
-	V24_3_StoreLivenessEnabled:         {Major: 24, Minor: 2, Internal: 4},
-	V24_3_AddTimeseriesZoneConfig:      {Major: 24, Minor: 2, Internal: 6},
-	V24_3_TableMetadata:                {Major: 24, Minor: 2, Internal: 8},
-	V24_3_TenantExcludeDataFromBackup:  {Major: 24, Minor: 2, Internal: 10},
-	V24_3_AdvanceCommitIndexViaMsgApps: {Major: 24, Minor: 2, Internal: 12},
+	V24_3_StoreLivenessEnabled:                         {Major: 24, Minor: 2, Internal: 4},
+	V24_3_AddTimeseriesZoneConfig:                      {Major: 24, Minor: 2, Internal: 6},
+	V24_3_TableMetadata:                                {Major: 24, Minor: 2, Internal: 8},
+	V24_3_TenantExcludeDataFromBackup:                  {Major: 24, Minor: 2, Internal: 10},
+	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
+	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
+	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
+	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
+	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -36,7 +31,6 @@ func registerAcceptance(r registry.Registry) {
 		defaultLeases      bool
 		requiresLicense    bool
 		randomized         bool
-		nativeLibs         []string
 		workloadNode       bool
 		incompatibleClouds registry.CloudSet
 	}{
@@ -82,7 +76,6 @@ func registerAcceptance(r registry.Registry) {
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
 				randomized:    true,
-				nativeLibs:    registry.LibGEOS,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -163,9 +156,6 @@ func registerAcceptance(r registry.Registry) {
 			}
 			if !tc.defaultLeases {
 				testSpec.Leases = registry.MetamorphicLeases
-			}
-			if len(tc.nativeLibs) > 0 {
-				testSpec.NativeLibs = tc.nativeLibs
 			}
 			testSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)

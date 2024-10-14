@@ -1,16 +1,14 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,9 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -158,7 +160,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.srcTableIDsToDestMeta)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
@@ -209,7 +211,7 @@ func (r *logicalReplicationResumer) ingest(
 	execPlan := func(ctx context.Context) error {
 
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
+			log.VInfof(ctx, 2, "received producer meta: %v", meta)
 			return nil
 		}
 		rh := rowHandler{
@@ -292,9 +294,9 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans           []roachpb.Span
-	streamAddress         []string
-	srcTableIDsToDestMeta map[descpb.ID]dstTableMetadata
+	sourceSpans      []roachpb.Span
+	streamAddress    []string
+	destTableBySrcID map[descpb.ID]dstTableMetadata
 }
 
 func makeLogicalReplicationPlanner(
@@ -331,7 +333,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			srcTableIDsToDestMeta: make(map[descpb.ID]dstTableMetadata),
+			destTableBySrcID: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 	asOf := progress.ReplicatedTime
@@ -357,10 +359,17 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	// TODO(msbutler): is this import type resolver kosher? Should put in a new package.
+	importResolver := importer.MakeImportTypeResolver(plan.SourceTypes)
+	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
 		for _, pair := range payload.ReplicationPairs {
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+			cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+				return err
+			}
+			srcTableDesc = *cpy.TableDesc()
 
 			// Look up fully qualified destination table name
 			dstTableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
@@ -383,14 +392,14 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 				fnOID = defaultFnOID
 			}
 
-			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+			tableMetadataByDestID[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
 				SourceDescriptor:              srcTableDesc,
 				DestinationParentDatabaseName: dbDesc.GetName(),
 				DestinationParentSchemaName:   scDesc.GetName(),
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.srcTableIDsToDestMeta[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
+			info.destTableBySrcID[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
@@ -418,11 +427,12 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.ReplicationStartTime,
 		progress.ReplicatedTime,
 		progress.Checkpoint,
-		tablesMd,
+		tableMetadataByDestID,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
-		payload.IgnoreCDCIgnoredTTLDeletes,
+		payload.Discard,
 		payload.Mode,
+		payload.MetricsLabel,
 	)
 	if err != nil {
 		return nil, nil, info, err
@@ -529,6 +539,9 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
 			}
+			if l := rh.job.Details().(jobspb.LogicalReplicationDetails).MetricsLabel; l != "" {
+				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
+			}
 			return nil
 		}); err != nil {
 		return err
@@ -538,8 +551,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-
-	rh.metrics.ReplicatedTimeSeconds.Update(replicatedTime.GoTime().Unix())
 	return nil
 }
 
@@ -599,8 +610,31 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
-	metrics.ReplicatedTimeSeconds.Update(0)
+
+	// Remove the LDR job ID from the destination table descriptors.
+	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		b := txn.KV().NewBatch()
+		for _, repPair := range details.ReplicationPairs {
+			td, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descpb.ID(repPair.DstDescriptorID))
+			if err != nil {
+				return err
+			}
+			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID catpb.JobID) bool {
+				return thisID == r.job.ID()
+			})
+			if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+				return err
+			}
+		}
+		if err := txn.KV().Run(ctx, b); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	r.completeProducerJob(ctx, execCfg.InternalDB)
 	return nil
 }
@@ -662,6 +696,7 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 }
 
 func init() {
+	m := MakeMetrics(base.DefaultHistogramWindowInterval())
 	jobs.RegisterConstructor(
 		jobspb.TypeLogicalReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -669,7 +704,8 @@ func init() {
 				job: job,
 			}
 		},
-		jobs.WithJobMetrics(MakeMetrics(base.DefaultHistogramWindowInterval())),
+		jobs.WithJobMetrics(m),
+		jobs.WithResolvedMetric(m.(*Metrics).ReplicatedTimeSeconds),
 		jobs.UsesTenantCostControl,
 	)
 }

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -212,7 +207,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 	overwrite, traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, overwrite, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, nil, overwrite, traceKV); err != nil {
 		return err
 	}
 
@@ -274,7 +269,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, nil, traceKV)
 	if err != nil {
 		return err
 	}

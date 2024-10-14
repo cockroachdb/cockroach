@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -36,9 +31,13 @@ import (
 )
 
 func alterTableAlterPrimaryKey(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAlterPrimaryKey,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAlterPrimaryKey,
 ) {
-	alterPrimaryKey(b, tn, tbl, alterPrimaryKeySpec{
+	alterPrimaryKey(b, tn, tbl, stmt, alterPrimaryKeySpec{
 		n:             t,
 		Columns:       t.Columns,
 		Sharded:       t.Sharded,
@@ -55,7 +54,9 @@ type alterPrimaryKeySpec struct {
 	StorageParams tree.StorageParams
 }
 
-func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPrimaryKeySpec) {
+func alterPrimaryKey(
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t alterPrimaryKeySpec,
+) {
 	// Panic on certain forbidden `ALTER PRIMARY KEY` cases (e.g. one of
 	// the new primary key column is a virtual column). See the comments
 	// for a full list of preconditions we check.
@@ -107,7 +108,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
 	if checkIfColumnCanBeDropped(b, rowidToDrop) {
 		elts := b.QueryByID(rowidToDrop.TableID).Filter(hasColumnIDAttrFilter(rowidToDrop.ColumnID))
-		dropColumn(b, tn, tbl, t.n, rowidToDrop, elts, tree.DropRestrict)
+		dropColumn(b, tn, tbl, stmt, t.n, rowidToDrop, elts, tree.DropRestrict)
 	}
 
 	// Create a unique index on the old primary key columns, if applicable.
@@ -121,7 +122,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	oldShardColToDrop := getprimaryIndexShardColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
 	if checkIfColumnCanBeDropped(b, oldShardColToDrop) {
 		elts := b.QueryByID(oldShardColToDrop.TableID).Filter(hasColumnIDAttrFilter(oldShardColToDrop.ColumnID))
-		dropColumn(b, tn, tbl, t.n, oldShardColToDrop, elts, tree.DropRestrict)
+		dropColumn(b, tn, tbl, stmt, t.n, oldShardColToDrop, elts, tree.DropRestrict)
 	}
 }
 
@@ -579,23 +580,6 @@ func mustRetrieveKeyIndexColumns(
 		return keyIndexCols[i].OrdinalInKind < keyIndexCols[j].OrdinalInKind
 	})
 	return keyIndexCols
-}
-
-func mustRetrieveIndexNameElem(
-	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
-) (indexNameElem *scpb.IndexName) {
-	scpb.ForEachIndexName(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName,
-	) {
-		if e.IndexID == indexID {
-			indexNameElem = e
-		}
-	})
-	if indexNameElem == nil {
-		panic(errors.AssertionFailedf("programming error: cannot find an index name element "+
-			"with ID %v from table %v", indexID, tableID))
-	}
-	return indexNameElem
 }
 
 func mustRetrieveConstraintWithoutIndexNameElem(

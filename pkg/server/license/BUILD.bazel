@@ -1,15 +1,29 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "license",
-    srcs = ["enforcer.go"],
+    srcs = [
+        "cclbridge.go",
+        "enforcer.go",
+        "opts.go",
+        ":gen-lictype-stringer",  # keep
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/license",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/settings/cluster",
         "//pkg/sql/isql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,11 +41,21 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-lictype-stringer",
+    src = "cclbridge.go",
+    additional_args = ["-linecomment"],
+    typ = "LicType",
 )

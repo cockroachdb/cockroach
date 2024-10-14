@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisDomain } from "@cockroachlabs/cluster-ui";
 import each from "lodash/each";
@@ -20,7 +15,6 @@ import {
   AxisProps,
   MetricProps,
 } from "src/views/shared/components/metricQuery";
-
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 type TSQueryResult = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.IResult;
@@ -90,7 +84,10 @@ export function formatMetricData(
   return formattedData;
 }
 
-function hoverTooltipPlugin(xFormatter: (v: number) => string, yFormatter: (v: number) => string) {
+function hoverTooltipPlugin(
+  xFormatter: (v: number) => string,
+  yFormatter: (v: number) => string,
+) {
   const shiftX = 10;
   const shiftY = 10;
   let tooltipLeftOffset = 0;
@@ -99,27 +96,27 @@ function hoverTooltipPlugin(xFormatter: (v: number) => string, yFormatter: (v: n
   const tooltip = document.createElement("div");
   tooltip.className = "u-tooltip";
 
-  let timeNode = document.createElement("div")
-  timeNode.className = "u-time"
-  tooltip.appendChild(timeNode)
+  const timeNode = document.createElement("div");
+  timeNode.className = "u-time";
+  tooltip.appendChild(timeNode);
 
-  let seriesNode = document.createElement("div")
-  seriesNode.className = "u-series"
+  const seriesNode = document.createElement("div");
+  seriesNode.className = "u-series";
 
-  let markerNode = document.createElement("div")
-  markerNode.className = "u-marker"
+  const markerNode = document.createElement("div");
+  markerNode.className = "u-marker";
 
-  let labelNode = document.createElement("div")
-  labelNode.className = "u-label"
+  const labelNode = document.createElement("div");
+  labelNode.className = "u-label";
 
-  let dataNode = document.createTextNode(`--`)
+  const dataNode = document.createTextNode(`--`);
 
-  seriesNode.appendChild(markerNode)
-  seriesNode.appendChild(labelNode)
-  seriesNode.appendChild(dataNode)
-  tooltip.appendChild(seriesNode)
+  seriesNode.appendChild(markerNode);
+  seriesNode.appendChild(labelNode);
+  seriesNode.appendChild(dataNode);
+  tooltip.appendChild(seriesNode);
 
-  let seriesIdx: number= null;
+  let seriesIdx: number = null;
   let dataIdx: number = null;
   let over: HTMLDivElement;
   let tooltipVisible = false;
@@ -145,20 +142,20 @@ function hoverTooltipPlugin(xFormatter: (v: number) => string, yFormatter: (v: n
 
     // `yAxis` is used instead of `y` here because that's below in the
     // `uPlot` config as the custom scale that we define.n
-    let top = u.valToPos(u.data[seriesIdx][dataIdx], 'yAxis');
-    let lft = u.valToPos(u.data[        0][dataIdx], 'x');
+    const top = u.valToPos(u.data[seriesIdx][dataIdx], "yAxis");
+    const lft = u.valToPos(u.data[0][dataIdx], "x");
 
-    tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
-    tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
+    tooltip.style.top = tooltipTopOffset + top + shiftX + "px";
+    tooltip.style.left = tooltipLeftOffset + lft + shiftY + "px";
 
-    timeNode.textContent = `Time: ${xFormatter(u.data[0][dataIdx])}`
-    labelNode.textContent = `${u.series[seriesIdx].label}:`
-    dataNode.textContent = ` ${yFormatter(u.data[seriesIdx][dataIdx])}`
+    timeNode.textContent = `Time: ${xFormatter(u.data[0][dataIdx])}`;
+    labelNode.textContent = `${u.series[seriesIdx].label}:`;
+    dataNode.textContent = ` ${yFormatter(u.data[seriesIdx][dataIdx])}`;
 
-    let stroke = u.series[seriesIdx].stroke;
-    if (typeof stroke === 'function' && stroke.length === 0) {
+    const stroke = u.series[seriesIdx].stroke;
+    if (typeof stroke === "function" && stroke.length === 0) {
       markerNode.style.background = stroke(u, seriesIdx) as string;
-    } else if (typeof stroke === 'string') {
+    } else if (typeof stroke === "string") {
       markerNode.style.borderColor = stroke;
     }
   }
@@ -171,36 +168,32 @@ function hoverTooltipPlugin(xFormatter: (v: number) => string, yFormatter: (v: n
           tooltipLeftOffset = parseFloat(over.style.left);
           tooltipTopOffset = parseFloat(over.style.top);
           u.root.querySelector(".u-wrap").appendChild(tooltip);
-        }
+        },
       ],
       setCursor: [
         (u: uPlot) => {
-          let c = u.cursor;
+          const c = u.cursor;
 
           if (dataIdx !== c.idx) {
             dataIdx = c.idx;
 
-            if (seriesIdx != null)
-              setTooltip(u);
+            if (seriesIdx != null) setTooltip(u);
           }
-        }
+        },
       ],
       setSeries: [
         (u: uPlot, sidx: number) => {
           if (seriesIdx !== sidx) {
             seriesIdx = sidx;
 
-            if (sidx == null)
-              hideTooltip();
-            else if (dataIdx !== null)
-              setTooltip(u);
+            if (sidx == null) hideTooltip();
+            else if (dataIdx !== null) setTooltip(u);
           }
-        }
+        },
       ],
-    }
+    },
   };
 }
-
 
 // configureUPlotLineChart constructs the uplot Options object based on
 // information about the metrics, axis, and data that we'd like to plot.
@@ -246,17 +239,17 @@ export function configureUPlotLineChart(
       isolate: true,
       markers: {
         stroke: () => {
-          return null
+          return null;
         },
         fill: (u: uPlot, i: number) => {
-          let stroke = u.series[i].stroke;
-          if (typeof stroke === 'function' && stroke.length === 0) {
+          const stroke = u.series[i].stroke;
+          if (typeof stroke === "function" && stroke.length === 0) {
             return stroke(u, i) as string;
-          } else if (typeof stroke === 'string') {
+          } else if (typeof stroke === "string") {
             return stroke;
           }
         },
-      }
+      },
     },
     // By default, uPlot expects unix seconds in the x axis.
     // This setting defaults it to milliseconds which our
@@ -327,7 +320,12 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: [hoverTooltipPlugin(getLatestXAxisDomain().guideFormat, getLatestYAxisDomain().guideFormat)],
+    plugins: [
+      hoverTooltipPlugin(
+        getLatestXAxisDomain().guideFormat,
+        getLatestYAxisDomain().guideFormat,
+      ),
+    ],
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

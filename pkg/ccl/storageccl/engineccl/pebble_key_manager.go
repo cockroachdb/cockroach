@@ -1,10 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package engineccl
 
@@ -26,8 +23,8 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
 	"github.com/gogo/protobuf/proto"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const (
@@ -163,7 +160,7 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error)
 	// Since random generation of 48+ bytes will not produce a valid json object,
 	// if the file parses as JWK, assume that was the intended format.
 	if keySet, jwkErr := jwk.Parse(b); jwkErr == nil {
-		jwKey, ok := keySet.Get(0)
+		jwKey, ok := keySet.Key(0)
 		if !ok {
 			return nil, fmt.Errorf("JWKS file contains no keys")
 		}
@@ -173,7 +170,7 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error)
 		if jwKey.KeyType() != jwa.OctetSeq {
 			return nil, fmt.Errorf("expected kty=oct, found %s", jwKey.KeyType())
 		}
-		key.Info.EncryptionType, err = enginepbccl.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm())
+		key.Info.EncryptionType, err = enginepbccl.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm().String())
 		if err != nil {
 			return nil, err
 		}

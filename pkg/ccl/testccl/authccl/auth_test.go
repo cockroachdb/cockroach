@@ -1,19 +1,19 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package authccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"math"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,7 +26,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -109,7 +113,7 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
-		jwtRunTest(t, insecure)
+		authCCLRunTest(t, insecure)
 	})
 }
 
@@ -144,8 +148,7 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 		func() { _ = os.RemoveAll(tempDir) }
 }
 
-func jwtRunTest(t *testing.T, insecure bool) {
-
+func authCCLRunTest(t *testing.T, insecure bool) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
@@ -179,6 +182,12 @@ func jwtRunTest(t *testing.T, insecure bool) {
 		}
 		defer cleanup()
 
+		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+		mockLDAP, newMockLDAPUtil := ldapccl.LDAPMocks()
+		if strings.Contains(path, "ldap") {
+			defer testutils.TestingHook(&ldapccl.NewLDAPUtil, newMockLDAPUtil)()
+		}
+
 		srv, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{
 				DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
@@ -189,9 +198,17 @@ func jwtRunTest(t *testing.T, insecure bool) {
 			})
 		defer srv.Stopper().Stop(context.Background())
 		s := srv.ApplicationLayer()
+		pgServer := s.PGServer().(*pgwire.Server)
+		pgServer.TestingEnableConnLogging()
+		pgServer.TestingEnableAuthLogging()
+		s.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		httpClient, err := s.GetAdminHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
 
+		httpHBAUrl := s.AdminURL().WithPath("/debug/hba_conf").String()
 		sv := &s.ClusterSettings().SV
-
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
@@ -272,6 +289,11 @@ func jwtRunTest(t *testing.T, insecure bool) {
 				case "sql":
 					_, err := conn.ExecContext(context.Background(), td.Input)
 					return "ok", err
+
+				case "query_row":
+					var query_output string
+					err := conn.QueryRow(td.Input).Scan(&query_output)
+					return query_output, err
 
 				case "connect", "connect_unix":
 					if td.Cmd == "connect_unix" && runtime.GOOS == "windows" {
@@ -376,6 +398,109 @@ func jwtRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					return "ok " + dbName, nil
+
+				case "console_api_auth":
+					// Parse arguments.
+					authorizationHeader := ""
+					if td.HasArg("authorization") {
+						td.ScanArgs(t, "authorization", &authorizationHeader)
+					}
+					// Default the endpoint to `/_admin/v1/cluster` if not provided.
+					endpoint := apiconstants.AdminPrefix + "cluster"
+					if td.HasArg("path") {
+						td.ScanArgs(t, "path", &endpoint)
+					}
+					userName := ""
+					if td.HasArg("username") {
+						td.ScanArgs(t, "username", &userName)
+					}
+
+					// Get an unauthenticated client (without the session cookie) to test JWT auth.
+					client, err := s.GetUnauthenticatedHTTPClient()
+					require.NoError(t, err)
+
+					// Construct an HTTP request.
+					req, err := http.NewRequest(
+						"GET",
+						s.AdminURL().WithPath(endpoint).String(),
+						bytes.NewBuffer(nil),
+					)
+					require.NoError(t, err)
+					if authorizationHeader != "" {
+						req.Header.Set(authserver.AuthorizationHeader, authorizationHeader)
+					}
+					if userName != "" {
+						req.Header.Set(authserver.UsernameHeader, userName)
+					}
+
+					// Send the request and assert the response status code.
+					resp, err := client.Do(req)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					return strconv.Itoa(resp.StatusCode), nil
+
+				case "set_hba":
+					_, err := conn.ExecContext(context.Background(),
+						`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, td.Input)
+					if err != nil {
+						return "", err
+					}
+
+					// Wait until the configuration has propagated back to the
+					// test client. We need to wait because the cluster setting
+					// change propagates asynchronously.
+					expConf := pgwire.DefaultHBAConfig
+					if td.Input != "" {
+						expConf, err = pgwire.ParseAndNormalize(td.Input)
+						if err != nil {
+							// The SET above succeeded so we don't expect a problem here.
+							t.Fatal(err)
+						}
+					}
+					testutils.SucceedsSoon(t, func() error {
+						curConf, _ := pgServer.GetAuthenticationConfiguration()
+						if expConf.String() != curConf.String() {
+							return errors.Newf(
+								"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
+								curConf, expConf)
+						}
+						return nil
+					})
+
+					// Verify the HBA configuration was processed properly by
+					// reporting the resulting cached configuration.
+					resp, err := httpClient.Get(httpHBAUrl)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return "", err
+					}
+					return string(body), nil
+
+				case "ldap_mock":
+					for _, a := range td.CmdArgs {
+						switch a.Key {
+						case "set_groups":
+							if len(a.Vals) < 2 {
+								t.Fatalf("too few argumenets to ldap_mock set_groups: %d", len(a.Vals))
+							}
+							user := a.Vals[0]
+							groups := a.Vals[1:]
+							for idx := range groups {
+								if _, err := distinguishedname.ParseDN(groups[idx]); err != nil {
+									t.Fatalf("invalid ldap group provided to ldap_mock set_groups: %s", groups[idx])
+								}
+							}
+							mockLDAP.SetGroups(mockLDAP.GetLdapDN(user), groups)
+						default:
+							t.Fatalf("unknown ldap_mock operation: %s", a.Key)
+						}
+					}
 
 				default:
 					td.Fatalf(t, "unknown command: %s", td.Cmd)

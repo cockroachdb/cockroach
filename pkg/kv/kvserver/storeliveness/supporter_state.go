@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storeliveness
 
@@ -36,9 +31,11 @@ type supporterState struct {
 //   - ssfu := checkOutUpdate()
 //     ssfu.handleHeartbeat(msg slpb.Message)
 //     checkInUpdate(ssfu)
+//     finishUpdate(ssfu)
 //   - ssfu := checkOutUpdate()
 //     ssfu.withdrawSupport(now hlc.ClockTimestamp)
 //     checkInUpdate(ssfu)
+//     finishUpdate(ssfu)
 //
 // Only one update can be in progress to ensure that multiple mutation methods
 // are not run concurrently.
@@ -105,6 +102,13 @@ func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.Support
 	return ssh.supporterState.supportFor[id]
 }
 
+// getNumSupportFor returns the size of the supporterState.supportFor map.
+func (ssh *supporterStateHandler) getNumSupportFor() int {
+	ssh.mu.RLock()
+	defer ssh.mu.RUnlock()
+	return len(ssh.supporterState.supportFor)
+}
+
 // Functions for handling supporterState updates.
 
 // assertMeta ensures the meta in the inProgress view does not regress any of
@@ -149,19 +153,20 @@ func (ssfu *supporterStateForUpdate) reset() {
 }
 
 // write writes the supporter meta and supportFor to disk if they changed in
-// this update.
-func (ssfu *supporterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+// this update. Accepts a batch to avoid potentially writing multiple support
+// states separately.
+func (ssfu *supporterStateForUpdate) write(ctx context.Context, b storage.Batch) error {
 	if ssfu.inProgress.meta == (slpb.SupporterMeta{}) && len(ssfu.inProgress.supportFor) == 0 {
 		return nil
 	}
 	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
 		ssfu.assertMeta()
-		if err := writeSupporterMeta(ctx, rw, ssfu.inProgress.meta); err != nil {
+		if err := writeSupporterMeta(ctx, b, ssfu.inProgress.meta); err != nil {
 			return err
 		}
 	}
 	for _, ss := range ssfu.inProgress.supportFor {
-		if err := writeSupportForState(ctx, rw, ss); err != nil {
+		if err := writeSupportForState(ctx, b, ss); err != nil {
 			return err
 		}
 	}
@@ -204,10 +209,6 @@ func (ssh *supporterStateHandler) checkOutUpdate() *supporterStateForUpdate {
 // updates from the inProgress view. It clears the inProgress view, and swaps it
 // back in supporterStateHandler.update to be checked out by future updates.
 func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
-	defer func() {
-		ssfu.reset()
-		ssh.update.Swap(ssfu)
-	}()
 	if ssfu.inProgress.meta == (slpb.SupporterMeta{}) && len(ssfu.inProgress.supportFor) == 0 {
 		return
 	}
@@ -220,6 +221,14 @@ func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
 	for storeID, ss := range ssfu.inProgress.supportFor {
 		ssfu.checkedIn.supportFor[storeID] = ss
 	}
+}
+
+// finishUpdate performs cleanup after a successful or unsuccessful
+// checkInUpdate. It resets the supporterStateForUpdate in-progress state and
+// makes it available for future check out.
+func (ssh *supporterStateHandler) finishUpdate(ssfu *supporterStateForUpdate) {
+	ssfu.reset()
+	ssh.update.Swap(ssfu)
 }
 
 // Functions for handling heartbeats.
@@ -265,7 +274,8 @@ func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState 
 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
-func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) {
+// The function returns the number of stores for which support was withdrawn.
+func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (numWithdrawn int) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
@@ -280,8 +290,10 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) {
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
 			}
+			numWithdrawn++
 		}
 	}
+	return numWithdrawn
 }
 
 // maybeWithdrawSupport contains the core logic for updating the epoch and

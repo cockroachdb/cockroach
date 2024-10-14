@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -31,7 +26,11 @@ import (
 )
 
 func alterTableAlterColumnType(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAlterColumnType,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAlterColumnType,
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)

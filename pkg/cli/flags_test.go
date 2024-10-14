@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -294,6 +289,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	defer func() { _ = cleanup2() }()
 
 	anyCmd := []string{"sql", "node drain"}
+	anyClientNonSQLCmd := []string{"gen haproxy"}
 	anyNonSQL := []string{"node drain", "init"}
 	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
@@ -320,7 +316,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, "", ""},
 
 		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, "", ""},
-		{anyNonSQL, []string{"--url=postgresql://foo@bar"}, []string{"--host=bar" /*user ignored*/}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo@bar"}, []string{"--user=foo", "--host=bar"}, "", ""},
 
 		{sqlShell, []string{"--url=postgresql://a@b:12345/d"}, []string{"--user=a", "--host=b", "--port=12345", "--database=d"}, "", ""},
 		{sqlShell, []string{"--url=postgresql://a@b:c/d"}, nil, `invalid port ":c" after host`, ""},
@@ -385,6 +381,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`, ""},
+		// Check that client commands take username into account when enforcing
+		// client cert names. Concretely, it's looking for 'timapples' in the client
+		// cert key file name, not 'root'.
+		{anyClientNonSQLCmd, []string{"--url=postgresql://timapples@foo?sslmode=verify-full&sslkey=/certs/client.roachprod.key"}, nil, `invalid file name for "sslkey": expected "client.timapples.key", got .*`, ""},
 
 		// Check that not specifying a certs dir will cause Go to use root trust store.
 		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo"}, "", ""},

@@ -1025,12 +1025,10 @@ scalar-group-by
  │    │         ├── key: (4)
  │    │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │    │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │    │              ├── inverted constraint: /7/4
- │    │              │    └── spans
- │    │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │    │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
- │    │              ├── key: (4)
- │    │              └── fd: (4)-->(7)
+ │    │              └── inverted constraint: /7/4
+ │    │                   └── spans
+ │    │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │    │                        └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  │    └── filters
  │         └── geom:1 && '0103000020E610000001000000050000000000000000000000000000000000000000000000000000000000000000005940000000000000594000000000000059400000000000005940000000000000000000000000000000000000000000000000' [outer=(1), immutable, constraints=(/1: (/NULL - ])]
  └── aggregations

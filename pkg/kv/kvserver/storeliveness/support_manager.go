@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storeliveness
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
 
@@ -34,27 +30,10 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
-type Options struct {
-	// HeartbeatInterval determines how often Store Liveness sends heartbeats.
-	HeartbeatInterval time.Duration
-	// LivenessInterval determines the Store Liveness support expiration time.
-	LivenessInterval time.Duration
-	// SupportExpiryInterval determines how often Store Liveness checks if support
-	// should be withdrawn.
-	SupportExpiryInterval time.Duration
-	// IdleSupportFromInterval determines how ofter Store Liveness checks if any
-	// stores have not appeared in a SupportFrom call recently.
-	IdleSupportFromInterval time.Duration
-	// SupportWithdrawalGracePeriod determines how long Store Liveness should
-	// wait after restart before withdrawing support. It helps prevent support
-	// churn until the first heartbeats are delivered.
-	SupportWithdrawalGracePeriod time.Duration
-}
-
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
-	SendAsync(msg slpb.Message) (sent bool)
+	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -71,6 +50,7 @@ type SupportManager struct {
 	minWithdrawalTS       hlc.Timestamp
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
+	metrics               *SupportManagerMetrics
 }
 
 // NewSupportManager creates a new Store Liveness SupportManager. The main
@@ -97,13 +77,24 @@ func NewSupportManager(
 		storesToAdd:           newStoresToAdd(),
 		requesterStateHandler: newRequesterStateHandler(),
 		supporterStateHandler: newSupporterStateHandler(),
+		metrics:               newSupportManagerMetrics(),
 	}
+}
+
+// Metrics returns metrics tracking this SupportManager.
+func (sm *SupportManager) Metrics() *SupportManagerMetrics {
+	return sm.metrics
 }
 
 // HandleMessage implements the MessageHandler interface. It appends incoming
 // messages to a queue and does not block on processing the messages.
-func (sm *SupportManager) HandleMessage(msg *slpb.Message) {
-	sm.receiveQueue.Append(msg)
+func (sm *SupportManager) HandleMessage(msg *slpb.Message) error {
+	if err := sm.receiveQueue.Append(msg); err != nil {
+		return err
+	}
+	sm.metrics.ReceiveQueueSize.Inc(1)
+	sm.metrics.ReceiveQueueBytes.Inc(int64(msg.Size()))
+	return nil
 }
 
 var _ MessageHandler = (*SupportManager)(nil)
@@ -113,15 +104,12 @@ var _ MessageHandler = (*SupportManager)(nil)
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 	ss := sm.supporterStateHandler.getSupportFor(id)
 	// An empty expiration implies support has expired.
-	if ss.Expiration.IsEmpty() {
-		return 0, false
-	}
-	return ss.Epoch, true
+	return ss.Epoch, !ss.Expiration.IsEmpty()
 }
 
 // SupportFrom implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
-func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp, bool) {
+func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp) {
 	ss, ok := sm.requesterStateHandler.getSupportFrom(id)
 	if !ok {
 		// If this is the first time SupportFrom has been called for this store,
@@ -131,13 +119,12 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
-		return 0, hlc.Timestamp{}, false
+		log.VInfof(
+			context.Background(), 2, "SupportFrom called for the first time with store id %+v", id,
+		)
+		return 0, hlc.Timestamp{}
 	}
-	// An empty expiration implies support has expired.
-	if ss.Expiration.IsEmpty() {
-		return 0, hlc.Timestamp{}, false
-	}
-	return ss.Epoch, ss.Expiration, true
+	return ss.Epoch, ss.Expiration
 }
 
 // SupportFromEnabled implements the Fabric interface and determines if Store
@@ -175,6 +162,8 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 	if err := sm.requesterStateHandler.read(ctx, sm.engine); err != nil {
 		return err
 	}
+	// Update the support-for metric.
+	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 	// Advance the clock to the maximum withdrawal time.
 	if err := sm.clock.UpdateAndCheckMaxOffset(
 		ctx, sm.supporterStateHandler.supporterState.meta.MaxWithdrawn,
@@ -192,6 +181,7 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 	sm.minWithdrawalTS = sm.clock.Now().AddDuration(sm.options.SupportWithdrawalGracePeriod)
 	// Increment the current epoch.
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	rsfu.incrementMaxEpoch()
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		return err
@@ -216,30 +206,32 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 
 	for {
 		// NOTE: only listen to the receive queue's signal if we don't already have
-		// heartbeats to send or support to check. This prevents a constant flow of
-		// inbound messages from delaying the other work due to the random selection
-		// between multiple enabled channels.
+		// stores to add, heartbeats to send, or support to check. This prevents a
+		// constant flow of inbound messages from delaying the other work due to the
+		// random selection between multiple enabled channels.
 		var receiveQueueSig <-chan struct{}
-		if len(heartbeatTicker.C) == 0 && len(supportExpiryTicker.C) == 0 {
+		if len(heartbeatTicker.C) == 0 &&
+			len(supportExpiryTicker.C) == 0 &&
+			len(sm.storesToAdd.sig) == 0 {
 			receiveQueueSig = sm.receiveQueue.Sig()
 		}
 
 		select {
-		case <-heartbeatTicker.C:
-			// First check if any stores need to be added to ensure they are included
-			// in the round of heartbeats below.
+		case <-sm.storesToAdd.sig:
 			sm.maybeAddStores()
-			if sm.SupportFromEnabled(ctx) {
-				sm.sendHeartbeats(ctx)
-			}
+			sm.sendHeartbeats(ctx)
+
+		case <-heartbeatTicker.C:
+			sm.sendHeartbeats(ctx)
 
 		case <-supportExpiryTicker.C:
 			sm.withdrawSupport(ctx)
 
 		case <-idleSupportFromTicker.C:
-			sm.requesterStateHandler.removeIdleStores()
+			sm.requesterStateHandler.markIdleStores()
 
 		case <-receiveQueueSig:
+			// Decrementing the queue metrics is done in handleMessages.
 			msgs := sm.receiveQueue.Drain()
 			sm.handleMessages(ctx, msgs)
 
@@ -254,31 +246,46 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 func (sm *SupportManager) maybeAddStores() {
 	sta := sm.storesToAdd.drainStoresToAdd()
 	for _, store := range sta {
-		sm.requesterStateHandler.addStore(store)
+		if sm.requesterStateHandler.addStore(store) {
+			log.VInfof(
+				context.Background(), 2, "store %+v is starting to request support from store %+v",
+				sm.storeID, store,
+			)
+			sm.metrics.SupportFromStores.Inc(1)
+		}
 	}
 }
 
 // sendHeartbeats delegates heartbeat generation to the requesterStateHandler
 // and sends the resulting messages via Transport.
 func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
+	// If Store Liveness is not enabled, don't send heartbeats.
+	if !sm.SupportFromEnabled(ctx) {
+		return
+	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.LivenessInterval
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
+	successes := 0
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(msg); !sent {
+		if sent := sm.sender.SendAsync(ctx, msg); sent {
+			successes++
+		} else {
 			log.Warningf(ctx, "sending heartbeat to store %+v failed", msg.To)
 		}
 	}
-	log.VInfof(
-		ctx, 2, "store %d sent heartbeats to %d stores", sm.storeID, len(heartbeats),
-	)
+	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
+	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
+	log.VInfof(ctx, 2, "store %+v sent heartbeats to %d stores", sm.storeID, successes)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
@@ -289,26 +296,39 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		return
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
-	ssfu.withdrawSupport(now)
-	if err := ssfu.write(ctx, sm.engine); err != nil {
-		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+	defer sm.supporterStateHandler.finishUpdate(ssfu)
+	numWithdrawn := ssfu.withdrawSupport(now)
+
+	batch := sm.engine.NewBatch()
+	defer batch.Close()
+	if err := ssfu.write(ctx, batch); err != nil {
+		log.Warningf(ctx, "failed to write supporter meta and state: %v", err)
+		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
+		return
 	}
-	log.VInfof(
-		ctx, 2, "store %d withdrew support from %d stores",
-		sm.storeID, len(ssfu.inProgress.supportFor),
-	)
+	if err := batch.Commit(true /* sync */); err != nil {
+		log.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
+		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
+		return
+	}
 	sm.supporterStateHandler.checkInUpdate(ssfu)
+	log.VInfof(ctx, 2, "store %+v withdrew support from %d stores", sm.storeID, numWithdrawn)
+	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 }
 
 // handleMessages iterates over the given messages and delegates their handling
 // to either the requesterStateHandler or supporterStateHandler. It then writes
 // all updates to disk in a single batch, and sends any responses via Transport.
 func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Message) {
-	log.VInfof(ctx, 2, "store %d drained receive queue of size %d", sm.storeID, len(msgs))
+	log.VInfof(ctx, 2, "store %+v drained receive queue of size %d", sm.storeID, len(msgs))
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
+	defer sm.supporterStateHandler.finishUpdate(ssfu)
 	var responses []slpb.Message
 	for _, msg := range msgs {
+		sm.metrics.ReceiveQueueSize.Dec(1)
+		sm.metrics.ReceiveQueueBytes.Dec(int64(msg.Size()))
 		switch msg.Type {
 		case slpb.MsgHeartbeat:
 			responses = append(responses, ssfu.handleHeartbeat(msg))
@@ -319,28 +339,41 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		}
 	}
 
-	// TODO(mira): handle the errors below (and elsewhere in SupportManager)
-	// properly by resetting the update in progress.
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
 	if err := rsfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
+		return
 	}
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
+		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
+		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
+	sm.metrics.MessageHandleSuccesses.Inc(int64(len(msgs)))
+	// Handling heartbeats is the only way to add a store to the supportFor map.
+	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 
 	for _, response := range responses {
-		_ = sm.sender.SendAsync(response)
+		_ = sm.sender.SendAsync(ctx, response)
 	}
-	log.VInfof(ctx, 2, "store %d sent %d responses", sm.storeID, len(responses))
+	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
 }
+
+// maxReceiveQueueSize is the maximum number of messages the receive queue can
+// store. If message consumption is slow (e.g. due to a disk stall) and the
+// queue reaches maxReceiveQueueSize, incoming messages will be dropped.
+const maxReceiveQueueSize = 10000
+
+var receiveQueueSizeLimitReachedErr = errors.Errorf("store liveness receive queue is full")
 
 // receiveQueue stores all received messages from the MessageHandler and allows
 // them to be processed async and in batch.
@@ -358,14 +391,19 @@ func newReceiveQueue() receiveQueue {
 	}
 }
 
-func (q *receiveQueue) Append(msg *slpb.Message) {
+func (q *receiveQueue) Append(msg *slpb.Message) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	// Drop messages if maxReceiveQueueSize is reached.
+	if len(q.mu.msgs) >= maxReceiveQueueSize {
+		return receiveQueueSizeLimitReachedErr
+	}
 	q.mu.msgs = append(q.mu.msgs, msg)
 	select {
 	case q.sig <- struct{}{}:
 	default:
 	}
+	return nil
 }
 
 func (q *receiveQueue) Sig() <-chan struct{} {
@@ -384,11 +422,13 @@ func (q *receiveQueue) Drain() []*slpb.Message {
 // requesterState.supportFrom.
 type storesToAdd struct {
 	mu     syncutil.Mutex
+	sig    chan struct{}
 	stores map[slpb.StoreIdent]struct{}
 }
 
 func newStoresToAdd() storesToAdd {
 	return storesToAdd{
+		sig:    make(chan struct{}, 1),
 		stores: make(map[slpb.StoreIdent]struct{}),
 	}
 }
@@ -397,6 +437,10 @@ func (sta *storesToAdd) addStore(id slpb.StoreIdent) {
 	sta.mu.Lock()
 	defer sta.mu.Unlock()
 	sta.stores[id] = struct{}{}
+	select {
+	case sta.sig <- struct{}{}:
+	default:
+	}
 }
 
 func (sta *storesToAdd) drainStoresToAdd() []slpb.StoreIdent {

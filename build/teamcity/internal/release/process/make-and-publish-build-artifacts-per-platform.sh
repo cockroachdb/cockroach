@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -euxo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
@@ -93,7 +99,7 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
     --ungzip \
     --ignore-zeros \
     --strip-components=1
-  cp --recursive licenses "build/deploy-${platform}"
+  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy-${platform}"
   # Move the libs where Dockerfile expects them to be
   mv build/deploy-${platform}/lib/* build/deploy-${platform}/
   rmdir build/deploy-${platform}/lib

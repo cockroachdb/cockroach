@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // The admission package contains abstractions for admission control for
 // CockroachDB nodes, both for single-tenant and multi-tenant (aka serverless)
@@ -274,13 +269,13 @@ type granterWithIOTokens interface {
 	// negative, though that will be rare, since it is possible for tokens to be
 	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskBandwidthTokens int64,
-		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskBandwidthTokensCapacity int64,
+		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64,
+		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
 		lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
-	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
-	// since the last such call.
-	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
+	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
+	// last such call.
+	getDiskTokensUsedAndReset() [admissionpb.NumStoreWorkTypes]diskTokens
 	// setLinearModels supplies the models to use when storeWriteDone or
 	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
 	// Note that these models are not used for token adjustment at admission
@@ -288,7 +283,7 @@ type granterWithIOTokens interface {
 	// granter. This asymmetry is due to the need to use all the functionality
 	// of WorkQueue at admission time. See the long explanatory comment at the
 	// beginning of store_token_estimation.go, regarding token estimation.
-	setLinearModels(l0WriteLM, l0IngestLM, ingestLM tokensLinearModel)
+	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel)
 }
 
 // granterWithStoreReplicatedWorkAdmitted is used to abstract

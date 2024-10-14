@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package opentelemetry
 
@@ -287,6 +282,12 @@ var cockroachdbMetrics = map[string]string{
 	"admission_wait_sum_sql_kv_response":                                  "admission.wait.sum.sql_kv.response",
 	"admission_wait_sum_sql_root_start":                                   "admission.wait.sum.sql.root.start",
 	"admission_wait_sum_sql_sql_response":                                 "admission.wait.sum.sql_sql.response",
+	"auth_cert_conn_latency":                                              "auth.cert.conn.latency",
+	"auth_gss_conn_latency":                                               "auth.gss.conn.latency",
+	"auth_jwt_conn_latency":                                               "auth.jwt.conn.latency",
+	"auth_ldap_conn_latency":                                              "auth.ldap.conn.latency",
+	"auth_password_conn_latency":                                          "auth.password.conn.latency",
+	"auth_scram_conn_latency":                                             "auth.scram.conn.latency",
 	"backup_last_failed_time_kms_inaccessible":                            "backup.last_failed_time.kms_inaccessible",
 	"batch_requests_bytes":                                                "batch_requests.bytes",
 	"batch_requests_cross_region_bytes":                                   "batch_requests.cross_region.bytes",
@@ -1103,20 +1104,16 @@ var cockroachdbMetrics = map[string]string{
 	"physical_replication_commit_latency_sum":                     "physical_replication.commit_latency.sum",
 	"physical_replication_cutover_progress":                       "physical_replication.cutover_progress",
 	"physical_replication_distsql_replan_count":                   "physical_replication.distsql_replan_count",
-	"physical_replication_earliest_data_checkpoint_span":          "physical_replication.earliest_data_checkpoint_span",
 	"physical_replication_events_ingested":                        "physical_replication.events_ingested",
 	"physical_replication_flush_hist_nanos":                       "physical_replication.flush_hist_nanos",
 	"physical_replication_flush_hist_nanos_bucket":                "physical_replication.flush_hist_nanos.bucket",
 	"physical_replication_flush_hist_nanos_count":                 "physical_replication.flush_hist_nanos.count",
 	"physical_replication_flush_hist_nanos_sum":                   "physical_replication.flush_hist_nanos.sum",
 	"physical_replication_flushes":                                "physical_replication.flushes",
-	"physical_replication_job_progress_updates":                   "physical_replication.job_progress_updates",
-	"physical_replication_latest_data_checkpoint_span":            "physical_replication.latest_data_checkpoint_span",
 	"physical_replication_logical_bytes":                          "physical_replication.logical_bytes",
 	"physical_replication_replicated_time_seconds":                "physical_replication.replicated_time_seconds",
 	"physical_replication_resolved_events_ingested":               "physical_replication.resolved_events_ingested",
 	"physical_replication_running":                                "physical_replication.running",
-	"physical_replication_sst_bytes":                              "physical_replication.sst_bytes",
 	"queue_consistency_pending":                                   "queue.consistency.pending",
 	"queue_consistency_process_failure":                           "queue.consistency.process.failure",
 	"queue_consistency_process_success":                           "queue.consistency.process.success",
@@ -2067,7 +2064,6 @@ var cockroachdbMetrics = map[string]string{
 	"txn_restarts_txnpush":                                        "txn.restarts.txnpush",
 	"txn_restarts_unknown":                                        "txn.restarts.unknown",
 	"txn_restarts_writetooold":                                    "txn.restarts.writetooold",
-	"txn_restarts_writetoooldmulti":                               "txn.restarts.writetoooldmulti",
 	"txn_rollbacks_async_failed":                                  "txn.rollbacks.async.failed",
 	"txn_rollbacks_failed":                                        "txn.rollbacks.failed",
 	"txn_server_side_1PC_failure":                                 "txn.server_side.1PC.failure",

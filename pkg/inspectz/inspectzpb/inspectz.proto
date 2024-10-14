@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.inspectz.inspectzpb;
@@ -30,6 +25,17 @@ service Inspectz {
   // KVFlowHandles exposes in-memory state of kvflowcontrol.Handles. It's housed
   // under /inspectz/kvflowhandles.
   rpc KVFlowHandles(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
+
+  // KVFlowController exposes in-memory state of the node-level
+  // rac2.StreamTokenCounterProvider. It's housed under
+  // /inspectz/v2/kvflowcontroller.
+  rpc KVFlowControllerV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerResponse) {}
+
+  // KVFlowHandles exposes in-memory state of all rac2.RangeController(s). It's
+  // housed under /inspectz/v2/kvflowhandles.
+  rpc KVFlowHandlesV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
       returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
 
 }

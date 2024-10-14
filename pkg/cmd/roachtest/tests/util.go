@@ -1,19 +1,12 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
 import (
 	"context"
-	gosql "database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,18 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-// WaitFor3XReplication is like WaitForReplication but specifically requires
-// three as the minimum number of voters a range must be replicated on.
-func WaitFor3XReplication(ctx context.Context, t test.Test, l *logger.Logger, db *gosql.DB) error {
-	return WaitForReplication(ctx, t, l, db, 3 /* replicationFactor */, atLeastReplicationFactor)
-}
 
 // WaitForReady waits until the given nodes report ready via health checks.
 // This implies that the node has completed server startup, is heartbeating its
@@ -80,109 +65,6 @@ func WaitForReady(
 			return nil
 		},
 	))
-}
-
-type waitForReplicationType int
-
-const (
-	_ waitForReplicationType = iota
-
-	// atleastReplicationFactor indicates all ranges in the system should have
-	// at least the replicationFactor number of replicas.
-	atLeastReplicationFactor
-
-	// exactlyReplicationFactor indicates that all ranges in the system should
-	// have exactly the replicationFactor number of replicas.
-	exactlyReplicationFactor
-)
-
-// WaitForReplication waits until all ranges in the system are on at least or
-// exactly replicationFactor number of voters, depending on the supplied
-// waitForReplicationType.
-func WaitForReplication(
-	ctx context.Context,
-	t test.Test,
-	l *logger.Logger,
-	db *gosql.DB,
-	replicationFactor int,
-	waitForReplicationType waitForReplicationType,
-) error {
-	l.Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
-	tStart := timeutil.Now()
-	var compStr string
-	switch waitForReplicationType {
-	case exactlyReplicationFactor:
-		compStr = "!="
-	case atLeastReplicationFactor:
-		compStr = "<"
-	default:
-		t.Fatalf("unknown type %v", waitForReplicationType)
-	}
-	var oldN int
-	for {
-		var n int
-		if err := db.QueryRowContext(
-			ctx,
-			fmt.Sprintf(
-				"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) %s %d",
-				compStr,
-				replicationFactor,
-			),
-		).Scan(&n); err != nil {
-			return err
-		}
-		if n == 0 {
-			l.Printf("up-replication complete")
-			return nil
-		}
-		if timeutil.Since(tStart) > 30*time.Second || oldN != n {
-			l.Printf("still waiting for full replication (%d ranges left)", n)
-		}
-		oldN = n
-		time.Sleep(time.Second)
-	}
-}
-
-// WaitForUpdatedReplicationReport waits for an updated replication report.
-func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql.DB) {
-	t.L().Printf("waiting for updated replication report...")
-
-	// Temporarily drop the replication report interval down.
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER setting kv.replication_reports.interval = '2s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if _, err := db.ExecContext(
-			ctx, `RESET CLUSTER setting kv.replication_reports.interval`,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	// Wait for a new report with a timestamp after tStart to ensure
-	// that the report picks up any new tables or zones.
-	tStart := timeutil.Now()
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		var count int
-		var gen gosql.NullTime
-		if err := db.QueryRowContext(
-			ctx, `SELECT count(*), min(generated) FROM system.reports_meta`,
-		).Scan(&count, &gen); err != nil {
-			if !errors.Is(err, gosql.ErrNoRows) {
-				t.Fatal(err)
-			}
-			// No report generated yet. There are 3 types of reports. We want to
-			// see a result for all of them.
-		} else if count == 3 && tStart.Before(gen.Time) {
-			// New report generated.
-			return
-		}
-		if timeutil.Since(tStart) > 30*time.Second {
-			t.L().Printf("still waiting for updated replication report")
-		}
-	}
 }
 
 // setAdmissionControl sets the admission control cluster settings on the
@@ -253,12 +135,13 @@ func getMeanOverLastN(n int, items []float64) float64 {
 }
 
 // profileTopStatements enables profile collection on the top statements from
-// the cluster that exceed 10ms latency. Top statements are defined as ones that
-// have executed frequently enough to matter.
-// minDuration is the minimum duration a statement to be included in profiling. Typically
-// set this close to the 99.9 percentile for good results.
+// the cluster that exceed 10ms latency and are more than 10x the P99 up to this
+// point. Top statements are defined as ones that have executed frequently
+// enough to matter.
+// NB: This doesn't really work well. The data in statement_statistics is not
+// very accurate so we often use the minimum latency of 10ms.
 func profileTopStatements(
-	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, minDuration time.Duration,
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, dbName string,
 ) error {
 	db := cluster.Conn(ctx, logger, 1)
 	defer db.Close()
@@ -269,6 +152,7 @@ func profileTopStatements(
 		return err
 	}
 
+	// TODO(baptist): Make these 4 constants configurable using options.
 	// The probability that a statement will be included in the profile.
 	probabilityToInclude := .001
 
@@ -277,17 +161,41 @@ func profileTopStatements(
 	// out all the statements we need to capture.
 	minNumExpectedStmts := 1000
 
+	// minimumLatency is the minimum P99 latency in seconds. Anything lower than
+	// this is rounded up to this value.
+	minimumLatency := 0.001
+
+	// multipleFromP99 is the multiple of the P99 latency that the statement
+	// must exceed in order to be collected.
+	multipleFromP99 := 10
+
 	sql = fmt.Sprintf(`
 SELECT
-    crdb_internal.request_statement_bundle(statement, %f, '%s'::INTERVAL, '12h'::INTERVAL )
+    crdb_internal.request_statement_bundle(
+		statement,
+		%f,
+		(%d*CASE WHEN latency::FLOAT > %f THEN LATENCY::FLOAT ELSE %f END)::INTERVAL,
+		'12h'::INTERVAL
+	)
 FROM (
-	SELECT DISTINCT statement FROM (
-		SELECT metadata->>'query' AS statement, 
-			CAST(statistics->'execution_statistics'->>'cnt' AS int) AS cnt 
+	SELECT max(latency) as latency, statement FROM (
+		SELECT
+			metadata->>'db' AS db,
+			metadata->>'query' AS statement,
+			CAST(statistics->'execution_statistics'->>'cnt' AS int) AS cnt,
+			statistics->'statistics'->'latencyInfo'->'p99' AS latency
 			FROM crdb_internal.statement_statistics
-		) 
-	WHERE cnt > %d
-)`, probabilityToInclude, minDuration, minNumExpectedStmts)
+		)
+	WHERE db = '%s' AND cnt > %d AND latency::FLOAT > 0
+	GROUP BY statement
+)`,
+		probabilityToInclude,
+		multipleFromP99,
+		minimumLatency,
+		minimumLatency,
+		dbName,
+		minNumExpectedStmts,
+	)
 	if _, err := db.Exec(sql); err != nil {
 		return err
 	}
@@ -336,22 +244,6 @@ func downloadProfiles(
 
 type IP struct {
 	Query string
-}
-
-// getListenAddr returns the public IP address of the machine running the test.
-func getListenAddr(ctx context.Context) (string, error) {
-	req, err := httputil.Get(ctx, "http://ip-api.com/json/")
-	if err != nil {
-		return "", err
-	}
-	defer req.Body.Close()
-
-	var ip IP
-	if err := json.NewDecoder(req.Body).Decode(&ip); err != nil {
-		return "", err
-	}
-
-	return ip.Query, nil
 }
 
 // EnvWorkloadDurationFlag - environment variable to override

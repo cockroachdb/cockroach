@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tenantcapabilitiesauthorizer
 
@@ -95,6 +90,25 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 		// capabilitiesReader is set post construction, using BindReader.
 	}
 	return a
+}
+
+// HasCrossTenantRead returns true if a tenant can read from other tenants.
+func (a *Authorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
+	if tenID.IsSystem() {
+		// The system tenant has access to all request types.
+		return true
+	}
+	_, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn, authorizerModeV222:
+		return false
+	case authorizerModeAllowAll:
+		return true
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return false
+	}
 }
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.

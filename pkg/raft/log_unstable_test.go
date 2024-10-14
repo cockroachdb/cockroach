@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -20,6 +20,7 @@ package raft
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func newUnstableForTesting(ls logSlice, snap *pb.Snapshot) unstable {
 		snapshot:        snap,
 		logSlice:        ls,
 		entryInProgress: ls.prev.index,
-		logger:          discardLogger,
+		logger:          raftlogger.DiscardLogger,
 	}
 }
 
@@ -106,81 +107,6 @@ func TestLastIndex(t *testing.T) {
 			u := newUnstableForTesting(tt.ls, tt.snap)
 			u.checkInvariants(t)
 			require.Equal(t, tt.windex, u.lastIndex())
-		})
-	}
-}
-
-func TestUnstableMaybeTerm(t *testing.T) {
-	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
-	for _, tt := range []struct {
-		ls    logSlice
-		snap  *pb.Snapshot
-		index uint64
-
-		wok   bool
-		wterm uint64
-	}{
-		// term from entries
-		{
-			prev4.append(1), nil,
-			5,
-			true, 1,
-		},
-		{
-			prev4.append(1), nil,
-			6,
-			false, 0,
-		},
-		{
-			prev4.append(1), nil,
-			4,
-			true, 1,
-		},
-		{
-			prev4.append(1), snap4,
-			5,
-			true, 1,
-		},
-		{
-			prev4.append(1), snap4,
-			6,
-			false, 0,
-		},
-		// term from snapshot
-		{
-			prev4.append(1), snap4,
-			4,
-			true, 1,
-		},
-		{
-			prev4.append(1), snap4,
-			3,
-			false, 0,
-		},
-		{
-			prev4.append(), snap4,
-			5,
-			false, 0,
-		},
-		{
-			prev4.append(), snap4,
-			4,
-			true, 1,
-		},
-		{
-			prev4.append(), nil,
-			5,
-			false, 0,
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			u := newUnstableForTesting(tt.ls, tt.snap)
-			u.checkInvariants(t)
-
-			term, ok := u.maybeTerm(tt.index)
-			require.Equal(t, tt.wok, ok)
-			require.Equal(t, tt.wterm, term)
 		})
 	}
 }

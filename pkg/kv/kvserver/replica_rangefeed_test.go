@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -28,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1097,7 +1091,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				return err
 			}
 			raftStatus := repl.RaftStatus()
-			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+			if raftStatus != nil && raftStatus.RaftState == raftpb.StateFollower {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1), false /* bypassSafetyChecks */)
@@ -1842,13 +1836,24 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 	// eligible to acquire a new lease.
 	log.Infof(ctx, "test expiring lease")
-	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
-	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
-	n2Liveness, ok := nl.Self()
+	nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl2.Self()
 	require.True(t, ok)
 	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
 	atomic.StoreInt64(&rejectExtraneousRequests, 1)
-	// Ask another node to increment n2's liveness record.
+
+	// Ask another node to increment n2's liveness record, but first, wait until
+	// n1's liveness state is the same as n2's. Otherwise, the epoch below might
+	// get rejected because of mismatching liveness records.
+	testutils.SucceedsSoon(t, func() error {
+		nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
+		n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
+		if n2Liveness != n2LivenessFromN1.Liveness {
+			return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
+		}
+		return nil
+	})
 	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
 
 	resumeHeartbeats()

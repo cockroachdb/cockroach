@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -200,4 +195,5 @@ var rubyPGIgnorelist = blocklist{
 	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                  "flaky",
 	`running with sync_* methods PG::Connection handles server close while asynchronous connect`:                                                                                   "flaky",
 	`running with sync_* methods PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`: "flaky",
+	`running with sync_* methods PG::Connection times out after connect_timeout seconds`:                                                                                           "flaky",
 }

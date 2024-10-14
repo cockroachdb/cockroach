@@ -31,22 +31,6 @@ CREATE VIRTUAL CLUSTER IF NOT EXISTS bar -- literals removed
 CREATE VIRTUAL CLUSTER IF NOT EXISTS _ -- identifiers removed
 
 parse
-CREATE VIRTUAL CLUSTER foo LIKE bar
-----
-CREATE VIRTUAL CLUSTER foo LIKE bar
-CREATE VIRTUAL CLUSTER (foo) LIKE (bar) -- fully parenthesized
-CREATE VIRTUAL CLUSTER foo LIKE bar -- literals removed
-CREATE VIRTUAL CLUSTER _ LIKE _ -- identifiers removed
-
-parse
-CREATE VIRTUAL CLUSTER foo LIKE [123]
-----
-CREATE VIRTUAL CLUSTER foo LIKE [123]
-CREATE VIRTUAL CLUSTER (foo) LIKE [(123)] -- fully parenthesized
-CREATE VIRTUAL CLUSTER foo LIKE [_] -- literals removed
-CREATE VIRTUAL CLUSTER _ LIKE [123] -- identifiers removed
-
-parse
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON 'pgurl'
 ----
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON 'pgurl'
@@ -61,22 +45,6 @@ CREATE VIRTUAL CLUSTER IF NOT EXISTS destination FROM REPLICATION OF source ON '
 CREATE VIRTUAL CLUSTER IF NOT EXISTS (destination) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
 CREATE VIRTUAL CLUSTER IF NOT EXISTS destination FROM REPLICATION OF source ON '_' -- literals removed
 CREATE VIRTUAL CLUSTER IF NOT EXISTS _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
-
-parse
-CREATE VIRTUAL CLUSTER destination LIKE bar FROM REPLICATION OF source ON 'pgurl'
-----
-CREATE VIRTUAL CLUSTER destination LIKE bar FROM REPLICATION OF source ON 'pgurl'
-CREATE VIRTUAL CLUSTER (destination) LIKE (bar) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
-CREATE VIRTUAL CLUSTER destination LIKE bar FROM REPLICATION OF source ON '_' -- literals removed
-CREATE VIRTUAL CLUSTER _ LIKE _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
-
-parse
-CREATE VIRTUAL CLUSTER destination LIKE [123] FROM REPLICATION OF source ON 'pgurl'
-----
-CREATE VIRTUAL CLUSTER destination LIKE [123] FROM REPLICATION OF source ON 'pgurl'
-CREATE VIRTUAL CLUSTER (destination) LIKE [(123)] FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
-CREATE VIRTUAL CLUSTER destination LIKE [_] FROM REPLICATION OF source ON '_' -- literals removed
-CREATE VIRTUAL CLUSTER _ LIKE [123] FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
 
 parse
 CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl'
@@ -101,6 +69,22 @@ CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" 
 CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH RETENTION = ('36h') -- fully parenthesized
 CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH RETENTION = '_' -- literals removed
 CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '36h' -- identifiers removed
+
+parse
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH READ VIRTUAL CLUSTER
+----
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH READ VIRTUAL CLUSTER
+CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH READ VIRTUAL CLUSTER -- fully parenthesized
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH READ VIRTUAL CLUSTER -- literals removed
+CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH READ VIRTUAL CLUSTER -- identifiers removed
+
+parse
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH OPTIONS (READ VIRTUAL CLUSTER)
+----
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH READ VIRTUAL CLUSTER -- normalized!
+CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH READ VIRTUAL CLUSTER -- fully parenthesized
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH READ VIRTUAL CLUSTER -- literals removed
+CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH READ VIRTUAL CLUSTER -- identifiers removed
 
 parse
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF ('a'||'b') ON ('pg'||'url')

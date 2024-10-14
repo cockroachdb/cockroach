@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //go:build linux || (arm64 && darwin)
 
 package sysutil
@@ -18,22 +13,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 )
-
-// SetKeepAliveCount sets the keep alive probe count on a TCP
-// connection.
-func SetKeepAliveCount(conn *net.TCPConn, probeCount int) (err error) {
-	syscallConn, err := conn.SyscallConn()
-	if err != nil {
-		return err
-	}
-	outerErr := syscallConn.Control(func(fd uintptr) {
-		err = syscall.SetsockoptInt(SocketFd(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, probeCount)
-	})
-	if err != nil || outerErr != nil {
-		return errors.WithSecondaryError(err, outerErr)
-	}
-	return nil
-}
 
 // GetKeepAliveSettings gets the keep alive socket connections
 // set on a TCP connection.

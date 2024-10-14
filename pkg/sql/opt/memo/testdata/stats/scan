@@ -2217,10 +2217,8 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
- │              │   histogram(5)=
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=
  └── filters
       └── st_coveredby(geom:1, '0101000000000000000000F03F000000000000F03F') [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]
 

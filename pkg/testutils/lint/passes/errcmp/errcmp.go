@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package errcmp defines an Analyzer which checks
 // for usage of errors.Is instead of direct ==/!= comparisons.
@@ -107,6 +102,7 @@ Alternatives:
 
 func isEOFError(e ast.Expr) bool {
 	if s, ok := e.(*ast.SelectorExpr); ok {
+		//lint:ignore SA1019 Need to replace use of ast.Object (#132181)
 		if io, ok := s.X.(*ast.Ident); ok && io.Name == "io" && io.Obj == (*ast.Object)(nil) {
 			if s.Sel.Name == "EOF" || s.Sel.Name == "ErrUnexpectedEOF" {
 				return true

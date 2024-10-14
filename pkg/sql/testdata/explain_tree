@@ -94,13 +94,13 @@ quality of service: regular
 │ columns: (cid int, sum decimal)
 │
 └── • sort
-    │ columns: (column8 decimal, cid int, sum decimal)
+    │ columns: (column10 decimal, cid int, sum decimal)
     │ estimated row count: 98 (missing stats)
-    │ order: +column8
+    │ order: +column10
     │
     └── • render
-        │ columns: (column8 decimal, cid int, sum decimal)
-        │ render column8: ((1)[decimal] - (sum)[decimal])[decimal]
+        │ columns: (column10 decimal, cid int, sum decimal)
+        │ render column10: ((1)[decimal] - (sum)[decimal])[decimal]
         │ render cid: (cid)[int]
         │ render sum: (sum)[decimal]
         │
@@ -132,7 +132,7 @@ SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDE
 name: sort
 attrs:
 - key: order
-  value: +column8
+  value: +column10
 children:
 - name: render
   attrs: []

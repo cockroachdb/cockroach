@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import React from "react";
@@ -201,10 +196,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.elastic-stores-p99"
-              title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -240,7 +232,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
+      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas. v1 refers to the pre-v24.3 flow controller.`}
     >
       <Axis units={AxisUnits.Duration} label="Flow Token Wait Duration">
         {nodeIDs.map(nid => (
@@ -249,8 +241,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
               title={
-                "Regular " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
+                "(v1) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
               downsampleMax
@@ -259,8 +250,25 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
               title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
+                "(v1) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
+              title={
+                "(v2) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
+              title={
+                "(v2) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
               downsampleMax
@@ -275,7 +283,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
+      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}. v1 refers to the pre-v24.3 flow controller.`}
     >
       <Axis label="Blocked Stream Count">
         {nodeIDs.map(nid => (
@@ -284,8 +292,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
               title={
-                "Regular " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
+                "(v1) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
             />
@@ -293,8 +300,23 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
               title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
+                "(v1) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
+              title={
+                "(v2) Regular " + nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
+              title={
+                "(v2) Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
             />
@@ -403,9 +425,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.storage.l0-sublevels"
-              title={
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>

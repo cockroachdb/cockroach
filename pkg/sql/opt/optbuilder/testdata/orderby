@@ -1265,3 +1265,28 @@ sort
       ├── columns: a:1!null b:2 c:3 d:4
       └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+
+# TODO(#129956): Handle non-default NULL ordering that references a projected
+# expression that contains a subquery.
+exec-ddl
+CREATE TABLE t129956 (i INT)
+----
+
+build
+SELECT * FROM t129956 AS t0
+WHERE EXISTS(
+  SELECT (SELECT t0.i FROM t129956) AS tmp
+  ORDER BY tmp NULLS LAST
+)
+----
+error (0A000): subqueries in ORDER BY with non-default NULLS ordering is not supported
+
+# TODO(#92165): Allow ordering by VECTOR columns.
+exec-ddl
+CREATE TABLE t_vector (v VECTOR)
+----
+
+build
+SELECT * FROM t_vector ORDER BY v
+----
+error (0A000): unimplemented: can't order by column type VECTOR

@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -50,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -87,13 +83,14 @@ import (
 func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
@@ -215,9 +212,6 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := createTestServerParams()
@@ -232,6 +226,10 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	// Read table descriptor for version.
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -607,6 +605,11 @@ func TestRaceWithBackfill(t *testing.T) {
 				return nil
 			},
 		},
+		SQLEvalContext: &eval.TestingKnobs{
+			// This prevents using a small kv-batch-size, which is suspected
+			// of causing the test to time out when run with race detection enabled.
+			ForceProductionValues: true,
+		},
 	}
 
 	tc := serverutils.StartCluster(t, numNodes,
@@ -645,14 +648,17 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	ctx := context.Background()
 
-	// number of keys == 2 * number of rows; 1 column family and 1 index entry
-	// for each row.
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		// number of keys == 2 * number of rows; 1 column family and 1 index entry
+		// for each row.
+		if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
+			return err
+		}
+		if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			return err
+		}
+		return nil
+	})
 
 	// Run some schema changes with operations.
 

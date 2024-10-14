@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -437,6 +432,12 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.L().Printf("Failed to read %s: %s", testdata, err)
 	}
+
+	// Replace specific versions in URIs with a generic "_version_".
+	issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+	actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
+	docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+	actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
 	actual := string(actualB)
 
 	if expected != actual {

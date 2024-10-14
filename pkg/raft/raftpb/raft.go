@@ -1,16 +1,15 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package raftpb
 
-import "github.com/cockroachdb/redact"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/redact"
+)
 
 // PeerID is a custom type for peer IDs in a raft group.
 type PeerID uint64
@@ -80,4 +79,31 @@ func (p Priority) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		panic("invalid raft priority")
 	}
+}
+
+// StateType represents the role of a node in a cluster.
+type StateType uint64
+
+// Possible values for StateType.
+const (
+	StateFollower StateType = iota
+	StateCandidate
+	StateLeader
+	StatePreCandidate
+	NumStates
+)
+
+var stmap = [...]string{
+	"StateFollower",
+	"StateCandidate",
+	"StateLeader",
+	"StatePreCandidate",
+}
+
+func (st StateType) String() string {
+	return stmap[st]
+}
+
+func (st StateType) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("%q", st.String())), nil
 }

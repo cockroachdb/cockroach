@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package operations
 
@@ -94,19 +89,21 @@ func createNetworkFullPartition(
 // partition operations.
 func registerNetworkPartition(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "network-partition/full",
-		Owner:            registry.OwnerKV,
-		Timeout:          1 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              createNetworkFullPartition,
+		Name:               "network-partition/full",
+		Owner:              registry.OwnerKV,
+		Timeout:            1 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                createNetworkFullPartition,
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:             "network-partition/partial",
-		Owner:            registry.OwnerKV,
-		Timeout:          1 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              createNetworkPartialPartition,
+		Name:               "network-partition/partial",
+		Owner:              registry.OwnerKV,
+		Timeout:            1 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                createNetworkPartialPartition,
 	})
 }

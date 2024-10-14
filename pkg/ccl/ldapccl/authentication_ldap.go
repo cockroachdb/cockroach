@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ldapccl
 
@@ -17,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -82,16 +80,6 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
 	}
 
-	if err := authManager.validateLDAPBaseOptions(); err != nil {
-		return nil, redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager base options")
-	}
-
-	if err := authManager.validateLDAPUserFetchOptions(); err != nil {
-		return nil, redact.Sprintf("error validating authentication hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager authentication options")
-	}
-
 	// Establish a LDAPs connection with the set LDAP server and port
 	err := authManager.mu.util.MaybeInitLDAPsConn(ctx, authManager.mu.conf)
 	if err != nil {
@@ -109,7 +97,7 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 				"cannot find provided user %s on LDAP server", user.Normalized())
 	}
 
-	retrievedUserDN, err = distinguishedname.ParseDN(userDN)
+	retrievedUserDN, err = distinguishedname.ParseDN(lexbase.NormalizeName(userDN))
 	if err != nil {
 		return nil, redact.Sprintf("error parsing user DN %s obtained from LDAP server: %v", userDN, err),
 			errors.WithDetailf(
@@ -118,18 +106,6 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 	}
 
 	return retrievedUserDN, "", nil
-}
-
-// validateLDAPUserFetchOptions checks the ldap user search config values.
-func (authManager *ldapAuthManager) validateLDAPUserFetchOptions() error {
-	const ldapOptionsErrorMsg = "ldap authentication params in HBA conf missing"
-	if authManager.mu.conf.ldapSearchFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " search filter")
-	}
-	if authManager.mu.conf.ldapSearchAttribute == "" {
-		return errors.New(ldapOptionsErrorMsg + " search attribute")
-	}
-	return nil
 }
 
 // ValidateLDAPLogin validates an attempt to bind provided user DN to configured LDAP server.
@@ -173,11 +149,6 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
-	}
-
-	if err := authManager.validateLDAPBaseOptions(); err != nil {
-		return redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authManager base options")
 	}
 
 	// Establish a LDAPs connection with the set LDAP server and port

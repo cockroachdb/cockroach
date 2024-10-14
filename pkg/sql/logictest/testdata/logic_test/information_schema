@@ -442,8 +442,11 @@ crdb_internal       kv_catalog_namespace
 crdb_internal       kv_catalog_zones
 crdb_internal       kv_dropped_relations
 crdb_internal       kv_flow_control_handles
+crdb_internal       kv_flow_control_handles_v2
 crdb_internal       kv_flow_controller
+crdb_internal       kv_flow_controller_v2
 crdb_internal       kv_flow_token_deductions
+crdb_internal       kv_flow_token_deductions_v2
 crdb_internal       kv_inherited_role_members
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
@@ -801,8 +804,11 @@ kv_catalog_namespace
 kv_catalog_zones
 kv_dropped_relations
 kv_flow_control_handles
+kv_flow_control_handles_v2
 kv_flow_controller
+kv_flow_controller_v2
 kv_flow_token_deductions
+kv_flow_token_deductions_v2
 kv_inherited_role_members
 kv_node_liveness
 kv_node_status
@@ -1252,8 +1258,11 @@ system         crdb_internal       kv_catalog_namespace                         
 system         crdb_internal       kv_catalog_zones                             SYSTEM VIEW  NO
 system         crdb_internal       kv_dropped_relations                         SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_control_handles                      SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_control_handles_v2                   SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_controller                           SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_controller_v2                        SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_token_deductions                     SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_token_deductions_v2                  SYSTEM VIEW  NO
 system         crdb_internal       kv_inherited_role_members                    SYSTEM VIEW  NO
 system         crdb_internal       kv_node_liveness                             SYSTEM VIEW  NO
 system         crdb_internal       kv_node_status                               SYSTEM VIEW  NO
@@ -1837,6 +1846,8 @@ system              public             29_67_12_not_null                        
 system              public             29_67_13_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_15_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_16_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_17_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_18_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_1_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_2_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
 system              public             29_67_3_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
@@ -2208,6 +2219,8 @@ system              public             29_67_11_not_null                        
 system              public             29_67_12_not_null                                                                                               total_data_bytes IS NOT NULL
 system              public             29_67_13_not_null                                                                                               perc_live_data IS NOT NULL
 system              public             29_67_15_not_null                                                                                               last_updated IS NOT NULL
+system              public             29_67_16_not_null                                                                                               table_type IS NOT NULL
+system              public             29_67_17_not_null                                                                                               details IS NOT NULL
 system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
 system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
 system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
@@ -2776,6 +2789,8 @@ system              public             29_67_11_not_null                        
 system              public             29_67_12_not_null                                                                                               total_data_bytes IS NOT NULL
 system              public             29_67_13_not_null                                                                                               perc_live_data IS NOT NULL
 system              public             29_67_15_not_null                                                                                               last_updated IS NOT NULL
+system              public             29_67_16_not_null                                                                                               table_type IS NOT NULL
+system              public             29_67_17_not_null                                                                                               details IS NOT NULL
 system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
 system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
 system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
@@ -3077,6 +3092,7 @@ system         public        sql_instances                    addr              
 system         public        sql_instances                    binary_version                                                                                            7
 system         public        sql_instances                    crdb_region                                                                                               6
 system         public        sql_instances                    id                                                                                                        1
+system         public        sql_instances                    is_draining                                                                                               8
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
 system         public        sql_instances                    sql_addr                                                                                                  5
@@ -3169,9 +3185,10 @@ system         public        statement_statistics             service_latency   
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             total_estimated_execution_time                                                                            18
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
-system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              16
+system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              18
 system         public        table_metadata                   db_id                                                                                                     1
 system         public        table_metadata                   db_name                                                                                                   3
+system         public        table_metadata                   details                                                                                                   17
 system         public        table_metadata                   last_update_error                                                                                         14
 system         public        table_metadata                   last_updated                                                                                              15
 system         public        table_metadata                   perc_live_data                                                                                            13
@@ -3180,6 +3197,7 @@ system         public        table_metadata                   schema_name       
 system         public        table_metadata                   store_ids                                                                                                 8
 system         public        table_metadata                   table_id                                                                                                  2
 system         public        table_metadata                   table_name                                                                                                5
+system         public        table_metadata                   table_type                                                                                                16
 system         public        table_metadata                   total_columns                                                                                             6
 system         public        table_metadata                   total_data_bytes                                                                                          12
 system         public        table_metadata                   total_indexes                                                                                             7
@@ -3964,8 +3982,11 @@ NULL     public   system         crdb_internal       kv_catalog_namespace       
 NULL     public   system         crdb_internal       kv_catalog_zones                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_control_handles                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles_v2                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_controller                           SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller_v2                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_token_deductions                     SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions_v2                  SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_inherited_role_members                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                               SELECT          NO            YES
@@ -4683,8 +4704,11 @@ NULL     public   system         crdb_internal       kv_catalog_namespace       
 NULL     public   system         crdb_internal       kv_catalog_zones                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_control_handles                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles_v2                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_controller                           SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller_v2                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_token_deductions                     SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions_v2                  SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_inherited_role_members                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                               SELECT          NO            YES
@@ -5504,6 +5528,7 @@ admin    test           DELETE          NULL
 admin    test           DROP            NULL
 admin    test           INSERT          NULL
 admin    test           SELECT          NULL
+admin    test           TRIGGER         NULL
 admin    test           UPDATE          NULL
 admin    test           ZONECONFIG      NULL
 root     test           ALL             NULL
@@ -5514,6 +5539,7 @@ root     test           DELETE          NULL
 root     test           DROP            NULL
 root     test           INSERT          NULL
 root     test           SELECT          NULL
+root     test           TRIGGER         NULL
 root     test           UPDATE          NULL
 root     test           ZONECONFIG      NULL
 
@@ -6182,6 +6208,7 @@ allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
 application_name                                           ·
+authentication_method                                      cert-password
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
 bytea_output                                               hex
@@ -6253,7 +6280,7 @@ is_superuser                                               on
 join_reader_index_join_strategy_batch_size                 4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB
-large_full_scan_rows                                       1000
+large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
 lc_messages                                                C.UTF-8
@@ -6277,6 +6304,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on

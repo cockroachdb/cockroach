@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package gossip
 
@@ -47,10 +42,13 @@ func addKV(rng *rand.Rand, cfg *config.SystemConfig, key int) {
 			}
 		}
 	}
+	rawBytes := randutil.RandBytes(rng, 100)
+	// Ensure we don't accidentally make this look like an extended encoding sentinel.
+	rawBytes[4] = byte(roachpb.ValueType_MVCC_EXTENDED_ENCODING_SENTINEL + 1)
 	newKVs = append(newKVs, roachpb.KeyValue{
 		Key: newKey,
 		Value: roachpb.Value{
-			RawBytes: randutil.RandBytes(rng, 100),
+			RawBytes: rawBytes,
 		},
 	})
 	sort.Sort(roachpb.KeyValueByKey(newKVs))

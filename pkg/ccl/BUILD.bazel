@@ -32,6 +32,6 @@ go_library(
         "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
-        "//pkg/server",
+        "//pkg/server/license",
     ],
 )

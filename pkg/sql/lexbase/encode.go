@@ -7,13 +7,8 @@
 //
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // This code was derived from https://github.com/youtube/vitess.
 
@@ -47,9 +42,9 @@ const (
 	// without wrapping quotes.
 	EncBareIdentifiers
 
-	// EncNoDoubleEscapeQuotes indicates that backslashes will not be
-	// escaped when they are used as escape quotes.
-	EncNoDoubleEscapeQuotes
+	// EncBareReservedKeywords indicates that reserved keywords will be rendered
+	// without wrapping quotes.
+	EncBareReservedKeywords
 
 	// EncFirstFreeFlagBit needs to remain unused; it is used as base
 	// bit offset for tree.FmtFlags.
@@ -61,7 +56,8 @@ const (
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
 func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
-	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && IsBareIdentifier(s)) {
+	if flags.HasFlags(EncBareIdentifiers) ||
+		(IsBareIdentifier(s) && (flags.HasFlags(EncBareReservedKeywords) || !isReservedKeyword(s))) {
 		buf.WriteString(s)
 		return
 	}
@@ -149,7 +145,6 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	start := 0
 	escapedString := false
 	bareStrings := flags.HasFlags(EncBareStrings)
-	noDoubleEscapeQuotes := flags.HasFlags(EncNoDoubleEscapeQuotes)
 	// Loop through each unicode code point.
 	for i, r := range in {
 		if i < start {
@@ -169,9 +164,6 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 		if !escapedString {
 			buf.WriteString("e'") // begin e'xxx' string
 			escapedString = true
-		}
-		if noDoubleEscapeQuotes && i+1 < len(in) && in[i:i+2] == "\\\"" {
-			continue
 		}
 		buf.WriteString(in[start:i])
 

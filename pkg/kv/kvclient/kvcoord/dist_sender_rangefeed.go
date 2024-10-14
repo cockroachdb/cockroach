@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -62,13 +57,17 @@ var catchupStartupRate = settings.RegisterIntSetting(
 // ForEachRangeFn is used to execute `fn` over each range in a rangefeed.
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
 
+// A RangeObserver is a function that observes the ranges in a rangefeed
+// by polling fn.
+type RangeObserver func(fn ForEachRangeFn)
+
 type rangeFeedConfig struct {
 	overSystemTable       bool
 	withDiff              bool
 	withFiltering         bool
 	withMetadata          bool
 	withMatchingOriginIDs []uint32
-	rangeObserver         func(ForEachRangeFn)
+	rangeObserver         RangeObserver
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -128,7 +127,7 @@ func WithMatchingOriginIDs(originIDs ...uint32) RangeFeedOption {
 
 // WithRangeObserver is called when the rangefeed starts with a function that
 // can be used to iterate over all the ranges.
-func WithRangeObserver(observer func(ForEachRangeFn)) RangeFeedOption {
+func WithRangeObserver(observer RangeObserver) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.rangeObserver = observer
 	})

@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -19,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -184,9 +181,10 @@ func newUninitializedReplicaWithoutRaftGroup(
 			store.rebalanceObjManager.Objective().ToSplitObjective(),
 		)
 	}
+	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
 	// NB: the state will be loaded when the replica gets initialized.
-	r.mu.state = uninitState
+	r.shMu.state = uninitState
 	r.rangeStr.store(replicaID, uninitState.Desc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
@@ -218,12 +216,20 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
-	r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
-		(*replicaFlowControl)(r),
-		makeStoreFlowControlHandleFactory(r.store),
-		r.store.TestingKnobs().FlowControlTestingKnobs,
-	)
-	r.raftMu.flowControlLevel = racV2EnabledWhenLeaderLevel(r.raftCtx, store.cfg.Settings)
+	r.mu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
+	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
+		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
+	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
+		r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
+	} else {
+		r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
+			(*replicaFlowControl)(r),
+			makeStoreFlowControlHandleFactory(r.store),
+			r.store.TestingKnobs().FlowControlTestingKnobs,
+		)
+	}
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
+	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
@@ -233,8 +239,12 @@ func newUninitializedReplicaWithoutRaftGroup(
 		RaftScheduler:          r.store.scheduler,
 		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
 		ACWorkQueue:            r.store.cfg.KVAdmissionController,
-		RangeControllerFactory: replica_rac2.RangeControllerFactoryImpl{},
+		MsgAppSender:           r,
+		Settings:               r.store.cfg.Settings,
+		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
+		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
+		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
 	return r
 }
@@ -271,9 +281,9 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 
 	r.setStartKeyLocked(desc.StartKey)
 
-	r.mu.state = s.ReplState
-	r.mu.lastIndexNotDurable = s.LastIndex
-	r.mu.lastTermNotDurable = invalidLastTerm
+	r.shMu.state = s.ReplState
+	r.shMu.lastIndexNotDurable = s.LastIndex
+	r.shMu.lastTermNotDurable = invalidLastTerm
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
@@ -294,7 +304,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	// this problem would multiply to a number of replicas at cluster bootstrap.
 	// Instead, we make the first lease special (which is OK) and the problem
 	// disappears.
-	if r.mu.state.Lease.Sequence > 0 {
+	if r.shMu.state.Lease.Sequence > 0 {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
@@ -309,8 +319,9 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		ctx,
 		(*replicaRaftStorage)(r),
 		raftpb.PeerID(r.replicaID),
-		r.mu.state.RaftAppliedIndex,
+		r.shMu.state.RaftAppliedIndex,
 		r.store.cfg,
+		r.mu.currentRACv2Mode == rac2.MsgAppPull,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
 	))
@@ -318,6 +329,8 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
+	r.flowControlV2.InitRaftLocked(
+		ctx, replica_rac2.NewRaftNode(rg, (*replicaForRACv2)(r)), rg.LogMark())
 	return nil
 }
 
@@ -368,15 +381,15 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
-	if r.mu.state.Desc.IsInitialized() &&
+	if r.shMu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
-			r.mu.state.Desc, desc)
+			r.shMu.state.Desc, desc)
 	}
-	if r.mu.state.Desc.IsInitialized() &&
-		!r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
+	if r.shMu.state.Desc.IsInitialized() &&
+		!r.shMu.state.Desc.StartKey.Equal(desc.StartKey) {
 		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
-			r.mu.state.Desc.StartKey, desc.StartKey)
+			r.shMu.state.Desc.StartKey, desc.StartKey)
 	}
 
 	// NB: It might be nice to assert that the current replica exists in desc
@@ -414,7 +427,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	// Determine if a new replica was added. This is true if the new max replica
 	// ID is greater than the old max replica ID.
-	oldMaxID := maxReplicaIDOfAny(r.mu.state.Desc)
+	oldMaxID := maxReplicaIDOfAny(r.shMu.state.Desc)
 	newMaxID := maxReplicaIDOfAny(desc)
 	if newMaxID > oldMaxID {
 		r.mu.lastReplicaAdded = newMaxID
@@ -429,7 +442,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.isInitialized.Store(desc.IsInitialized())
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
-	r.mu.state.Desc = desc
+	r.shMu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
 

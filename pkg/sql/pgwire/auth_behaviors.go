@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire
 
@@ -27,15 +22,17 @@ import (
 type AuthBehaviors struct {
 	authenticator       Authenticator
 	connClose           func()
-	replacementIdentity username.SQLUsername
+	replacementIdentity string
 	replacedIdentity    bool
 	roleMapper          RoleMapper
+	authorizer          Authorizer
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
 var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
 var _ func() = (*AuthBehaviors)(nil).ConnClose
 var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
+var _ Authorizer = (*AuthBehaviors)(nil).MaybeAuthorize
 
 // This is a hack for the unused-symbols linter. These two functions
 // are, at present, only called by the GSSAPI integration. The code
@@ -44,12 +41,11 @@ var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
 var _ = (*AuthBehaviors)(nil).SetConnClose
 var _ = (*AuthBehaviors)(nil).SetReplacementIdentity
 
-// Authenticate delegates to the Authenticator passed to
-// SetAuthenticator or returns an error if SetAuthenticator has not been
-// called.
+// Authenticate delegates to the Authenticator passed to SetAuthenticator or
+// returns an error if SetAuthenticator has not been called.
 func (b *AuthBehaviors) Authenticate(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	roleSubject *ldap.DN,
@@ -84,13 +80,13 @@ func (b *AuthBehaviors) SetConnClose(fn func()) {
 // This allows "ambient" authentication mechanisms, such as GSSAPI, to
 // provide replacement values. This method will return ok==false if
 // SetReplacementIdentity has not been called.
-func (b *AuthBehaviors) ReplacementIdentity() (_ username.SQLUsername, ok bool) {
+func (b *AuthBehaviors) ReplacementIdentity() (_ string, ok bool) {
 	return b.replacementIdentity, b.replacedIdentity
 }
 
 // SetReplacementIdentity allows the AuthMethod to override the
 // client-reported system identity.
-func (b *AuthBehaviors) SetReplacementIdentity(id username.SQLUsername) {
+func (b *AuthBehaviors) SetReplacementIdentity(id string) {
 	b.replacementIdentity = id
 	b.replacedIdentity = true
 }
@@ -98,7 +94,7 @@ func (b *AuthBehaviors) SetReplacementIdentity(id username.SQLUsername) {
 // MapRole delegates to the RoleMapper passed to SetRoleMapper or
 // returns an error if SetRoleMapper has not been called.
 func (b *AuthBehaviors) MapRole(
-	ctx context.Context, systemIdentity username.SQLUsername,
+	ctx context.Context, systemIdentity string,
 ) ([]username.SQLUsername, error) {
 	if found := b.roleMapper; found != nil {
 		return found(ctx, systemIdentity)
@@ -109,4 +105,20 @@ func (b *AuthBehaviors) MapRole(
 // SetRoleMapper updates the RoleMapper to be used.
 func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 	b.roleMapper = m
+}
+
+// SetAuthorizer updates the SetAuthorizer to be used.
+func (b *AuthBehaviors) SetAuthorizer(a Authorizer) {
+	b.authorizer = a
+}
+
+// MaybeAuthorize delegates to the Authorizer passed to SetAuthorizer and if
+// successful obtains the grants using RoleGranter passed to SetRoleGranter.
+func (b *AuthBehaviors) MaybeAuthorize(
+	ctx context.Context, systemIdentity string, clientConnection bool,
+) error {
+	if found := b.authorizer; found != nil {
+		return found(ctx, systemIdentity, clientConnection)
+	}
+	return nil
 }

@@ -30,7 +30,7 @@ RUN if [ "$fips_enabled" == "1" ]; then \
 
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
 COPY cockroach.sh cockroach /cockroach/
-COPY licenses/* /licenses/
+COPY LICENSE THIRD-PARTY-NOTICES.txt /licenses/
 # Install GEOS libraries.
 COPY libgeos.so libgeos_c.so /usr/local/lib/cockroach/
 

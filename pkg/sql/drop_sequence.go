@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -265,7 +260,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 				continue
 			}
 
-			if dependent.ColumnIDs != nil && len(dependent.ColumnIDs) > 0 {
+			if len(dependent.ColumnIDs) > 0 {
 				// If we reach here, it means this sequence is depended on by a column in `t`
 				// in its default expression. Remove that column's default expression.
 				err = dropDefaultExprInDepColsOnSeq(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)

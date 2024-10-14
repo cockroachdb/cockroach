@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package lexbase_test
 
@@ -115,28 +110,6 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 		t.Fatalf("expected %s, but found %s", sql, stmt)
 	}
 	return stmt
-}
-
-func TestEncodeSQLStringWithNoDoubleEscapeQuotes(t *testing.T) {
-	testCases := []struct {
-		input  string
-		output string
-	}{
-		// (GH issue #107518)
-		{`\"`, `e'\"'`},
-		{`{"a": "b\u0099c"}`, `e'{"a": "b\\u0099c"}'`},
-		{`{\"a\": \"b\u0099c\"}`, `e'{\"a\": \"b\\u0099c\"}'`},
-	}
-
-	for _, tc := range testCases {
-		var buf bytes.Buffer
-		lexbase.EncodeSQLStringWithFlags(&buf, tc.input, lexbase.EncNoDoubleEscapeQuotes)
-		out := buf.String()
-
-		if out != tc.output {
-			t.Errorf("`%s`: expected `%s`, got `%s`", tc.input, tc.output, out)
-		}
-	}
 }
 
 func BenchmarkEncodeSQLString(b *testing.B) {

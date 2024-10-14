@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package kvadmission is the integration layer between KV and admission
 // control.
@@ -186,6 +181,9 @@ type Controller interface {
 		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
 		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
+	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
+	// snapshots.
+	GetSnapshotQueue(roachpb.StoreID) *admission.SnapshotQueue
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -353,6 +351,10 @@ func (n *controllerImpl) AdmitKVWork(
 				// and the point of deduction. That's ok, there's no strong
 				// synchronization needed between these two points.
 				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+					// NOTE: The priority is identical for v1 and v2, a
+					// admissionpb.WorkPriority,  until we encode the command in
+					// replica_raft, where if the range is using racv2 encoding we will
+					// convert the priority to a raftpb.Priority.
 					AdmissionPriority:   int32(admissionInfo.Priority),
 					AdmissionCreateTime: admissionInfo.CreateTime,
 					AdmissionOriginNode: n.nodeID.Get(),
@@ -679,10 +681,10 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		Enabled:    true,
 		RangeID:    entry.RangeID,
 		ReplicaID:  entry.ReplicaID,
-		LeaderTerm: entry.CallbackState.LeaderTerm,
+		LeaderTerm: entry.CallbackState.Mark.Term,
 		LogPosition: admission.LogPosition{
 			Term:  0, // Ignored by callback in RACv2.
-			Index: entry.CallbackState.Index,
+			Index: entry.CallbackState.Mark.Index,
 		},
 		Origin:       0,
 		RaftPri:      entry.CallbackState.Priority,
@@ -701,6 +703,14 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
+}
+
+func (n *controllerImpl) GetSnapshotQueue(storeID roachpb.StoreID) *admission.SnapshotQueue {
+	sq := n.storeGrantCoords.TryGetSnapshotQueueForStore(storeID)
+	if sq == nil {
+		return nil
+	}
+	return sq.(*admission.SnapshotQueue)
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a

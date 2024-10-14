@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package vm
 
@@ -60,6 +55,9 @@ const (
 	// need to be re-initialized on every start. The presence of this file
 	// automatically implies the presence of OSInitializedFile.
 	DisksInitializedFile = "/mnt/data1/" + InitializedFile
+	// StartupLogs is a log file that is created on a VM to redirect startup script
+	// output logs.
+	StartupLogs = "/var/log/roachprod_startup.log"
 )
 
 // UnimplementedError is returned when a method is not implemented by a

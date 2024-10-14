@@ -112,7 +112,13 @@ go_library(
         "@io_bazel_rules_go//go/platform:openbsd": [
             "@com_github_shirou_gopsutil_v3//disk",
         ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
         "@io_bazel_rules_go//go/platform:plan9": [
+            "@com_github_shirou_gopsutil_v3//disk",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
             "@com_github_shirou_gopsutil_v3//disk",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [

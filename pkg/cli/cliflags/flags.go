@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cliflags
 
@@ -691,6 +686,21 @@ When specified, this node will accept SQL client connections that do not wish
 to negotiate a TLS handshake. Authentication is still otherwise required
 as per the HBA configuration and all other security mechanisms continue to
 apply. This flag is experimental.
+`,
+	}
+
+	AcceptProxyProtocolHeaders = FlagInfo{
+		Name: "accept-proxy-protocol-headers",
+		Description: `
+Allows CockroachDB to parse proxy protocol headers. Proxy protocol is used by
+some proxies to retain the original client IP information after the proxy has
+rewritten the source IP address of forwarded packets.
+<PRE>
+
+</PRE>
+When using this flag, ensure all traffic to CockroachDB flows through a proxy
+which adds proxy protocol headers, to prevent spoofing of client IP address
+information.
 `,
 	}
 
@@ -1900,15 +1910,6 @@ commands, WARNING for client commands.`,
 	SQLAuditLogDirOverride = FlagInfo{
 		Name:        "sql-audit-dir",
 		Description: `--sql-audit-dir=XXX is an alias for --log='sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}'.`,
-	}
-
-	ObsServiceAddr = FlagInfo{
-		Name:   "obsservice-addr",
-		EnvVar: "",
-		Description: `Address of an OpenTelemetry OTLP sink such as the
-Observability Service or the OpenTelemetry Collector. If set, telemetry
-events are exported to this address. The special value "embed" causes
-the Cockroach node to run the Observability Service internally.`,
 	}
 
 	BuildTag = FlagInfo{

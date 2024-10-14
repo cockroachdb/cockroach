@@ -456,3 +456,325 @@ project
       │    └── interesting orderings: (+4,+1) (+7,+(3|6),+4,+1)
       └── projections
            └── variable: s:2 [as=c_s:5, type=string, outer=(2)]
+
+# Test FDs for inverted index scans.
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  a INT[],
+  b BOOL,
+  INVERTED INDEX a_idx (a),
+  INVERTED INDEX a_b_idx (a) WHERE b
+)
+----
+
+exec-ddl
+CREATE TABLE inv_multi_pks (
+  k1 INT,
+  k2 INT,
+  a INT[],
+  b BOOL,
+  PRIMARY KEY (k1, k2),
+  INVERTED INDEX a_idx (a),
+  INVERTED INDEX a_b_idx (a) WHERE b
+)
+----
+
+# If the inverted scan scans a single key, then it upholds the FD keys of the
+# underlying table.
+opt
+SELECT * FROM inv WHERE a @> ARRAY[1]
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
+ └── scan inv@a_idx,inverted
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /6/1
+      │    └── spans: [1, 1]
+      ├── key: (1)
+      └── prune: (1)
+
+# Same as above, but with multiple PK columns.
+opt
+SELECT * FROM inv_multi_pks WHERE a @> ARRAY[1]
+----
+index-join inv_multi_pks
+ ├── columns: k1:1(int!null) k2:2(int!null) a:3(int[]!null) b:4(bool)
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── prune: (1,2,4)
+ ├── interesting orderings: (+1,+2)
+ └── scan inv_multi_pks@a_idx,inverted
+      ├── columns: k1:1(int!null) k2:2(int!null)
+      ├── inverted constraint: /7/1/2
+      │    └── spans: [1, 1]
+      ├── key: (1,2)
+      └── prune: (1,2)
+
+# If the inverted scan scans multiple keys, then it does NOT uphold the FD keys
+# of the underlying table. The table FD keys are only valid after the inverted
+# filter expression.
+opt
+SELECT * FROM inv@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 2]
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [2, 2]
+      ├── key: (1)
+      └── scan inv@a_idx,inverted
+           ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
+           ├── inverted constraint: /6/1
+           │    └── spans: [1, 3)
+           ├── flags: no-zigzag-join
+           └── prune: (1,6)
+
+# Same as above, but with multiple inverted spans instead of a single, multi-key
+# span.
+opt
+SELECT * FROM inv@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 3]
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [3, 3]
+      ├── key: (1)
+      └── scan inv@a_idx,inverted
+           ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── [1, 1]
+           │         └── [3, 3]
+           ├── flags: no-zigzag-join
+           └── prune: (1,6)
+
+# Same as above, but with multiple PK columns.
+opt
+SELECT * FROM inv_multi_pks@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 3]
+----
+index-join inv_multi_pks
+ ├── columns: k1:1(int!null) k2:2(int!null) a:3(int[]!null) b:4(bool)
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── prune: (1,2,4)
+ ├── interesting orderings: (+1,+2)
+ └── inverted-filter
+      ├── columns: k1:1(int!null) k2:2(int!null)
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [3, 3]
+      ├── key: (1,2)
+      └── scan inv_multi_pks@a_idx,inverted
+           ├── columns: k1:1(int!null) k2:2(int!null) a_inverted_key:7(encodedkey!null)
+           ├── inverted constraint: /7/1/2
+           │    └── spans
+           │         ├── [1, 1]
+           │         └── [3, 3]
+           ├── flags: no-zigzag-join
+           └── prune: (1,2,7)
+
+# A single key scan over a partial inverted index upholds the FD keys of the
+# underlying table.
+opt
+SELECT * FROM inv WHERE a @> ARRAY[1] AND b
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool!null)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ ├── interesting orderings: (+1 opt(3))
+ └── scan inv@a_b_idx,inverted,partial
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /7/1
+      │    └── spans: [1, 1]
+      ├── key: (1)
+      └── prune: (1)
+
+# Same as above, but with multiple PK columns.
+opt
+SELECT * FROM inv_multi_pks WHERE a @> ARRAY[1] AND b
+----
+index-join inv_multi_pks
+ ├── columns: k1:1(int!null) k2:2(int!null) a:3(int[]!null) b:4(bool!null)
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: ()-->(4), (1,2)-->(3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1,+2 opt(4))
+ └── scan inv_multi_pks@a_b_idx,inverted,partial
+      ├── columns: k1:1(int!null) k2:2(int!null)
+      ├── inverted constraint: /8/1/2
+      │    └── spans: [1, 1]
+      ├── key: (1,2)
+      └── prune: (1,2)
+
+# A multi-key scan over a partial inverted index does not uphold the FD keys of
+# the underlying table.
+opt
+SELECT * FROM inv@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 2] AND b
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool!null)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ ├── interesting orderings: (+1 opt(3))
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [2, 2]
+      ├── key: (1)
+      └── scan inv@a_b_idx,inverted,partial
+           ├── columns: k:1(int!null) a_inverted_key:7(encodedkey!null)
+           ├── inverted constraint: /7/1
+           │    └── spans: [1, 3)
+           ├── flags: no-zigzag-join
+           ├── key: (1,7)
+           └── prune: (1,7)
+
+# Same as above, but with multiple inverted spans instead of a single, multi-key
+# span.
+opt
+SELECT * FROM inv@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 3] AND b
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool!null)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ ├── interesting orderings: (+1 opt(3))
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [3, 3]
+      ├── key: (1)
+      └── scan inv@a_b_idx,inverted,partial
+           ├── columns: k:1(int!null) a_inverted_key:7(encodedkey!null)
+           ├── inverted constraint: /7/1
+           │    └── spans
+           │         ├── [1, 1]
+           │         └── [3, 3]
+           ├── flags: no-zigzag-join
+           ├── key: (1,7)
+           └── prune: (1,7)
+
+# Same as above, but with multiple PK columns.
+opt
+SELECT * FROM inv_multi_pks@{NO_ZIGZAG_JOIN} WHERE a @> ARRAY[1, 3] AND b
+----
+index-join inv_multi_pks
+ ├── columns: k1:1(int!null) k2:2(int!null) a:3(int[]!null) b:4(bool!null)
+ ├── immutable
+ ├── key: (1,2)
+ ├── fd: ()-->(4), (1,2)-->(3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1,+2 opt(4))
+ └── inverted-filter
+      ├── columns: k1:1(int!null) k2:2(int!null)
+      ├── inverted expression: /8
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: [1, 1]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [3, 3]
+      ├── key: (1,2)
+      └── scan inv_multi_pks@a_b_idx,inverted,partial
+           ├── columns: k1:1(int!null) k2:2(int!null) a_inverted_key:8(encodedkey!null)
+           ├── inverted constraint: /8/1/2
+           │    └── spans
+           │         ├── [1, 1]
+           │         └── [3, 3]
+           ├── flags: no-zigzag-join
+           ├── key: (1,2,8)
+           └── prune: (1,2,8)
+
+opt
+SELECT * FROM inv@a_idx WHERE a @> '{}'
+----
+index-join inv
+ ├── columns: k:1(int!null) a:2(int[]!null) b:3(bool)
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans: [, NULL/NULL)
+      ├── key: (1)
+      └── scan inv@a_idx,inverted
+           ├── columns: k:1(int!null) a_inverted_key:6(encodedkey!null)
+           ├── inverted constraint: /6/1
+           │    └── spans: [, NULL/NULL)
+           ├── flags: force-index=a_idx
+           └── prune: (1,6)

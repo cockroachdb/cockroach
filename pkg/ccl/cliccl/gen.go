@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cliccl
 
@@ -18,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/errors"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spf13/cobra"
 )
 
@@ -62,8 +59,10 @@ func genEncryptionKey(
 			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
 		}
 
-		symKey := jwk.NewSymmetricKey()
-		if err := symKey.FromRaw(key); err != nil {
+		// FromRaw uses the input type to instantiate particular type of key.
+		// []byte input type is used to generate a symmetric key here.
+		symKey, err := jwk.FromRaw(key)
+		if err != nil {
 			return errors.Wrap(err, "error setting key bytes")
 		}
 		if err := symKey.Set(jwk.KeyIDKey, hex.EncodeToString(keyID)); err != nil {
@@ -78,7 +77,9 @@ func genEncryptionKey(
 		}
 
 		keySet := jwk.NewSet()
-		keySet.Add(symKey)
+		if err = keySet.AddKey(symKey); err != nil {
+			return err
+		}
 
 		b, err = json.Marshal(keySet)
 		if err != nil {

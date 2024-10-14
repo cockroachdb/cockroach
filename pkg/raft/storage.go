@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,10 +18,11 @@
 package raft
 
 import (
-	"errors"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrCompacted is returned by Storage.Entries/Compact when a requested
@@ -30,28 +31,16 @@ var ErrCompacted = errors.New("requested index is unavailable due to compaction"
 
 // ErrSnapOutOfDate is returned by Storage.CreateSnapshot when a requested
 // index is older than the existing snapshot.
+//
+// TODO(pav-kv): this is used only in tests. Remove it.
 var ErrSnapOutOfDate = errors.New("requested index is older than the existing snapshot")
 
 // ErrUnavailable is returned by Storage interface when the requested log entries
 // are unavailable.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
-// ErrSnapshotTemporarilyUnavailable is returned by the Storage interface when the required
-// snapshot is temporarily unavailable.
-var ErrSnapshotTemporarilyUnavailable = errors.New("snapshot is temporarily unavailable")
-
-// Storage is an interface that may be implemented by the application
-// to retrieve log entries from storage.
-//
-// If any Storage method returns an error, the raft instance will
-// become inoperable and refuse to participate in elections; the
-// application is responsible for cleanup and recovery in this case.
-type Storage interface {
-	// TODO(tbg): split this into two interfaces, LogStorage and StateStorage.
-
-	// InitialState returns the saved HardState and ConfState information.
-	InitialState() (pb.HardState, pb.ConfState, error)
-
+// LogStorage is a read-only API for the raft log.
+type LogStorage interface {
 	// Entries returns a slice of consecutive log entries in the range [lo, hi),
 	// starting from lo. The maxSize limits the total size of the log entries
 	// returned, but Entries returns at least one entry if any.
@@ -71,25 +60,66 @@ type Storage interface {
 	//
 	// Returns ErrCompacted if entry lo has been compacted, or ErrUnavailable if
 	// encountered an unavailable entry in [lo, hi).
+	//
+	// TODO(pav-kv): all log slices in raft are constructed in context of being
+	// appended after a particular log index, so (lo, hi] semantics fits better
+	// than [lo, hi).
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
 
-	// Term returns the term of entry i, which must be in the range
-	// [FirstIndex()-1, LastIndex()]. The term of the entry before
-	// FirstIndex is retained for matching purposes even though the
-	// rest of that entry may not be available.
-	Term(i uint64) (uint64, error)
+	// Term returns the term of the entry at the given index, which must be in the
+	// valid range: [FirstIndex()-1, LastIndex()]. The term of the entry before
+	// FirstIndex is retained for matching purposes even though the rest of that
+	// entry may not be available.
+	Term(index uint64) (uint64, error)
 	// LastIndex returns the index of the last entry in the log.
-	LastIndex() (uint64, error)
-	// FirstIndex returns the index of the first log entry that is
-	// possibly available via Entries (older entries have been incorporated
-	// into the latest Snapshot; if storage only contains the dummy entry the
-	// first log entry is not available).
-	FirstIndex() (uint64, error)
-	// Snapshot returns the most recent snapshot.
-	// If snapshot is temporarily unavailable, it should return ErrSnapshotTemporarilyUnavailable,
-	// so raft state machine could know that Storage needs some time to prepare
-	// snapshot and call Snapshot later.
+	// TODO(pav-kv): replace this with LastEntryID() which never fails.
+	LastIndex() uint64
+	// FirstIndex returns the index of the first log entry that is possibly
+	// available via Entries. Older entries have been incorporated into the
+	// StateStorage.Snapshot.
+	//
+	// If storage only contains the dummy entry or initial snapshot then
+	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
+	// this index is not available.
+	//
+	// TODO(pav-kv): replace this with a Prev() method equivalent to logSlice's
+	// prev field. The log storage is just a storage-backed logSlice.
+	FirstIndex() uint64
+
+	// LogSnapshot returns an immutable point-in-time log storage snapshot.
+	LogSnapshot() LogStorageSnapshot
+}
+
+// LogStorageSnapshot is a read-only API for the raft log which has extended
+// immutability guarantees outside RawNode. The immutability must be provided by
+// the application layer.
+type LogStorageSnapshot interface {
+	LogStorage
+}
+
+// StateStorage provides read access to the state machine storage.
+type StateStorage interface {
+	// Snapshot returns the most recent state machine snapshot.
 	Snapshot() (pb.Snapshot, error)
+}
+
+// Storage is an interface that should be implemented by the application to
+// provide raft with access to the log and state machine storage.
+//
+// If any method returns an error other than ErrCompacted or ErrUnavailable, the
+// raft instance generally does not behave gracefully, e.g. it may panic.
+//
+// TODO(pav-kv): audit all error handling and document the contract.
+type Storage interface {
+	// InitialState returns the saved HardState and ConfState information.
+	//
+	// TODO(sep-raft-log): this would need to be fetched (fully or partially) from
+	// both log and state machine storage on startup, to detect which of the two
+	// storages is ahead, and initialize correctly.
+	InitialState() (pb.HardState, pb.ConfState, error)
+
+	LogStorage
+	StateStorage
 }
 
 type inMemStorageCallStats struct {
@@ -144,7 +174,7 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		return nil, ErrCompacted
 	}
 	if hi > ms.lastIndex()+1 {
-		getLogger().Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
+		raftlogger.GetLogger().Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
 	}
 	// only contains dummy entries.
 	if len(ms.ents) == 1 {
@@ -174,11 +204,11 @@ func (ms *MemoryStorage) Term(i uint64) (uint64, error) {
 }
 
 // LastIndex implements the Storage interface.
-func (ms *MemoryStorage) LastIndex() (uint64, error) {
+func (ms *MemoryStorage) LastIndex() uint64 {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.lastIndex++
-	return ms.lastIndex(), nil
+	return ms.lastIndex()
 }
 
 func (ms *MemoryStorage) lastIndex() uint64 {
@@ -186,15 +216,21 @@ func (ms *MemoryStorage) lastIndex() uint64 {
 }
 
 // FirstIndex implements the Storage interface.
-func (ms *MemoryStorage) FirstIndex() (uint64, error) {
+func (ms *MemoryStorage) FirstIndex() uint64 {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.callStats.firstIndex++
-	return ms.firstIndex(), nil
+	return ms.firstIndex()
 }
 
 func (ms *MemoryStorage) firstIndex() uint64 {
 	return ms.ents[0].Index + 1
+}
+
+// LogSnapshot implements the LogStorage interface.
+func (ms *MemoryStorage) LogSnapshot() LogStorageSnapshot {
+	// TODO(pav-kv): return an immutable subset of MemoryStorage.
+	return ms
 }
 
 // Snapshot implements the Storage interface.
@@ -238,7 +274,7 @@ func (ms *MemoryStorage) CreateSnapshot(
 
 	offset := ms.ents[0].Index
 	if i > ms.lastIndex() {
-		getLogger().Panicf("snapshot %d is out of bound lastindex(%d)", i, ms.lastIndex())
+		raftlogger.GetLogger().Panicf("snapshot %d is out of bound lastindex(%d)", i, ms.lastIndex())
 	}
 
 	ms.snapshot.Metadata.Index = i
@@ -261,7 +297,7 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 		return ErrCompacted
 	}
 	if compactIndex > ms.lastIndex() {
-		getLogger().Panicf("compact %d is out of bound lastindex(%d)", compactIndex, ms.lastIndex())
+		raftlogger.GetLogger().Panicf("compact %d is out of bound lastindex(%d)", compactIndex, ms.lastIndex())
 	}
 
 	i := compactIndex - offset
@@ -308,7 +344,7 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	case uint64(len(ms.ents)) == offset:
 		ms.ents = append(ms.ents, entries...)
 	default:
-		getLogger().Panicf("missing log entry [last: %d, append at: %d]",
+		raftlogger.GetLogger().Panicf("missing log entry [last: %d, append at: %d]",
 			ms.lastIndex(), entries[0].Index)
 	}
 	return nil

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package delegate
 
@@ -20,7 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
-// delegateShowDefaultSessionVariablesForRole implements SHOW DEFAULT SESSION VARIABLES FOR ROLE <name> which returns all the default session variables for a user.
+// delegateShowDefaultSessionVariablesForRole implements SHOW DEFAULT SESSION VARIABLES FOR ROLE <name> which returns all the default session variables for a
+// user.
 // for the given role.
 // Privileges: None.
 func (d *delegator) delegateShowDefaultSessionVariablesForRole(
@@ -29,20 +25,23 @@ func (d *delegator) delegateShowDefaultSessionVariablesForRole(
 
 	// Check if user has at least one of CREATEROLE, MODIFYCLUSTERSETTING, or MODIFYSQLCLUSTERSETTING privileges
 	hasPrivilege := false
-	if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.CREATEROLE); err == nil {
+	cat := d.catalog
+	globalPrivObj := syntheticprivilege.GlobalPrivilegeObject
+	user := cat.GetCurrentUser()
+	if err := cat.CheckPrivilege(d.ctx, globalPrivObj, user, privilege.CREATEROLE); err == nil {
 		hasPrivilege = true
 	} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 		return nil, err
 	}
 	if !hasPrivilege {
-		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
+		if err := cat.CheckPrivilege(d.ctx, globalPrivObj, user, privilege.MODIFYCLUSTERSETTING); err == nil {
 			hasPrivilege = true
 		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 			return nil, err
 		}
 	}
 	if !hasPrivilege {
-		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING); err == nil {
+		if err := cat.CheckPrivilege(d.ctx, globalPrivObj, user, privilege.MODIFYSQLCLUSTERSETTING); err == nil {
 			hasPrivilege = true
 		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 			return nil, err

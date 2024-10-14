@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import moment from "moment";
 
@@ -30,3 +25,19 @@ export function createInitialState<T>(
     ...overrides,
   };
 }
+
+export type PaginationRequest = {
+  pageSize: number;
+  pageNum: number;
+};
+
+export type PaginationState = {
+  pageSize: number;
+  pageNum: number;
+  totalResults: number;
+};
+
+export type ResultsWithPagination<T> = {
+  results: T;
+  pagination: PaginationState;
+};

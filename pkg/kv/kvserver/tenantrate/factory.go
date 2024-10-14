@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tenantrate
 
@@ -19,13 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // TestingKnobs configures a LimiterFactory for testing.
 type TestingKnobs struct {
-	TimeSource timeutil.TimeSource
+	QuotaPoolOptions []quotapool.Option
 
 	// Authorizer, if set, replaces the authorizer in the RPCContext.
 	Authorizer tenantcapabilities.Authorizer
@@ -95,9 +89,7 @@ func (rl *LimiterFactory) GetTenant(
 	rcLim, ok := rl.mu.tenants[tenantID]
 	if !ok {
 		var options []quotapool.Option
-		if rl.knobs.TimeSource != nil {
-			options = append(options, quotapool.WithTimeSource(rl.knobs.TimeSource))
-		}
+		options = append(options, rl.knobs.QuotaPoolOptions...)
 		if closer != nil {
 			options = append(options, quotapool.WithCloser(closer))
 		}

@@ -1,19 +1,12 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rac2
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -33,19 +26,42 @@ func (l *LogTracker) check(t *testing.T) {
 	stable := l.Stable()
 	require.Equal(t, l.last.Term, stable.Term)
 	for _, waiting := range l.waiting {
-		if ln := len(waiting); ln != 0 {
-			require.LessOrEqual(t, waiting[ln-1].Index, l.last.Index)
-			require.LessOrEqual(t, waiting[ln-1].Term, l.last.Term)
+		if ln := waiting.Length(); ln != 0 {
+			require.LessOrEqual(t, waiting.At(ln-1).Index, l.last.Index)
+			require.LessOrEqual(t, waiting.At(ln-1).Term, l.last.Term)
 		}
-		for i, ln := 1, len(waiting); i < ln; i++ {
-			require.Less(t, waiting[i-1].Index, waiting[i].Index)
-			require.LessOrEqual(t, waiting[i-1].Term, waiting[i].Term)
+		for i, ln := 1, waiting.Length(); i < ln; i++ {
+			require.Less(t, waiting.At(i-1).Index, waiting.At(i).Index)
+			require.LessOrEqual(t, waiting.At(i-1).Term, waiting.At(i).Term)
 		}
 	}
 	a := l.Admitted()
 	require.Equal(t, stable.Term, a.Term)
 	for _, index := range a.Admitted {
 		require.LessOrEqual(t, index, stable.Index)
+	}
+}
+
+func TestAdmittedVectorMerge(t *testing.T) {
+	av := func(term uint64, indices ...uint64) AdmittedVector {
+		av := AdmittedVector{Term: term}
+		require.Len(t, indices, len(av.Admitted))
+		copy(av.Admitted[:], indices)
+		return av
+	}
+	for _, tt := range [][3]AdmittedVector{
+		// Different terms. Higher term wins. Merge is symmetric.
+		{av(3, 10, 11, 12, 12), av(4, 10, 10, 20, 20), av(4, 10, 10, 20, 20)},
+		{av(4, 10, 10, 20, 20), av(3, 10, 11, 12, 12), av(4, 10, 10, 20, 20)},
+		// Same term. Highest index wins at each priority.
+		{av(3, 10, 10, 10, 10), av(3, 20, 20, 20, 20), av(3, 20, 20, 20, 20)},
+		{av(3, 20, 20, 20, 20), av(3, 10, 10, 10, 10), av(3, 20, 20, 20, 20)},
+		{av(3, 10, 11, 12, 12), av(3, 8, 9, 20, 20), av(3, 10, 11, 20, 20)},
+		{av(3, 5, 10, 5, 10), av(3, 10, 5, 10, 5), av(3, 10, 10, 10, 10)},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tt[2], tt[0].Merge(tt[1]))
+		})
 	}
 }
 
@@ -135,7 +151,7 @@ func TestLogTrackerLogSynced(t *testing.T) {
 	}
 }
 
-func TestLogTrackerSnapSynced(t *testing.T) {
+func TestLogTrackerSnap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -143,15 +159,16 @@ func TestLogTrackerSnapSynced(t *testing.T) {
 		last   LogMark
 		stable uint64
 		snap   LogMark
+		want   LogMark // stable mark after registering the snap
 		notOk  bool
 	}{
 		// Invalid snapshots.
 		{last: mark(5, 20), snap: mark(4, 30), notOk: true},
 		{last: mark(5, 20), snap: mark(5, 10), notOk: true},
 		// Valid snapshots.
-		{last: mark(5, 20), snap: mark(5, 30)},
-		{last: mark(5, 20), snap: mark(6, 10)},
-		{last: mark(5, 20), snap: mark(6, 30)},
+		{last: mark(5, 20), stable: 20, snap: mark(5, 30), want: mark(5, 20)},
+		{last: mark(5, 20), stable: 15, snap: mark(6, 10), want: mark(6, 10)},
+		{last: mark(5, 20), stable: 20, snap: mark(6, 30), want: mark(6, 20)},
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
@@ -161,10 +178,10 @@ func TestLogTrackerSnapSynced(t *testing.T) {
 			l := NewLogTracker(tt.last)
 			l.stable = tt.stable
 			l.check(t)
-			l.SnapSynced(context.Background(), tt.snap)
+			l.Snap(context.Background(), tt.snap)
 			l.check(t)
 			require.Equal(t, tt.snap, l.last)
-			require.Equal(t, tt.snap.Index, l.Stable().Index)
+			require.Equal(t, tt.want, l.Stable())
 		})
 	}
 }
@@ -190,20 +207,12 @@ func TestLogTracker(t *testing.T) {
 	}
 
 	var tracker LogTracker
-	state := func() string {
-		var b strings.Builder
-		fmt.Fprintln(&b, tracker.String())
-		for pri, marks := range tracker.waiting {
-			if len(marks) == 0 {
-				continue
-			}
-			fmt.Fprintf(&b, "%s:", raftpb.Priority(pri))
-			for _, mark := range marks {
-				fmt.Fprintf(&b, " %+v", mark)
-			}
-			fmt.Fprintf(&b, "\n")
+	state := func(updated bool) string {
+		var s string
+		if updated {
+			s += "[upd] "
 		}
-		return b.String()
+		return s + tracker.DebugString()
 	}
 
 	ctx := context.Background()
@@ -218,31 +227,37 @@ func TestLogTracker(t *testing.T) {
 		case "reset": // Example: reset term=1 index=10
 			stable := readMark(t, d, "index")
 			tracker = NewLogTracker(stable)
-			return state()
+			return state(false)
 
 		case "append": // Example: append term=10 after=100 to=200
 			var after uint64
 			d.ScanArgs(t, "after", &after)
 			to := readMark(t, d, "to")
-			tracker.Append(ctx, after, to)
-			return state()
+			updated := tracker.Append(ctx, after, to)
+			return state(updated)
+
+		case "snap":
+			mark := readMark(t, d, "index")
+			updated := tracker.Snap(ctx, mark)
+			str := state(updated)
+			return str
 
 		case "sync": // Example: sync term=10 index=100
 			mark := readMark(t, d, "index")
-			tracker.LogSynced(ctx, mark)
-			return state()
+			updated := tracker.LogSynced(ctx, mark)
+			return state(updated)
 
 		case "register": // Example: register term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
 			tracker.Register(ctx, mark, pri)
-			return state()
+			return state(false)
 
 		case "admit": // Example: admit term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
-			tracker.LogAdmitted(ctx, mark, pri)
-			return state()
+			updated := tracker.LogAdmitted(ctx, mark, pri)
+			return state(updated)
 
 		default:
 			t.Fatalf("unknown command: %s", d.Cmd)

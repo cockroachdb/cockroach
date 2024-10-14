@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package catpb_test
 
@@ -92,6 +87,7 @@ func TestPrivilege(t *testing.T) {
 					{Kind: privilege.CREATE},
 					{Kind: privilege.DELETE},
 					{Kind: privilege.DROP},
+					{Kind: privilege.TRIGGER},
 					{Kind: privilege.UPDATE},
 					{Kind: privilege.ZONECONFIG},
 				}},
@@ -134,7 +130,7 @@ func TestPrivilege(t *testing.T) {
 		{testUser,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.CREATE, privilege.DROP, privilege.SELECT, privilege.INSERT,
-				privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+				privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -609,7 +605,7 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			true,
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{privilege.ALL}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -643,8 +639,8 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.CREATE},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.SELECT, privilege.INSERT}, privilege.List{privilege.INSERT}, username.AdminRoleName()),
 			testUser, privilege.Table,

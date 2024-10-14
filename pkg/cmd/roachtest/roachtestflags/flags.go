@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachtestflags
 
@@ -434,6 +429,14 @@ var (
 						Clear the local cluster cache of missing clusters when syncing resources with
 						providers. Set this to false when running many concurrent Azure tests. Azure
 						can return stale VM information when many PUT calls are made in succession.`,
+	})
+
+	AlwaysCollectArtifacts bool = false
+	_                           = registerRunFlag(&AlwaysCollectArtifacts, FlagInfo{
+		Name: "always-collect-artifacts",
+		Usage: `
+						Always collect artifacts during test teardown, even if the test did not
+						time out or fail.`,
 	})
 )
 

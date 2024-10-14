@@ -1,0 +1,1082 @@
+echo
+----
+----
+-- This test exercises the transition from replication flow control:
+--   - v1 protocol with v1 encoding =>
+--   - v2 protocol with v1 encoding =>
+--   - v2 protocol with v2 encoding
+-- The test is structured as follows:
+--   (1) Start n1, n2, n3 with v1 protocol and v1 encoding.
+--   (2) Upgrade n1 to v2 protocol with v1 encoding.
+--   (3) Transfer the range lease to n2.
+--   (4) Upgrade n2 to v2 protocol with v1 encoding.
+--   (5) Upgrade n3 to v2 protocol with v1 encoding.
+--   (6) Upgrade n1 to v2 protocol with v2 encoding.
+--   (7) Transfer the range lease to n1.
+--   (8) Upgrade n2,n3 to v2 protocol with v2 encoding.
+--   (9) Transfer the range lease to n3.
+-- Between each step, we issue writes, (un)block admission and observe the
+-- flow control metrics and vtables.
+-- 
+-- Start by checking that the leader (n1) has 3 connected v1 streams.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  70       | 3             
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v1 flow token metrics, there should be 3x1 MiB = 3 MiB of tokens deducted.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 21 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B      
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 45 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B      
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- The v2 flow token metrics, there should be no tokens or deductions.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 0 B  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.eval.regular.available                       | 0 B  
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B  
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B  
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.send.elastic.available                       | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.send.regular.available                       | 0 B  
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B  
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B  
+
+
+-- The v1 tracked tokens per-stream on n1 should be 1 MiB for (s1,s2,s3).
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- The v1 flow token metrics on n1, there should be 3x1 MiB = 3 MiB of tokens deducted
+-- and returned now. With all tokens available.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 3.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- The v1 tracked tokens per-stream on n1 should now be 0.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 0 B                   
+  70       | 2        | 0 B                   
+  70       | 3        | 0 B                   
+
+
+-- (Block below-raft admission again.)
+
+
+-- (Issuing 1 x 1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v1 tracked tokens per-stream on n1 should again be 1 MiB for (s1,s2,s3).
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+--------------------------------------------------------------------------------
+-- (Upgrading n1 to v2 protocol with v1 encoding.)
+--------------------------------------------------------------------------------
+
+
+-- Viewing the range's v2 connected streams, there now should be three.
+-- These are lazily instantiated on the first raft event the leader 
+-- RangeController sees.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  70       | 3             
+
+
+-- There should also now be no connected streams for the v1 protocol,
+-- at the leader n1.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+
+
+-- The v1 flow token metrics, all deducted tokens should be returned after
+-- the leader switches to the rac2 protocol.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 6.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 6.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 6.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 6.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- (Issuing 1x2MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v2 flow token metrics, the 3 MiB of earlier token deductions from v1 are dropped.
+-- Expect 3 * 2 MiB = 6 MiB of deductions, from the most recent write.
+-- Note that the v2 protocol with v1 encoding will only ever deduct elastic tokens.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 18 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 18 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- The v2 tracked tokens per-stream on n1 should now also be 2 MiB for (s1,s2,s3).
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 2.0 MiB               
+  70       | 2        | 2.0 MiB               
+  70       | 3        | 2.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- The v2 flow token metrics. The 6 MiB of tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Block below-raft admission again.)
+
+
+-- (Issuing 1 x 1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v2 tracked tokens per-stream on n1 reflect the most recent write
+-- and should be 1 MiB per stream now.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+-- There should also be a corresponding elastic token deduction (not regular),
+-- as v2 protocol with v1 encoding will only ever deduct elastic tokens.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Transferring range lease to n2 (running v1) and allowing leadership to follow.)
+
+
+-- The v2 flow token metrics from n1 having lost the lease and raft leadership. 
+-- All deducted tokens are returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- Now expect to see 3 connected v1 streams on n2.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  70       | 3             
+
+
+-- (Issuing 1 x 3MiB elastic, 3x replicated write that's not admitted.)
+
+
+-- The v1 tracked tokens per-stream on n2 should be 3 MiB.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 3.0 MiB               
+  70       | 2        | 3.0 MiB               
+  70       | 3        | 3.0 MiB               
+
+
+-- Corresponding v1 token metrics on the new leader n2.
+-- These should reflect the 3 x 3 MiB = 9 MiB write.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 15 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 9.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B      
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 39 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 9.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B      
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- Corresponding v2 token metrics on the new leader n2.
+-- These should be unpopulated, similar to when n1 was first the leader.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 0 B  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.eval.regular.available                       | 0 B  
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B  
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B  
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.send.elastic.available                       | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B  
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B  
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B  
+  kvflowcontrol.tokens.send.regular.available                       | 0 B  
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B  
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B  
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B  
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B  
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- The v1 token metrics on the new leader n2 should now reflect
+-- the 9 MiB write and admission, all tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 9.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 9.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 9.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 9.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- (Issuing 1 x 1MiB regular, 3x replicated write that's admitted.)
+
+
+-- The v1 token metrics on the new leader n2 should now also reflect
+-- the 9 + 3 = 12 MiB write and admission, all tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 12 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 12 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 12 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 12 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- (Block below-raft admission.)
+
+
+-- (Issuing 1 x 4MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v1 tracked tokens per-stream on n2 should be 4 MiB.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 4.0 MiB               
+  70       | 2        | 4.0 MiB               
+  70       | 3        | 4.0 MiB               
+
+
+-- Corresponding v1 token metrics.
+-- These should reflect the 3 x 4 MiB = 12 MiB write.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 12 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 12 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 36 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 12 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+--------------------------------------------------------------------------------
+-- (Upgrading n2 to v2 protocol with v1 encoding.)
+--------------------------------------------------------------------------------
+
+
+-- (Issuing another 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- Corresponding v1 token metrics on the new leader n2. 
+-- All tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 24 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+
+
+-- Also expect to see 0 connected v1 streams on n2.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+
+
+-- There should be 3 connected streams on n2 for the v2 protocol.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  70       | 3             
+
+
+-- Corresponding v2 token metrics on the new leader n2. The most recent 
+-- 3 x 1 MiB = 3 MiB write should be reflected in the token deductions.
+-- Recall that v2 protocol with v1 encoding will only ever deduct elastic tokens.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+--------------------------------------------------------------------------------
+-- (Upgrading n3 to v2 protocol with v1 encoding.)
+--------------------------------------------------------------------------------
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- The v2 flow token metrics on n2.
+-- The 3 MiB of elastic tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Block below-raft admission.)
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v2 tracked tokens per-stream on n2 should be 1 MiB.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+--------------------------------------------------------------------------------
+-- (Upgrading n1 to v2 protocol with v2 encoding.)
+--------------------------------------------------------------------------------
+
+
+-- The v2 tracked tokens per-stream on n2 should still be 1 MiB.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- There should no longer be any tracked tokens on n2, as admission occurs.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 0 B                   
+  70       | 2        | 0 B                   
+  70       | 3        | 0 B                   
+
+
+-- Corresponding v2 token metrics on n2. All tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Block below-raft admission.)
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- Corresponding v2 token metrics on n2. The 3 x 1 MiB = 3 MiB write 
+-- should be reflected.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Transferring range lease back to n1.)
+
+
+-- There should no longer be any tracked tokens on n2, as it's no longer the
+-- leader.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+
+
+-- Corresponding v2 token metrics on n2. All tokens should be returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- Viewing n1's v2 connected streams, there now should be three, as n1 acquired
+-- the leadership and lease.
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+
+  range_id | stream_count  
+-----------+---------------
+  70       | 3             
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- The v2 tracked tokens per-stream on n1.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- Corresponding v2 token metrics on n1. 
+-- All tokens should be returned via admission.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 12 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 12 MiB   
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Block below-raft admission.)
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
+
+
+-- Corresponding v2 token metrics on n1. 
+-- The 3 x 1 MiB replicated write should be deducted.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 12 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 45 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 12 MiB   
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 45 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- The v2 tracked tokens per-stream on n1.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+
+
+-- The v1 tracked tokens per-stream on n1. 
+-- There should be no tokens tracked.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+
+
+--------------------------------------------------------------------------------
+-- (Upgrading n2 and n3 to v2 protocol with v2 encoding.)
+--------------------------------------------------------------------------------
+
+
+-- (Allow below-raft admission to proceed.)
+
+
+-- (Issuing 2x1MiB regular, 3x replicated write that's admitted.)
+
+
+-- Corresponding v2 token metrics on n1. 
+-- The 3 x 2 MiB replicated write should be deducted and returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.returned                        | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 12 MiB   
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Transferring range lease to n3, running v2 protocol with v2 encoding,
+-- and allowing leadership to follow.)
+
+
+-- (Issuing 1x1MiB regular, 3x replicated write that's admitted.)
+
+
+-- The v1 and v2 flow token metrics on n3.
+-- The 3 x 1 MiB write should have been deducted and returned.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 0 B  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 0 B  
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B  
+  kvadmission.flow_controller.regular_tokens_available   | 0 B  
+  kvadmission.flow_controller.regular_tokens_deducted    | 0 B  
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B  
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- The v1 and v2 flow token metrics on n1.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 6.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 6.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 6.0 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 6.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.returned                        | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 12 MiB   
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 12 MiB   
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- The v1 and v2 flow token metrics on n2.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_returned    | 24 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B     
+  kvadmission.flow_controller.regular_tokens_available   | 48 MiB  
+  kvadmission.flow_controller.regular_tokens_deducted    | 24 MiB  
+  kvadmission.flow_controller.regular_tokens_returned    | 24 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B     
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 9.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+----
+----
+
+# vim:ft=sql

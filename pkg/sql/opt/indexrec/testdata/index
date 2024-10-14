@@ -1490,7 +1490,7 @@ project
       └── scan t4@_hyp_1,inverted
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
-           │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           │    └── spans: ["a"/1, "a"/1]
            ├── cost: 132.464444
            └── key: (6)
 
@@ -1517,7 +1517,7 @@ project
       └── scan t4@_hyp_1,inverted
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
-           │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+           │    └── spans: ["foo"/"1", "foo"/"1"]
            ├── cost: 132.464444
            └── key: (6)
 
@@ -1549,19 +1549,17 @@ project
       │         ├── inverted expression: /9
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         └── ["foo"/"1", "foo"/"1"]
       │         ├── cost: 138.706667
       │         ├── key: (6)
       │         └── scan t4@_hyp_1,inverted
       │              ├── columns: rowid:6!null j_inverted_key:9!null
       │              ├── inverted constraint: /9/6
       │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │              ├── cost: 137.575556
-      │              ├── key: (6)
-      │              └── fd: (6)-->(9)
+      │              │         ├── [{}, {}]
+      │              │         └── ["foo"/"1", "foo"/"1"]
+      │              └── cost: 137.575556
       └── filters
            └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
 
@@ -1624,8 +1622,8 @@ project
       │         ├── inverted expression: /10
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         └── ["foo"/"1", "foo"/"1"]
       │         ├── cost: 19.2177778
       │         ├── key: (6)
       │         └── scan t4@_hyp_3,inverted
@@ -1633,11 +1631,9 @@ project
       │              ├── constraint: /1: [/1 - /1]
       │              ├── inverted constraint: /10/6
       │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │              ├── cost: 19.1866667
-      │              ├── key: (6)
-      │              └── fd: (6)-->(10)
+      │              │         ├── [{}, {}]
+      │              │         └── ["foo"/"1", "foo"/"1"]
+      │              └── cost: 19.1866667
       └── filters
            └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
 
@@ -1677,8 +1673,8 @@ project
       │         ├── inverted expression: /12
       │         │    ├── tight: false, unique: false
       │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         │         ├── [{}, {}]
+      │         │         └── ["foo"/"1", "foo"/"1"]
       │         ├── cost: 18.1482853
       │         ├── key: (6)
       │         └── scan t4@_hyp_7,inverted
@@ -1686,11 +1682,9 @@ project
       │              ├── constraint: /1/2: [/1/2 - /1/2]
       │              ├── inverted constraint: /12/6
       │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │              ├── cost: 18.1272733
-      │              ├── key: (6)
-      │              └── fd: (6)-->(12)
+      │              │         ├── [{}, {}]
+      │              │         └── ["foo"/"1", "foo"/"1"]
+      │              └── cost: 18.1272733
       └── filters
            └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
 
@@ -1877,7 +1871,7 @@ index-join t4
       ├── columns: rowid:6!null
       ├── constraint: /1: [/1 - /1]
       ├── inverted constraint: /9/6
-      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │    └── spans: ["a"/1, "a"/1]
       ├── cost: 19.1755556
       └── key: (6)
 
@@ -1953,7 +1947,7 @@ project
       └── scan t4@partial_inverted_idx,inverted,partial
            ├── columns: rowid:6!null
            ├── inverted constraint: /10/6
-           │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           │    └── spans: ["a"/1, "a"/1]
            ├── cost: 19.1644445
            └── key: (6)
 
@@ -1995,7 +1989,7 @@ index-join t4
  └── scan t4@_hyp_4,inverted
       ├── columns: rowid:6!null
       ├── inverted constraint: /11/6
-      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │    └── spans: ["a"/1, "a"/1]
       ├── cost: 132.464444
       └── key: (6)
 

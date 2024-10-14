@@ -1135,10 +1135,10 @@ WHERE y = 2
 project
  ├── columns: case:14!null
  ├── left-join (hash)
- │    ├── columns: x:1!null y:2!null k:5 true:15
+ │    ├── columns: x:1!null y:2!null k:5 i:6
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: ()-->(2), (1)-->(5,15)
+ │    ├── fd: ()-->(2), (1)-->(5,6)
  │    ├── select
  │    │    ├── columns: x:1!null y:2!null
  │    │    ├── key: (1)
@@ -1149,26 +1149,20 @@ project
  │    │    │    └── fd: (1)-->(2)
  │    │    └── filters
  │    │         └── y:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
- │    ├── project
- │    │    ├── columns: true:15!null k:5!null
+ │    ├── select
+ │    │    ├── columns: k:5!null i:6!null
  │    │    ├── key: (5)
- │    │    ├── fd: ()-->(15)
- │    │    ├── select
+ │    │    ├── fd: ()-->(6)
+ │    │    ├── scan a
  │    │    │    ├── columns: k:5!null i:6!null
  │    │    │    ├── key: (5)
- │    │    │    ├── fd: ()-->(6)
- │    │    │    ├── scan a
- │    │    │    │    ├── columns: k:5!null i:6!null
- │    │    │    │    ├── key: (5)
- │    │    │    │    └── fd: (5)-->(6)
- │    │    │    └── filters
- │    │    │         └── i:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
- │    │    └── projections
- │    │         └── true [as=true:15]
+ │    │    │    └── fd: (5)-->(6)
+ │    │    └── filters
+ │    │         └── i:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
  │    └── filters
  │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
-      └── CASE WHEN true:15 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:14, outer=(15)]
+      └── CASE WHEN k:5 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:14, outer=(5)]
 
 # Don't eliminate the GroupBy if there is an aggregate function other than
 # ConstAgg, ConstNotNullAgg, or AnyNotNullAgg.

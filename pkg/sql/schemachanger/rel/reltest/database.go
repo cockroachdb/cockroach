@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package reltest
 
@@ -90,7 +85,8 @@ func (qc QueryTest) run(t *testing.T, indexes int, db *rel.Database) {
 
 	require.NoError(t, err)
 	require.Equal(t, qc.Entities, q.Entities())
-	if err := q.Iterate(db, func(r rel.Result) error {
+	stats := &rel.QueryStats{}
+	if err := q.Iterate(db, stats, func(r rel.Result) error {
 		var cur []interface{}
 		for _, v := range qc.ResVars {
 			cur = append(cur, r.Var(v))
@@ -106,6 +102,12 @@ func (qc QueryTest) run(t *testing.T, indexes int, db *rel.Database) {
 		t.Fatal(err)
 	} else if intsets.MakeFast(qc.UnsatisfiableIndexes...).Contains(indexes) {
 		t.Fatalf("expected to fail with indexes %d", indexes)
+	}
+	if len(results) == 0 {
+		require.Equal(t, 0, stats.ResultsFound)
+		require.Less(t, stats.FirstUnsatisfiedClause, len(q.Clauses()),
+			"There are %d clauses in the query, but the first unsatisfied clause is %d",
+			len(q.Clauses()), stats.FirstUnsatisfiedClause)
 	}
 	expResults := append(qc.Results[:0:0], qc.Results...)
 	findResultInExp := func(res []interface{}) (found bool) {

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -1097,10 +1092,10 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`system_identity`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return evalCtx.SessionData().SystemIdentity().Normalized(), nil
+			return evalCtx.SessionData().SystemIdentity(), nil
 		},
 		GetFromSessionData: func(sd *sessiondata.SessionData) string {
-			return sd.SystemIdentity().Normalized()
+			return sd.SystemIdentity()
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
@@ -1435,6 +1430,15 @@ var varGen = map[string]sessionVar{
 				return newVarValueError("ssl_renegotiation_limit", s, "0")
 			}
 			return nil
+		},
+	},
+
+	// CockroachDB extension.
+	// This is a read-only setting that shows the method that was used
+	// to authenticate this session.
+	`authentication_method`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(evalCtx.SessionData().AuthenticationMethod), nil
 		},
 	},
 
@@ -3467,6 +3471,23 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUsePolymorphicParameterFix), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_push_limit_into_project_filtered_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_push_limit_into_project_filtered_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_push_limit_into_project_filtered_scan", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPushLimitIntoProjectFilteredScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan), nil
 		},
 		GlobalDefault: globalTrue,
 	},

@@ -152,6 +152,7 @@ go_test(
         "//pkg/kv/kvserver/readsummary",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/kv/kvserver/spanset",
+        "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

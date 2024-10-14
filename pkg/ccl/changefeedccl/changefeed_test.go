@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -78,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -713,7 +711,7 @@ func TestMissingTableErr(t *testing.T) {
 
 	t.Run("changefeed on non existing table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(s.DB)
-		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist$`,
+		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist`,
 			`CREATE CHANGEFEED FOR foo`,
 		)
 	})
@@ -1391,6 +1389,60 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedTotalRangesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		totalRanges := defaultSLI.TotalRanges
+
+		// Total ranges should start at zero.
+		require.Zero(t, totalRanges.Value())
+
+		assertTotalRanges := func(expected int64) {
+			testutils.SucceedsSoon(t, func() error {
+				if actual := totalRanges.Value(); expected != actual {
+					return errors.Newf("expected total ranges to be %d, but got %d", expected, actual)
+				}
+				return nil
+			})
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, "CREATE TABLE foo (x int)")
+
+		// We expect one range after creating a changefeed on a single table.
+		fooFeed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval='1s'")
+		assertTotalRanges(1)
+
+		// We expect total ranges to be zero again after pausing the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Pause())
+		assertTotalRanges(0)
+
+		// We once again expect one range after resuming the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Resume())
+		assertTotalRanges(1)
+
+		// We expect two ranges after starting another changefeed on a single table.
+		barFeed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval='1s'")
+		assertTotalRanges(2)
+
+		// We expect there to still be one range after cancelling one of the changefeeds.
+		require.NoError(t, fooFeed.Close())
+		assertTotalRanges(1)
+
+		// We expect there to be no ranges left after cancelling the other changefeed.
+		require.NoError(t, barFeed.Close())
+		assertTotalRanges(0)
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1529,6 +1581,8 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1633,6 +1687,8 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1666,6 +1722,8 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1714,6 +1772,8 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1761,6 +1821,8 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -1794,6 +1856,8 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1887,6 +1951,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -2490,6 +2556,8 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -2684,6 +2752,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
@@ -2841,6 +2911,8 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
@@ -2903,6 +2975,8 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE after_backfill (a INT PRIMARY KEY)`)
@@ -2932,6 +3006,8 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 func TestChangefeedEachColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 
@@ -3051,6 +3127,8 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
 	// requireErrorSoon times out after 30 seconds
 	skip.UnderStress(t)
 	skip.UnderRace(t)
@@ -3094,6 +3172,8 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -5110,17 +5190,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
 	)
 
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	sqlDB.ExpectErrWithTimeout(
-		t, `CHANGEFEED requires an enterprise license`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-	)
-	sqlDB.ExpectErrWithTimeout(
-		t, `use of AS SELECT requires an enterprise license`,
-		`CREATE CHANGEFEED AS SELECT * FROM foo`,
-	)
-	enableEnterprise()
-
 	// Watching system.jobs would create a cycle, since the resolved timestamp
 	// high-water mark is saved in it.
 	sqlDB.ExpectErrWithTimeout(
@@ -6535,7 +6604,7 @@ func TestChangefeedPrimaryKeyChangeWorks(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY USING HASH, b STRING NOT NULL)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 
@@ -6546,20 +6615,20 @@ func TestChangefeedPrimaryKeyChangeWorks(t *testing.T) {
 		// 'initial' is skipped because only the latest value ('updated') is
 		// emitted by the initial scan.
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo: [2, 0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [11, 1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [6, 2]->{"after": {"a": 2, "b": "b"}}`,
 		})
 
-		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+		sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b) USING HASH`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3, 'c'), (4, 'd')`)
 		assertPayloads(t, foo, []string{
-			`foo: ["c"]->{"after": {"a": 3, "b": "c"}}`,
-			`foo: ["d"]->{"after": {"a": 4, "b": "d"}}`,
+			`foo: [6, "c"]->{"after": {"a": 3, "b": "c"}}`,
+			`foo: [15, "d"]->{"after": {"a": 4, "b": "d"}}`,
 		})
 
 		// ALTER PRIMARY KEY should work and we should see the changed
@@ -6575,8 +6644,8 @@ INSERT INTO foo VALUES (1, 'f');
 		// Note that the primary key change is asynchronous and that only the
 		// subsequent write will be displayed using the new primary key.
 		assertPayloads(t, foo, []string{
-			`foo: ["a"]->{"after": {"a": 6, "b": "a"}}`,
-			`foo: ["e"]->{"after": {"a": 5, "b": "e"}}`,
+			`foo: [6, "a"]->{"after": {"a": 6, "b": "a"}}`,
+			`foo: [14, "e"]->{"after": {"a": 5, "b": "e"}}`,
 		})
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1, "b": "f"}}`,
@@ -7068,7 +7137,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	ts := timeutil.NewManualTime(timeutil.Now())
 	js := newJobState(nil, /* job */
 		cluster.MakeTestingClusterSettings(),
-		MakeMetrics(time.Second).(*Metrics), ts,
+		MakeMetrics(time.Second, cidr.NewTestLookup()).(*Metrics), ts,
 	)
 
 	ctx := context.Background()
@@ -8544,6 +8613,8 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

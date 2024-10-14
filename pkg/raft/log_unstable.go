@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -17,7 +17,10 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
 // "log" can be represented by a snapshot, and/or a contiguous slice of entries.
@@ -96,10 +99,10 @@ type unstable struct {
 	// together with the entries.
 	entryInProgress uint64
 
-	logger Logger
+	logger raftlogger.Logger
 }
 
-func newUnstable(last entryID, logger Logger) unstable {
+func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	// To initialize the last accepted term (logSlice.term) correctly, we make
 	// sure its invariant is true: the log is a prefix of the term's leader's log.
 	// This can be achieved by conservatively initializing to the term of the last
@@ -129,14 +132,6 @@ func (u *unstable) maybeFirstIndex() (uint64, bool) {
 		return u.snapshot.Metadata.Index + 1, true
 	}
 	return 0, false
-}
-
-// maybeTerm returns the term of the entry at index i, if there is any.
-func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
-	if i < u.prev.index || i > u.lastIndex() {
-		return 0, false
-	}
-	return u.termAt(i), true
 }
 
 // nextEntries returns the unstable entries that are not already in the process
@@ -327,35 +322,4 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	}
 	u.entryInProgress = min(u.entryInProgress, a.prev.index)
 	return true
-}
-
-// slice returns the entries from the unstable log with indexes in the range
-// [lo, hi). The entire range must be stored in the unstable log or the method
-// will panic. The returned slice can be appended to, but the entries in it must
-// not be changed because they are still shared with unstable.
-//
-// TODO(pavelkalinnikov): this, and similar []pb.Entry slices, may bubble up all
-// the way to the application code through Ready struct. Protect other slices
-// similarly, and document how the client can use them.
-func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
-	u.mustCheckOutOfBounds(lo, hi)
-	// NB: use the full slice expression to limit what the caller can do with the
-	// returned slice. For example, an append will reallocate and copy this slice
-	// instead of corrupting the neighbouring u.entries.
-	offset := u.prev.index + 1
-	return u.entries[lo-offset : hi-offset : hi-offset]
-}
-
-// mustCheckOutOfBounds checks that [lo, hi) interval is included in
-// (u.prev.index, u.lastIndex()].
-// Equivalently, u.prev.index + 1 <= lo <= hi <= u.lastIndex() + 1.
-//
-// TODO(pav-kv): the callers check this already. Remove.
-func (u *unstable) mustCheckOutOfBounds(lo, hi uint64) {
-	if lo > hi {
-		u.logger.Panicf("invalid unstable.slice %d > %d", lo, hi)
-	}
-	if last := u.lastIndex(); lo <= u.prev.index || hi > last+1 {
-		u.logger.Panicf("unstable.slice[%d,%d) out of bound (%d,%d]", lo, hi, u.prev.index, last)
-	}
 }

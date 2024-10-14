@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package localtestcluster
 
@@ -29,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -40,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -116,7 +113,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock,
-		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
+		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */, logger.CRDBLogger)
 	var cfg kvserver.StoreConfig
 	if ltc.StoreTestingKnobs != nil && ltc.StoreTestingKnobs.InitialReplicaVersionOverride != nil {
 		cfg = kvserver.TestStoreConfigWithVersion(clock, *ltc.StoreTestingKnobs.InitialReplicaVersionOverride)
@@ -183,6 +180,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
+	storeLivenessTransport := storeliveness.NewTransport(
+		cfg.AmbientCtx, ltc.stopper, ltc.Clock,
+		nil /* dialer */, nil /* grpcServer */, nil, /* knobs */
+	)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
@@ -226,6 +227,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		/* deterministic */ false,
 	)
 	cfg.Transport = transport
+	cfg.StoreLivenessTransport = storeLivenessTransport
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
 	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package testcat
 
@@ -266,7 +261,9 @@ func (tc *Catalog) ResolveIndex(
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+func (tc *Catalog) CheckPrivilege(
+	ctx context.Context, o cat.Object, user username.SQLUsername, priv privilege.Kind,
+) error {
 	return tc.CheckAnyPrivilege(ctx, o)
 }
 
@@ -298,7 +295,9 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (tc *Catalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, user username.SQLUsername,
+) error {
 	if tc.revokedUDFOids.Contains(int(oid)) {
 		return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to execute function with OID %d", oid)
 	}
@@ -330,6 +329,18 @@ func (tc *Catalog) CheckRoleExists(ctx context.Context, role username.SQLUsernam
 // Optimizer is part of the cat.Catalog interface.
 func (tc *Catalog) Optimizer() interface{} {
 	return nil
+}
+
+// GetCurrentUser is part of the cat.Catalog interface.
+func (tc *Catalog) GetCurrentUser() username.SQLUsername {
+	return username.EmptyRoleName()
+}
+
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (tc *Catalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	return tc.GetCurrentUser(), nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -724,6 +735,16 @@ func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
 	return nil, nil
 }
 
+// TriggerCount is a part of the cat.View interface.
+func (tv *View) TriggerCount() int {
+	return 0
+}
+
+// Trigger is a part of the cat.View interface.
+func (tv *View) Trigger(i int) cat.Trigger {
+	panic("not implemented")
+}
+
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
@@ -1022,6 +1043,16 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 // IsRefreshViewRequired is a part of the cat.Table interface.
 func (tt *Table) IsRefreshViewRequired() bool {
 	return false
+}
+
+// TriggerCount is a part of the cat.Table interface.
+func (tt *Table) TriggerCount() int {
+	return 0
+}
+
+// Trigger is a part of the cat.Table interface.
+func (tt *Table) Trigger(i int) cat.Trigger {
+	panic("not implemented")
 }
 
 // Index implements the cat.Index interface for testing purposes.

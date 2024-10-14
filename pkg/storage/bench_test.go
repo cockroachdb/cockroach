@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -972,7 +967,7 @@ func runMVCCConditionalPut(
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if _, err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, CPutFailIfMissing, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, ConditionalPutWriteOptions{AllowIfDoesNotExist: CPutFailIfMissing}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -995,7 +990,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if _, err := MVCCBlindConditionalPut(
-			ctx, eng, key, ts, value, nil, CPutFailIfMissing, MVCCWriteOptions{},
+			ctx, eng, key, ts, value, nil, ConditionalPutWriteOptions{AllowIfDoesNotExist: CPutFailIfMissing},
 		); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}

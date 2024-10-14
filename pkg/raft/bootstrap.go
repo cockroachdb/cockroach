@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,9 +18,8 @@
 package raft
 
 import (
-	"errors"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // Bootstrap initializes the RawNode for first use by appending configuration
@@ -34,10 +33,8 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	if len(peers) == 0 {
 		return errors.New("must provide at least one peer to Bootstrap")
 	}
-	lastIndex, err := rn.raft.raftLog.storage.LastIndex()
-	if err != nil {
-		return err
-	} else if lastIndex != 0 {
+	lastIndex := rn.raft.raftLog.storage.LastIndex()
+	if lastIndex != 0 {
 		return errors.New("can't bootstrap a nonempty Storage")
 	}
 

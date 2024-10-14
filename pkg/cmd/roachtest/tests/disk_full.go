@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -49,7 +44,7 @@ func registerDiskFull(r registry.Registry) {
 			// a range on node 1, but node 1 will not restart until the query
 			// completes.
 			db := c.Conn(ctx, t.L(), 1)
-			err := WaitFor3XReplication(ctx, t, t.L(), db)
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 			require.NoError(t, err)
 			_ = db.Close()
 

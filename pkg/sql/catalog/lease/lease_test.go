@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Note that there's also lease_internal_test.go, in package lease.
 
@@ -17,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -929,6 +925,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 	fooReleaseCount := int32(0)
 	var tableID int64
 
+	ctx := context.Background()
 	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
@@ -938,10 +935,12 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				RemoveOnceDereferenced: true,
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 					if desc.GetName() == "foo" {
+						log.Infof(ctx, "lease acquirer stack trace: %s", debug.Stack())
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
+					log.Infof(ctx, "releasing lease for ID %d", int64(id))
 					if int64(id) == atomic.LoadInt64(&tableID) {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
@@ -970,6 +969,7 @@ CREATE TABLE t.foo (v INT);
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
+	log.Infof(ctx, "table ID for foo is %d", tableDesc.GetID())
 
 	tx, err := sqlDB.Begin()
 	if err != nil {

@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -32,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,6 +72,7 @@ type serverAddresses struct {
 
 func TestProxyHandler_ValidateConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -135,6 +135,7 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 
 func TestProxyProtocol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -290,6 +291,7 @@ func TestProxyProtocol(t *testing.T) {
 
 func TestPrivateEndpointsACL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -460,6 +462,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 
 func TestAllowedCIDRRangesACL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -574,6 +577,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -603,6 +607,7 @@ func TestLongDBName(t *testing.T) {
 // deleted.
 func TestBackendDownRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -638,7 +643,13 @@ func TestBackendDownRetry(t *testing.T) {
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
+
+	// This test is asserting against specific counter values and error messages.
+	// The counter assertions make it difficult to insert retries and the test
+	// flakes once a month under stress.
+	skip.UnderStress(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -689,6 +700,7 @@ func TestFailedConnection(t *testing.T) {
 
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -726,6 +738,7 @@ func TestUnexpectedError(t *testing.T) {
 
 func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -841,6 +854,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 func TestProxyTLSConf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	t.Run("insecure", func(t *testing.T) {
@@ -922,6 +936,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 func TestProxyTLSClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 	// NB: The leaktest call is an important part of this test. We're
 	// verifying that no goroutines are leaked, despite calling Close an
@@ -978,6 +993,7 @@ func TestProxyTLSClose(t *testing.T) {
 
 func TestProxyModifyRequestParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1038,6 +1054,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 func TestInsecureProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1084,6 +1101,7 @@ func TestInsecureProxy(t *testing.T) {
 
 func TestErroneousFrontend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1110,6 +1128,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 func TestErrorHint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1142,6 +1161,7 @@ func TestErrorHint(t *testing.T) {
 
 func TestErroneousBackend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1168,6 +1188,7 @@ func TestErroneousBackend(t *testing.T) {
 
 func TestProxyRefuseConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1195,6 +1216,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 func TestProxyHandler_handle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1219,6 +1241,7 @@ func TestProxyHandler_handle(t *testing.T) {
 
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1332,6 +1355,7 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1451,6 +1475,7 @@ func TestDirectoryConnect(t *testing.T) {
 
 func TestConnectionRebalancingDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1539,6 +1564,7 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 
 func TestCancelQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1825,6 +1851,7 @@ func TestCancelQuery(t *testing.T) {
 
 func TestPodWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1864,6 +1891,10 @@ func TestPodWatcher(t *testing.T) {
 	opts.testingKnobs.balancerOpts = []balancer.Option{
 		balancer.NoRebalanceLoop(),
 		balancer.RebalanceRate(1.0),
+		// Set a rebalance delay of zero. Rebalance is triggered on startup because
+		// the watch enumerates three existing pods. The delay of zero allows
+		// addition of the fourth pod to trigger rebalancing.
+		balancer.RebalanceDelay(0),
 	}
 	proxy, addrs := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addrs.listenAddr, tenantID)
@@ -1924,6 +1955,7 @@ func TestPodWatcher(t *testing.T) {
 
 func TestConnectionMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -2319,6 +2351,7 @@ func TestConnectionMigration(t *testing.T) {
 // (both failed and successful ones).
 func TestAcceptedConnCountMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2410,6 +2443,7 @@ func TestAcceptedConnCountMetric(t *testing.T) {
 // decremented whenever the connections were closed due to a goroutine leak.
 func TestCurConnCountMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2477,21 +2511,24 @@ func TestCurConnCountMetric(t *testing.T) {
 
 func TestClusterNameAndTenantFromParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
 	testCases := []struct {
 		name                string
+		sniServerName       string
 		params              map[string]string
 		expectedClusterName string
 		expectedTenantID    uint64
 		expectedParams      map[string]string
 		expectedError       string
 		expectedHint        string
+		expectedMetrics     func(t *testing.T, m *metrics)
 	}{
 		{
-			name:          "empty params",
+			name:          "empty params and server name",
 			params:        map[string]string{},
 			expectedError: "missing cluster identifier",
 			expectedHint:  clusterIdentifierHint,
@@ -2607,6 +2644,32 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedHint:  "Tenant ID 0 is invalid.",
 		},
 		{
+			name:          "invalid sni format",
+			sniServerName: "foo-bar-baz",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:          "invalid sni value",
+			sniServerName: "happy2koala-.abc.aws-ap-south-1.cockroachlabs.cloud",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:                "valid sni value",
+			sniServerName:       "happy-seal-10.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:              map[string]string{},
+			expectedClusterName: "happy-seal",
+			expectedTenantID:    10,
+			expectedParams:      map[string]string{},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.SNIRoutingMethodCount.Value())
+			},
+		},
+		{
 			name: "multiple similar cluster identifiers",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
@@ -2615,6 +2678,11 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(2), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "cluster identifier in database param",
@@ -2625,6 +2693,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: strings.Repeat("a", 100),
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "valid cluster identifier with invalid arrangements",
@@ -2638,6 +2710,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"database": "defaultdb",
 				"options":  "-c  -c -c -c",
 			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "short option: cluster identifier in options param",
@@ -2648,6 +2724,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "short option with spaces: cluster identifier in options param",
@@ -2658,6 +2738,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name: "long option: cluster identifier in options param",
@@ -2670,6 +2754,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams: map[string]string{
 				"database": "defaultdb",
 				"options":  "--foo=test",
+			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
 			},
 		},
 		{
@@ -2684,6 +2772,10 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				"database": "defaultdb",
 				"options":  "-csearch_path=public \t--foo=test",
 			},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.ClusterOptionRoutingMethodCount.Value())
+			},
 		},
 		{
 			name:                "leading 0s are ok",
@@ -2691,19 +2783,24 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedClusterName: "happy-koala-0",
 			expectedTenantID:    7,
 			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
+			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := &pgproto3.StartupMessage{Parameters: tc.params}
+			m := makeProxyMetrics()
 
 			originalParams := make(map[string]string)
 			for k, v := range msg.Parameters {
 				originalParams[k] = v
 			}
 
-			fe := &FrontendAdmitInfo{Msg: msg}
-			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe)
+			fe := &FrontendAdmitInfo{Msg: msg, SniServerName: tc.sniServerName}
+			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe, &m)
 			if tc.expectedError == "" {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
 
@@ -2721,6 +2818,15 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 
 			// Check that the original parameters were not modified.
 			require.Equal(t, originalParams, msg.Parameters)
+
+			if tc.expectedMetrics != nil {
+				tc.expectedMetrics(t, &m)
+			} else {
+				require.Zero(t, m.RoutingMethodCount.Count())
+				require.Zero(t, m.SNIRoutingMethodCount.Value())
+				require.Zero(t, m.DatabaseRoutingMethodCount.Value())
+				require.Zero(t, m.ClusterOptionRoutingMethodCount.Value())
+			}
 		})
 	}
 }

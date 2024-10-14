@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -152,8 +147,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			repl := &Replica{store: testCtx.store}
-			repl.mu.state.Desc = &roachpb.RangeDescriptor{StartKey: tc.startKey, EndKey: tc.endKey}
-			repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
+			repl.shMu.state.Desc = &roachpb.RangeDescriptor{StartKey: tc.startKey, EndKey: tc.endKey}
+			repl.shMu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
 			zoneConfig := zonepb.DefaultZoneConfigRef()
 			zoneConfig.RangeMinBytes = proto.Int64(tc.minBytes)
 			repl.SetSpanConfig(zoneConfig.AsSpanConfig(), roachpb.Span{Key: tc.startKey, EndKey: tc.endKey})

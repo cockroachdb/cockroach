@@ -38,7 +38,7 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1451375629  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+1451375629  1546506610  0                r              {bar=C*a*d*r*t*w*/,foo=C*a*d*r*t*w*/,=r/}
 1451375629  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 1451375629  1546506610  0                T              {bar=U*/,foo=U*/}
 1451375629  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
@@ -55,7 +55,7 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1451375629  1546506610  0                r              {bar=C*a*drw*/,foo=C*a*drw*/,=r/}
+1451375629  1546506610  0                r              {bar=C*a*drt*w*/,foo=C*a*drt*w*/,=r/}
 1451375629  1546506610  0                S              {bar=CU*a*d*r*w/,foo=CU*a*d*r*w/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU*/,foo=CU*/,=U/}
@@ -72,7 +72,7 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
@@ -93,17 +93,17 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-97389596    1791217281  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+97389596    1791217281  0                r              {bar=C*a*d*r*t*w*/,foo=C*a*d*r*t*w*/}
 97389596    1791217281  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 97389596    1791217281  0                T              {bar=U*/,foo=U*/,=U/}
 97389596    1791217281  0                n              {bar=C*U*/,foo=C*U*/}
 97389596    1791217281  0                f              {bar=X*/,foo=X*/,=X/}
-3755498903  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+3755498903  2026795574  0                r              {bar=C*a*d*r*t*w*/,foo=C*a*d*r*t*w*/}
 3755498903  2026795574  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 3755498903  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
 3755498903  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
 3755498903  2026795574  0                f              {bar=X*/,foo=X*/,=X/}
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
@@ -132,7 +132,7 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 3755498903  2026795574  0                T              {=U/}
 3755498903  2026795574  0                n              {}
 3755498903  2026795574  0                f              {=X/}
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
@@ -169,7 +169,7 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
@@ -184,7 +184,7 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 3755498903  2026795574  0                T              {foo=U*/,=U/}
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}
@@ -198,7 +198,7 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1451375629  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r/}
+1451375629  1546506610  0                r              {bar=Cadrtw/,foo=Cadrtw/,=r/}
 1451375629  1546506610  0                S              {bar=CUadrw/,foo=CUadrw/,=r/}
 1451375629  1546506610  0                T              {bar=U/,foo=U/}
 1451375629  1546506610  0                n              {bar=CU/,foo=CU/,=U/}

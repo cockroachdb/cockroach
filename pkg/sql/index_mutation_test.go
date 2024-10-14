@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -40,8 +35,6 @@ func TestIndexMutationKVOps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	defer lease.TestingDisableTableLeases()()
-
 	params, _ := createTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
@@ -52,6 +45,7 @@ func TestIndexMutationKVOps(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "index_mutations"), func(t *testing.T, path string) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
+		defer lease.TestingDisableTableLeases()()
 		_, err := sqlDB.Exec("CREATE DATABASE t; USE t")
 		require.NoError(t, err)
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {

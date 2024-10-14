@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package randclient
 
@@ -706,12 +703,8 @@ func randDatumsForTable(rng *rand.Rand, td catalog.TableDescriptor) ([]tree.Datu
 		if c.IsComputed() {
 			return nil, errors.Errorf("unable to generate random datums for table with computed column %q", c.GetName())
 		}
-		if c.GetName() == "crdb_replication_origin_timestamp" {
-			datums = append(datums, tree.DNull)
-		} else {
-			datums = append(datums,
-				randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
-		}
+		datums = append(datums,
+			randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
 	}
 	return datums, nil
 }

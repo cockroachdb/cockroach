@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { createHashHistory } from "history";
 import Long from "long";
@@ -17,6 +12,7 @@ import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
 import { versionsSelector } from "src/redux/nodes";
 import { API_PREFIX } from "src/util/api";
+import { setDataFromServer } from "src/util/dataFromServer";
 import fetchMock from "src/util/fetch-mock";
 
 import {
@@ -32,6 +28,7 @@ import {
   emailSubscriptionAlertSelector,
   clusterPreserveDowngradeOptionDismissedSetting,
   clusterPreserveDowngradeOptionOvertimeSelector,
+  licenseUpdateNotificationSelector,
 } from "./alerts";
 import {
   livenessReducerObj,
@@ -46,6 +43,7 @@ import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
 import {
   VERSION_DISMISSED_KEY,
   INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  LICENSE_UPDATE_DISMISSED_KEY,
   setUIDataKey,
   isInFlight,
 } from "./uiData";
@@ -258,6 +256,31 @@ describe("alerts", function () {
       });
     });
 
+    describe("licence update notification", function () {
+      it("displays the alert when nothing is done", function () {
+        dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, null));
+        const alert = licenseUpdateNotificationSelector(state());
+        expect(typeof alert).toBe("object");
+        expect(alert.level).toEqual(AlertLevel.INFORMATION);
+        expect(alert.text).toEqual(
+          "Important changes to CockroachDB’s licensing model.",
+        );
+      });
+
+      it("hides the alert when dismissed timestamp is present", function () {
+        dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, moment()));
+        expect(licenseUpdateNotificationSelector(state())).toBeUndefined();
+      });
+
+      it("hides the alert when license is enterprise", function () {
+        dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, null));
+        setDataFromServer({
+          LicenseType: "Enterprise",
+        } as any);
+        expect(licenseUpdateNotificationSelector(state())).toBeUndefined();
+      });
+    });
+
     describe("new version available notification", function () {
       it("displays nothing when versions have not yet been loaded", function () {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
@@ -456,9 +479,8 @@ describe("alerts", function () {
 
     describe("email signup for release notes alert", () => {
       it("initialized with default 'false' (hidden) state", () => {
-        const settingState = emailSubscriptionAlertLocalSetting.selector(
-          state(),
-        );
+        const settingState =
+          emailSubscriptionAlertLocalSetting.selector(state());
         expect(settingState).toBe(false);
       });
 
@@ -631,6 +653,7 @@ describe("alerts", function () {
       );
       dispatch(setUIDataKey(VERSION_DISMISSED_KEY, "blank"));
       dispatch(setUIDataKey(INSTRUCTIONS_BOX_COLLAPSED_KEY, false));
+      dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, moment()));
       dispatch(
         versionReducerObj.receiveData({
           details: [],

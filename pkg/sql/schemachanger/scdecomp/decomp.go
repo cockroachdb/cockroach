@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scdecomp
 
@@ -413,6 +408,10 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	for _, c := range tbl.OutboundForeignKeys() {
 		w.walkForeignKeyConstraint(tbl, c)
 	}
+	triggers := tbl.GetTriggers()
+	for i := range triggers {
+		w.walkTrigger(tbl, &triggers[i])
+	}
 
 	_ = tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		w.backRefs.Add(dep.ID)
@@ -439,10 +438,19 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
 				w.ev(scpb.Status_PUBLIC,
 					&scpb.IndexZoneConfig{
+						TableID: tbl.GetID(),
+						IndexID: catid.IndexID(subZoneCfg.IndexID),
+						Subzone: subZoneCfg,
+						SeqNum:  0,
+					})
+			}
+			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.PartitionZoneConfig{
 						TableID:       tbl.GetID(),
 						IndexID:       catid.IndexID(subZoneCfg.IndexID),
-						Subzone:       subZoneCfg,
 						PartitionName: subZoneCfg.PartitionName,
+						Subzone:       subZoneCfg,
 						SeqNum:        0,
 					})
 			}
@@ -453,6 +461,12 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	}
 	if tbl.IsSchemaLocked() {
 		w.ev(scpb.Status_PUBLIC, &scpb.TableSchemaLocked{TableID: tbl.GetID()})
+	}
+	if tbl.TableDesc().LDRJobIDs != nil {
+		w.ev(scpb.Status_PUBLIC, &scpb.LDRJobIDs{
+			TableID: tbl.GetID(),
+			JobIDs:  tbl.TableDesc().LDRJobIDs,
+		})
 	}
 }
 
@@ -788,6 +802,70 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 			Comment:      comment,
 		})
 	}
+}
+
+func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDescriptor) {
+	w.ev(scpb.Status_PUBLIC, &scpb.Trigger{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerName{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Name:      t.Name,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Enabled:   t.Enabled,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerTiming{
+		TableID:    tbl.GetID(),
+		TriggerID:  t.ID,
+		ActionTime: t.ActionTime,
+		ForEachRow: t.ForEachRow,
+	})
+	events := make([]*scpb.TriggerEvent, 0, len(t.Events))
+	for _, event := range t.Events {
+		events = append(events, &scpb.TriggerEvent{
+			Type:        event.Type,
+			ColumnNames: event.ColumnNames,
+		})
+	}
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEvents{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Events:    events,
+	})
+	if t.NewTransitionAlias != "" || t.OldTransitionAlias != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerTransition{
+			TableID:            tbl.GetID(),
+			TriggerID:          t.ID,
+			NewTransitionAlias: t.NewTransitionAlias,
+			OldTransitionAlias: t.OldTransitionAlias,
+		})
+	}
+	if t.WhenExpr != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerWhen{
+			TableID:   tbl.GetID(),
+			TriggerID: t.ID,
+			WhenExpr:  t.WhenExpr,
+		})
+	}
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerFunctionCall{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		FuncID:    t.FuncID,
+		FuncBody:  t.FuncBody,
+		FuncArgs:  t.FuncArgs,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
+		TableID:         tbl.GetID(),
+		TriggerID:       t.ID,
+		UsesRelationIDs: t.DependsOn,
+		UsesTypeIDs:     t.DependsOnTypes,
+		UsesRoutineIDs:  t.DependsOnRoutines,
+	})
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(

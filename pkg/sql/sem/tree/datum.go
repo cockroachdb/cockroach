@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -230,7 +225,7 @@ func (d Datums) Compare(ctx context.Context, evalCtx CompareContext, other Datum
 
 // CompositeDatum is a Datum that may require composite encoding in
 // indexes. Any Datum implementing this interface must also add itself to
-// colinfo.HasCompositeKeyEncoding.
+// colinfo.CanHaveCompositeKeyEncoding.
 type CompositeDatum interface {
 	Datum
 	// IsComposite returns true if this datum is not round-tripable in a key
@@ -1108,11 +1103,14 @@ var (
 	// DZeroDecimal is the decimal constant '0'.
 	DZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
 
-	// dNaNDecimal is the decimal constant 'NaN'.
-	dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+	// DNaNDecimal is the decimal constant 'NaN'.
+	DNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
-	// dPosInfDecimal is the decimal constant 'inf'.
-	dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+	// DPosInfDecimal is the decimal constant 'inf'.
+	DPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+
+	// DNegInfDecimal is the decimal constant '-inf'.
+	DNegInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: true}}
 )
 
 // IsMax implements the Datum interface.
@@ -1127,12 +1125,12 @@ func (d *DDecimal) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 
 // Max implements the Datum interface.
 func (d *DDecimal) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dPosInfDecimal, true
+	return DPosInfDecimal, true
 }
 
 // Min implements the Datum interface.
 func (d *DDecimal) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dNaNDecimal, true
+	return DNaNDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.

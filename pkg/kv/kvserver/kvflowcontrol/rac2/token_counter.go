@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rac2
 
@@ -29,6 +24,8 @@ import (
 
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
+//
+// TODO(sumeer): remove this interface since there is only one implementation.
 type TokenWaitingHandle interface {
 	// WaitChannel is the channel that will be signaled if tokens are possibly
 	// available. If signaled, the caller must call
@@ -54,6 +51,9 @@ type TokenWaitingHandle interface {
 	// available. True is returned if tokens are available, false otherwise. If
 	// no tokens are available, the caller can resume waiting using WaitChannel.
 	ConfirmHaveTokensAndUnblockNextWaiter() bool
+	// StreamString returns a string representation of the stream. Used for
+	// tracing.
+	StreamString() string
 }
 
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
@@ -169,13 +169,44 @@ type tokensPerWorkClass struct {
 	regular, elastic kvflowcontrol.Tokens
 }
 
+// TokenType represents the type of token being adjusted, distinct from the
+// class of token (elastic or regular). A TokenCounter will have a TokenType
+// for which it adjusts tokens.
+type TokenType int
+
+const (
+	EvalToken TokenType = iota
+	SendToken
+	NumTokenTypes
+)
+
+func (f TokenType) String() string {
+	return redact.StringWithoutMarkers(f)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (f TokenType) SafeFormat(p redact.SafePrinter, _ rune) {
+	switch f {
+	case EvalToken:
+		p.SafeString("eval")
+	case SendToken:
+		p.SafeString("send")
+	default:
+		panic("unknown flowControlMetricType")
+	}
+}
+
 // tokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
 type tokenCounter struct {
 	settings *cluster.Settings
 	clock    *hlc.Clock
-	metrics  *tokenCounterMetrics
+	metrics  *TokenCounterMetrics
+	// stream is the stream for which tokens are being adjusted, it is only used
+	// in logging.
+	stream    kvflowcontrol.Stream
+	tokenType TokenType
 
 	mu struct {
 		syncutil.RWMutex
@@ -186,12 +217,18 @@ type tokenCounter struct {
 
 // newTokenCounter creates a new TokenCounter.
 func newTokenCounter(
-	settings *cluster.Settings, clock *hlc.Clock, metrics *tokenCounterMetrics,
+	settings *cluster.Settings,
+	clock *hlc.Clock,
+	metrics *TokenCounterMetrics,
+	stream kvflowcontrol.Stream,
+	tokenType TokenType,
 ) *tokenCounter {
 	t := &tokenCounter{
-		settings: settings,
-		clock:    clock,
-		metrics:  metrics,
+		settings:  settings,
+		clock:     clock,
+		metrics:   metrics,
+		stream:    stream,
+		tokenType: tokenType,
 	}
 	limit := tokensPerWorkClass{
 		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
@@ -221,19 +258,33 @@ func newTokenCounter(
 }
 
 // String returns a string representation of the token counter.
-func (b *tokenCounter) String() string {
-	return redact.StringWithoutMarkers(b)
+func (t *tokenCounter) String() string {
+	return redact.StringWithoutMarkers(t)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+func (t *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	w.Printf("reg=%v/%v ela=%v/%v",
-		b.mu.counters[admissionpb.RegularWorkClass].tokens,
-		b.mu.counters[admissionpb.RegularWorkClass].limit,
-		b.mu.counters[admissionpb.ElasticWorkClass].tokens,
-		b.mu.counters[admissionpb.ElasticWorkClass].limit)
+		t.mu.counters[admissionpb.RegularWorkClass].tokens,
+		t.mu.counters[admissionpb.RegularWorkClass].limit,
+		t.mu.counters[admissionpb.ElasticWorkClass].tokens,
+		t.mu.counters[admissionpb.ElasticWorkClass].limit)
+}
+
+// Stream returns the flow control stream for which tokens are being adjusted.
+func (t *tokenCounter) Stream() kvflowcontrol.Stream {
+	return t.stream
+}
+
+func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return tokensPerWorkClass{
+		regular: t.tokensLocked(admissionpb.RegularWorkClass),
+		elastic: t.tokensLocked(admissionpb.ElasticWorkClass),
+	}
 }
 
 func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
@@ -242,8 +293,14 @@ func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	return t.tokensLocked(wc)
 }
 
-func (b *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	return b.mu.counters[wc].tokens
+func (t *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	return t.mu.counters[wc].tokens
+}
+
+func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.counters[wc].limit
 }
 
 // TokensAvailable returns true if tokens are available. If false, it returns
@@ -262,9 +319,13 @@ func (t *tokenCounter) TokensAvailable(
 // token count is available, partial tokens are returned corresponding to this
 // partial amount.
 func (t *tokenCounter) TryDeduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) kvflowcontrol.Tokens {
 	now := t.clock.PhysicalTime()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -274,7 +335,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now)
+	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -282,16 +343,19 @@ func (t *tokenCounter) TryDeduct(
 // there are not enough available tokens, the token counter will go into debt
 // (negative available count) and still issue the requested number of tokens.
 func (t *tokenCounter) Deduct(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) {
-	t.adjust(ctx, wc, -tokens)
+	t.adjust(ctx, wc, -tokens, flag)
 }
 
-// Return returns flow tokens for the given work class.
+// Return returns flow tokens for the given work class. When disconnect is
+// true, the tokens being returned are not associated with admission of any
+// specific request, rather the leader returning tracked tokens for a replica
+// it doesn't expect to hear from again.
 func (t *tokenCounter) Return(
-	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) {
-	t.adjust(ctx, wc, tokens)
+	t.adjust(ctx, wc, tokens, flag)
 }
 
 // waitHandle is a handle for waiting for tokens to become available from a
@@ -338,12 +402,21 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	return haveTokens
 }
 
+// StreamString implements TokenWaitingHandle.
+func (wh waitHandle) StreamString() string {
+	return wh.b.stream.String()
+}
+
 type tokenWaitingHandleInfo struct {
+	// Can be nil, in which case the wait on this can never succeed.
 	handle TokenWaitingHandle
-	// For regular work, this will be set for the leaseholder and leader. For
-	// elastic work this will be set for the aforementioned, and all replicas
+	// requiredWait will be set for the leaseholder and leader for regular work.
+	// For elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
 	requiredWait bool
+	// partOfQuorum will be set for all voting replicas which can contribute to
+	// quorum.
+	partOfQuorum bool
 }
 
 // WaitEndState is the state returned by WaitForEval and indicates the result
@@ -388,6 +461,7 @@ func WaitForEval(
 	refreshWaitCh <-chan struct{},
 	handles []tokenWaitingHandleInfo,
 	requiredQuorum int,
+	traceIndividualWaits bool,
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
@@ -407,8 +481,13 @@ func WaitForEval(
 		if h.requiredWait {
 			requiredWaitCount++
 		}
+		var chanValue reflect.Value
+		if h.handle != nil {
+			chanValue = reflect.ValueOf(h.handle.WaitChannel())
+		}
+		// Else, zero Value, so will never be selected.
 		scratch = append(scratch,
-			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: chanValue})
 	}
 	if requiredQuorum == 0 && requiredWaitCount == 0 {
 		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
@@ -416,17 +495,23 @@ func WaitForEval(
 
 	// m is the current length of the scratch slice.
 	m := len(scratch)
-	signaledCount := 0
+	signaledQuorumCount := 0
 
-	// Wait for (1) at least a quorumCount of handles to be signaled and have
-	// available tokens; as well as (2) all of the required wait handles to be
-	// signaled and have tokens available.
-	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
+	// Wait for (1) at least a quorumCount of partOfQuorum handles to be signaled
+	// and have available tokens; as well as (2) all of the required wait handles
+	// to be signaled and have tokens available.
+	for signaledQuorumCount < requiredQuorum || requiredWaitCount > 0 {
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
 		case 0:
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until context cancellation")
+			}
 			return ContextCanceled, scratch
 		case 1:
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until channel refreshed")
+			}
 			return RefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-2]
@@ -436,7 +521,13 @@ func WaitForEval(
 				continue
 			}
 
-			signaledCount++
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until %s tokens available",
+					handleInfo.handle.StreamString())
+			}
+			if handleInfo.partOfQuorum {
+				signaledQuorumCount++
+			}
 			if handleInfo.requiredWait {
 				requiredWaitCount--
 			}
@@ -450,20 +541,73 @@ func WaitForEval(
 	return WaitSuccess, scratch
 }
 
+// TokenAdjustFlag are used to inform token adjustments about the context in
+// which they are being made. Currently used for observability.
+type TokenAdjustFlag uint8
+
+const (
+	AdjNormal TokenAdjustFlag = iota
+	// AdjDisconnect is set when (regular|elastic) tokens are being returned without
+	// corresponding admission. This is used to track tokens that are being
+	// returned for a replica that is not expected to reply anymore.
+	AdjDisconnect
+	// AdjForceFlush is set when elastic send tokens are being deducted without
+	// waiting for them to be available, due to force flush.
+	AdjForceFlush
+	// AdjPreventSendQueue is set when not enough (regular|elastic) send tokens
+	// are available but being deducted anyway (negative balance) to prevent a
+	// delay in quorum by forming a send queue.
+	AdjPreventSendQueue
+)
+
+func (a TokenAdjustFlag) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (a TokenAdjustFlag) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch a {
+	case AdjNormal:
+		w.Print("normal")
+	case AdjDisconnect:
+		w.Print("disconnect")
+	case AdjForceFlush:
+		w.Print("force_flush")
+	case AdjPreventSendQueue:
+		w.Print("prevent_send_queue")
+	default:
+		panic("unknown token_adjust_flag")
+	}
+}
+
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
 func (t *tokenCounter) adjust(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
+	ctx context.Context,
+	class admissionpb.WorkClass,
+	delta kvflowcontrol.Tokens,
+	flag TokenAdjustFlag,
 ) {
 	now := t.clock.PhysicalTime()
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	var expensiveLog bool
+	if log.V(2) {
+		expensiveLog = true
+	}
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
+	}()
 
-	t.adjustLocked(ctx, class, delta, now)
 }
 
 func (t *tokenCounter) adjustLocked(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, now time.Time,
+	ctx context.Context,
+	class admissionpb.WorkClass,
+	delta kvflowcontrol.Tokens,
+	now time.Time,
+	flag TokenAdjustFlag,
+	expensiveLog bool,
 ) {
 	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
@@ -483,10 +627,14 @@ func (t *tokenCounter) adjustLocked(
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
 	if adjustment.regular != 0 || adjustment.elastic != 0 {
-		t.metrics.onTokenAdjustment(adjustment)
+		t.metrics.onTokenAdjustment(adjustment, flag)
 	}
 	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
 		t.metrics.onUnaccounted(unaccounted)
+	}
+	if expensiveLog {
+		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
 	}
 }
 

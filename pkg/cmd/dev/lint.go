@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -124,7 +119,7 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	}
 	if pkg != "" && filter == "" {
 		toLint := strings.TrimPrefix(pkg, "./")
-		args := []string{"build", toLint, "--//build/toolchains:nogo_flag"}
+		args := []string{"build", toLint, "--run_validations"}
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 		}
@@ -135,10 +130,9 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 			"build",
 			"//pkg/cmd/cockroach-short",
 			"//pkg/cmd/dev",
-			"//pkg/obsservice/cmd/obsservice",
 			"//pkg/cmd/roachprod",
 			"//pkg/cmd/roachtest",
-			"--//build/toolchains:nogo_flag",
+			"--run_validations",
 		}
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))

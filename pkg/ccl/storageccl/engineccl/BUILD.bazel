@@ -32,8 +32,8 @@ go_library(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",
         "@com_github_gogo_protobuf//proto",
-        "@com_github_lestrrat_go_jwx//jwa",
-        "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx_v2//jwa",
+        "@com_github_lestrrat_go_jwx_v2//jwk",
     ],
 )
 

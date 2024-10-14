@@ -223,6 +223,14 @@ EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = '_' -- literals rem
 EXPLAIN ALTER PARTITION _ OF INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
 
 parse
+ALTER PARTITION p1 OF INDEX foobar@* CONFIGURE ZONE USING num_replicas = 1;
+----
+ALTER PARTITION p1 OF INDEX foobar@* CONFIGURE ZONE USING num_replicas = 1 -- normalized!
+ALTER PARTITION p1 OF INDEX foobar@* CONFIGURE ZONE USING num_replicas = (1) -- fully parenthesized
+ALTER PARTITION p1 OF INDEX foobar@* CONFIGURE ZONE USING num_replicas = _ -- literals removed
+ALTER PARTITION _ OF INDEX _@* CONFIGURE ZONE USING _ = 1 -- identifiers removed
+
+parse
 ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay
 ----
 ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay

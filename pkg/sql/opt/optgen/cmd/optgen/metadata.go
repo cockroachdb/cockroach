@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -223,6 +218,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Subquery":             {fullName: "tree.Subquery", isPointer: true, usePointerIntern: true},
 		"CreateTable":          {fullName: "tree.CreateTable", isPointer: true, usePointerIntern: true},
 		"CreateRoutine":        {fullName: "tree.CreateRoutine", isPointer: true, usePointerIntern: true},
+		"CreateTrigger":        {fullName: "tree.CreateTrigger", isPointer: true, usePointerIntern: true},
 		"CreateStats":          {fullName: "tree.CreateStats", isPointer: true, usePointerIntern: true},
 		"TableName":            {fullName: "tree.TableName", isPointer: true, usePointerIntern: true},
 		"Constraint":           {fullName: "constraint.Constraint", isPointer: true, usePointerIntern: true},

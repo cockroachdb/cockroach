@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package logstore implements the Raft log storage.
 package logstore
@@ -109,11 +104,16 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 	// one in the list.
 	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
 	// API to be more digestible outside the package.
-	msg := m[len(m)-1]
-	if msg.Type != raftpb.MsgStorageAppendResp {
-		return raft.LogMark{}
+	if buildutil.CrdbTestBuild {
+		for _, msg := range m[:len(m)-1] {
+			if msg.Type == raftpb.MsgStorageAppendResp {
+				panic("unexpected MsgStorageAppendResp not in last position")
+			}
+		}
 	}
-	if len(msg.Entries) != 0 {
+	if msg := m[len(m)-1]; msg.Type != raftpb.MsgStorageAppendResp {
+		return raft.LogMark{}
+	} else if msg.Index != 0 {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
 	} else if msg.Snapshot != nil {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
@@ -170,8 +170,11 @@ type LogStore struct {
 }
 
 // SyncCallback is a callback that is notified when a raft log write has been
-// durably committed to disk. The function is handed the response messages that
-// are associated with the MsgStorageAppend that triggered the fsync.
+// durably committed to disk.
+//
+// The function is handed the struct containing messages that are associated
+// with the MsgStorageAppend that triggered the fsync.
+//
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
 	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)

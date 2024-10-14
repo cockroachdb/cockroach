@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -529,7 +524,7 @@ type StoreTestingKnobs struct {
 	// rangeID should ignore the queue being disabled, and be processed anyway.
 	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
 
-	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
+	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndexRaftMuLocked.
 	// If nil is returned, reproposal will be attempted.
 	InjectReproposalError func(p *ProposalData) error
 
@@ -540,6 +535,16 @@ type StoreTestingKnobs struct {
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.
 	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
+
+	// RaftReportUnreachableBypass is called when a replica reports that another
+	// replica is unreachable. If the bypass function is non-nil and returns
+	// true, the report is ignored and ReportUnreachable is not called on the
+	// raft group for that replica.
+	RaftReportUnreachableBypass func(roachpb.ReplicaID) bool
+
+	// DisableUpdateLastUpdateTimesMapOnRaftGroupStep disables updating the
+	// lastUpdateTimes map when a raft group is stepped.
+	DisableUpdateLastUpdateTimesMapOnRaftGroupStep bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

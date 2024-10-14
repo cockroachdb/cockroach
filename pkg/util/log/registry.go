@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package log
 
@@ -81,8 +76,12 @@ func (r *sinkInfoRegistry) iter(fn func(l *sinkInfo) error) error {
 func (r *sinkInfoRegistry) iterFileSinks(fn func(l *fileSink) error) error {
 	return r.iter(func(si *sinkInfo) error {
 		if fs, ok := si.sink.(*fileSink); ok {
-			if err := fn(fs); err != nil {
-				return err
+			return fn(fs)
+		}
+
+		if bs, ok := si.sink.(*bufferedSink); ok {
+			if fs, ok := bs.child.(*fileSink); ok {
+				return fn(fs)
 			}
 		}
 		return nil

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecagg
 
@@ -604,9 +599,10 @@ func ProcessAggregations(
 	constructors = make([]execagg.AggregateConstructor, len(aggregations))
 	constArguments = make([]tree.Datums, len(aggregations))
 	outputTypes = make([]*types.T, len(aggregations))
+	pAlloc := execagg.MakeParamTypesAllocator(aggregations)
 	for i, aggFn := range aggregations {
 		constructors[i], constArguments[i], outputTypes[i], err = execagg.GetAggregateConstructor(
-			ctx, evalCtx, semaCtx, &aggFn, inputTypes,
+			ctx, evalCtx, semaCtx, &aggFn, inputTypes, &pAlloc,
 		)
 		if err != nil {
 			return

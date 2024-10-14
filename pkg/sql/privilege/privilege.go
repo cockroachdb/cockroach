@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package privilege outlines the basic privilege system for cockroach.
 package privilege
@@ -92,7 +87,7 @@ var (
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
 	DBPrivileges          = List{ALL, BACKUP, CONNECT, CREATE, DROP, RESTORE, ZONECONFIG}
-	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, TRIGGER}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
 	RoutinePrivileges     = List{ALL, EXECUTE}
@@ -366,10 +361,11 @@ var privToACL = map[Kind]string{
 	USAGE:   "U",
 	CONNECT: "c",
 	EXECUTE: "X",
+	TRIGGER: "t",
 }
 
-// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrwX
-var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE, EXECUTE}
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrtwX
+var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, TRIGGER, UPDATE, EXECUTE}
 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.

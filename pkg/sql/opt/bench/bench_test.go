@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package bench
 
@@ -678,6 +673,11 @@ var queries = [...]benchQuery{
 		args:    []interface{}{},
 		cleanup: "TRUNCATE TABLE customer",
 	},
+	{
+		name:  "const-agg",
+		query: `SELECT * FROM k GROUP BY id HAVING sum(a) > 100`,
+		args:  []interface{}{},
+	},
 }
 
 func init() {
@@ -1074,36 +1074,41 @@ func BenchmarkEndToEnd(b *testing.B) {
 
 	for _, query := range queriesToTest(b) {
 		b.Run(query.name, func(b *testing.B) {
-			b.Run("Simple", func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					sr.Exec(b, query.query, query.args...)
-					if query.cleanup != "" {
-						sr.Exec(b, query.cleanup)
-					}
-				}
-			})
-			b.Run("Prepared", func(b *testing.B) {
-				prepared, err := db.Prepare(query.query)
-				if err != nil {
-					b.Fatalf("%v", err)
-				}
-				for i := 0; i < b.N; i++ {
-					res, err := prepared.Exec(query.args...)
-					if err != nil {
-						b.Fatalf("%v", err)
-					}
-					if query.cleanup != "" {
-						sr.Exec(b, query.cleanup)
-					}
-					rows, err := res.RowsAffected()
-					if err != nil {
-						b.Fatalf("%v", err)
-					}
-					if rows > 0 {
-						b.ReportMetric(float64(rows), "rows/op")
-					}
-				}
-			})
+			for _, vectorize := range []string{"on", "off"} {
+				b.Run("vectorize="+vectorize, func(b *testing.B) {
+					sr.Exec(b, "SET vectorize="+vectorize)
+					b.Run("Simple", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							sr.Exec(b, query.query, query.args...)
+							if query.cleanup != "" {
+								sr.Exec(b, query.cleanup)
+							}
+						}
+					})
+					b.Run("Prepared", func(b *testing.B) {
+						prepared, err := db.Prepare(query.query)
+						if err != nil {
+							b.Fatalf("%v", err)
+						}
+						for i := 0; i < b.N; i++ {
+							res, err := prepared.Exec(query.args...)
+							if err != nil {
+								b.Fatalf("%v", err)
+							}
+							if query.cleanup != "" {
+								sr.Exec(b, query.cleanup)
+							}
+							rows, err := res.RowsAffected()
+							if err != nil {
+								b.Fatalf("%v", err)
+							}
+							if rows > 0 {
+								b.ReportMetric(float64(rows), "rows/op")
+							}
+						}
+					})
+				})
+			}
 		})
 	}
 }

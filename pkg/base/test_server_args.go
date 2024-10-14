@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package base
 
@@ -166,10 +161,6 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
-
-	// ObsServiceAddr is the address to which events will be exported over OTLP.
-	// If empty, exporting events is inhibited.
-	ObsServiceAddr string
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -621,7 +612,11 @@ type TestTenantArgs struct {
 	// determine the tenant's HTTP port.
 	StartingHTTPPort int
 
-	// TracingDefault controls whether the tracing will be on or off by default.
+	// Tracer, if set, will be used by the Server for creating Spans.
+	Tracer *tracing.Tracer
+
+	// TracingDefault controls whether the tracing will be on or off by default,
+	// if Tracer is not set.
 	TracingDefault tracing.TracingMode
 
 	// GoroutineDumpDirName is used to initialize the same named field on the

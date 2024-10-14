@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tenant_test
 
@@ -18,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,6 +34,7 @@ import (
 
 func TestDirectoryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	ctx := context.Background()
@@ -66,6 +65,7 @@ func TestDirectoryErrors(t *testing.T) {
 
 func TestWatchTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -260,6 +260,7 @@ func TestWatchTenants(t *testing.T) {
 
 func TestWatchPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -393,6 +394,7 @@ func TestWatchPods(t *testing.T) {
 
 func TestCancelLookups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	tenantID := roachpb.MustMakeTenantID(20)
@@ -427,6 +429,7 @@ func TestCancelLookups(t *testing.T) {
 
 func TestResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	tenantID := roachpb.MustMakeTenantID(40)
@@ -474,6 +477,7 @@ func TestResume(t *testing.T) {
 
 func TestDeleteTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// Create the directory.
@@ -554,6 +558,7 @@ func TestDeleteTenant(t *testing.T) {
 // TestRefreshThrottling checks that throttling works.
 func TestRefreshThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 	skip.UnderDeadlockWithIssue(t, 71365)
 

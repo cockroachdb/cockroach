@@ -1,16 +1,13 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tabledesc
 
 import (
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -302,6 +299,17 @@ func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
+	}
+	// ... in the ldr_job_ids slice,
+	{
+		tbl.LDRJobIDs = slices.DeleteFunc(tbl.LDRJobIDs, func(i catpb.JobID) bool {
+			// Remove if the job ID is not found.
+			if !nonTerminalJobIDMightExist(i) {
+				tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+				return true
+			}
+			return false
+		})
 	}
 	// ... in the sequence ownership field.
 	if seq := tbl.SequenceOpts; seq != nil {

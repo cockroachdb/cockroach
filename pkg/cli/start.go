@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -744,8 +739,11 @@ func getDefaultGoMemLimit(ctx context.Context) int64 {
 		log.Ops.Shoutf(
 			ctx, severity.WARNING, "recommended default value of "+
 				"--max-go-memory (%s) was truncated to %s, consider reducing "+
-				"--max-sql-memory and / or --cache",
+				"--max-sql-memory (%s) and / or --cache (%s); total system/cgroup memory: %s.",
 			humanizeutil.IBytes(limit), humanizeutil.IBytes(maxGoMemLimit),
+			humanizeutil.IBytes(serverCfg.MemoryPoolSize),
+			humanizeutil.IBytes(serverCfg.CacheSize),
+			humanizeutil.IBytes(sysMem),
 		)
 		limit = maxGoMemLimit
 	}

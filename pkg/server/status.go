@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -74,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -396,11 +392,12 @@ func (b *baseStatusServer) localExecutionInsights(
 			return
 		}
 
-		// Versions <=22.2.6 expects that Statement is not null when building the exec insights virtual table.
-		insightWithStmt := *insight
-		insightWithStmt.Statement = &insights.Statement{}
+		insightsCopy := *insight
+		// Copy statements slice - these insights objects can be read concurrently.
+		insightsCopy.Statements = make([]*insights.Statement, len(insight.Statements))
+		copy(insightsCopy.Statements, insight.Statements)
 
-		response.Insights = append(response.Insights, insightWithStmt)
+		response.Insights = append(response.Insights, insightsCopy)
 	})
 
 	return &response, nil
@@ -487,6 +484,10 @@ type statusServer struct {
 	// 256 concurrent queries actively running on a node, then it would
 	// take 2^16 seconds (18 hours) to hit any one of them.
 	cancelSemaphore *quotapool.IntPool
+
+	// updateTableMetadataJobSignal is used to signal the updateTableMetadataCacheJob
+	// to execute.
+	updateTableMetadataJobSignal chan struct{}
 
 	knobs *TestingKnobs
 }
@@ -604,8 +605,9 @@ func newStatusServer(
 		internalExecutor: internalExecutor,
 
 		// See the docstring on cancelSemaphore for details about this initialization.
-		cancelSemaphore: quotapool.NewIntPool("pgwire-cancel", 256),
-		knobs:           knobs,
+		cancelSemaphore:              quotapool.NewIntPool("pgwire-cancel", 256),
+		updateTableMetadataJobSignal: make(chan struct{}),
+		knobs:                        knobs,
 	}
 
 	return server
@@ -2342,6 +2344,27 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	telemetry.Inc(telemetryPrometheusVars)
 }
 
+// Ranges returns the current tenant's range information for the specified node.
+//
+// Note: If the current server is running in external process mode and
+// RangesRequest.NodeID is `local`, the resulting value could be returned by any
+// of the KV nodes via the tenant connector. This is because the system SQL
+// server may not be colocated with the current server, making the result
+// non-deterministic.
+func (t *statusServer) Ranges(
+	ctx context.Context, req *serverpb.RangesRequest,
+) (*serverpb.RangesResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// Response contains replica metadata which is privileged.
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.Ranges(ctx, req)
+}
+
 // Ranges returns range info for the specified node.
 func (s *systemStatusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
@@ -2401,15 +2424,20 @@ func (s *systemStatusServer) rangesHelper(
 		return resp, next, err
 	}
 
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tID = roachpb.SystemTenantID
+	}
+
+	tenantKeySpan := keys.MakeTenantSpan(tID)
+
 	output := serverpb.RangesResponse{
 		Ranges: make([]serverpb.RangeInfo, 0, s.stores.GetStoreCount()),
 	}
 
 	convertRaftStatus := func(raftStatus *raft.Status) serverpb.RaftState {
 		if raftStatus == nil {
-			return serverpb.RaftState{
-				State: RaftStateDormant,
-			}
+			return serverpb.RaftState{State: RaftStateDormant}
 		}
 
 		state := serverpb.RaftState{
@@ -2440,12 +2468,9 @@ func (s *systemStatusServer) rangesHelper(
 		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
 		raftStatus := rep.RaftStatus()
-		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
-		var span serverpb.PrettySpan
 		desc := rep.Desc()
-		span.StartKey = desc.StartKey.String()
-		span.EndKey = desc.EndKey.String()
+		span := serverpb.PrettySpan{StartKey: desc.StartKey.String(), EndKey: desc.EndKey.String()}
 		state := rep.State(ctx)
 		var topKLocksByWaiters []serverpb.RangeInfo_LockInfo
 		for _, lm := range metrics.LockTableMetrics.TopKLocksByWaiters {
@@ -2472,7 +2497,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 		return serverpb.RangeInfo{
 			Span:          span,
-			RaftState:     raftState,
+			RaftState:     convertRaftStatus(raftStatus),
 			State:         state,
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
@@ -2531,20 +2556,27 @@ func (s *systemStatusServer) rangesHelper(
 
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
 		now := store.Clock().NowAsClockTimestamp()
+		appendRangeInfo := func(rep *kvserver.Replica) {
+			if !tID.IsSystem() {
+				rangeReplicaSpan := rep.Desc().RSpan().AsRawSpanWithNoLocals()
+				if !tenantKeySpan.Contains(rangeReplicaSpan) {
+					return
+				}
+			}
+
+			output.Ranges = append(output.Ranges, constructRangeInfo(
+				rep,
+				store.Ident.StoreID,
+				rep.Metrics(ctx, now, isLiveMap, clusterNodes),
+			))
+		}
+
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
-			store.VisitReplicas(
-				func(rep *kvserver.Replica) bool {
-					output.Ranges = append(output.Ranges,
-						constructRangeInfo(
-							rep,
-							store.Ident.StoreID,
-							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-						))
-					return true // continue.
-				},
-				kvserver.WithReplicasInOrder(),
-			)
+			store.VisitReplicas(func(r *kvserver.Replica) bool {
+				appendRangeInfo(r)
+				return true // continue.
+			}, kvserver.WithReplicasInOrder())
 			return nil
 		}
 
@@ -2555,12 +2587,7 @@ func (s *systemStatusServer) rangesHelper(
 				// Not found: continue.
 				continue
 			}
-			output.Ranges = append(output.Ranges,
-				constructRangeInfo(
-					rep,
-					store.Ident.StoreID,
-					rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-				))
+			appendRangeInfo(rep)
 		}
 		return nil
 	})
@@ -4195,4 +4222,146 @@ func (s *statusServer) ListJobProfilerExecutionDetails(
 		return nil, err
 	}
 	return &serverpb.ListJobProfilerExecutionDetailsResponse{Files: files}, nil
+}
+
+func (s *statusServer) localUpdateTableMetadataCache() (
+	*serverpb.UpdateTableMetadataCacheResponse,
+	error,
+) {
+	select {
+	case s.updateTableMetadataJobSignal <- struct{}{}:
+	default:
+		return nil, status.Errorf(codes.Aborted, "update table metadata cache job is not ready to start execution")
+	}
+	return &serverpb.UpdateTableMetadataCacheResponse{}, nil
+}
+
+func (s *statusServer) UpdateTableMetadataCache(
+	ctx context.Context, req *serverpb.UpdateTableMetadataCacheRequest,
+) (*serverpb.UpdateTableMetadataCacheResponse, error) {
+	if req.Local {
+		return s.localUpdateTableMetadataCache()
+	}
+	ctx = s.AnnotateCtx(ctx)
+
+	// Get the node id for the job.
+	row, err := s.internalExecutor.QueryRow(ctx, "get-node-id", nil, `
+SELECT claim_instance_id
+FROM system.jobs
+WHERE id = $1
+`, jobs.UpdateTableMetadataCacheJobID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%s", err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.FailedPrecondition, "no job record found")
+	}
+	if row[0] == tree.DNull {
+		return nil, status.Error(codes.Unavailable, "update table metadata cache job is unclaimed")
+	}
+
+	nodeID := roachpb.NodeID(*row[0].(*tree.DInt))
+	statusClient, err := s.dialNode(ctx, nodeID)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	return statusClient.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{
+		Local: true,
+	})
+}
+
+// GetUpdateTableMetadataCacheSignal returns the signal channel used
+// in the UpdateTableMetadataCache rpc.
+func (s *statusServer) GetUpdateTableMetadataCacheSignal() chan struct{} {
+	return s.updateTableMetadataJobSignal
+}
+
+func (s *statusServer) GetThrottlingMetadata(
+	ctx context.Context, req *serverpb.GetThrottlingMetadataRequest,
+) (*serverpb.GetThrottlingMetadataResponse, error) {
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.getThrottlingMetadataLocal(ctx)
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.GetThrottlingMetadata(ctx, req)
+	}
+
+	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.GetThrottlingMetadataResponse, error) {
+		return statusClient.GetThrottlingMetadata(ctx, &serverpb.GetThrottlingMetadataRequest{
+			NodeID: "local",
+		})
+	}
+
+	resp := &serverpb.GetThrottlingMetadataResponse{}
+
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "throttling metadata for node",
+		noTimeout,
+		s.dialNode,
+		rpcCallFn,
+		func(nodeID roachpb.NodeID, nodeResp *serverpb.GetThrottlingMetadataResponse) {
+			if !resp.Throttled && nodeResp.Throttled {
+				resp.Throttled = true
+				resp.ThrottleExplanation = nodeResp.ThrottleExplanation
+			}
+			if !resp.HasGracePeriod && nodeResp.HasGracePeriod {
+				resp.HasGracePeriod = true
+				resp.GracePeriodEndSeconds = nodeResp.GracePeriodEndSeconds
+			}
+			if !resp.HasTelemetryDeadline && nodeResp.HasTelemetryDeadline {
+				resp.HasTelemetryDeadline = true
+				resp.TelemetryDeadlineSeconds = nodeResp.TelemetryDeadlineSeconds
+				resp.LastTelemetryReceivedSeconds = nodeResp.LastTelemetryReceivedSeconds
+			}
+			// Telemetry deadlines can vary from node to node based on timing
+			// issues or firewalls (as opposed to license expiry which is a
+			// global cluster state). For that reason we will accumulate all
+			// nodeIDs which haven't sent telemetry in a day.
+			if nodeResp.HasTelemetryDeadline && nodeResp.LastTelemetryReceivedSeconds < timeutil.Now().Add(-24*time.Hour).Unix() {
+				resp.NodeIdsWithTelemetryProblems = append(resp.NodeIdsWithTelemetryProblems, nodeID.String())
+			}
+		},
+		func(nodeID roachpb.NodeID, nodeFnError error) {
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (s *statusServer) getThrottlingMetadataLocal(
+	ctx context.Context,
+) (*serverpb.GetThrottlingMetadataResponse, error) {
+	e := s.sqlServer.execCfg.LicenseEnforcer
+
+	// We use 100 here as a number that's definitely more than what's
+	// allowed to trigger the throttling error if possible.
+	// TODO(davidh): consider saving the pg notice here as an explanation if err is nil
+	_, err := e.MaybeFailIfThrottled(ctx, 100 /* txnsOpened */)
+	throttleExplanation := ""
+	if err != nil {
+		throttleExplanation = err.Error()
+	}
+	gpe, okGrace := e.GetGracePeriodEndTS()
+	deadline, lastPing, okTelem := e.GetTelemetryDeadline()
+	return &serverpb.GetThrottlingMetadataResponse{
+			Throttled:                    err != nil,
+			ThrottleExplanation:          throttleExplanation,
+			HasGracePeriod:               okGrace,
+			GracePeriodEndSeconds:        gpe.Unix(),
+			TelemetryDeadlineSeconds:     deadline.Unix(),
+			LastTelemetryReceivedSeconds: lastPing.Unix(),
+			HasTelemetryDeadline:         okTelem,
+		},
+		nil
 }

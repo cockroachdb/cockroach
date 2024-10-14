@@ -1,0 +1,125 @@
+# Demonstrate that a single slow stream (with lower admission/token return
+# rate) will end up pacing quorum writes (through the handle) to just the
+# slowest rate.
+init
+handle=h
+----
+
+# Set up a triply connected handle (to s1, s2, s3) and start issuing writes at
+# 1MiB/s. For two of the streams, return tokens at exactly the rate its being
+# deducted (1MiB/s). For the third stream (s3), we return flow tokens at only
+# 0.5MiB/s.
+timeline
+t=0s         handle=h op=connect    stream=t1/s1
+t=0s         handle=h op=connect    stream=t1/s2
+t=0s         handle=h op=connect    stream=t1/s3
+t=[0s,50s)   handle=h class=regular adjust=-1MiB/s   rate=10/s
+t=[0.2s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s1
+t=[0.2s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s2
+t=[0.2s,50s) handle=h class=regular adjust=+0.5MiB/s rate=10/s stream=t1/s3
+----
+
+
+simulate
+----
+
+# Observe:
+# - Total available tokens flatlines at 32MiB since flow tokens for s3
+#   eventually depletes and later bounces off of 0MiB. We initially have
+#   3*16MiB = 48MiB worth of flow tokens, and end up at 48MiB-16MiB = 32MiB.
+# - Initially the rate of token deductions (3*1MiB/s = 3MiB/s) is higher than
+#   the token returns (1MiB/s+1MiB/s+0.5MiB/s = 2.5MiB/s), but after we start
+#   shaping it to the slowest stream, they end up matching at (0.5MiB/s*3 =
+#   1.5MiB/s).
+# - The blocked stream count bounces between 0 and 1 as the s3 stream gets
+#   blocked/unblocked as tokens are deducted/returned. The demand for tokens
+#   (1MiB/s) is higher than the replenishment rate (0.5MiB/s).
+# - The overall admission rate through the handle is reduced from 10 reqs/s
+#   (corresponding to 1MiB/s) to 5 reqs/s (corresponding to 0.5MiB/s), the
+#   difference now found in the +5 reqs/s accumulating in the wait queue.
+plot
+
+kvflowcontrol.tokens.eval.regular.available                 unit=MiB
+kvflowcontrol.tokens.eval.regular.{deducted,returned}       unit=MiB/s rate=true
+kvflowcontrol.streams.eval.regular.blocked_count            unit=streams
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+----
+----
+ 47.7 ┼╮
+ 46.6 ┤╰─╮
+ 45.6 ┤  ╰─╮
+ 44.5 ┤    ╰╮
+ 43.5 ┤     ╰─╮
+ 42.4 ┤       ╰╮
+ 41.4 ┤        ╰─╮
+ 40.3 ┤          ╰─╮
+ 39.3 ┤            ╰╮
+ 38.2 ┤             ╰─╮
+ 37.2 ┤               ╰─╮
+ 36.1 ┤                 ╰╮
+ 35.1 ┤                  ╰─╮
+ 34.0 ┤                    ╰─╮
+ 33.0 ┤                      ╰╮
+ 31.9 ┤                       ╰───────────────
+         tokens.eval.regular.available (MiB)
+
+
+ 3.0 ┤╭───────────────────────╮
+ 2.8 ┤│                       │
+ 2.6 ┤╭────────────────────────╮
+ 2.4 ┤│                       ╰│
+ 2.2 ┤│                        │
+ 2.0 ┤│                        │
+ 1.8 ┤│                        │
+ 1.6 ┤│                        ╰─────────────
+ 1.4 ┤│
+ 1.2 ┤│
+ 1.0 ┤│
+ 0.8 ┤│
+ 0.6 ┤│
+ 0.4 ┤│
+ 0.2 ┤│
+ 0.0 ┼╯
+      rate(tokens.eval.regular.{deducted,returned}) (MiB/s)
+
+
+ 1.0 ┤                                 ╭╮   ╭
+ 0.9 ┤                            ╭╮   ││   │
+ 0.9 ┤                            ││   ││   │
+ 0.8 ┤                            ││   ││   │
+ 0.7 ┤                            ││   ││   │
+ 0.7 ┤                         ╭╮ ││╭╮ ││   │
+ 0.6 ┤                         ││ ││││ ││╭─╮│
+ 0.5 ┤                         │╰╮│││╰╮│││ ││
+ 0.5 ┤                         │ ││││ ││││ ││
+ 0.4 ┤                         │ ││││ ││││ ││
+ 0.3 ┤                         │ ││││ ││││ ││
+ 0.3 ┤                         │ ╰╯││ ││││ ││
+ 0.2 ┤                         │   ││ ╰╯╰╯ ╰╯
+ 0.1 ┤                        ╭╯   ╰╯
+ 0.1 ┤                        │
+ 0.0 ┼────────────────────────╯
+      streams.eval.regular.blocked_count (streams)
+
+
+ 10.0 ┤╭───────────────────────╮
+  9.3 ┤│                       │
+  8.7 ┤│                       │
+  8.0 ┤│                       ╰╮
+  7.3 ┤│                        │
+  6.7 ┤│                        │
+  6.0 ┤│                        │
+  5.3 ┤│                        ╭─────────────
+  4.7 ┤│                        │
+  4.0 ┤│                        │
+  3.3 ┤│                        │
+  2.7 ┤│                        │
+  2.0 ┤│                       ╭╯
+  1.3 ┤│                       │
+  0.7 ┤│                       │
+  0.0 ┼────────────────────────╯
+       rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+----
+----
+
+# vim:ft=conf

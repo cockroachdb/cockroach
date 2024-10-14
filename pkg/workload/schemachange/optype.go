@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemachange
 
@@ -274,7 +269,7 @@ var opWeights = []int{
 	alterTableAddConstraintForeignKey: 1,
 	alterTableAddConstraintUnique:     1,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
-	alterTableAlterPrimaryKey:         0, // Disabled and tracked with #128656.
+	alterTableAlterPrimaryKey:         1,
 	alterTableDropColumn:              1,
 	alterTableDropColumnDefault:       1,
 	alterTableDropConstraint:          1,

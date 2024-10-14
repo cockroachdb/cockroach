@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package apply
 
@@ -380,16 +375,22 @@ func (r *rangeAsserter) applySnapshot(
 	r.Lock()
 	defer r.Unlock()
 
-	// INVARIANT: we can't have a snapshot without any applied log entries.
-	if len(r.log) == 0 {
-		fail("snapshot before any log entries applied")
-	}
-
 	// INVARIANT: a snapshot must progress the replica's applied index.
 	if ri := r.replicaAppliedIndex[replicaID]; index <= ri {
 		fail("replica applied index regression: %d -> %d", ri, index)
 	}
 	r.replicaAppliedIndex[replicaID] = index
+
+	// We can't have a snapshot without any applied log entries, except when this
+	// is an initial snapshot. It's possible that the initial snapshot follows an
+	// empty entry appended by the raft leader at the start of this term. Since we
+	// don't register this entry as applied, r.log can be empty here.
+	//
+	// See the comment in r.apply() method, around the empty cmdID check, and the
+	// comment for r.log saying that there can be gaps in the observed applies.
+	if len(r.log) == 0 {
+		return
+	}
 
 	// INVARIANT: a snapshot must match the applied state at the given Raft index.
 	//

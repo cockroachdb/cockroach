@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cdcevent
 
@@ -321,16 +318,25 @@ func NewEventDescriptor(
 	// appear in the primary key index.
 	primaryIdx := desc.GetPrimaryIndex()
 	colOrd := catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
-	sd.keyCols = make([]int, primaryIdx.NumKeyColumns())
+	writeOnlyAndPublic := catalog.ColumnIDToOrdinalMap(desc.WritableColumns())
 	var primaryKeyOrdinal catalog.TableColMap
 
+	ordIdx := 0
 	for i := 0; i < primaryIdx.NumKeyColumns(); i++ {
 		ord, ok := colOrd.Get(primaryIdx.GetKeyColumnID(i))
+		// Columns going through mutation can exist in the PK, but not
+		// be public, since a later primary index will make these fully
+		// public.
 		if !ok {
+			if _, isWriteOnlyColumn := writeOnlyAndPublic.Get(primaryIdx.GetKeyColumnID(i)); isWriteOnlyColumn {
+				continue
+			}
 			return nil, errors.AssertionFailedf("expected to find column %d", ord)
 		}
-		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), i)
+		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), ordIdx)
+		ordIdx += 1
 	}
+	sd.keyCols = make([]int, ordIdx)
 
 	switch {
 	case keyOnly:
@@ -616,7 +622,10 @@ func (d *eventDecoder) initForKey(
 // In particular, when decoding previous row, we strip table OID column
 // since it makes little sense to include it in the previous row value.
 var systemColumns = []descpb.ColumnDescriptor{
-	colinfo.MVCCTimestampColumnDesc, colinfo.TableOIDColumnDesc,
+	colinfo.MVCCTimestampColumnDesc,
+	colinfo.TableOIDColumnDesc,
+	colinfo.OriginIDColumnDesc,
+	colinfo.OriginTimestampColumnDesc,
 }
 
 type fetcher struct {

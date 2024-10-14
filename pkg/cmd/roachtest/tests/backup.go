@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -629,12 +624,10 @@ func runBackupMVCCRangeTombstones(
 
 	// Configure cluster.
 	t.Status("configuring cluster")
-	_, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`)
-	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
+	_, err := conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
 	require.NoError(t, err)
 	// Wait for ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	// Create the orders table. It's about 16 GB across 8 files.
 	t.Status("creating table")

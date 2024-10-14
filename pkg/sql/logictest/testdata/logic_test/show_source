@@ -31,6 +31,7 @@ allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
 application_name                                           ·
+authentication_method                                      cert-password
 autocommit_before_ddl                                      off
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
@@ -105,7 +106,7 @@ is_superuser                                               on
 join_reader_index_join_strategy_batch_size                 4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB
-large_full_scan_rows                                       1000
+large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
 lc_messages                                                C.UTF-8
@@ -128,6 +129,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on

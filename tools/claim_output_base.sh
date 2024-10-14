@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # Typically only one bazel server can be running in one output_base at
 # a time, which means if we always use the default base, only one bazel server 
 # can be running for a given workspace at a time. Instead, we'll keep a few 

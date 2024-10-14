@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -881,7 +876,7 @@ into a single stream.
 		} else {
 			dest = args[0] + ".logs"
 		}
-		return roachprod.Logs(config.Logger, args[0], dest, username, logsOpts)
+		return roachprod.Logs(config.Logger, args[0], dest, logsOpts)
 	}),
 }
 
@@ -1709,6 +1704,18 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 			_ = cmd.Flags().Set("arch", string(arch))
 		}
 	}
+
+	// Validate cloud providers, if set.
+	providersSet := make(map[string]struct{})
+	for _, p := range createVMOpts.VMProviders {
+		if _, ok := vm.Providers[p]; !ok {
+			printErrAndExit(fmt.Errorf("unknown cloud provider %q", p))
+		}
+		if _, ok := providersSet[p]; ok {
+			printErrAndExit(fmt.Errorf("duplicate cloud provider specified %q", p))
+		}
+		providersSet[p] = struct{}{}
+	}
 }
 
 var updateCmd = &cobra.Command{
@@ -2003,6 +2010,7 @@ func main() {
 		fluentBitStopCmd,
 		opentelemetryStartCmd,
 		opentelemetryStopCmd,
+		fetchLogsCmd,
 	)
 	loadBalancerCmd.AddCommand(createLoadBalancerCmd)
 	loadBalancerCmd.AddCommand(loadBalancerPGUrl)
@@ -2072,4 +2080,32 @@ Node specification
 		// Cobra has already printed the error message.
 		os.Exit(1)
 	}
+}
+
+var fetchLogsCmd = &cobra.Command{
+	Use:     "fetchlogs <cluster> <destination (optional)> [flags]",
+	Aliases: []string{"getlogs"},
+	Short:   "download the logs from the cluster",
+	Long: `Download the logs from the cluster using "roachprod get".
+
+The logs will be placed in the directory if specified or in the directory named as <clustername>_logs.
+`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		ctx := context.Background()
+		var dest string
+		if len(args) == 2 {
+			dest = args[1]
+		} else {
+			// trim the node number and keep only the cluster name as prefix of the directory
+			dest = fmt.Sprintf("%s_logs", strings.Split(args[0], ":")[0])
+			fmt.Printf("Placing logs at %s\n", dest)
+		}
+		if err := os.Mkdir(dest, 0755); err != nil {
+			return err
+		}
+		return roachprod.FetchLogs(ctx, config.Logger, cluster, dest,
+			fetchLogsTimeout)
+	}),
 }

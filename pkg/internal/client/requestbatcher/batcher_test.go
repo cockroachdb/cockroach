@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package requestbatcher
 
@@ -25,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -79,6 +75,9 @@ func (g *senderGroup) Wait() error {
 }
 
 func TestBatcherSendOnSizeWithReset(t *testing.T) {
+	// Note: the timing-dependency and possible flakiness can be addressed by
+	// using a manual time(r) source, see TestBatcherSend for an example.
+
 	// This test ensures that when a single batch ends up sending due to size
 	// constrains its timer is successfully canceled and does not lead to a
 	// nil panic due to an attempt to send a batch due to the old timer.
@@ -138,11 +137,12 @@ func TestBatchesAtTheSameTime(t *testing.T) {
 	sc := make(chanSender)
 	start := timeutil.Now()
 	then := start.Add(10 * time.Millisecond)
+	mt := timeutil.NewManualTime(then)
 	b := New(Config{
-		MaxIdle: 20 * time.Millisecond,
-		Sender:  sc,
-		Stopper: stopper,
-		NowFunc: func() time.Time { return then },
+		MaxIdle:    20 * time.Millisecond,
+		Sender:     sc,
+		Stopper:    stopper,
+		manualTime: mt,
 	})
 	const N = 20
 	sendChan := make(chan Response, N)
@@ -150,6 +150,22 @@ func TestBatchesAtTheSameTime(t *testing.T) {
 		assert.Nil(t, b.SendWithChan(
 			context.Background(), sendChan, roachpb.RangeID(i), &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func(ctx context.Context) {
+		// At this point, all the requests should've made it into the
+		// batcher and have been timestamped. We want to be a real clock
+		// so that the timers fire on their own accord.
+		for {
+			select {
+			case <-time.After(5 * time.Millisecond):
+				mt.Advance(5 * time.Millisecond)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}(ctx)
 	for i := 0; i < N; i++ {
 		bs := <-sc
 		bs.respChan <- batchResp{}
@@ -160,6 +176,10 @@ func TestBackpressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
+
+	// Note: the timing-dependency and possible flakiness can be addressed by
+	// using a manual time(r) source, see TestBatcherSend for an example.
+
 	sc := make(chanSender)
 	backpressureLimit := 3
 	b := New(Config{
@@ -260,30 +280,74 @@ func TestBatcherSend(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc := make(chanSender)
+	mt := timeutil.NewManualTime(time.Time{})
+	peekCh := make(chan *RequestBatcher) // must be unbuffered
 	b := New(Config{
+		// We're using a manual timer here, so these fire when we advance `mt`
+		// accordingly.
 		MaxIdle:         50 * time.Millisecond,
 		MaxWait:         50 * time.Millisecond,
 		MaxMsgsPerBatch: 3,
 		Sender:          sc,
 		Stopper:         stopper,
+		manualTime:      mt,
+		testingPeekCh:   peekCh,
 	})
+
 	// Send 3 requests to range 2 and 2 to range 1.
 	// The 3rd range 2 request will trigger immediate sending due to the
 	// MaxMsgsPerBatch configuration. The range 1 batch will be sent after the
-	// MaxWait timeout expires.
+	// MaxWait timeout expires (manually via `mt`).
 	g := senderGroup{b: b}
 	g.Send(1, &kvpb.GetRequest{})
 	g.Send(2, &kvpb.GetRequest{})
 	g.Send(1, &kvpb.GetRequest{})
 	g.Send(2, &kvpb.GetRequest{})
 	g.Send(2, &kvpb.GetRequest{})
-	// Wait for the range 2 request and ensure it contains 3 requests.
-	s := <-sc
-	assert.Len(t, s.ba.Requests, 3)
-	s.respChan <- batchResp{}
+
+	// We should ~immediately see the requests to r2 show up in a single
+	// batch because no timers are firing but three is the limit for when
+	// a batch is full. We should not see anything to r1 yet because this
+	// is waiting for us to fire a timer.
+	// NB: we don't actually verify that they're for r2. This could be added
+	// (noting that ba.RangeID is zero at this level of the stack, so that won't
+	// do it). But - we check that the requests to r1 are still in the batcher
+	// later in the test.
+	select {
+	case s := <-sc:
+		require.Len(t, s.ba.Requests, 3)
+		s.respChan <- batchResp{}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("requests to r2 did not show up")
+	}
+
+	// Check that r1 is queued up in entirety. This is
+	// a nice check and also assures that once we fire
+	// the timer, we can expect to see everything at once.
+	testutils.SucceedsSoon(t, func() error {
+		b := <-peekCh
+		defer func() {
+			peekCh <- b
+		}()
+		var r1waiting int
+		if r1b, ok := b.batches.get(1); ok {
+			r1waiting = len(r1b.reqs)
+		}
+		if r1waiting != 2 {
+			return errors.Errorf("expect two requests waiting on r1, not %d", r1waiting)
+		}
+		return nil
+	})
+
+	// There should be a timer at this point since we know we have the requests
+	// to r1 waiting.
+	require.Len(t, mt.Timers(), 1)
+	// Time passes and the timer is triggered.
+	mt.AdvanceTo(mt.Timers()[0])
+
 	// Wait for the range 1 request and ensure it contains 2 requests.
-	s = <-sc
-	assert.Len(t, s.ba.Requests, 2)
+	s := <-sc
+	require.Len(t, s.ba.Requests, 2)
 	s.respChan <- batchResp{}
 	// Make sure everything gets a response.
 	if err := g.Wait(); err != nil {
@@ -361,6 +425,10 @@ func TestBatchTimeout(t *testing.T) {
 	const timeout = 5 * time.Millisecond
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
+
+	// Note: the timing-dependency and possible flakiness can be addressed by
+	// using a manual time(r) source, see TestBatcherSend for an example.
+
 	testCases := []struct {
 		requestTimeout  time.Duration
 		maxTimeout      time.Duration

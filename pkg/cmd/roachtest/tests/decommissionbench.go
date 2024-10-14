@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -400,7 +395,7 @@ func setupDecommissionBench(
 		// import can saturate snapshots and leave underreplicated system ranges
 		// struggling.
 		// See GH issue #101532 for longer term solution.
-		if err := WaitForReplication(ctx, t, t.L(), db, 3, atLeastReplicationFactor); err != nil {
+		if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
 			t.Fatal(err)
 		}
 
@@ -439,7 +434,7 @@ func setupDecommissionBench(
 		}
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, t.L(), db)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 	}
 }

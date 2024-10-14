@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package install
 
@@ -1129,10 +1124,8 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 
 	args = append(args, fmt.Sprintf("--cache=%d%%", c.maybeScaleMem(25)))
 
-	if locality := c.locality(node); locality != "" {
-		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
-			args = append(args, "--locality="+locality)
-		}
+	if localityArg := c.generateLocalityArg(node, startOpts); localityArg != "" {
+		args = append(args, localityArg)
 	}
 	return args
 }
@@ -1163,8 +1156,22 @@ func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []
 
 	if startOpts.Target == StartServiceForVirtualCluster {
 		args = append(args, "--store", c.InstanceStoreDir(node, startOpts.VirtualClusterName, startOpts.SQLInstance))
+
+		if localityArg := c.generateLocalityArg(node, startOpts); localityArg != "" {
+			args = append(args, localityArg)
+		}
 	}
 	return args
+}
+
+func (c *SyncedCluster) generateLocalityArg(node Node, startOpts StartOpts) string {
+	if locality := c.locality(node); locality != "" {
+		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
+			return "--locality=" + locality
+		}
+	}
+
+	return ""
 }
 
 // maybeScaleMem is used to scale down a memory percentage when the cluster is
@@ -1416,7 +1423,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.StorageCluster.ExecSQL(
-			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
+			ctx, l, startOpts.StorageCluster.Nodes[:1], SystemInterfaceName, 0, DefaultAuthMode(), "", /* database */
 			[]string{"--format", "csv", "-e", stmt})
 		if err != nil {
 			return "", err

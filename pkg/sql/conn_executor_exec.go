@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -482,11 +477,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
+		// NB: ex.metrics includes internal executor transactions when executorType
+		// is executorTypeInternal, so that's why we exclude internal executors
+		// in the conditional.
+		curOpen := ex.metrics.EngineMetrics.SQLTxnsOpen.Value()
 		if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
-			// NB: ex.metrics includes internal executor transactions when executorType
-			// is executorTypeInternal, so that's why we exclude internal executors
-			// in the conditional.
-			if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
+			if curOpen > maxOpen {
 				hasAdmin, err := ex.planner.HasAdminRole(ctx)
 				if err != nil {
 					return makeErrEvent(err)
@@ -500,6 +496,16 @@ func (ex *connExecutor) execStmtInOpenState(
 						"the maximum number of open transactions is %d", maxOpen,
 					))
 				}
+			}
+		}
+
+		// Enforce license policies. Throttling can occur if there is no valid
+		// license or if the existing one has expired.
+		if isSQLOkayToThrottle(ast) {
+			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+				return makeErrEvent(err)
+			} else if notice != nil {
+				res.BufferNotice(notice)
 			}
 		}
 	}
@@ -2460,6 +2466,13 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	asOfClause := ex.asOfClauseWithSessionDefault(modes.AsOf)
 	if asOfClause.Expr == nil {
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
+		if ex.executorType == executorTypeExec {
+			// Check if a PCR reader catalog timestamp is set, which
+			// will cause to turn all txns into system time queries.
+			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() {
+				return tree.ReadOnly, now, &newTS, nil
+			}
+		}
 		return rwMode, now, nil, nil
 	}
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
@@ -3436,4 +3449,17 @@ func (ex *connExecutor) execWithProfiling(
 		err = op(ctx)
 	}
 	return err
+}
+
+// isSQLOkayToThrottle will return true if the given statement is allowed to be throttled.
+func isSQLOkayToThrottle(ast tree.Statement) bool {
+	switch ast.(type) {
+	// We do not throttle the SET CLUSTER command, as this is how a new license
+	// would be installed to disable throttling. We want to avoid the situation
+	// where the action to disable throttling is itself throttled.
+	case *tree.SetClusterSetting:
+		return false
+	default:
+		return true
+	}
 }

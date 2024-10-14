@@ -1,4 +1,10 @@
 #! /usr/bin/env python3
+
+# Copyright 2018 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # Show a compact release note summary of a range of Git commits.
 #

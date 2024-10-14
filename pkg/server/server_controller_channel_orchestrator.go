@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -185,7 +180,7 @@ func (o *channelOrchestrator) startControlledServer(
 	// the server. Suggested use is for logging. To synchronize on the
 	// server's state, use the resulting serverState instead.
 	startErrorFn func(ctx context.Context, tenantName roachpb.TenantName, err error),
-	// serverStartedFn is called when the server has started
+	// startCompleteFn is called when the server has started
 	// successfully and is accepting clients. Suggested use is for
 	// logging. To synchronize on the server's state, use the
 	// resulting serverState instead.

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metamorphic
 
@@ -171,11 +166,9 @@ func ConstantWithTestBoolWithoutLogging(name string, defaultValue bool) bool {
 // included in the random choice.
 //
 // The given name is used for logging.
-func ConstantWithTestChoice(
-	name string, defaultValue interface{}, otherValues ...interface{},
-) interface{} {
+func ConstantWithTestChoice[T any](name string, defaultValue T, otherValues ...T) T {
 	if metamorphicutil.IsMetamorphicBuild {
-		values := append([]interface{}{defaultValue}, otherValues...)
+		values := append([]T{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()
 		value := values[rng.r.Int63n(int64(len(values)))]

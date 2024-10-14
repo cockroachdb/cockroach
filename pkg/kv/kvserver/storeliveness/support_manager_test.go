@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storeliveness
 
@@ -33,8 +28,8 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		HeartbeatInterval:       3 * time.Millisecond,
 		LivenessInterval:        6 * time.Millisecond,
+		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
 	}
@@ -59,13 +54,23 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
-	epoch, expiration, supported := sm.SupportFrom(remoteStore)
+	epoch, expiration := sm.SupportFrom(remoteStore)
 	require.Equal(t, slpb.Epoch(0), epoch)
 	require.Equal(t, hlc.Timestamp{}, expiration)
-	require.False(t, supported)
+
+	testutils.SucceedsSoon(
+		t, func() error {
+			if sm.metrics.SupportFromStores.Value() != int64(1) {
+				return errors.New("store not added yet")
+			}
+			return nil
+		},
+	)
 
 	// Ensure heartbeats are sent.
-	msgs := ensureHeartbeats(t, sender)
+	msgs := ensureHeartbeats(t, sender, 10)
+	require.LessOrEqual(t, int64(10), sm.metrics.HeartbeatSuccesses.Count())
+	require.Equal(t, int64(0), sm.metrics.HeartbeatFailures.Count())
 	require.Equal(t, slpb.MsgHeartbeat, msgs[0].Type)
 	require.Equal(t, sm.storeID, msgs[0].From)
 	require.Equal(t, remoteStore, msgs[0].To)
@@ -79,18 +84,26 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 		Epoch:      slpb.Epoch(1),
 		Expiration: requestedExpiration,
 	}
-	sm.HandleMessage(heartbeatResp)
+	require.NoError(t, sm.HandleMessage(heartbeatResp))
 
 	// Ensure support is provided as seen by SupportFrom.
 	testutils.SucceedsSoon(
 		t, func() error {
-			epoch, expiration, supported = sm.SupportFrom(remoteStore)
-			if !supported {
+			epoch, expiration = sm.SupportFrom(remoteStore)
+			if expiration.IsEmpty() {
 				return errors.New("support not provided yet")
 			}
 			require.Equal(t, slpb.Epoch(1), epoch)
 			require.Equal(t, requestedExpiration, expiration)
-			require.True(t, supported)
+			return nil
+		},
+	)
+	testutils.SucceedsSoon(
+		t, func() error {
+			if sm.metrics.MessageHandleSuccesses.Count() != int64(1) {
+				return errors.New("metric not incremented yet")
+			}
+			require.Equal(t, int64(0), sm.metrics.MessageHandleFailures.Count())
 			return nil
 		},
 	)
@@ -114,15 +127,18 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
+	// Pause the clock so support is not withdrawn before calling SupportFor.
+	manual.Pause()
+
 	// Process a heartbeat from the remote store.
 	heartbeat := &slpb.Message{
 		Type:       slpb.MsgHeartbeat,
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(time.Second),
+		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
 	}
-	sm.HandleMessage(heartbeat)
+	require.NoError(t, sm.HandleMessage(heartbeat))
 
 	// Ensure a response is sent.
 	testutils.SucceedsSoon(
@@ -130,6 +146,9 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 			if sender.getNumSentMessages() == 0 {
 				return errors.New("more messages expected")
 			}
+			require.Equal(t, int64(1), sm.metrics.MessageHandleSuccesses.Count())
+			require.Equal(t, int64(0), sm.metrics.MessageHandleFailures.Count())
+			require.Equal(t, int64(1), sm.metrics.SupportForStores.Value())
 			return nil
 		},
 	)
@@ -145,6 +164,9 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	require.Equal(t, slpb.Epoch(1), epoch)
 	require.True(t, supported)
 
+	// Resume the clock, so support can be withdrawn.
+	manual.Resume()
+
 	// Wait for support to be withdrawn.
 	testutils.SucceedsSoon(
 		t, func() error {
@@ -152,8 +174,17 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 			if supported {
 				return errors.New("support not withdrawn yet")
 			}
-			require.Equal(t, slpb.Epoch(0), epoch)
+			require.Equal(t, slpb.Epoch(2), epoch)
 			require.False(t, supported)
+			return nil
+		},
+	)
+	testutils.SucceedsSoon(
+		t, func() error {
+			if sm.metrics.SupportWithdrawSuccesses.Count() != int64(1) {
+				return errors.New("metric not incremented yet")
+			}
+			require.Equal(t, int64(0), sm.metrics.SupportWithdrawFailures.Count())
 			return nil
 		},
 	)
@@ -178,17 +209,17 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
-	_, _, supported := sm.SupportFrom(remoteStore)
-	require.False(t, supported)
-	ensureHeartbeats(t, sender)
+	sm.SupportFrom(remoteStore)
+	ensureHeartbeats(t, sender, 10)
 
 	// Disable Store Liveness and make sure heartbeats stop.
 	Enabled.Override(ctx, &settings.SV, false)
-	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval)
+	// One heartbeat may race in while heartbeats are being disabled.
+	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 1)
 
 	// Enable Store Liveness again and make sure heartbeats are sent.
 	Enabled.Override(ctx, &settings.SV, true)
-	ensureHeartbeats(t, sender)
+	ensureHeartbeats(t, sender, 10)
 }
 
 // TestSupportManagerRestart tests that the SupportManager adjusts the clock
@@ -256,11 +287,158 @@ func TestSupportManagerRestart(t *testing.T) {
 	require.True(t, withdrawalTime.Less(now))
 }
 
-func ensureHeartbeats(t *testing.T, sender *testMessageSender) []slpb.Message {
+// TestSupportManagerDiskStall tests that the SupportManager continues to
+// respond to SupportFrom and SupportFor calls when its disk is stalled.
+func TestSupportManagerDiskStall(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := &testEngine{
+		Engine:     storage.NewDefaultInMemForTesting(),
+		blockingCh: make(chan struct{}, 1),
+	}
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	// Initialize the SupportManager without starting the main goroutine.
+	require.NoError(t, sm.onRestart(ctx))
+
+	// Establish support for and from the remote store.
+	sm.SupportFrom(remoteStore)
+	sm.maybeAddStores()
+	sm.sendHeartbeats(ctx)
+	requestedTime := sm.requesterStateHandler.requesterState.meta.MaxRequested
+	heartbeatResp := &slpb.Message{
+		Type:       slpb.MsgHeartbeatResp,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: requestedTime,
+	}
+	heartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+	}
+	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
+
+	// Start blocking writes.
+	engine.setBlockOnWrite(true)
+	sender.drainSentMessages()
+
+	// Send heartbeats in a separate goroutine. It will block on writing the
+	// requester meta.
+	require.NoError(
+		t, sm.stopper.RunAsyncTask(
+			ctx, "heartbeat", sm.sendHeartbeats,
+		),
+	)
+	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 0)
+
+	// SupportFrom and SupportFor calls are still being answered.
+	epoch, _ := sm.SupportFrom(remoteStore)
+	require.Equal(t, slpb.Epoch(1), epoch)
+
+	epoch, supported := sm.SupportFor(remoteStore)
+	require.Equal(t, slpb.Epoch(1), epoch)
+	require.True(t, supported)
+
+	// Stop blocking writes.
+	engine.blockingCh <- struct{}{}
+	engine.setBlockOnWrite(false)
+
+	// Ensure the heartbeat is unblocked and sent out.
+	ensureHeartbeats(t, sender, 1)
+}
+
+// TestSupportManagerReceiveQueueLimit tests that the receive queue returns
+// errors when the queue size limit is reached.
+func TestSupportManagerReceiveQueueLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	// Initialize the SupportManager without starting the main goroutine.
+	require.NoError(t, sm.onRestart(ctx))
+
+	heartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+	}
+
+	for i := 0; i < maxReceiveQueueSize; i++ {
+		require.NoError(t, sm.HandleMessage(heartbeat))
+	}
+	require.Equal(t, int64(maxReceiveQueueSize), sm.metrics.ReceiveQueueSize.Value())
+	require.Equal(
+		t, int64(maxReceiveQueueSize*heartbeat.Size()), sm.metrics.ReceiveQueueBytes.Value(),
+	)
+
+	// Nothing is consuming messages from the queue, so the next HandleMessage
+	// should result in an error.
+	require.Regexp(t, sm.HandleMessage(heartbeat), "store liveness receive queue is full")
+}
+
+// TestSupportManagerHeartbeatNewStore tests that when a store is added (in the
+// first call of SupportFrom), heartbeats are sent to it immediately, before a
+// heartbeat interval has expired.
+func TestSupportManagerHeartbeatNewStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	// Set a very large heartbeat interval to ensure heartbeats for new stores are
+	// sent out before the heartbeat ticker is signalled.
+	options.HeartbeatInterval = time.Hour
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	require.NoError(t, sm.Start(ctx))
+
+	// Start sending heartbeats to the remote store by calling SupportFrom.
+	sm.SupportFrom(remoteStore)
+
+	testutils.SucceedsSoon(
+		t, func() error {
+			if sm.metrics.HeartbeatSuccesses.Count() == int64(0) {
+				return errors.New("heartbeat not sent yet")
+			}
+			return nil
+		},
+	)
+}
+
+func ensureHeartbeats(t *testing.T, sender *testMessageSender, expectedNum int) []slpb.Message {
 	var msgs []slpb.Message
 	testutils.SucceedsSoon(
 		t, func() error {
-			if sender.getNumSentMessages() < 10 {
+			if sender.getNumSentMessages() < expectedNum {
 				return errors.New("not enough heartbeats")
 			}
 			msgs = sender.drainSentMessages()
@@ -271,12 +449,13 @@ func ensureHeartbeats(t *testing.T, sender *testMessageSender) []slpb.Message {
 	return msgs
 }
 
-func ensureNoHeartbeats(t *testing.T, sender *testMessageSender, hbInterval time.Duration) {
+func ensureNoHeartbeats(
+	t *testing.T, sender *testMessageSender, hbInterval time.Duration, slack int,
+) {
 	sender.drainSentMessages()
 	err := testutils.SucceedsWithinError(
 		func() error {
-			// One heartbeat may race in while heartbeats are being disabled.
-			if sender.getNumSentMessages() > 2 {
+			if sender.getNumSentMessages() > slack {
 				return errors.New("heartbeats are sent")
 			} else {
 				return errors.New("no heartbeats")
@@ -293,7 +472,7 @@ type testMessageSender struct {
 	messages []slpb.Message
 }
 
-func (tms *testMessageSender) SendAsync(msg slpb.Message) (sent bool) {
+func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (sent bool) {
 	tms.mu.Lock()
 	defer tms.mu.Unlock()
 	tms.messages = append(tms.messages, msg)
@@ -315,3 +494,57 @@ func (tms *testMessageSender) getNumSentMessages() int {
 }
 
 var _ MessageSender = (*testMessageSender)(nil)
+
+// testEngine is a wrapper around storage.Engine that helps simulate failed and
+// stalled writes.
+type testEngine struct {
+	storage.Engine
+	mu           syncutil.Mutex
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (te *testEngine) NewBatch() storage.Batch {
+	return testBatch{
+		Batch:        te.Engine.NewBatch(),
+		blockingCh:   te.blockingCh,
+		blockOnWrite: te.blockOnWrite,
+		errorOnWrite: te.errorOnWrite,
+	}
+}
+
+func (te *testEngine) setBlockOnWrite(bow bool) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.blockOnWrite = bow
+}
+
+func (te *testEngine) PutUnversioned(key roachpb.Key, value []byte) error {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	if te.blockOnWrite {
+		<-te.blockingCh
+	}
+	if te.errorOnWrite {
+		return errors.New("error writing")
+	}
+	return te.Engine.PutUnversioned(key, value)
+}
+
+type testBatch struct {
+	storage.Batch
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (tb testBatch) Commit(sync bool) error {
+	if tb.blockOnWrite {
+		<-tb.blockingCh
+	}
+	if tb.errorOnWrite {
+		return errors.New("error committing batch")
+	}
+	return tb.Batch.Commit(sync)
+}

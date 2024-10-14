@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scdeps
 
@@ -265,8 +260,9 @@ func (d *txnDeps) UpdateSubzoneConfig(
 		rawBytes = oldZc.GetRawBytesInStorage()
 		zc = oldZc.ZoneConfigProto()
 	} else {
-		// If no zone config exists, create a new one.
-		zc = &zonepb.ZoneConfig{}
+		// If no zone config exists, create a new one that is a subzone placeholder.
+		zc = zonepb.NewZoneConfig()
+		zc.DeleteTableConfig()
 	}
 
 	// Update the subzones in the zone config.

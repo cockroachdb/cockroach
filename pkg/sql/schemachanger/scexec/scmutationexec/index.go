@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scmutationexec
 
@@ -498,8 +493,13 @@ func (m *deferredVisitor) MaybeAddSplitForIndex(
 	return nil
 }
 
-func (i *immediateVisitor) AddIndexZoneConfig(
-	ctx context.Context, op scop.AddIndexZoneConfig,
+func (i *immediateVisitor) AddIndexZoneConfig(_ context.Context, op scop.AddIndexZoneConfig) error {
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
+	return nil
+}
+
+func (i *immediateVisitor) AddPartitionZoneConfig(
+	_ context.Context, op scop.AddPartitionZoneConfig,
 ) error {
 	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
 	return nil

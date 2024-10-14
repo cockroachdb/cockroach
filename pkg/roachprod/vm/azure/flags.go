@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package azure
 
@@ -14,17 +9,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/pflag"
 )
 
 // ProviderOpts provides user-configurable, azure-specific create options.
 type ProviderOpts struct {
-	Locations       []string
+	// N.B. Azure splits up the region (location) and availability zone, but
+	// to keep things consistent with other providers, we treat zone to mean
+	// both and split it up later.
+	Zones           []string
 	MachineType     string
 	VnetName        string
-	Zone            string
 	NetworkDiskType string
 	NetworkDiskSize int32
 	UltraDiskIOPS   int64
@@ -34,21 +31,18 @@ type ProviderOpts struct {
 // These default locations support availability zones. At the time of
 // this comment, `westus` did not and `westus2` is consistently out of
 // capacity.
-var defaultLocations = []string{
-	"eastus",
-	"canadacentral",
-	"westus3",
+var DefaultZones = []string{
+	"eastus-1",
+	"canadacentral-1",
+	"westus3-1",
 }
-
-var defaultZone = "1"
 
 // DefaultProviderOpts returns a new azure.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		Locations:       nil,
-		MachineType:     string(compute.VirtualMachineSizeTypesStandardD4V3),
+		Zones:           nil,
+		MachineType:     string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		VnetName:        "common",
-		Zone:            "",
 		NetworkDiskType: "premium-disk",
 		NetworkDiskSize: 500,
 		UltraDiskIOPS:   5000,
@@ -68,14 +62,16 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.BoolVar(&providerInstance.SyncDelete, ProviderName+"-sync-delete", providerInstance.SyncDelete,
 		"Wait for deletions to finish before returning")
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type",
-		string(compute.VirtualMachineSizeTypesStandardD4V3),
+		string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")
-	flags.StringSliceVar(&o.Locations, ProviderName+"-locations", nil,
-		fmt.Sprintf("Locations for cluster (see `az account list-locations`) (default\n[%s])",
-			strings.Join(defaultLocations, ",")))
+	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
+		fmt.Sprintf("Zones for cluster, where a zone is a location (see `az account list-locations`)\n"+
+			"and availability zone seperated by a dash. If zones are formatted as Location-AZ:N where N is an integer,\n"+
+			"the zone will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
+			"regardless of geo (default [%s])",
+			strings.Join(DefaultZones, ",")))
 	flags.StringVar(&o.VnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
-	flags.StringVar(&o.Zone, ProviderName+"-availability-zone", "", "Availability Zone to create VMs in")
 	flags.StringVar(&o.NetworkDiskType, ProviderName+"-network-disk-type", "premium-disk",
 		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
 	flags.Int32Var(&o.NetworkDiskSize, ProviderName+"-volume-size", 500,

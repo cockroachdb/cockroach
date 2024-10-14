@@ -1,0 +1,43 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+/**
+ Mixins
+*/
+@mixin crl-depth($n_: 1, $color_: $color-core-blue-5) {
+  /**
+    Desc:
+      This mixin sets the `box-shadow` property
+      to reflect the depth layers outlined in the
+      CRL design system.
+
+    Example usage:
+      `@include depth(3);`
+  */
+  $depth-1: 0 1px 5px 0px rgba($color_, 0.17);
+  $depth-2: 0 6px 15px 0px rgba($color_, 0.17);
+  $depth-3: 0 9px 20px 0px rgba($color_, 0.27);
+  $depth-4: 0 10px 40px 0px rgba($color_, 0.37);
+
+  @if $n_ == 1 {
+    -webkit-box-shadow: $depth-1;
+    -moz-box-shadow: $depth-1;
+    box-shadow: $depth-1;
+  } @else if $n_ == 2 {
+    -webkit-box-shadow: $depth-2;
+    -moz-box-shadow: $depth-2;
+    box-shadow: $depth-2;
+  } @else if $n_ == 3 {
+    -webkit-box-shadow: $depth-3;
+    -moz-box-shadow: $depth-3;
+    box-shadow: $depth-3;
+  } @else if $n_ == 4 {
+    -webkit-box-shadow: $depth-4;
+    -moz-box-shadow: $depth-4;
+    box-shadow: $depth-4;
+  } @else {
+    box-shadow: none;
+  }
+}

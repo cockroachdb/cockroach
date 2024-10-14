@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package base
 
@@ -49,8 +44,4 @@ const (
 	// InflightTraceDir is the directory name where the job trace dumper stores traces
 	// when a job opts in to dumping its execution traces.
 	InflightTraceDir = "inflight_trace_dump"
-
-	// ObsServiceEmbedFlagValue is the special value of the --obsservice-addr flag
-	// configuring the CRDB node to run the Obs Service internally.
-	ObsServiceEmbedFlagValue = "embed"
 )

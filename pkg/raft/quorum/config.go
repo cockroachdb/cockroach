@@ -1,17 +1,13 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package quorum
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -101,20 +97,10 @@ func (c Config) String() string {
 
 // Clone returns a copy of the Config that shares no memory with the original.
 func (c *Config) Clone() Config {
-	clone := func(m map[pb.PeerID]struct{}) map[pb.PeerID]struct{} {
-		if m == nil {
-			return nil
-		}
-		mm := make(map[pb.PeerID]struct{}, len(m))
-		for k := range m {
-			mm[k] = struct{}{}
-		}
-		return mm
-	}
 	return Config{
-		Voters:       JointConfig{clone(c.Voters[0]), clone(c.Voters[1])},
-		Learners:     clone(c.Learners),
-		LearnersNext: clone(c.LearnersNext),
+		Voters:       JointConfig{maps.Clone(c.Voters[0]), maps.Clone(c.Voters[1])},
+		Learners:     maps.Clone(c.Learners),
+		LearnersNext: maps.Clone(c.LearnersNext),
 	}
 }
 

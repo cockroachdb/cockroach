@@ -1,0 +1,10 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module.scss";
+
+.label-body {
+  background-color: $colors--neutral-3;
+}

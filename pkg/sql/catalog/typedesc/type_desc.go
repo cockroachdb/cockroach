@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package typedesc contains the concrete implementations of
 // catalog.TypeDescriptor.
@@ -260,6 +255,11 @@ func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 // DescriptorType implements the catalog.Descriptor interface.
 func (desc *immutable) DescriptorType() catalog.DescriptorType {
 	return catalog.Type
+}
+
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedPCRVersion
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
@@ -914,6 +914,22 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 		}
 	}
 	return nil
+}
+
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *immutable) MaybeRequiresTypeHydration() bool {
+	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
+		return true
+	}
+	if desc.Composite == nil {
+		return false
+	}
+	for _, e := range desc.Composite.Elements {
+		if catid.IsOIDUserDefined(e.ElementType.Oid()) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetIDClosure implements the TypeDescriptor interface.

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -57,6 +52,7 @@ func newTxnKVFetcher(
 	txn *kv.Txn,
 	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
+	rawMVCCValues bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
@@ -103,6 +99,7 @@ func newTxnKVFetcher(
 	fetcherArgs := newTxnKVFetcherArgs{
 		sendFn:                     sendFn,
 		reverse:                    reverse,
+		rawMVCCValues:              rawMVCCValues,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
 		lockDurability:             lockDurability,
@@ -134,6 +131,7 @@ func NewDirectKVBatchFetcher(
 	bsHeader *kvpb.BoundedStalenessHeader,
 	spec *fetchpb.IndexFetchSpec,
 	reverse bool,
+	rawMVCCValues bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
@@ -144,7 +142,7 @@ func NewDirectKVBatchFetcher(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
+		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
@@ -162,6 +160,7 @@ func NewKVFetcher(
 	txn *kv.Txn,
 	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
+	rawMVCCValues bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
@@ -172,7 +171,7 @@ func NewKVFetcher(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
+		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
 	))
 }
@@ -198,6 +197,7 @@ func NewStreamingKVFetcher(
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	rawMVCCValues bool,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -229,7 +229,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued, rawMVCCValues))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

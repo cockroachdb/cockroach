@@ -32,7 +32,13 @@ translate database=db table=person
 
 exec-sql
 ALTER PARTITION default OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION australia OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER PARTITION north_america OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 3;
 ----
 
@@ -52,8 +58,17 @@ translate database=db table=person
 
 exec-sql
 ALTER PARTITION old_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+
+exec-sql
 ALTER PARTITION yung_au OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 5;
+----
+
+exec-sql
 ALTER PARTITION old_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 6;
+----
+
+exec-sql
 ALTER PARTITION yung_na OF TABLE db.person CONFIGURE ZONE USING gc.ttlseconds = 7;
 ----
 
@@ -87,8 +102,17 @@ CREATE TABLE db.list_default_then_range (
             PARTITION P2N1N2 VALUES FROM (10) TO (maxvalue)
         )
 );
+----
+
+exec-sql
 ALTER PARTITION P1N1 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+
+exec-sql
 ALTER PARTITION P1N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 5;
+----
+
+exec-sql
 ALTER PARTITION P2N1N2 OF TABLE db.list_default_then_range CONFIGURE ZONE USING gc.ttlseconds = 6;
 ----
 
@@ -112,7 +136,13 @@ translate database=db table=list_multi_column_partitions
 
 exec-sql
 ALTER TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 3;
+----
+
+exec-sql
 ALTER PARTITION default OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION six_and_seven OF TABLE db.list_multi_column_partitions CONFIGURE ZONE USING gc.ttlseconds = 2;
 ----
 
@@ -130,9 +160,21 @@ CREATE TABLE db.partition_by_list(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i
   PARTITION four_and_three  VALUES IN (4, 3),
   PARTITION everything_else VALUES IN (6, default)
 );
+----
+
+exec-sql
 ALTER TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER PARTITION four_and_three OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 3;
+----
+
+exec-sql
 ALTER PARTITION everything_else OF TABLE db.partition_by_list CONFIGURE ZONE USING gc.ttlseconds = 4;
 ----
 
@@ -151,10 +193,19 @@ translate database=db table=partition_by_list
 
 exec-sql
 CREATE TABLE db.test(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
-  PARTITION one_and_five    VALUES IN (1, 5)
+  PARTITION one_and_five VALUES IN (1, 5)
 );
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.test CONFIGURE ZONE USING gc.ttlseconds = 2;
+----
+
+exec-sql
 ALTER INDEX db.test@test_pkey CONFIGURE ZONE USING num_replicas = 4;
+----
+
+exec-sql
 ALTER PARTITION one_and_five OF TABLE db.test CONFIGURE ZONE USING gc.ttlseconds = 3;
 ----
 
@@ -167,3 +218,38 @@ translate database=db table=test
 /Table/110/1/{5-6}                         ttl_seconds=3 num_replicas=4
 /Table/110/{1/6-2}                         num_replicas=4
 /Table/11{0/2-1}                           range default
+
+exec-sql
+CREATE TABLE db.part (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data) PARTITION BY LIST (data) (
+        PARTITION p1 VALUES IN (10, 20, 30),
+        PARTITION p2 VALUES IN (40, 50, 60)
+    )
+);
+----
+
+exec-sql
+ALTER PARTITION p1 OF index db.part@idx CONFIGURE ZONE USING num_replicas = 10;
+----
+
+exec-sql
+ALTER PARTITION p2 OF index db.part@idx CONFIGURE ZONE USING num_replicas = 11;
+----
+
+translate database=db table=part
+----
+/Table/111{-/2/10}                         range default
+/Table/111/2/1{0-1}                        num_replicas=10
+/Table/111/2/{11-20}                       range default
+/Table/111/2/2{0-1}                        num_replicas=10
+/Table/111/2/{21-30}                       range default
+/Table/111/2/3{0-1}                        num_replicas=10
+/Table/111/2/{31-40}                       range default
+/Table/111/2/4{0-1}                        num_replicas=11
+/Table/111/2/{41-50}                       range default
+/Table/111/2/5{0-1}                        num_replicas=11
+/Table/111/2/{51-60}                       range default
+/Table/111/2/6{0-1}                        num_replicas=11
+/Table/11{1/2/61-2}                        range default

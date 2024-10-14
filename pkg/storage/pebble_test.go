@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -98,24 +93,23 @@ func TestEngineComparer(t *testing.T) {
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
 
 	// We group versions by equality and in the expected ordering.
-	orderedVersions := [][]any{
-		{ts1},       // Empty version sorts first.
-		{ts2, ts2a}, // Higher timestamps sort before lower timestamps.
-		{ts3, ts3a, ts3b},
-		{ts4},
-		{ts5},
+	orderedVersions := []any{
+		ts1,  // Empty version sorts first.
+		ts2a, // Synthetic bit is not ignored when comparing suffixes.
+		ts2,
+		ts3b, // Higher timestamps sort before lower timestamps.
+		ts3a,
+		ts3,
+		ts4,
+		ts5,
 	}
 
 	// Compare suffixes.
-	for i := range orderedVersions {
-		for j := range orderedVersions {
-			for _, v1 := range orderedVersions[i] {
-				for _, v2 := range orderedVersions[j] {
-					result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
-					if expected := cmp.Compare(i, j); result != expected {
-						t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
-					}
-				}
+	for i, v1 := range orderedVersions {
+		for j, v2 := range orderedVersions {
+			result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
+			if expected := cmp.Compare(i, j); result != expected {
+				t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
 			}
 		}
 	}

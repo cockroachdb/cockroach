@@ -1,19 +1,17 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cidr
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -49,6 +48,7 @@ func TestCIDRLookup(t *testing.T) {
 		{"10.0.0.2", "CIDR3"},
 		{"10.0.0.1", "CIDR4"},
 		{"172.16.0.1", ""},
+		{"2001:0db8:0a0b:12f0:0000:0000:0000:0001", ""},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.ip, func(t *testing.T) {
@@ -87,6 +87,7 @@ func TestInvalidCIDR(t *testing.T) {
 		{"int name ", `[ { "Name":  1, "Ipnet": "192.168.0.0/24" } ]`},
 		{"missing cidr", `[ { Name:  "CIDR1" } ]`},
 		{"malformed cidr", `[ { "Name":  "CIDR1", "Ipnet": "192.168.0.0.1/24" } ]`},
+		{"ipv6", `[ { "Name":  "CIDR1", "Ipnet": "2001:db8::/40" } ]`},
 	}
 	c := Lookup{}
 	for _, tc := range testCases {
@@ -101,7 +102,7 @@ func TestInvalidCIDR(t *testing.T) {
 func TestEmptyLookup(t *testing.T) {
 	settings := cluster.MakeClusterSettings()
 	c := NewLookup(&settings.SV)
-	c.Start(context.Background(), stop.NewStopper())
+	require.NoError(t, c.Start(context.Background(), stop.NewStopper()))
 	c.LookupIP(net.ParseIP("127.0.0.1"))
 }
 
@@ -139,13 +140,18 @@ func TestRefresh(t *testing.T) {
 
 	st := cluster.MakeClusterSettings()
 	c := NewLookup(&st.SV)
-	c.Start(context.Background(), stopper)
+	require.NoError(t, c.Start(context.Background(), stopper))
 	// We haven't set the URL yet, so it should return an empty string.
 	require.Equal(t, "", c.LookupIP(net.ParseIP("127.0.0.1")))
 
-	// Set the URL to the file we created. Verify it takes effect immediately.
+	// Set the URL to the file we created. Verify it takes effect quickly.
 	cidrMappingUrl.Override(context.Background(), &st.SV, "file://"+filename)
-	require.Equal(t, "loopback", c.LookupIP(net.ParseIP("127.0.0.1")))
+	testutils.SucceedsSoon(t, func() error {
+		if c.LookupIP(net.ParseIP("127.0.0.1")) != "loopback" {
+			return errors.New("not refreshed")
+		}
+		return nil
+	})
 
 	cidrRefreshInterval.Override(context.Background(), &st.SV, time.Second)
 
@@ -163,4 +169,77 @@ func TestRefresh(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+var writeBytes = metric.Metadata{
+	Name:        "write_bytes",
+	Help:        "Number of bytes written",
+	Measurement: "Bytes",
+	Unit:        metric.Unit_BYTES,
+}
+var readBytes = metric.Metadata{
+	Name:        "read_bytes",
+	Help:        "Number of bytes read",
+	Measurement: "Bytes",
+	Unit:        metric.Unit_BYTES,
+}
+
+// TestWrapHTTP validates the metrics for a HTTP connections.
+func TestWrapHTTP(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer s.Close()
+	// Create a mapping for this server's IP.
+	mapping := fmt.Sprintf(`[ { "Name": "test", "Ipnet": "%s/32" } ]`, s.Listener.Addr().(*net.TCPAddr).IP.String())
+	c := Lookup{}
+	require.NoError(t, c.setDestinations(context.Background(), []byte(mapping)))
+
+	// This is the standard way to wrap the transport.
+	m := c.MakeNetMetrics(writeBytes, readBytes, "label")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = m.Wrap(transport.DialContext, "foo")
+
+	// Execute a simple get request.
+	client := &http.Client{Transport: transport}
+	_, err := client.Get(s.URL)
+	require.NoError(t, err)
+
+	// Ideally we could check the actual value, but the header includes the date
+	// and could be flaky.
+	require.Greater(t, m.WriteBytes.Count(), int64(1))
+	require.Greater(t, m.ReadBytes.Count(), int64(1))
+	// Also check the child metrics by looking up in the map directly.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Greater(t, m.mu.childMetrics["foo/test"].WriteBytes.Value(), int64(1))
+	require.Greater(t, m.mu.childMetrics["foo/test"].ReadBytes.Value(), int64(1))
+}
+
+func TestWrapDialer(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer s.Close()
+	// Create a mapping for this server's IP.
+	mapping := fmt.Sprintf(`[ { "Name": "test", "Ipnet": "%s/32" } ]`, s.Listener.Addr().(*net.TCPAddr).IP.String())
+	c := Lookup{}
+	require.NoError(t, c.setDestinations(context.Background(), []byte(mapping)))
+
+	m := c.MakeNetMetrics(writeBytes, readBytes, "label")
+	dialer := m.WrapDialer(&net.Dialer{}, "foo")
+	conn, err := dialer.Dial(s.Listener.Addr().Network(), s.Listener.Addr().String())
+	require.NoError(t, err)
+	_, err = conn.Write([]byte("GET / HTTP/1.0\r\n\r\n"))
+	require.NoError(t, err)
+	var b [1024]byte
+	_, err = conn.Read(b[:])
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+
+	// Ideally we could check the actual value, but the header includes the date
+	// and could be flaky.
+	require.Greater(t, m.WriteBytes.Count(), int64(1))
+	require.Greater(t, m.ReadBytes.Count(), int64(1))
+	// Also check the child metrics by looking up in the map directly.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	require.Greater(t, m.mu.childMetrics["foo/test"].WriteBytes.Value(), int64(1))
+	require.Greater(t, m.mu.childMetrics["foo/test"].ReadBytes.Value(), int64(1))
 }

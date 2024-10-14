@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package timeutil
 
@@ -55,6 +50,13 @@ type Timer struct {
 	// the timer has been initialized (via Reset).
 	C    <-chan time.Time
 	Read bool
+}
+
+// AsTimerI returns the Timer as a TimerI. This is helpful
+// to write code that accepts a Timer in production and a manual
+// timer in tests.
+func (t *Timer) AsTimerI() TimerI {
+	return (*timer)(t)
 }
 
 // Reset changes the timer to expire after duration d and returns

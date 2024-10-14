@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -405,6 +402,12 @@ func newRangeDistributionTester(
 	systemDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	if tc.StartedDefaultTestTenant() {
 		systemDB.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		// Give 1,000,000 upfront tokens to the tenant, and keep the tokens per
+		// second rate to the default value of 10,000. This helps avoid throttling
+		// in the tests.
+		systemDB.Exec(t,
+			"SELECT crdb_internal.update_tenant_resource_limits($1::INT, 1000000, 10000, 0, now(), 0)",
+			serverutils.TestTenantID().ToUint64())
 	}
 
 	t.Logf("%s: creating and inserting rows into table", timeutil.Now().Format(time.DateTime))

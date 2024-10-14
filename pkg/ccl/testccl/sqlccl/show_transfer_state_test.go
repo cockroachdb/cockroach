@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlccl
 
@@ -17,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -212,9 +210,11 @@ func TestShowTransferState(t *testing.T) {
 		t.Run("root_user", func(t *testing.T) {
 			var key string
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
-			err := tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
-			require.NoError(t, err)
-
+			testutils.SucceedsSoon(t, func() error {
+				// Waiting for the cluster setting to propagate to the tenant.
+				return tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).
+					Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
+			})
 			require.True(t, errVal.Valid)
 			require.Equal(t, "cannot create token for root user", errVal.String)
 			require.False(t, sessionState.Valid)

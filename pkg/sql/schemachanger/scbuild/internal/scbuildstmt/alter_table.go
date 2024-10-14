@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -55,11 +50,12 @@ func init() {
 			panic(errors.AssertionFailedf("%v entry for statement is "+
 				"not a function", statementType))
 		}
-		if callBackType.NumIn() != 4 ||
+		if callBackType.NumIn() != 5 ||
 			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
 			callBackType.In(1) != reflect.TypeOf((*tree.TableName)(nil)) ||
 			callBackType.In(2) != reflect.TypeOf((*scpb.Table)(nil)) ||
-			callBackType.In(3) != statementType {
+			!callBackType.In(3).Implements(reflect.TypeOf((*tree.Statement)(nil)).Elem()) ||
+			callBackType.In(4) != statementType {
 			panic(errors.AssertionFailedf("%v entry for alter table statement "+
 				"does not have a valid signature; got %v", statementType, callBackType))
 		}
@@ -126,7 +122,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", n.Table.Object()))
 	}
-	panicIfSchemaIsLocked(elts)
+	panicIfSchemaChangeIsDisallowed(elts, n)
 	tn.ObjectNamePrefix = b.NamePrefix(tbl)
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
@@ -139,6 +135,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 			reflect.ValueOf(b),
 			reflect.ValueOf(&tn),
 			reflect.ValueOf(tbl),
+			reflect.ValueOf(n),
 			reflect.ValueOf(cmd),
 		})
 		b.IncrementSubWorkID()

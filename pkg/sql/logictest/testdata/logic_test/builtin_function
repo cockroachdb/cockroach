@@ -3035,6 +3035,9 @@ SELECT (SELECT * FROM [SHOW crdb_version]) = version()
 ----
 true
 
+# Replicated version field was added in 24.3, which will make the two non-equivalent.
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query B
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
 ----
@@ -4377,5 +4380,34 @@ public  concat_enum      ·
 public  custom_typ       ·
 public  roach_dwellings  ·
 public  testenum         ·
+
+subtest end
+
+subtest type_is_indexable
+
+# Indexable type (int4).
+query B
+SELECT crdb_internal.type_is_indexable(23);
+----
+true
+
+# Unindexable type (refcursor).
+query B
+SELECT crdb_internal.type_is_indexable(1790);
+----
+false
+
+statement ok
+CREATE TYPE foo_type AS ENUM ('v1', 'v2', 'v3');
+
+query B
+SELECT crdb_internal.type_is_indexable((SELECT oid FROM pg_type WHERE typname = 'foo_type'));
+----
+true
+
+query T
+SELECT crdb_internal.type_is_indexable(NULL);
+----
+NULL
 
 subtest end

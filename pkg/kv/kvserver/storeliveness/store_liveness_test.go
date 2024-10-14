@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storeliveness
 
@@ -40,7 +35,7 @@ func TestStoreLiveness(t *testing.T) {
 		t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 			ctx := context.Background()
 			storeID := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
-			engine := storage.NewDefaultInMemForTesting()
+			engine := &testEngine{Engine: storage.NewDefaultInMemForTesting()}
 			defer engine.Close()
 			settings := clustersettings.MakeTestingClusterSettings()
 			stopper := stop.NewStopper()
@@ -53,25 +48,19 @@ func TestStoreLiveness(t *testing.T) {
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
 					switch d.Cmd {
-					case "remove-idle-stores":
-						sm.requesterStateHandler.removeIdleStores()
+					case "mark-idle-stores":
+						sm.requesterStateHandler.markIdleStores()
 						return ""
 
 					case "support-from":
 						remoteID := parseStoreID(t, d, "node-id", "store-id")
-						epoch, timestamp, supported := sm.SupportFrom(remoteID)
-						return fmt.Sprintf(
-							"epoch: %+v, expiration: %+v, support provided: %v",
-							epoch, timestamp, supported,
-						)
+						epoch, timestamp := sm.SupportFrom(remoteID)
+						return fmt.Sprintf("epoch: %+v, expiration: %+v", epoch, timestamp)
 
 					case "support-for":
 						remoteID := parseStoreID(t, d, "node-id", "store-id")
 						epoch, supported := sm.SupportFor(remoteID)
-						return fmt.Sprintf(
-							"epoch: %+v, support provided: %v",
-							epoch, supported,
-						)
+						return fmt.Sprintf("epoch: %+v, support provided: %v", epoch, supported)
 
 					case "send-heartbeats":
 						now := parseTimestamp(t, d, "now")
@@ -108,6 +97,13 @@ func TestStoreLiveness(t *testing.T) {
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
 						return ""
+
+					case "error-on-write":
+						var errorOnWrite bool
+						d.ScanArgs(t, "on", &errorOnWrite)
+						engine.errorOnWrite = errorOnWrite
+						return ""
+
 					case "debug-requester-state":
 						var sortedSupportMap []string
 						for _, support := range sm.requesterStateHandler.requesterState.supportFrom {
@@ -134,6 +130,21 @@ func TestStoreLiveness(t *testing.T) {
 							strings.Join(sortedSupportMap, "\n"),
 						)
 
+					case "debug-metrics":
+						return fmt.Sprintf(
+							"HeartbeatSuccess: %d, HeartbeatFailure: %d\n"+
+								"MessageHandleSuccess: %d, MessageHandleFailure: %d\n"+
+								"SupportWithdrawSuccess: %d, SupportWithdrawFailure: %d\n"+
+								"SupportFromStores: %d, SupportForStores: %d",
+							sm.metrics.HeartbeatSuccesses.Count(),
+							sm.metrics.HeartbeatFailures.Count(),
+							sm.metrics.MessageHandleSuccesses.Count(),
+							sm.metrics.MessageHandleFailures.Count(),
+							sm.metrics.SupportWithdrawSuccesses.Count(),
+							sm.metrics.SupportWithdrawFailures.Count(),
+							sm.metrics.SupportFromStores.Value(),
+							sm.metrics.SupportForStores.Value(),
+						)
 					default:
 						return fmt.Sprintf("unknown command: %s", d.Cmd)
 					}

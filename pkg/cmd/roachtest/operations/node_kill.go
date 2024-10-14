@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package operations
 
@@ -99,35 +94,39 @@ func runNodeKill(
 
 func registerNodeKill(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "node-kill/sigkill/drain=true",
-		Owner:            registry.OwnerServer,
-		Timeout:          15 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              nodeKillRunner(9 /* signal */, true /* drain */),
+		Name:               "node-kill/sigkill/drain=true",
+		Owner:              registry.OwnerServer,
+		Timeout:            15 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                nodeKillRunner(9 /* signal */, true /* drain */),
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:             "node-kill/sigkill/drain=false",
-		Owner:            registry.OwnerServer,
-		Timeout:          10 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              nodeKillRunner(9 /* signal */, false /* drain */),
+		Name:               "node-kill/sigkill/drain=false",
+		Owner:              registry.OwnerServer,
+		Timeout:            10 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                nodeKillRunner(9 /* signal */, false /* drain */),
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:             "node-kill/sigterm/drain=true",
-		Owner:            registry.OwnerServer,
-		Timeout:          15 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              nodeKillRunner(15 /* signal */, true /* drain */),
+		Name:               "node-kill/sigterm/drain=true",
+		Owner:              registry.OwnerServer,
+		Timeout:            15 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                nodeKillRunner(15 /* signal */, true /* drain */),
 	})
 	r.AddOperation(registry.OperationSpec{
-		Name:             "node-kill/sigterm/drain=false",
-		Owner:            registry.OwnerServer,
-		Timeout:          10 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              nodeKillRunner(15 /* signal */, false /* drain */),
+		Name:               "node-kill/sigterm/drain=false",
+		Owner:              registry.OwnerServer,
+		Timeout:            10 * time.Minute,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                nodeKillRunner(15 /* signal */, false /* drain */),
 	})
 }

@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -15,7 +10,6 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
-	"slices"
 	"sort"
 	"time"
 
@@ -105,7 +99,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// Disallow schema changes if this table's schema is locked, unless it is to
 	// set/reset the "schema_locked" storage parameter.
-	if err = checkTableSchemaUnlocked(tableDesc); err != nil && !isSetOrResetSchemaLocked(n) {
+	if err = checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -464,7 +458,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				for _, updated := range affected {
 					// Disallow schema change if the FK references a table whose schema is
 					// locked.
-					if err := checkTableSchemaUnlocked(updated); err != nil {
+					if err := checkSchemaChangeIsAllowed(updated, n.n); err != nil {
 						return err
 					}
 					if err := params.p.writeSchemaChange(
@@ -1934,7 +1928,7 @@ func dropColumnImpl(
 	if err := schemaexpr.ValidateColumnHasNoDependents(tableDesc, colToDrop); err != nil {
 		return nil, err
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop, tn, "drop"); err != nil {
+	if err := schemaexpr.ValidateTTLExpression(tableDesc, rowLevelTTL, colToDrop, tn, "drop"); err != nil {
 		return nil, err
 	}
 
@@ -2307,27 +2301,21 @@ func (p *planner) tryRemoveFKBackReferences(
 	return nil
 }
 
-func checkTableSchemaUnlocked(desc catalog.TableDescriptor) (ret error) {
-	if desc != nil && desc.IsSchemaLocked() {
+// checkSchemaChangeIsAllowed checks if a schema change is allowed on
+// this table. A schema change is disallowed if one of the following is true:
+//   - The schema_locked table storage parameter is true, and this statement is
+//     not modifying the value of schema_locked.
+//   - The table is referenced by logical data replication jobs, and the statement
+//     is not in the allow list of LDR schema changes.
+func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) (ret error) {
+	if desc == nil {
+		return nil
+	}
+	if desc.IsSchemaLocked() && !tree.IsSetOrResetSchemaLocked(n) {
 		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
 	}
-	return nil
-}
-
-// isSetOrResetSchemaLocked returns true if `n` contains a command to
-// set/reset "schema_locked" storage parameter.
-func isSetOrResetSchemaLocked(n *tree.AlterTable) bool {
-	for _, cmd := range n.Cmds {
-		switch cmd := cmd.(type) {
-		case *tree.AlterTableSetStorageParams:
-			if cmd.StorageParams.GetVal("schema_locked") != nil {
-				return true
-			}
-		case *tree.AlterTableResetStorageParams:
-			if slices.Contains(cmd.Params, "schema_locked") {
-				return true
-			}
-		}
+	if len(desc.TableDesc().LDRJobIDs) > 0 && !tree.IsAllowedLDRSchemaChange(n) {
+		return sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(desc.GetName(), desc.TableDesc().LDRJobIDs)
 	}
-	return false
+	return nil
 }

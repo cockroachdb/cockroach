@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package testcluster
 
@@ -28,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -685,7 +680,11 @@ func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossi
 			}
 			t.Fatal(err)
 		case <-time.After(testutils.DefaultSucceedsSoonDuration):
-			t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
+			func() {
+				storesMu.Lock()
+				defer storesMu.Unlock()
+				t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
+			}()
 		}
 	}
 }
@@ -1607,6 +1606,16 @@ func (tc *TestCluster) ToggleSplitQueues(active bool) {
 	}
 }
 
+// ToggleLeaseQueues implements TestClusterInterface.
+func (tc *TestCluster) ToggleLeaseQueues(active bool) {
+	for _, s := range tc.Servers {
+		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			store.TestingSetLeaseQueueActive(active)
+			return nil
+		})
+	}
+}
+
 // ReadIntFromStores reads the current integer value at the given key
 // from all configured engines on un-stopped servers, filling in zeros
 // when the value is not found.
@@ -1846,7 +1855,7 @@ func (tc *TestCluster) GetRaftLeader(
 					// invalid.
 					raftLeaderRepl = nil
 					latestTerm = raftStatus.Term
-					if raftStatus.RaftState == raft.StateLeader {
+					if raftStatus.RaftState == raftpb.StateLeader {
 						raftLeaderRepl = repl
 					}
 				}

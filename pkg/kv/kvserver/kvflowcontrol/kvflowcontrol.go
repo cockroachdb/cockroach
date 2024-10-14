@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package kvflowcontrol provides flow control for replication traffic in KV.
 // It's part of the integration layer between KV and admission control.
@@ -17,12 +12,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
@@ -41,11 +37,7 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	metamorphic.ConstantWithTestChoice(
-		"kv.snapshot.ingest_as_write_threshold",
-		modeDict[ApplyToElastic], /* default value */
-		modeDict[ApplyToAll],     /* other value */
-	).(string),
+	modeDict[ApplyToElastic], /* default value */
 	modeDict,
 )
 
@@ -118,6 +110,55 @@ var validateTokenRange = settings.WithValidateInt(func(b int64) error {
 	return nil
 })
 
+// V2EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
+// this replica is the leader.
+//
+// State transitions are V2NotEnabledWhenLeader =>
+// V2EnabledWhenLeaderV1Encoding => V2EnabledWhenLeaderV2Encoding, i.e., the
+// level will never regress.
+type V2EnabledWhenLeaderLevel = uint32
+
+const (
+	V2NotEnabledWhenLeader V2EnabledWhenLeaderLevel = iota
+	V2EnabledWhenLeaderV1Encoding
+	V2EnabledWhenLeaderV2Encoding
+)
+
+// GetV2EnabledWhenLeaderLevel returns the level at which RACV2 is enabled when
+// this replica is the leader.
+//
+// The level is determined by the cluster version, and is ratcheted up as the
+// cluster version advances. The level is used to determine:
+//
+//  1. Whether the leader should use the RACv2 protocol.
+//  2. Whether the leader should use the V1 or V2 entry encoding iff (1) is
+//     true.
+//
+// Upon the leader first seeing V24_3_UseRACV2WithV1EntryEncoding, it will
+// create a RangeController and use the V1 entry encoding, operating in Push
+// mode. Upon the leader first seeing V24_3_UseRACV2Full, it will continue
+// using the RACV2 protocol, but will switch to the V2 entry encoding. Note the
+// necessary migration for V2NotEnabledWhenLeader =>
+// V2EnabledWhenLeaderV1Encoding occurs before anything else in
+// kvserver.handleRaftReadyRaftMuLocked.
+func GetV2EnabledWhenLeaderLevel(
+	ctx context.Context, st *cluster.Settings, knobs *TestingKnobs,
+) V2EnabledWhenLeaderLevel {
+	if knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
+		return knobs.OverrideV2EnabledWhenLeaderLevel()
+	}
+	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) {
+		// Full RACv2 can be enabled: RACv2 protocol with V2 entry encoding.
+		return V2EnabledWhenLeaderV2Encoding
+	}
+	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2WithV1EntryEncoding) {
+		// Partial RACv2 can be enabled: RACv2 protocol with V1 entry encoding.
+		return V2EnabledWhenLeaderV1Encoding
+	}
+	// RACv2 is not enabled.
+	return V2NotEnabledWhenLeader
+}
+
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
 // specific store the traffic is bound for and the tenant driving it. Despite
@@ -150,6 +191,7 @@ type Tokens int64
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
 type Controller interface {
+	InspectController
 	// Admit seeks admission to replicate data, regardless of size, for work with
 	// the given priority, create-time, and over the given stream. This blocks
 	// until there are flow tokens available or the stream disconnects, subject to
@@ -167,9 +209,6 @@ type Controller interface {
 	// expected to have been deducted earlier with the same priority provided
 	// here.
 	ReturnTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream)
-	// Inspect returns a snapshot of all underlying streams and their available
-	// {regular,elastic} tokens. It's used to power /inspectz.
-	Inspect(context.Context) []kvflowinspectpb.Stream
 	// InspectStream returns a snapshot of a specific underlying stream and its
 	// available {regular,elastic} tokens. It's used to power /inspectz.
 	InspectStream(context.Context, Stream) kvflowinspectpb.Stream
@@ -179,6 +218,12 @@ type Controller interface {
 	// replication to a specific store is paused due to follower-pausing.
 	// That'll have to show up between the Handler and the Controller somehow.
 	// See I2, I3a and [^7] in kvflowcontrol/doc.go.
+}
+
+type InspectController interface {
+	// Inspect returns a snapshot of all underlying streams and their available
+	// {regular,elastic} tokens. It's used to power /inspectz.
+	Inspect(context.Context) []kvflowinspectpb.Stream
 }
 
 // ReplicationAdmissionHandle abstracts waiting for admission across RACv1 and RACv2.
@@ -218,6 +263,7 @@ type ReplicationAdmissionHandle interface {
 // kvflowcontrolpb.AdmittedRaftLogEntries for more details).
 type Handle interface {
 	ReplicationAdmissionHandle
+	InspectHandle
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
@@ -267,9 +313,6 @@ type Handle interface {
 	// Admit(). It's only used when cluster settings change, settings that
 	// affect all work waiting for flow tokens.
 	ResetStreams(ctx context.Context)
-	// Inspect returns a serialized form of the underlying handle. It's used to
-	// power /inspectz.
-	Inspect(context.Context) kvflowinspectpb.Handle
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
@@ -277,10 +320,17 @@ type Handle interface {
 	Close(context.Context)
 }
 
+type InspectHandle interface {
+	// Inspect returns a serialized form of the underlying handle. It's used to
+	// power /inspectz.
+	Inspect(context.Context) kvflowinspectpb.Handle
+}
+
 // Handles represent a set of flow control handles. Note that handles are
 // typically held on replicas initiating replication traffic, so on a given node
 // they're uniquely identified by their range ID.
 type Handles interface {
+	InspectHandles
 	// Lookup the kvflowcontrol.Handle for the specific range (or rather, the
 	// replica of the specific range that's locally held).
 	Lookup(roachpb.RangeID) (Handle, bool)
@@ -288,9 +338,6 @@ type Handles interface {
 	// kvflowcontrol.Handles, i.e. disconnect and reconnect each one. It
 	// effectively unblocks all requests waiting in Admit().
 	ResetStreams(ctx context.Context)
-	// Inspect returns the set of ranges that have an embedded
-	// kvflowcontrol.Handle. It's used to power /inspectz.
-	Inspect() []roachpb.RangeID
 	// TODO(irfansharif): When fixing I1 and I2 from kvflowcontrol/node.go,
 	// we'll want to disconnect all streams for a specific node. Expose
 	// something like the following to disconnect all replication streams bound
@@ -306,6 +353,15 @@ type Handles interface {
 	// that's locally held). The bool is false if no handle was found, in which
 	// case the caller must use the pre-replication-admission-control path.
 	LookupReplicationAdmissionHandle(roachpb.RangeID) (ReplicationAdmissionHandle, bool)
+}
+
+type InspectHandles interface {
+	// LookupInspect the serialized form of a handle for the specific range (or
+	// rather, the replica of the specific range that's locally held).
+	LookupInspect(roachpb.RangeID) (kvflowinspectpb.Handle, bool)
+	// Inspect returns the set of ranges that have an embedded
+	// kvflowcontrol.Handle. It's used to power /inspectz.
+	Inspect() []roachpb.RangeID
 }
 
 // HandleFactory is used to construct new Handles.

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package leases
 
@@ -74,12 +69,12 @@ func TestStatus(t *testing.T) {
 	leaderLeaseRemote := leaderLease
 	leaderLeaseRemote.Replica = repl2
 
-	raftStatus := func(state raft.StateType, term uint64, leadSupport hlc.Timestamp) raft.LeadSupportStatus {
+	raftStatus := func(state raftpb.StateType, term uint64, leadSupport hlc.Timestamp) raft.LeadSupportStatus {
 		var s raft.LeadSupportStatus
 		s.ID = raftpb.PeerID(repl1.ReplicaID)
 		s.RaftState = state
 		s.Term = term
-		if state == raft.StateLeader {
+		if state == raftpb.StateLeader {
 			s.Lead = raftpb.PeerID(repl1.ReplicaID)
 		} else {
 			s.Lead = raftpb.PeerID(repl2.ReplicaID)
@@ -88,15 +83,15 @@ func TestStatus(t *testing.T) {
 		return s
 	}
 	// Basic case.
-	leaderStatus := raftStatus(raft.StateLeader, 5, ts[4].ToTimestamp())
+	leaderStatus := raftStatus(raftpb.StateLeader, 5, ts[4].ToTimestamp())
 	// Advanced cases.
-	followerStatus := raftStatus(raft.StateFollower, 5, hlc.Timestamp{})
-	unfortifiedLeaderStatus := raftStatus(raft.StateLeader, 5, hlc.Timestamp{})
-	steppingDownFollowerStatus := raftStatus(raft.StateFollower, 5, ts[4].ToTimestamp())
-	followerNewTermUnknownLeadStatus := raftStatus(raft.StateFollower, 6, hlc.Timestamp{})
+	followerStatus := raftStatus(raftpb.StateFollower, 5, hlc.Timestamp{})
+	unfortifiedLeaderStatus := raftStatus(raftpb.StateLeader, 5, hlc.Timestamp{})
+	steppingDownFollowerStatus := raftStatus(raftpb.StateFollower, 5, ts[4].ToTimestamp())
+	followerNewTermUnknownLeadStatus := raftStatus(raftpb.StateFollower, 6, hlc.Timestamp{})
 	followerNewTermUnknownLeadStatus.Lead = raft.None
-	followerNewTermKnownLeadStatus := raftStatus(raft.StateFollower, 6, hlc.Timestamp{})
-	leaderNewTermKnownLeadStatus := raftStatus(raft.StateLeader, 6, ts[4].ToTimestamp())
+	followerNewTermKnownLeadStatus := raftStatus(raftpb.StateFollower, 6, hlc.Timestamp{})
+	leaderNewTermKnownLeadStatus := raftStatus(raftpb.StateLeader, 6, ts[4].ToTimestamp())
 
 	for _, tc := range []struct {
 		lease         roachpb.Lease

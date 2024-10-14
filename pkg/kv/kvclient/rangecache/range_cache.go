@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangecache
 
@@ -97,7 +92,18 @@ const (
 // UnknownClosedTimestampPolicy is used to mark on a cacheEntry that the closed
 // timestamp policy is not known. This value is never serialized into
 // RangeInfo or any other message which uses the type.
-const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
+const unknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
+
+// DefaultSendClosedTimestampPolicy is used when the closed timestamp policy
+// is not known by the range cache. This choice prevents sending batch requests
+// to only voters when a perfectly good non-voter may exist in the local
+// region. It's defined as a constant here to ensure that we use the same
+// value when populating the batch header.
+//
+// In effect, we treat unknownClosedTimestampPolicy as
+// DefaultSendClosedTimestampPolicy whenever accessed (and in particular on the
+// wire).
+const DefaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by RangeCache to
@@ -351,10 +357,7 @@ func (et EvictionToken) ClosedTimestampPolicy(
 	if !et.Valid() {
 		panic("invalid ClosedTimestampPolicy() call on empty EvictionToken")
 	}
-	if et.entry.closedts == UnknownClosedTimestampPolicy {
-		return _default
-	}
-	return et.entry.closedts
+	return et.entry.closedTimestampPolicy(_default)
 }
 
 // syncRLocked syncs the token with the cache. If the cache has a newer, but
@@ -912,7 +915,7 @@ func tryLookupImpl(
 		// We don't have any lease information.
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
-		closedts: UnknownClosedTimestampPolicy,
+		closedts: unknownClosedTimestampPolicy,
 	}
 	// speculativeDesc comes from intents. Being uncommitted, it is speculative.
 	// We reset its generation to indicate this fact and allow it to be easily
@@ -931,7 +934,7 @@ func tryLookupImpl(
 	newEntries := make([]*cacheEntry, len(preRs)+1)
 	newEntries[0] = &newEntry
 	for i, preR := range preRs {
-		newEntries[i+1] = &cacheEntry{desc: preR, closedts: UnknownClosedTimestampPolicy}
+		newEntries[i+1] = &cacheEntry{desc: preR, closedts: unknownClosedTimestampPolicy}
 	}
 	insertedEntries := rc.insertLockedInner(ctx, newEntries)
 	// entry corresponds to rs[0], which is the descriptor covering the key
@@ -1031,7 +1034,7 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
 func (rc *RangeCache) TestingGetCached(
-	ctx context.Context, key roachpb.RKey, inverted bool,
+	ctx context.Context, key roachpb.RKey, inverted bool, _default roachpb.RangeClosedTimestampPolicy,
 ) (roachpb.RangeInfo, error) {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
@@ -1039,7 +1042,14 @@ func (rc *RangeCache) TestingGetCached(
 	if entry == nil {
 		return roachpb.RangeInfo{}, errors.Newf("no entry found for %s in cache", key)
 	}
-	return entry.toRangeInfo(), nil
+	// NB: this is slightly awkward. In an ideal world, we wouldn't expose the internal
+	// -1 value for the closed timestamp policy at all. But at least we don't let it
+	// leak into any tests.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/129981
+	info := entry.toRangeInfo()
+	info.ClosedTimestampPolicy = entry.closedTimestampPolicy(_default)
+	return info, nil
 }
 
 // getCachedRLocked is like TestingGetCached, but it assumes that the caller holds a
@@ -1319,6 +1329,15 @@ func (e *cacheEntry) LeaseSpeculative() bool {
 
 func (e cacheEntry) String() string {
 	return fmt.Sprintf("desc:%s, lease:%s", e.desc, e.lease)
+}
+
+func (e *cacheEntry) closedTimestampPolicy(
+	_default roachpb.RangeClosedTimestampPolicy,
+) roachpb.RangeClosedTimestampPolicy {
+	if e.closedts == unknownClosedTimestampPolicy {
+		return _default
+	}
+	return e.closedts
 }
 
 func (e *cacheEntry) toRangeInfo() roachpb.RangeInfo {

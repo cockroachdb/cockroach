@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package lease provides functionality to create and manage sql schema leases.
 package lease
@@ -889,6 +884,10 @@ type Manager struct {
 		rangeFeed *rangefeed.RangeFeed
 	}
 
+	// closeTimeStamp for the range feed, which is the timestamp
+	// that we have all the updates for.
+	closeTimestamp atomic.Value
+
 	draining atomic.Value
 
 	// names is a cache for name -> id mappings. A mapping for the cache
@@ -996,6 +995,12 @@ func NewLeaseManager(
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
+	// We are going to start the range feed later when RefreshLeases
+	// is invoked inside pre-start. So, that guarantees all range feed events
+	// that will be generated will be after the current time. So, historical
+	// queries with in this tenant (i.e. PCR catalog reader) before this point are
+	// guaranteed to be up to date.
+	lm.closeTimestamp.Store(db.KV().Clock().Now())
 	lm.draining.Store(false)
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
@@ -1438,6 +1443,12 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 	})
 }
 
+// GetSafeReplicationTS gets the timestamp till which the leased descriptors
+// have been synced.
+func (m *Manager) GetSafeReplicationTS() hlc.Timestamp {
+	return m.closeTimestamp.Load().(hlc.Timestamp)
+}
+
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
 func (m *Manager) watchForUpdates(ctx context.Context) {
@@ -1496,6 +1507,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 			return
 		}
 		m.mu.rangeFeedCheckpoints += 1
+		m.closeTimestamp.Store(checkpoint.ResolvedTS)
 	}
 
 	// If we already started a range feed terminate it first

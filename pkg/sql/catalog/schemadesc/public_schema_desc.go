@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemadesc
 
@@ -43,11 +38,12 @@ type public struct {
 var _ catalog.SchemaDescriptor = public{}
 var _ privilege.Object = public{}
 
-func (p public) GetID() descpb.ID                     { return keys.PublicSchemaID }
-func (p public) GetParentID() descpb.ID               { return descpb.InvalidID }
-func (p public) GetName() string                      { return catconstants.PublicSchemaName }
-func (p public) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
-func (p public) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
+func (p public) GetID() descpb.ID                                  { return keys.PublicSchemaID }
+func (p public) GetParentID() descpb.ID                            { return descpb.InvalidID }
+func (p public) GetName() string                                   { return catconstants.PublicSchemaName }
+func (p public) SchemaDesc() *descpb.SchemaDescriptor              { return makeSyntheticSchemaDesc(p) }
+func (p public) DescriptorProto() *descpb.Descriptor               { return makeSyntheticDesc(p) }
+func (p public) GetReplicatedPCRVersion() descpb.DescriptorVersion { return 0 }
 
 type publicBase struct{}
 

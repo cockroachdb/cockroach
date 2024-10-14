@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -127,7 +122,6 @@ func (sr *schemaResolver) byNameGetterBuilder() descs.ByNameGetterBuilder {
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
-
 	// Check if we are looking up a type which matches a built-in type in
 	// CockroachDB but is an extension type on the public schema in PostgreSQL.
 	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {

@@ -1,0 +1,73 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./application.module.scss";
+
+@mixin button-styles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: $crl-input-height;
+  padding: crl-gutters(1) crl-gutters(1.5);
+  border-width: 1px;
+  border-radius: $crl-border-radius;
+  outline: none !important; // focus indicators added below
+  @include crl-transition(background-color, border-color, box-shadow);
+  @include crl-type-button;
+
+  &:hover {
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+
+      &:hover {
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &:focus {
+    &:active {
+      box-shadow: none;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.65;
+  }
+
+  &--fluid {
+    width: 100%;
+  }
+
+  &--small {
+    height: $crl-input-height-small;
+    padding: crl-gutters(0.75) crl-gutters(1.5);
+  }
+
+  &--icon {
+    &-only {
+      img,
+      svg {
+        margin: 0 0;
+      }
+    }
+
+    &-left {
+      img,
+      svg {
+        margin-right: crl-gutters(1);
+      }
+    }
+
+    &-right {
+      img,
+      svg {
+        margin-left: crl-gutters(1);
+      }
+    }
+  }
+}

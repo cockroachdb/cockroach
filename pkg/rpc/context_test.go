@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rpc
 
@@ -235,8 +230,12 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	t.Logf("client dial")
 	// Dial: this causes the heartbeats to start.
 	remoteAddr := ln.Addr().String()
-	_, err = rpcCtxClient.GRPCDialNode(remoteAddr, 1, roachpb.Locality{}, SystemClass).Connect(ctx)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err = rpcCtxClient.GRPCDialNode(
+			remoteAddr, 1, roachpb.Locality{}, SystemClass,
+		).Connect(ctx)
+		return err
+	})
 
 	// The first ping establishes the TCP+TLS connection and uses a blocking dialback,
 	// so it's usually pretty noisy in terms of detecting clock offsets. The second

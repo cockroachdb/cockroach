@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire_test
 
@@ -135,6 +130,7 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		defer leaktest.AfterTest(t)()
 		hbaRunTest(t, insecure)
 	})
 }
@@ -271,6 +267,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 				case "accept_sql_without_tls":
 					testServer.SetAcceptSQLWithoutTLS(true)
+
+				case "reject_sql_without_tls":
+					testServer.SetAcceptSQLWithoutTLS(false)
 
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),
@@ -477,6 +476,13 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						showSystemIdentity = true
 					}
 
+					// Whether to display the authentication_method as well.
+					showAuthMethod := false
+					if td.HasArg("show_authentication_method") {
+						rmArg("show_authentication_method")
+						showAuthMethod = true
+					}
+
 					certName := ""
 					if td.HasArg("cert_name") {
 						td.ScanArgs(t, "cert_name", &certName)
@@ -580,6 +586,23 @@ func hbaRunTest(t *testing.T, insecure bool) {
 							t.Fatal(err)
 						}
 						result += " " + name
+					}
+					if showAuthMethod {
+						var method, methodFromShowSessions string
+						row := dbSQL.QueryRow(`SHOW authentication_method`)
+						if err := row.Scan(&method); err != nil {
+							t.Fatal(err)
+						}
+						// Verify that the session variable agrees with the information
+						// in SHOW SESSIONS.
+						row = dbSQL.QueryRow(`SELECT authentication_method FROM [SHOW SESSIONS] WHERE session_id = current_setting('session_id');`)
+						if err := row.Scan(&methodFromShowSessions); err != nil {
+							t.Fatal(err)
+						}
+						if method != methodFromShowSessions {
+							t.Fatalf("SHOW SESSIONS disagrees with SHOW: %s vs %s", method, methodFromShowSessions)
+						}
+						result += " " + method
 					}
 
 					return "ok " + result, nil

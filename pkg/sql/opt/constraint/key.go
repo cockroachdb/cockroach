@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package constraint
 
@@ -14,9 +9,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // EmptyKey has zero values. If it's a start key, then it sorts before all
@@ -297,7 +294,14 @@ func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
 func (k Key) String() string {
 	var buf bytes.Buffer
 	for i := 0; i < k.Length(); i++ {
-		fmt.Fprintf(&buf, "/%s", k.Value(i))
+		if enc, ok := k.Value(i).(*tree.DEncodedKey); ok {
+			// Pretty-print encoded keys, which are used for constraints of
+			// inverted indexes, instead of printing the raw bytes.
+			vals, _ := encoding.PrettyPrintValuesWithTypes(nil, []byte(*enc))
+			fmt.Fprintf(&buf, "/%s", strings.Join(vals, "/"))
+		} else {
+			fmt.Fprintf(&buf, "/%s", k.Value(i))
+		}
 	}
 	return buf.String()
 }

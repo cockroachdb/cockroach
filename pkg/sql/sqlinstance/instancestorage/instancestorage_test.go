@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package instancestorage_test
 
@@ -15,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -145,15 +139,16 @@ func TestStorage(t *testing.T) {
 
 		equalInstance := func(t *testing.T, expect sqlinstance.InstanceInfo, actual sqlinstance.InstanceInfo) {
 			require.Equal(t, expect.InstanceID, actual.InstanceID)
-			require.Equal(t, actual.SessionID, actual.SessionID)
-			require.Equal(t, actual.InstanceRPCAddr, actual.InstanceRPCAddr)
-			require.Equal(t, actual.InstanceSQLAddr, actual.InstanceSQLAddr)
-			require.Equal(t, actual.Locality, actual.Locality)
-			require.Equal(t, actual.BinaryVersion, actual.BinaryVersion)
+			require.Equal(t, expect.SessionID, actual.SessionID)
+			require.Equal(t, expect.InstanceRPCAddr, actual.InstanceRPCAddr)
+			require.Equal(t, expect.InstanceSQLAddr, actual.InstanceSQLAddr)
+			require.Equal(t, expect.Locality, actual.Locality)
+			require.Equal(t, expect.BinaryVersion, actual.BinaryVersion)
+			require.Equal(t, expect.IsDraining, actual.IsDraining)
 		}
 
 		isAvailable := func(t *testing.T, instance sqlinstance.InstanceInfo, id base.SQLInstanceID) {
-			require.Equal(t, sqlinstance.InstanceInfo{InstanceID: id}, instance)
+			require.Equal(t, sqlinstance.InstanceInfo{InstanceID: id, Region: enum.One}, instance)
 		}
 
 		var initialInstances []sqlinstance.InstanceInfo
@@ -169,7 +164,7 @@ func TestStorage(t *testing.T) {
 		// Verify all instances are returned by GetAllInstancesDataForTest.
 		{
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for _, i := range []int{0, 1, 2} {
@@ -188,7 +183,7 @@ func TestStorage(t *testing.T) {
 		// Verify all instances are returned by GetAllInstancesDataForTest.
 		{
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for i := range instances {
@@ -207,7 +202,7 @@ func TestStorage(t *testing.T) {
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 
 			for i, instance := range instances {
 				if i == 0 {
@@ -231,7 +226,7 @@ func TestStorage(t *testing.T) {
 
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
 			require.NoError(t, err)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 
 			require.Equal(t, len(initialInstances), len(instances))
 			for index, instance := range instances {
@@ -598,7 +593,7 @@ func TestReclaimLoop(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		sortInstances(instances)
+		instancestorage.SortInstances(instances)
 		if len(instances) == 0 {
 			return errors.New("instances have not been generated yet")
 		}
@@ -645,6 +640,8 @@ func TestReclaimLoop(t *testing.T) {
 			sessionExpiry,
 			localities[i],
 			binaryVersions[i],
+			/* encodeIsDraining */ true,
+			/* isDraining */ false,
 		))
 	}
 
@@ -663,7 +660,7 @@ func TestReclaimLoop(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		sortInstances(instances)
+		instancestorage.SortInstances(instances)
 		if len(instances) == preallocatedCount {
 			return errors.New("new instances have not been generated yet")
 		}
@@ -688,10 +685,4 @@ func TestReclaimLoop(t *testing.T) {
 			require.Empty(t, instance.BinaryVersion)
 		}
 	}
-}
-
-func sortInstances(instances []sqlinstance.InstanceInfo) {
-	sort.SliceStable(instances, func(idx1, idx2 int) bool {
-		return instances[idx1].InstanceID < instances[idx2].InstanceID
-	})
 }

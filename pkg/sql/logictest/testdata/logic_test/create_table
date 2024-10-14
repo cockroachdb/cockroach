@@ -739,6 +739,10 @@ CREATE TABLE t_bad_param (
   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
 );
 
+statement error pq: hash sharded index bucket count must be in range \[2, 2048\], got NULL
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = NULL
+);
 
 statement error pq: invalid storage param "s2_max_level" on primary key
 CREATE TABLE t_bad_param (

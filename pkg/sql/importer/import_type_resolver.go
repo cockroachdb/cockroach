@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package importer
 
@@ -25,16 +20,16 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-type importTypeResolver struct {
+type ImportTypeResolver struct {
 	typeIDToDesc   map[descpb.ID]*descpb.TypeDescriptor
 	typeNameToDesc map[string][]*descpb.TypeDescriptor
 }
 
-var _ tree.TypeReferenceResolver = importTypeResolver{}
-var _ catalog.TypeDescriptorResolver = importTypeResolver{}
+var _ tree.TypeReferenceResolver = ImportTypeResolver{}
+var _ catalog.TypeDescriptorResolver = ImportTypeResolver{}
 
-func makeImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolver {
-	itr := importTypeResolver{
+func MakeImportTypeResolver(typeDescs []*descpb.TypeDescriptor) ImportTypeResolver {
+	itr := ImportTypeResolver{
 		typeIDToDesc:   make(map[descpb.ID]*descpb.TypeDescriptor),
 		typeNameToDesc: make(map[string][]*descpb.TypeDescriptor),
 	}
@@ -57,7 +52,7 @@ func makeImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolv
 // Note that if a table happens to have multiple types with the same name (but
 // different schemas), this implementation will return a "feature unsupported"
 // error.
-func (i importTypeResolver) ResolveType(
+func (i ImportTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	var descs []*descpb.TypeDescriptor
@@ -80,12 +75,12 @@ func (i importTypeResolver) ResolveType(
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
-func (i importTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+func (i ImportTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return typedesc.ResolveHydratedTByOID(ctx, oid, i)
 }
 
 // GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.
-func (i importTypeResolver) GetTypeDescriptor(
+func (i ImportTypeResolver) GetTypeDescriptor(
 	_ context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	var desc *descpb.TypeDescriptor

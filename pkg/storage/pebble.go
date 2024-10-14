@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -394,18 +389,22 @@ func ShouldUseEFOS(settings *settings.Values) bool {
 // cockroach suffixes (which are composed of the version and a trailing sentinel
 // byte); the version can be an MVCC timestamp or a lock key.
 func EngineSuffixCompare(a, b []byte) int {
-	// NB: For performance, this routine manually splits the key into the
-	// user-key and version components rather than using DecodeEngineKey. In
-	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
-	// SplitMVCCKey instead of doing this.
 	if len(a) == 0 || len(b) == 0 {
 		// Empty suffixes sort before non-empty suffixes.
 		return cmp.Compare(len(a), len(b))
 	}
-	return bytes.Compare(
-		normalizeEngineSuffixForCompare(b),
-		normalizeEngineSuffixForCompare(a),
-	)
+	// Here we are not using normalizeEngineKeyVersionForCompare for historical
+	// reasons, summarized in
+	// https://github.com/cockroachdb/cockroach/issues/130533.
+
+	// Check and strip off sentinel bytes.
+	if buildutil.CrdbTestBuild && len(a) != int(a[len(a)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", a))
+	}
+	if buildutil.CrdbTestBuild && len(b) != int(b[len(b)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", b))
+	}
+	return bytes.Compare(b[:len(b)-1], a[:len(a)-1])
 }
 
 func checkEngineKey(k []byte) {
@@ -413,7 +412,10 @@ func checkEngineKey(k []byte) {
 		panic(errors.AssertionFailedf("empty key"))
 	}
 	if int(k[len(k)-1]) >= len(k) {
-		panic(errors.AssertionFailedf("malformed key sentinel byte: %x", k))
+		panic(errors.AssertionFailedf("malformed key terminator byte: %x", k))
+	}
+	if k[len(k)-1] == 1 {
+		panic(errors.AssertionFailedf("invalid key terminator byte 1"))
 	}
 }
 
@@ -444,8 +446,6 @@ func EngineKeySplit(k []byte) int {
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
 func EngineKeyCompare(a, b []byte) int {
-	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
-	// them until we fix that.
 	if len(a) == 0 || len(b) == 0 {
 		return cmp.Compare(len(a), len(b))
 	}
@@ -481,8 +481,6 @@ func EngineKeyCompare(a, b []byte) int {
 // EngineKeyEqual checks for equality of cockroach keys, including the version
 // (which could be MVCC timestamps).
 func EngineKeyEqual(a, b []byte) bool {
-	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
-	// them until we fix that.
 	if len(a) == 0 || len(b) == 0 {
 		return len(a) == len(b)
 	}
@@ -1189,12 +1187,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// Pebble has better guards against this.
 		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
-	// Multi-level compactions were discovered to cause excessively large
-	// compactions that can have adverse affects. We disable these types of
-	// compactions for now.
-	// See https://github.com/cockroachdb/pebble/issues/3120
-	// TODO(travers): Re-enable, once the issues are resolved.
-	cfg.opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
@@ -1843,6 +1835,13 @@ func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
+	// If the range key holds an encoded timestamp as it was read from storage,
+	// write the tombstone to clear it using the same encoding of the timestamp.
+	// See #129592.
+	if len(rangeKey.EncodedTimestampSuffix) > 0 {
+		return p.ClearEngineRangeKey(
+			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
+	}
 	return p.ClearEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
@@ -2316,7 +2315,7 @@ func (p *Pebble) IngestAndExciseFiles(
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan, sstsContainExciseTombstone)
+	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan)
 }
 
 // IngestExternalFiles implements the Engine interface.

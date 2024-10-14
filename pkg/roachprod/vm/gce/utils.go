@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package gce
 
@@ -31,7 +26,17 @@ import (
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-set -x
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a {{ .StartupLogs }})
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
+
+sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
 function setup_disks() {
   first_setup=$1
@@ -40,7 +45,7 @@ function setup_disks() {
 	mount_opts="defaults,nofail"
 	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 	{{ end }}
-	
+
 	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
 	mount_prefix="/mnt/data"
@@ -73,14 +78,19 @@ function setup_disks() {
 
 	for l in ${local_or_persistent}; do
   d=$(readlink -f $l)
+  mounted="no"
   {{ if .Zfs }}
     # Check if the disk is already part of a zpool or mounted; skip if so.
-    (zpool list -v -P | grep ${d} > /dev/null) || (mount | grep ${d} > /dev/null)
+    if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
+      mounted="yes"
+    fi
   {{ else }}
     # Skip already mounted disks.
-    mount | grep ${d} > /dev/null
+    if mount | grep -q ${d}; then
+      mounted="yes"
+    fi
   {{ end }}
-		if [ $? -ne 0 ]; then
+		if [ "$mounted" == "no" ]; then
 			disks+=("${d}")
 			echo "Disk ${d} not mounted, need to mount..."
 		else
@@ -133,7 +143,7 @@ function setup_disks() {
 	{{ end }}
 		chmod 777 ${mountpoint}
 	fi
-	
+
 	# Print the block device and FS usage output. This is useful for debugging.
 	lsblk
 	df -h
@@ -163,7 +173,9 @@ fi
 setup_disks true
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
-systemctl stop sshguard
+if systemctl is-active --quiet sshguard; then
+    systemctl stop sshguard
+fi
 systemctl mask sshguard
 # increase the number of concurrent unauthenticated connections to the sshd
 # daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
@@ -205,6 +217,7 @@ sudo apt-get install -qy chrony
 
 # Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
 systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
 apt-get purge -y unattended-upgrades
 
 {{ if not .EnableCron }}
@@ -239,7 +252,9 @@ for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.ti
 done
 
 for service in apport.service atd.service; do
-  systemctl stop $service
+	if systemctl is-active --quiet $service; then
+    systemctl stop $service
+	fi
   systemctl mask $service
 done
 
@@ -267,11 +282,12 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings
 
 {{ if .EnableFIPS }}
-sudo ua enable fips --assume-yes
+sudo apt-get install -yq ubuntu-advantage-tools jq
+# Enable FIPS (in practice, it's often already enabled at this point).
+if [ $(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status') != '"enabled"' ]; then
+  sudo ua enable fips --assume-yes
+fi
 {{ end }}
-
-sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
-sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo service ssh restart
@@ -298,6 +314,7 @@ func writeStartupScript(
 		EnableCron           bool
 		OSInitializedFile    string
 		DisksInitializedFile string
+		StartupLogs          string
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -315,6 +332,7 @@ func writeStartupScript(
 		EnableCron:           enableCron,
 		OSInitializedFile:    vm.OSInitializedFile,
 		DisksInitializedFile: vm.DisksInitializedFile,
+		StartupLogs:          vm.StartupLogs,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

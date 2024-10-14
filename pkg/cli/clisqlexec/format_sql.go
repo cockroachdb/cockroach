@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clisqlexec
 
@@ -48,7 +43,7 @@ func (p *sqlReporter) iter(w, _ io.Writer, _ int, row []string) error {
 	fmt.Fprint(w, "INSERT INTO results VALUES (")
 	for i, r := range row {
 		var buf bytes.Buffer
-		lexbase.EncodeSQLStringWithFlags(&buf, r, lexbase.EncNoDoubleEscapeQuotes)
+		lexbase.EncodeSQLStringWithFlags(&buf, r, lexbase.EncNoFlags)
 		fmt.Fprint(w, buf.String())
 		if i < len(row)-1 {
 			fmt.Fprint(w, ", ")

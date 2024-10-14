@@ -11,6 +11,7 @@ go_library(
         "metadata.go",
         "post_deserialization_changes.go",
         "schema.go",
+        "serial_helper.go",
         "system_table.go",
         "table_col_map.go",
         "table_col_set.go",

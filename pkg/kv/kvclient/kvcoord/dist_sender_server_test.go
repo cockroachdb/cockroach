@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord_test
 
@@ -32,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -4776,7 +4771,7 @@ func TestPartialPartition(t *testing.T) {
 					store, err := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
 					require.NoError(t, err)
 					status := store.LookupReplica(roachpb.RKey(scratchKey)).RaftStatus()
-					if status == nil || status.RaftState != raft.StateLeader {
+					if status == nil || status.RaftState != raftpb.StateLeader {
 						return errors.Newf("Leader leaseholder split %v", status)
 					}
 					return nil

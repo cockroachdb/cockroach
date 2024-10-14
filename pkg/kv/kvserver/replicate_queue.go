@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -87,6 +82,22 @@ var EnqueueInReplicateQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSett
 	"controls whether replicas are enqueued into the replicate queue for "+
 		"processing, when a span config update occurs, which affects the replica",
 	true,
+)
+
+// EnqueueProblemRangeInReplicateQueueInterval controls the interval at which
+// problem ranges are enqueued into the replicate queue for processing, outside
+// of the normal scanner interval. A problem range is one which is
+// underreplicated or has a replica on a decommissioning store. The setting is
+// disabled when set to 0. By default, the setting is disabled.
+var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.enqueue_in_replicate_queue_on_problem.interval",
+	"interval at which problem ranges are enqueued into the replicate queue for "+
+		"processing, outside of the normal scanner interval; a problem range is "+
+		"one which is underreplicated or has a replica on a decommissioning store, "+
+		"disabled when set to 0",
+	0,
+	settings.NonNegativeDuration,
 )
 
 var (

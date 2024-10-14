@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rac2
 
@@ -17,13 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/errors"
 )
 
 // Aliases to make the code below slightly easier to read.
 const regular, elastic = admissionpb.RegularWorkClass, admissionpb.ElasticWorkClass
 
 var (
+	// TokenCounter metrics.
 	flowTokensAvailable = metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.available",
 		Help:        "Flow %s tokens available for %s requests, across all replication streams",
@@ -48,6 +44,28 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	flowTokensDisconnectReturn = metric.Metadata{
+		Name:        "kvflowcontrol.tokens.%s.%s.returned.disconnect",
+		Help:        "Flow %s tokens returned early by %s due disconnects, across all replication stream, this is a subset of returned tokens",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
+	// SendQueue TokenCounter metrics.
+	flowTokensSendQueuePreventionDeduct = metric.Metadata{
+		Name:        "kvflowcontrol.tokens.send.%s.deducted.prevent_send_queue",
+		Help:        "Flow send tokens deducted by %s requests, across all replication streams to prevent forming a send queue",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	flowTokensSendQueueForceFlushDeduct = metric.Metadata{
+		Name:        "kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue",
+		Help:        "Flow send tokens deducted by elastic requests, across all replication streams due to force flushing the stream's send queue",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
+	// TokenStream metrics.
 	totalStreamCount = metric.Metadata{
 		Name:        "kvflowcontrol.streams.%s.%s.total_count",
 		Help:        "Total number of %s replication streams for %s requests",
@@ -60,6 +78,7 @@ var (
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+
 	// WaitForEval metrics.
 	requestsWaiting = metric.Metadata{
 		Name:        "kvflowcontrol.eval_wait.%s.requests.waiting",
@@ -92,12 +111,52 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	// RangeController metrics.
+	rangeFlowControllerCount = metric.Metadata{
+		Name:        "kvflowcontrol.range_controller.count",
+		Help:        "Gauge of range flow controllers currently open, this should align with the number of leaders",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// SendQueue metrics.
+	sendQueueBytes = metric.Metadata{
+		Name:        "kvflowcontrol.send_queue.bytes",
+		Help:        "Byte size of all raft entries queued for sending to followers, waiting on available elastic send tokens",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	sendQueueCount = metric.Metadata{
+		Name:        "kvflowcontrol.send_queue.count",
+		Help:        "Count of all raft entries queued for sending to followers, waiting on available elastic send tokens",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	sendQueueForceFlushScheduledCount = metric.Metadata{
+		Name:        "kvflowcontrol.send_queue.scheduled.force_flush",
+		Help:        "Gauge of replication streams scheduled to force flush their send queue",
+		Measurement: "Scheduled force flushes",
+		Unit:        metric.Unit_COUNT,
+	}
+	sendQueueDeductedForSchedulerBytes = metric.Metadata{
+		Name:        "kvflowcontrol.send_queue.scheduled.deducted_bytes",
+		Help:        "Gauge of elastic send token bytes already deducted by replication streams waiting on the scheduler",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	sendQueuePreventionCount = metric.Metadata{
+		Name:        "kvflowcontrol.send_queue.prevent.count",
+		Help:        "Counter of replication streams that were prevented from forming a send queue",
+		Measurement: "Preventions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // annotateMetricTemplateWithWorkClass uses the given metric template to build
 // one suitable for the specific token type and work class.
 func annotateMetricTemplateWithWorkClassAndType(
-	wc admissionpb.WorkClass, tmpl metric.Metadata, t flowControlMetricType,
+	wc admissionpb.WorkClass, tmpl metric.Metadata, t TokenType,
 ) metric.Metadata {
 	rv := tmpl
 	rv.Name = fmt.Sprintf(tmpl.Name, t, wc)
@@ -116,109 +175,187 @@ func annotateMetricTemplateWithWorkClass(
 	return rv
 }
 
-type flowControlMetricType int
-
-const (
-	flowControlEvalMetricType flowControlMetricType = iota
-	flowControlSendMetricType
-	numFlowControlMetricTypes
-)
-
-func (f flowControlMetricType) String() string {
-	return redact.StringWithoutMarkers(f)
+type TokenMetrics struct {
+	CounterMetrics [NumTokenTypes]*TokenCounterMetrics
+	StreamMetrics  [NumTokenTypes]*TokenStreamMetrics
 }
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (f flowControlMetricType) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch f {
-	case flowControlEvalMetricType:
-		p.SafeString("eval")
-	case flowControlSendMetricType:
-		p.SafeString("send")
-	default:
-		panic("unknown flowControlMetricType")
-	}
-}
+var _ metric.Struct = &TokenMetrics{}
 
-type tokenMetrics struct {
-	counterMetrics [numFlowControlMetricTypes]*tokenCounterMetrics
-	streamMetrics  [numFlowControlMetricTypes]*tokenStreamMetrics
-}
+// TokenMetrics implements the metric.Struct interface.
+func (m *TokenMetrics) MetricStruct() {}
 
-func newTokenMetrics() *tokenMetrics {
-	m := &tokenMetrics{}
-	for _, typ := range []flowControlMetricType{
-		flowControlEvalMetricType,
-		flowControlSendMetricType,
+func NewTokenMetrics() *TokenMetrics {
+	m := &TokenMetrics{}
+	for _, typ := range []TokenType{
+		EvalToken,
+		SendToken,
 	} {
-		m.counterMetrics[typ] = newTokenCounterMetrics(typ)
-		m.streamMetrics[typ] = newTokenStreamMetrics(typ)
+		m.CounterMetrics[typ] = newTokenCounterMetrics(typ)
+		m.StreamMetrics[typ] = newTokenStreamMetrics(typ)
 	}
 	return m
 }
 
-type tokenCounterMetrics struct {
-	deducted    [admissionpb.NumWorkClasses]*metric.Counter
-	returned    [admissionpb.NumWorkClasses]*metric.Counter
-	unaccounted [admissionpb.NumWorkClasses]*metric.Counter
+type TokenCounterMetrics struct {
+	Deducted     [admissionpb.NumWorkClasses]*metric.Counter
+	Returned     [admissionpb.NumWorkClasses]*metric.Counter
+	Unaccounted  [admissionpb.NumWorkClasses]*metric.Counter
+	Disconnected [admissionpb.NumWorkClasses]*metric.Counter
+	// SendQueue is nil for the eval flow control metric type as it pertains only
+	// to the send queue, using send tokens. The metric registry will ignore nil
+	// values in a array but not a struct, so wrap the struct in an array to
+	// avoid nil pointer panics.
+	SendQueue [1]*SendQueueTokenCounterMetrics
 }
 
-func newTokenCounterMetrics(t flowControlMetricType) *tokenCounterMetrics {
-	m := &tokenCounterMetrics{}
+var _ metric.Struct = &TokenCounterMetrics{}
+
+// TokenCounterMetrics implements the metric.Struct interface.
+func (m *TokenCounterMetrics) MetricStruct() {}
+
+func newTokenCounterMetrics(t TokenType) *TokenCounterMetrics {
+	m := &TokenCounterMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.deducted[wc] = metric.NewCounter(
+		m.Deducted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDeducted, t),
 		)
-		m.returned[wc] = metric.NewCounter(
+		m.Returned[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensReturned, t),
 		)
-		m.unaccounted[wc] = metric.NewCounter(
+		m.Unaccounted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensUnaccounted, t),
+		)
+		m.Disconnected[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDisconnectReturn, t),
+		)
+	}
+	if t == SendToken {
+		// SendQueueTokenMetrics is only used for the send flow control metric type.
+		m.SendQueue[0] = newSendQueueTokenMetrics()
+	}
+	return m
+}
+
+func (m *TokenCounterMetrics) onTokenAdjustment(
+	adjustment tokensPerWorkClass, flag TokenAdjustFlag,
+) {
+	if adjustment.regular < 0 {
+		m.Deducted[regular].Inc(-int64(adjustment.regular))
+		switch flag {
+		case AdjNormal:
+			// Nothing to do.
+		case AdjDisconnect:
+			panic(errors.AssertionFailedf("unexpected disconnect deducting tokens, they should be returned"))
+		case AdjForceFlush:
+			panic(errors.AssertionFailedf("unexpected force flush deducting regular tokens, only elastic tokens should be deducted"))
+		case AdjPreventSendQueue:
+			m.SendQueue[0].PreventionDeducted[regular].Inc(-int64(adjustment.regular))
+		default:
+			panic(errors.AssertionFailedf("unexpected flag %v", flag))
+		}
+	} else if adjustment.regular > 0 {
+		m.Returned[regular].Inc(int64(adjustment.regular))
+		switch flag {
+		case AdjNormal:
+			// Nothing to do.
+		case AdjDisconnect:
+			m.Disconnected[regular].Inc(int64(adjustment.regular))
+		case AdjForceFlush:
+			panic(errors.AssertionFailedf("unexpected force flush returning tokens, they should be deducted"))
+		case AdjPreventSendQueue:
+			panic(errors.AssertionFailedf("unexpected send queue prevention returning tokens, they should be deducted"))
+		default:
+			panic(errors.AssertionFailedf("unexpected flag %v", flag))
+		}
+	}
+	if adjustment.elastic < 0 {
+		m.Deducted[elastic].Inc(-int64(adjustment.elastic))
+		switch flag {
+		case AdjNormal:
+			// Nothing to do.
+		case AdjDisconnect:
+			panic(errors.AssertionFailedf("unexpected disconnect deducting tokens, they should be returned"))
+		case AdjForceFlush:
+			m.SendQueue[0].ForceFlushDeducted.Inc(-int64(adjustment.elastic))
+		case AdjPreventSendQueue:
+			m.SendQueue[0].PreventionDeducted[elastic].Inc(-int64(adjustment.elastic))
+		default:
+			panic(errors.AssertionFailedf("unexpected flag %v", flag))
+		}
+	} else if adjustment.elastic > 0 {
+		m.Returned[elastic].Inc(int64(adjustment.elastic))
+		switch flag {
+		case AdjNormal:
+			// Nothing to do.
+		case AdjDisconnect:
+			m.Disconnected[elastic].Inc(int64(adjustment.elastic))
+		case AdjForceFlush:
+			panic(errors.AssertionFailedf("unexpected force flush returning tokens, they should be deducted"))
+		case AdjPreventSendQueue:
+			panic(errors.AssertionFailedf("unexpected send queue prevention returning tokens, they should be deducted"))
+		default:
+			panic(errors.AssertionFailedf("unexpected flag %v", flag))
+		}
+	}
+}
+
+func (m *TokenCounterMetrics) onUnaccounted(unaccounted tokensPerWorkClass) {
+	m.Unaccounted[regular].Inc(int64(unaccounted.regular))
+	m.Unaccounted[elastic].Inc(int64(unaccounted.elastic))
+}
+
+type SendQueueTokenCounterMetrics struct {
+	ForceFlushDeducted *metric.Counter
+	PreventionDeducted [admissionpb.NumWorkClasses]*metric.Counter
+}
+
+var _ metric.Struct = &SendQueueTokenCounterMetrics{}
+
+// SendQueueTokenCounterMetrics implements the metric.Struct interface.
+func (m *SendQueueTokenCounterMetrics) MetricStruct() {}
+
+func newSendQueueTokenMetrics() *SendQueueTokenCounterMetrics {
+	m := &SendQueueTokenCounterMetrics{}
+	m.ForceFlushDeducted = metric.NewCounter(flowTokensSendQueueForceFlushDeduct)
+	for _, wc := range []admissionpb.WorkClass{
+		admissionpb.RegularWorkClass,
+		admissionpb.ElasticWorkClass,
+	} {
+		m.PreventionDeducted[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClass(wc, flowTokensSendQueuePreventionDeduct),
 		)
 	}
 	return m
 }
 
-func (m *tokenCounterMetrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
-	if adjustment.regular < 0 {
-		m.deducted[regular].Inc(-int64(adjustment.regular))
-	} else if adjustment.regular > 0 {
-		m.returned[regular].Inc(int64(adjustment.regular))
-	}
-	if adjustment.elastic < 0 {
-		m.deducted[elastic].Inc(-int64(adjustment.elastic))
-	} else if adjustment.elastic > 0 {
-		m.returned[elastic].Inc(int64(adjustment.elastic))
-	}
+type TokenStreamMetrics struct {
+	Count           [admissionpb.NumWorkClasses]*metric.Gauge
+	BlockedCount    [admissionpb.NumWorkClasses]*metric.Gauge
+	TokensAvailable [admissionpb.NumWorkClasses]*metric.Gauge
 }
 
-func (m *tokenCounterMetrics) onUnaccounted(unaccounted tokensPerWorkClass) {
-	m.unaccounted[regular].Inc(int64(unaccounted.regular))
-	m.unaccounted[elastic].Inc(int64(unaccounted.elastic))
-}
+var _ metric.Struct = &TokenStreamMetrics{}
 
-type tokenStreamMetrics struct {
-	count           [admissionpb.NumWorkClasses]*metric.Gauge
-	blockedCount    [admissionpb.NumWorkClasses]*metric.Gauge
-	tokensAvailable [admissionpb.NumWorkClasses]*metric.Gauge
-}
+// TokenCounterMetrics implements the metric.Struct interface.
+func (m *TokenStreamMetrics) MetricStruct() {}
 
-func newTokenStreamMetrics(t flowControlMetricType) *tokenStreamMetrics {
-	m := &tokenStreamMetrics{}
+func newTokenStreamMetrics(t TokenType) *TokenStreamMetrics {
+	m := &TokenStreamMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.count[wc] = metric.NewGauge(
+		m.Count[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, totalStreamCount, t),
 		)
-		m.blockedCount[wc] = metric.NewGauge(
+		m.BlockedCount[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, blockedStreamCount, t),
 		)
-		m.tokensAvailable[wc] = metric.NewGauge(
+		m.TokensAvailable[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensAvailable, t),
 		)
 	}
@@ -226,12 +363,17 @@ func newTokenStreamMetrics(t flowControlMetricType) *tokenStreamMetrics {
 }
 
 type EvalWaitMetrics struct {
-	waiting  [admissionpb.NumWorkClasses]*metric.Gauge
-	admitted [admissionpb.NumWorkClasses]*metric.Counter
-	errored  [admissionpb.NumWorkClasses]*metric.Counter
-	bypassed [admissionpb.NumWorkClasses]*metric.Counter
-	duration [admissionpb.NumWorkClasses]metric.IHistogram
+	Waiting  [admissionpb.NumWorkClasses]*metric.Gauge
+	Admitted [admissionpb.NumWorkClasses]*metric.Counter
+	Errored  [admissionpb.NumWorkClasses]*metric.Counter
+	Bypassed [admissionpb.NumWorkClasses]*metric.Counter
+	Duration [admissionpb.NumWorkClasses]metric.IHistogram
 }
+
+var _ metric.Struct = &EvalWaitMetrics{}
+
+// EvalWaitMetrics implements the metric.Struct interface.
+func (m *EvalWaitMetrics) MetricStruct() {}
 
 func NewEvalWaitMetrics() *EvalWaitMetrics {
 	m := &EvalWaitMetrics{}
@@ -239,19 +381,19 @@ func NewEvalWaitMetrics() *EvalWaitMetrics {
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.waiting[wc] = metric.NewGauge(
+		m.Waiting[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
 		)
-		m.admitted[wc] = metric.NewCounter(
+		m.Admitted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsAdmitted),
 		)
-		m.errored[wc] = metric.NewCounter(
+		m.Errored[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsErrored),
 		)
-		m.bypassed[wc] = metric.NewCounter(
+		m.Bypassed[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsBypassed),
 		)
-		m.duration[wc] = metric.NewHistogram(
+		m.Duration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
 				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
 				Duration:     base.DefaultHistogramWindowInterval(),
@@ -263,24 +405,66 @@ func NewEvalWaitMetrics() *EvalWaitMetrics {
 	return m
 }
 
-func (e *EvalWaitMetrics) onWaiting(wc admissionpb.WorkClass) {
-	e.waiting[wc].Inc(1)
+func (e *EvalWaitMetrics) OnWaiting(wc admissionpb.WorkClass) {
+	e.Waiting[wc].Inc(1)
 }
 
-func (e *EvalWaitMetrics) onAdmitted(wc admissionpb.WorkClass, dur time.Duration) {
-	e.admitted[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnAdmitted(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Admitted[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
 }
 
-func (e *EvalWaitMetrics) onBypassed(wc admissionpb.WorkClass, dur time.Duration) {
-	e.bypassed[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnBypassed(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Bypassed[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
 }
 
-func (e *EvalWaitMetrics) onErrored(wc admissionpb.WorkClass, dur time.Duration) {
-	e.errored[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnErrored(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Errored[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
+}
+
+type RangeControllerMetrics struct {
+	Count     *metric.Gauge
+	SendQueue *SendQueueMetrics
+}
+
+var _ metric.Struct = &RangeControllerMetrics{}
+
+// RangeControllerMetrics implements the metric.Struct interface.
+func (m *RangeControllerMetrics) MetricStruct() {}
+
+func NewRangeControllerMetrics() *RangeControllerMetrics {
+	return &RangeControllerMetrics{
+		Count:     metric.NewGauge(rangeFlowControllerCount),
+		SendQueue: NewSendQueueMetrics(),
+	}
+}
+
+var _ metric.Struct = &SendQueueMetrics{}
+
+// SendQueueMetrics implements the metric.Struct interface.
+func (m *SendQueueMetrics) MetricStruct() {}
+
+type SendQueueMetrics struct {
+	// SizeCount and SizeBytes are updated periodically, by NodeMetrics.
+	SizeCount *metric.Gauge
+	SizeBytes *metric.Gauge
+	// The below metrics are maintained incrementally by each RangeController.
+	ForceFlushedScheduledCount *metric.Gauge
+	DeductedForSchedulerBytes  *metric.Gauge
+	PreventionCount            *metric.Counter
+}
+
+func NewSendQueueMetrics() *SendQueueMetrics {
+	return &SendQueueMetrics{
+		SizeCount:                  metric.NewGauge(sendQueueCount),
+		SizeBytes:                  metric.NewGauge(sendQueueBytes),
+		ForceFlushedScheduledCount: metric.NewGauge(sendQueueForceFlushScheduledCount),
+		DeductedForSchedulerBytes:  metric.NewGauge(sendQueueDeductedForSchedulerBytes),
+		PreventionCount:            metric.NewCounter(sendQueuePreventionCount),
+	}
 }

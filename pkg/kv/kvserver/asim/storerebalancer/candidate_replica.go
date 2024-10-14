@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storerebalancer
 
@@ -17,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -113,6 +109,8 @@ func (sr *simulatorReplica) AdminTransferLease(
 
 	return nil
 }
+
+func (sr *simulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {}
 
 // Replica returns the underlying kvserver replica, however when called from
 // the simulator it only returns nil.

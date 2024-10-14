@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -32,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -162,7 +159,7 @@ func (ef *execFactory) ConstructScan(
 	}
 
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
-		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.GetID()),
+		scan.desc.IndexSpanAllowingExternalRowData(ef.planner.ExecCfg().Codec, scan.index.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -193,7 +190,7 @@ func generateScanSpans(
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
 	var sb span.Builder
-	sb.Init(evalCtx, codec, tabDesc, index)
+	sb.InitAllowingExternalRowData(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
@@ -271,11 +268,9 @@ func (ef *execFactory) ConstructSimpleProject(
 func constructSimpleProjectForPlanNode(
 	n planNode, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// If the top node is already a renderNode, just rearrange the columns. But
-	// we don't want to duplicate a rendering expression (in case it is expensive
-	// to compute or has side-effects); so if we have duplicates we avoid this
-	// optimization (and add a new renderNode).
-	if r, ok := n.(*renderNode); ok && !hasDuplicates(cols) {
+	// If the top node is already a renderNode, we can just rearrange the columns
+	// as an optimization if each render expression is projected exactly once.
+	if r, ok := n.(*renderNode); ok && canRearrangeRenders(cols, r.render) {
 		oldCols, oldRenders := r.columns, r.render
 		r.columns = make(colinfo.ResultColumns, len(cols))
 		r.render = make([]tree.TypedExpr, len(cols))
@@ -315,15 +310,40 @@ func constructSimpleProjectForPlanNode(
 	return rb.res, nil
 }
 
-func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
-	var set intsets.Fast
-	for _, c := range cols {
-		if set.Contains(int(c)) {
-			return true
-		}
-		set.Add(int(c))
+// canRearrangeRenders returns true if the renderNode with the given columns and
+// render expressions can be combined with a parent renderNode. This is possible
+// if there are no duplicates in the columns, and every render expression is
+// referenced at least once. In other words, it is possible when every render
+// expression is projected exactly once. This ensures that no side effects are
+// lost or duplicated, even if the result of an expression isn't needed (or is
+// needed more than once).
+func canRearrangeRenders(cols []exec.NodeColumnOrdinal, render tree.TypedExprs) bool {
+	// Check whether each render expression is projected at least once, if
+	// that's not the case, then we must add another processor in order for
+	// each render expression to be evaluated (this is needed for edge cases
+	// like the render expressions resulting in errors).
+	//
+	// See also PhysicalPlan.AddProjection for a similar case.
+	if len(cols) < len(render) {
+		// There is no way for each of the render expressions to be referenced.
+		return false
 	}
-	return false
+	var colsSeen intsets.Fast
+	renderUsed := make([]bool, len(render))
+	for _, c := range cols {
+		if colsSeen.Contains(int(c)) {
+			return false
+		}
+		colsSeen.Add(int(c))
+		renderUsed[c] = true
+	}
+	for _, used := range renderUsed {
+		// Need to add a new renderNode if at least one render is not projected.
+		if !used {
+			return false
+		}
+	}
+	return true
 }
 
 // ConstructSerializingProject is part of the exec.Factory interface.
@@ -1891,6 +1911,26 @@ func (ef *execFactory) ConstructCreateFunction(
 		typeDeps:     typeDepSet,
 		functionDeps: funcDepList,
 	}, nil
+}
+
+// ConstructCreateTrigger is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateTrigger(ct *tree.CreateTrigger) (exec.Node, error) {
+	if err := checkSchemaChangeEnabled(
+		ef.ctx,
+		ef.planner.ExecCfg(),
+		"CREATE TRIGGER",
+	); err != nil {
+		return nil, err
+	}
+	plan, err := ef.planner.SchemaChange(ef.ctx, ct)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"CREATE TRIGGER is only implemented in the declarative schema changer")
+	}
+	return plan, nil
 }
 
 func toPlanDependencies(

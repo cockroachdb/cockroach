@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -17,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -65,7 +63,7 @@ func makePeriodicTelemetryLogger(
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
 		job:               job,
-		changefeedDetails: getCommonChangefeedEventDetails(ctx, job.Details().(jobspb.ChangefeedDetails), job.Payload().Description),
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, job.Details().(jobspb.ChangefeedDetails), job.Payload().Description, job.ID()),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -111,7 +109,6 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
-		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
@@ -127,7 +124,6 @@ func (ptl *periodicTelemetryLogger) close() {
 
 	continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
-		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
@@ -222,6 +218,10 @@ func (r *telemetryMetricsRecorder) getKafkaThrottlingMetrics(
 	settings *cluster.Settings,
 ) metrics.Histogram {
 	return r.inner.getKafkaThrottlingMetrics(settings)
+}
+
+func (r *telemetryMetricsRecorder) netMetrics() *cidr.NetMetrics {
+	return r.inner.netMetrics()
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events

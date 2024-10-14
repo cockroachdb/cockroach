@@ -1,18 +1,12 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cidr
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	io "io"
@@ -31,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 )
 
 var cidrMappingUrl = settings.RegisterStringSetting(
@@ -76,14 +71,17 @@ func NewLookup(st *settings.Values) *Lookup {
 	byLength := make([]map[string]string, 0)
 	c.byLength.Store(&byLength)
 	c.lastUpdate.Store(time.Time{})
-	c.changed = make(chan time.Duration)
+	c.changed = make(chan time.Duration, 1)
 
 	cidrMappingUrl.SetOnChange(st, func(ctx context.Context) {
 		log.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
 		// Reset the lastUpdate time so that the URL is always reloaded even if
 		// the new file/URL has an older timestamp.
 		c.lastUpdate.Store(time.Time{})
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	// We have to register this callback first. Otherwise we may run into
 	// an unlikely but possible scenario where we've started the ticker,
@@ -91,13 +89,25 @@ func NewLookup(st *settings.Values) *Lookup {
 	// ticker will not be reset to the new value.
 	cidrRefreshInterval.SetOnChange(c.st, func(ctx context.Context) {
 		log.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	return c
 }
 
+// NewTestLookup creates a new Lookup for testing purposes. It will never return
+// any results.
+func NewTestLookup() *Lookup {
+	c := &Lookup{}
+	byLength := make([]map[string]string, 0)
+	c.byLength.Store(&byLength)
+	return c
+}
+
 // Start refreshes the lookup once and begins the CIDR lookup refresh task.
-func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Lookup) {
+func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) error {
 	getTickDuration := func() time.Duration {
 		tickDuration := cidrRefreshInterval.Get(c.st)
 		// If the tickDuration is 0, set to a year to avoid auto refreshing.
@@ -123,9 +133,10 @@ func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Looku
 			}
 		}
 	}); err != nil {
-		log.Fatalf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		log.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // hexString returns a hex string representation of an IP address. The length of
@@ -266,7 +277,7 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 	if err := json.Unmarshal(contents, &destinations); err != nil {
 		return err
 	}
-	// TODO(baptist): This only handles IPv4. We could change to 128 if we want
+	// TODO(#130814): This only handles IPv4. We could change to 128 if we want
 	// to handle IPv6.
 	byLength := make([]map[string]string, 33)
 	for i := range 33 {
@@ -278,6 +289,9 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 			return err
 		}
 		lenBits, _ := cidr.Mask.Size()
+		if lenBits > 32 {
+			return fmt.Errorf("invalid mask size: %d", lenBits)
+		}
 		mask := net.CIDRMask(lenBits, 32)
 		val := hexString(cidr.IP.Mask(mask))
 		byLength[lenBits][val] = d.Name
@@ -317,6 +331,10 @@ func (c *Lookup) onChange(ctx context.Context) {
 func (c *Lookup) LookupIP(ip net.IP) string {
 	byLength := *c.byLength.Load()
 	ip = ip.To4()
+	// Don't map IPv6 addresses.
+	if ip == nil {
+		return ""
+	}
 	for i := len(byLength) - 1; i >= 0; i-- {
 		m := (byLength)[i]
 		if len(m) == 0 {
@@ -375,40 +393,85 @@ func (m *NetMetrics) Wrap(dial DialContext, labels ...string) DialContext {
 		if err != nil {
 			return conn, err
 		}
-		return m.track(conn, labels...), nil
-	}
-}
-
-// WrapTLS is like Wrap, but can be used if the underlying library doesn't
-// expose a way to plug in a dialer for TLS connections. This is unfortunately
-// pretty ugly... Copied from tls.Dial and kgo.DialTLS because they don't expose
-// a dial call with a DialContext. Ideally you don't have to use this if the
-// third party API does a sensible thing and exposes the ability to replace the
-// "DialContext" directly.
-func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...string) DialContext {
-	return func(ctx context.Context, network, host string) (net.Conn, error) {
-		c := tlsCfg.Clone()
-		if c.ServerName == "" {
-			server, _, err := net.SplitHostPort(host)
-			if err != nil {
-				return nil, fmt.Errorf("unable to split host:port for dialing: %w", err)
-			}
-			c.ServerName = server
-		}
-
-		rawConn, err := dial(ctx, network, host)
-		if err != nil {
-			return nil, err
-		}
-		scopedConn := m.track(rawConn, labels...)
-
-		conn := tls.Client(rawConn, c)
-		if err := conn.HandshakeContext(ctx); err != nil {
-			scopedConn.Close()
-			return nil, err
+		// m can be nil in tests.
+		if m != nil {
+			conn = m.track(conn, labels...)
 		}
 		return conn, nil
 	}
+}
+
+type Dialer interface {
+	Dial(network, addr string) (c net.Conn, err error)
+	DialContext(ctx context.Context, network, addr string) (c net.Conn, err error)
+}
+
+type dialer struct {
+	inner  Dialer
+	m      *NetMetrics
+	labels []string
+}
+
+func (d *dialer) Dial(network, addr string) (net.Conn, error) {
+	return d.DialContext(context.Background(), network, addr)
+}
+
+// DialTimeout implements pq.Dialer
+func (d *dialer) DialTimeout(
+	network, addr string, timeout time.Duration,
+) (conn net.Conn, err error) {
+	err = timeutil.RunWithTimeout(context.Background(), "dial_timeout", timeout, func(ctx context.Context) error {
+		conn, err = d.DialContext(ctx, network, addr)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	conn, err := d.inner.DialContext(ctx, network, addr)
+	if err != nil {
+		return conn, err
+	}
+	conn = d.m.track(conn, d.labels...)
+	return conn, nil
+}
+
+var _ Dialer = (*dialer)(nil)
+var _ pq.Dialer = (*dialer)(nil)
+
+// WrapDialer returns a Dialer that wraps the connection with metrics. If the
+// underlying library exposes an ability to replace the DialContext, you should
+// use Wrap instead of this function.
+func (m *NetMetrics) WrapDialer(inner Dialer, labels ...string) Dialer {
+	// m can be nil in tests.
+	if m == nil {
+		return inner
+	}
+	return &dialer{
+		inner:  inner,
+		m:      m,
+		labels: labels,
+	}
+}
+
+// WrapPqDialer sets up the Dialer for the Connector with metrics for use in pq.
+// It modifies the Connector instead of returning a Dialer like the other
+// methods because of the way pq is structured and requires a pq.Dialer with
+// DialTimeout.
+func (m *NetMetrics) WrapPqDialer(c *pq.Connector, labels ...string) {
+	// m can be nil in tests, in that case leave the default dialer.
+	if m == nil {
+		return
+	}
+	d := dialer{
+		inner:  &net.Dialer{},
+		m:      m,
+		labels: labels,
+	}
+	c.Dialer(&d)
 }
 
 // track converts a connection to a wrapped connection with the given labels.

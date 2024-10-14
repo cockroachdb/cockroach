@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -188,7 +183,7 @@ func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
 		l: nilLogger(),
 	}
 	ti.addFailure(0, "", vmPreemptionError("my_VM"))
-	errWithOwnership := failuresSpecifyOwner(ti.failures())
+	errWithOwnership := failuresAsErrorWithOwnership(ti.failures())
 
 	require.NotNil(t, errWithOwnership)
 	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)

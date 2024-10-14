@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package acl_test
 
@@ -14,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -22,6 +20,7 @@ import (
 
 func TestCIDRRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 
 	tenantID := roachpb.MustMakeTenantID(42)

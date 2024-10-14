@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -130,7 +125,7 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -1169,7 +1164,7 @@ func (rp *replicaProposer) destroyed() destroyStatus {
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
-	return rp.mu.state.LeaseAppliedIndex
+	return rp.shMu.state.LeaseAppliedIndex
 }
 
 func (rp *replicaProposer) enqueueUpdateCheck() {
@@ -1190,17 +1185,17 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 }
 
 func (rp *replicaProposer) onErrProposalDropped(
-	ents []raftpb.Entry, _ []*ProposalData, stateType raft.StateType,
+	ents []raftpb.Entry, _ []*ProposalData, stateType raftpb.StateType,
 ) {
 	n := int64(len(ents))
 	rp.store.metrics.RaftProposalsDropped.Inc(n)
-	if stateType == raft.StateLeader {
+	if stateType == raftpb.StateLeader {
 		rp.store.metrics.RaftProposalsDroppedLeader.Inc(n)
 	}
 }
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
-	return rp.mu.state.Lease.String()
+	return rp.shMu.state.Lease.String()
 }
 
 func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {

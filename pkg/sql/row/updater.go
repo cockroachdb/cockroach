@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -209,6 +204,7 @@ func (ru *Updater) UpdateRow(
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
@@ -354,11 +350,11 @@ func (ru *Updater) UpdateRow(
 
 	putter := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, oth, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, putter, ru.newValues, pm, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, oth, false /* ignoreConflicts */, traceKV,
 		); err != nil {
 			return nil, err
 		}
@@ -371,7 +367,7 @@ func (ru *Updater) UpdateRow(
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
+		&ru.key, &ru.value, ru.valueBuf, insertPutFn, oth, oldValues, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
 	}

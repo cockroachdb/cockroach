@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -57,6 +53,47 @@ var testReleaseData = func() map[string]release.Series {
 
 	return result
 }()
+
+func Test_validDeploymentModesForCloud(t *testing.T) {
+	testCases := []struct {
+		name          string
+		cloud         spec.Cloud
+		modes         []DeploymentMode
+		expectedModes []DeploymentMode
+	}{
+		{
+			name:          "locally, all modes are allowed",
+			cloud:         spec.Local,
+			modes:         allDeploymentModes,
+			expectedModes: allDeploymentModes,
+		},
+		{
+			name:          "on gce, all modes are allowed",
+			cloud:         spec.GCE,
+			modes:         allDeploymentModes,
+			expectedModes: allDeploymentModes,
+		},
+		{
+			name:          "on aws, we can't run separate process deployments",
+			cloud:         spec.AWS,
+			modes:         allDeploymentModes,
+			expectedModes: []DeploymentMode{SystemOnlyDeployment, SharedProcessDeployment},
+		},
+		{
+			name:          "on azure, we can't run separate process deployments",
+			cloud:         spec.Azure,
+			modes:         allDeploymentModes,
+			expectedModes: []DeploymentMode{SystemOnlyDeployment, SharedProcessDeployment},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := validDeploymentModesForCloud(tc.cloud, tc.modes)
+			require.Equal(t, tc.expectedModes, actual)
+		})
+	}
+}
 
 func Test_assertValidTest(t *testing.T) {
 	var fatalErr error
@@ -137,6 +174,26 @@ func Test_assertValidTest(t *testing.T) {
 	require.Error(t, fatalErr)
 	require.Equal(t,
 		`mixedversion.NewTest: invalid test options: unknown deployment mode "my-deployment"`,
+		fatalErr.Error(),
+	)
+
+	// simulate a NewTest call with an actual `cluster` implementation
+	mvt = newTest(EnabledDeploymentModes(SeparateProcessDeployment))
+	mvt.options.enabledDeploymentModes = validDeploymentModesForCloud(spec.AWS, mvt.options.enabledDeploymentModes)
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: no deployment modes enabled`,
+		fatalErr.Error(),
+	)
+
+	// separate-process deployments requires cluster validation
+	mvt = newTest(NeverUseFixtures, EnabledDeploymentModes(allDeploymentModes...))
+	mvt.crdbNodes = option.NodeListOption{1}
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: separate-process deployments require cluster with at least 3 nodes`,
 		fatalErr.Error(),
 	)
 

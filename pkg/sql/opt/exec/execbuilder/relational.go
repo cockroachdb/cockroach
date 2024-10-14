@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package execbuilder
 
@@ -284,6 +279,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 
 	case *memo.CreateFunctionExpr:
 		ep, outputCols, err = b.buildCreateFunction(t)
+
+	case *memo.CreateTriggerExpr:
+		ep, outputCols, err = b.buildCreateTrigger(t)
 
 	case *memo.WithExpr:
 		ep, outputCols, err = b.buildWith(t)
@@ -770,7 +768,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	relProps := scan.Relational()
 	stats := relProps.Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
-		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		large := !stats.Available || stats.RowCount >= b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
 			b.flags.Set(exec.PlanFlagContainsFullTableScan)
 			if large {

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package testselector
 
@@ -38,7 +33,10 @@ const (
 )
 
 //go:embed snowflake_query.sql
-var preparedQuery string
+var PreparedQuery string
+
+// SqlConnectorFunc is the function to get a sql connector
+var SqlConnectorFunc = gosql.Open
 
 // supported suites
 var suites = map[string]string{
@@ -79,18 +77,19 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 // 1. the number of time a test has been successfully running
 // 2. the test is new
 // 3. the test has not been run for a while
-// 4. a subset of the successful tests based on SelectTestReq.SelectFromSuccessPct
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
-func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*TestDetails, error) {
+// The tests are sorted by the last run and is used for further test selection criteria. So, the order should not be modified.
+func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = db.Close() }()
-	statement, err := db.Prepare(preparedQuery)
+	statement, err := db.Prepare(PreparedQuery)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = statement.Close() }()
 	// get the current branch from the teamcity environment
 	currentBranch := os.Getenv("TC_BUILD_BRANCH")
 	if currentBranch == "" {
@@ -103,6 +102,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*Test
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	// All the column headers
 	colHeaders, err := rows.Columns()
 	if err != nil {
@@ -115,7 +115,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*Test
 		colPointers[i] = &colContainer[i]
 	}
 	// allTestDetails are all the tests that are returned by the snowflake query
-	allTestDetails := make(map[string]*TestDetails)
+	allTestDetails := make([]*TestDetails, 0)
 	for rows.Next() {
 		err = rows.Scan(colPointers...)
 		if err != nil {
@@ -134,7 +134,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*Test
 			AvgDurationInMillis:  getDuration(testInfos[2]),
 			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
-		allTestDetails[testDetails.Name] = testDetails
+		allTestDetails = append(allTestDetails, testDetails)
 	}
 	return allTestDetails, nil
 }
@@ -146,13 +146,26 @@ func getDuration(durationStr string) int64 {
 }
 
 // getConnect makes connection to snowflake and returns the connection.
-func getConnect(ctx context.Context) (*gosql.DB, error) {
-	username, password, err := getSFCreds()
+func getConnect(_ context.Context) (*gosql.DB, error) {
+	dsn, err := getDSN()
 	if err != nil {
 		return nil, err
 	}
+	db, err := SqlConnectorFunc("snowflake", dsn)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
-	dsn, err := sf.DSN(&sf.Config{
+// getDSN returns the dataSource name for snowflake driver
+func getDSN() (string, error) {
+	username, password, err := getSFCreds()
+	if err != nil {
+		return "", err
+	}
+
+	return sf.DSN(&sf.Config{
 		Account:   account,
 		Database:  database,
 		Schema:    schema,
@@ -160,14 +173,6 @@ func getConnect(ctx context.Context) (*gosql.DB, error) {
 		Password:  password,
 		User:      username,
 	})
-	if err != nil {
-		return nil, err
-	}
-	db, err := gosql.Open("snowflake", dsn)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
 }
 
 // getSFCreds gets the snowflake credentials from the secrets manager

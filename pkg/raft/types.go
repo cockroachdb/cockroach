@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2024 The etcd Authors
 //
@@ -60,6 +60,8 @@ type LogMark struct {
 func (l LogMark) After(other LogMark) bool {
 	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
 }
+
+type LogSlice = logSlice // TODO(pav-kv): export logSlice properly
 
 // logSlice describes a correct slice of a raft log.
 //
@@ -136,6 +138,11 @@ func (s logSlice) forward(index uint64) logSlice {
 		prev:    entryID{term: s.termAt(index), index: index},
 		entries: s.entries[index-s.prev.index:],
 	}
+}
+
+// sub returns the entries of this logSlice with indices in (after, to].
+func (s logSlice) sub(after, to uint64) []pb.Entry {
+	return s.entries[after-s.prev.index : to-s.prev.index]
 }
 
 // valid returns nil iff the logSlice is a well-formed log slice. See logSlice

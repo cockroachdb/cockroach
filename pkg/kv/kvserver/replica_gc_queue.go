@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -17,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -173,7 +168,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	switch raftStatus.SoftState.RaftState {
 	// If a replica is a candidate, then by definition it has lost contact with
 	// its leader and possibly the rest of the Raft group, so consider it suspect.
-	case raft.StateCandidate, raft.StatePreCandidate:
+	case raftpb.StateCandidate, raftpb.StatePreCandidate:
 		return true
 
 	// If the replica is a follower, check that the leader is in our range
@@ -182,7 +177,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// a quiesced follower which was partitioned away from the Raft group during
 	// its own removal from the range -- this case is vulnerable to race
 	// conditions, but if it fails it will be GCed within 12 hours anyway.
-	case raft.StateFollower:
+	case raftpb.StateFollower:
 		leadDesc, ok := repl.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
 		if !ok || !livenessMap[leadDesc.NodeID].IsLive {
 			return true
@@ -191,7 +186,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// If the replica is a leader, check that it has a quorum. This handles e.g.
 	// a stuck leader with a lost quorum being replaced via Node.ResetQuorum,
 	// which must cause the stale leader to relinquish its lease and GC itself.
-	case raft.StateLeader:
+	case raftpb.StateLeader:
 		if !repl.Desc().Replicas().CanMakeProgress(func(d roachpb.ReplicaDescriptor) bool {
 			return livenessMap[d.NodeID].IsLive
 		}) {

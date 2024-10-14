@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import flow from "lodash/flow";
@@ -65,10 +60,12 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
     diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[],
   ): StatementDiagnosticsDictionary => {
     return flow(
-      (reports: clusterUiApi.StatementDiagnosticsReport[]) => groupBy(reports, report => report.statement_fingerprint),
-      diagnosticsByFingerprint => mapValues(diagnosticsByFingerprint, diagnostics =>
-        orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
-      )
+      (reports: clusterUiApi.StatementDiagnosticsReport[]) =>
+        groupBy(reports, report => report.statement_fingerprint),
+      diagnosticsByFingerprint =>
+        mapValues(diagnosticsByFingerprint, diagnostics =>
+          orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
+        ),
     )(diagnosticsReports);
-  }
+  },
 );

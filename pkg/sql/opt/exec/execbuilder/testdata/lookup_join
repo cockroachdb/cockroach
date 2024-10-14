@@ -88,7 +88,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (e > 1)
+│ lookup condition: (e > 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -106,7 +106,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@desc_idx
-│ lookup condition: (b = f) AND (e > 1)
+│ lookup condition: (e > 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -126,7 +126,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (e > 9223372036854775807)
+│ lookup condition: (e > 9223372036854775807) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -146,7 +146,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def_e_decimal@def_e_decimal_pkey
-│ lookup condition: (b = f) AND (e > 1)
+│ lookup condition: (e > 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -166,7 +166,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def_e_decimal@desc_idx
-│ lookup condition: (b = f) AND (e >= 1)
+│ lookup condition: (e >= 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -225,7 +225,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (a >= e)
+│ lookup condition: (a >= e) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -244,7 +244,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@desc_idx
-│ lookup condition: (b = f) AND (a >= e)
+│ lookup condition: (a >= e) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -263,7 +263,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (a > e)
+│ lookup condition: (a > e) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -282,7 +282,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@desc_idx
-│ lookup condition: (b = f) AND (a > e)
+│ lookup condition: (a > e) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -301,14 +301,14 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@def_e_decimal_pkey
-    │ lookup condition: (b = f) AND (column11 >= e)
+    │ lookup condition: (column15 >= e) AND (b = f)
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -330,14 +330,14 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@desc_idx
-    │ lookup condition: (b = f) AND (column11 >= e)
+    │ lookup condition: (column15 >= e) AND (b = f)
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -381,15 +381,15 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │
 └── • lookup join (inner)
-    │ columns: (column11, a, b, c, d, e, f)
+    │ columns: (column15, a, b, c, d, e, f)
     │ estimated row count: 33
     │ table: def_e_decimal@desc_idx
     │ equality: (b) = (f)
-    │ pred: column11 > e
+    │ pred: column15 > e
     │
     └── • render
-        │ columns: (column11, a, b, c)
-        │ render column11: a::DECIMAL
+        │ columns: (column15, a, b, c)
+        │ render column15: a::DECIMAL
         │ render a: a
         │ render b: b
         │ render c: c
@@ -705,7 +705,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 99
 │ table: books2@books2_pkey
-│ equality: (book, lookup_join_const_col_@7) = (title, edition)
+│ equality: (book, lookup_join_const_col_@9) = (title, edition)
 │ equality cols are key
 │
 └── • render
@@ -2093,15 +2093,15 @@ vectorized: true
     │ columns: (pk, col0, col3)
     │
     └── • lookup join (semi)
-        │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
+        │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
         │ estimated row count: 10 (missing stats)
         │ table: tab4@tab4_col3_col4_key
-        │ equality: (col0, lookup_join_const_col_@15) = (col3, col4)
+        │ equality: (col0, lookup_join_const_col_@17) = (col3, col4)
         │ equality cols are key
         │
         └── • render
-            │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
-            │ render lookup_join_const_col_@15: 495.6
+            │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
+            │ render lookup_join_const_col_@17: 495.6
             │ render pk: pk
             │ render col0: col0
             │ render col3: col3
@@ -2186,14 +2186,14 @@ vectorized: true
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUm1P20AM_r5fYfkLyWSgaXk9Cek6WqagkLImoElTFUWNgYw01-UuawD1v0-XQlemDbH7cPLjl8fWYz-h_lGgwOHXy6Dvh-AM_CiOvgQuRMNgeBrDRzgbjy7Aue4HV8MIHI_A67gETpeg2xo9gvAqCFwX-hHU4CwIGheC4VkM5yM_hEKp-3qecDOvbIaBUQhOvbOAEzA7Cxf64cDipsWNi4SlyjhMZ6xRfEMPJ4TzSk1Za1VZ11Ob4GcNig5hXs5rY90TwqmqGMUTmtwUjAKv06JmvdtBwoxNmhcrRg8-gdOD6V1d3mvbcMxlxpWAfSGEH8ZHBNIjkF2cLAlVbX530Ca95bbveiR_gKKzpPdPda7ycsxpxtWu93qy-GHOYiXd6CoejlsBkXBDQrlhJ1XSJA_JY7JI8qxBwqCNwXeVl6BKAY7jOHIP7F63ONVmSwgRxWM__EywteBNh_u8CNmDE5CHa3jUVnudtTLdF9Nd53i25HgNuxYeWF1PVVHPSi2gIvhJYC-D4IHgEQlHtREguyR7JPdI7pM8IHlI8ojk8T919_7Q3fsf3ces56rU_Erz925421tOCDm75dUJalVXU76s1LTNXcFRS9Q6MtZmFfVWwC9fQtpUnM7WZ7PJ5L3J1H2LaUJ4Uyh7CSiw8_y2__K9PLQF6a22EkV3atHS2gvUKG7SQjPhRXrPAzZczfIy1yafojBVzcvlh18BAAD__1_7Qi8=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUu9P20AM_b6_wvIXkslA0_LzJKTraJmCQsqagCZNVRQ1BjLSXJe7rAHU_326FLoybYjdh8jPdp6t5_eE-keBAodfL4O-H4Iz8KM4-hK4EA2D4WkMH-FsPLoA57ofXA0jcDwCr-MSOF2Cbhv0CMKrIHBd6EdQg7MgaFwIhmcxnI_8EAql7ut5ws28sh0GRiE49c4CTsDsLFzohwOLmxY3LhKWKuMwnbFG8Q09nBDOKzVlrVVlU09tg581KDqEeTmvjU1PCKeqYhRPaHJTMAq8Toua9W4HCTM2aV6sGD34BE4Ppnd1ea_twDGXGVcC9oUQfhgfEUiPQHZxsiRUtfk9QZv0ltu565X8AYrOkt6_1bnKyzGnGVe73uvN4oc5i5V0o6t4OG4FRMINCeVGnFRJkzwkj8kiybMGCYO2Bt9VXoIqBTiO48g9sHfd4lSbLSFEFI_98DPB1oI3E-7zIeRR2-511lJ0X0J33dODE5CHa-hZeLyGXQsPrK6nqqhnpRZQEfwksM4geCB4RMJRbQTILskeyT2S-yQPSB6SPCJ5_E_dvT909_5H9zHruSo1v9L8vRfe9pYTQs5ueWVBrepqypeVmra9KzhqidpExtqsqt4K-OVLSZuK09naNptM3ptM3beYJoQ3hbJOQIGd57f9l8_LQ_tDequtRNGdWrS01oEaxU1aaCa8SO95wIarWV7m2uRTFKaqebn88CsAAP__a61CLw==
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
@@ -2205,14 +2205,14 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUt1O20wQvf-eYjQ32J8WyDqlRSshOSWmNTIOjQ1FqiLLigdwcbzp7loxoLx7tQ64oWoR3YvVnPk5Mzozj6h_VCgwuDqPRmEMzjhM0uRL5EISRMFxCv_DyXRyBs7lKLoIEnA4Az5wGTgeA68zhgziiyhyXRgl0ICzYtC68PVzMA0gnqQQXFlKcF4SVlLeNcuM2qWydeapwGn2VnAEZm_lwigeW9x2uHVdZFjLguJ8QRrFN-Q4Y7hUck5aS2Vdj11CWLQoBgzLetkY654xnEtFKB7RlKYiFHiZVw3p_QEyLMjkZbVh5PARnCHMb5v6TtuGU6oLUgIOhBBhnB4y8DkD38PZmqFszK8O2uQ31PXtRwrHKAZr9vapTmVZTykvSO3zl5Ol90sSEAUnKYziNITTSRgjwy0V_S07U1mb3WcP2SorixYZRl0MvsuyBlkLcBzH8d-BXfgO5drsCCGSdBrGnxjsrGjb4T4twh_CEfjve_ihq-aDXhjv2XT7HG5LDnvoWXhgZT2WVbOotQDFwN4Lg3sGD8hw0hgBvsf84V8V5r8pzP9F4Snppaw1vVD3rbvc5esZQypuaHNsWjZqTudKzrvcDZx0RJ2jIG02Ub4BYf0c0kZRvugPZJuJv8rkvcY0Y3hdSbt0FDh4ert_-J4f2oL8RluJklu56mjtrWkU13mlieFZfkdjMqQWZV1qU85RGNXQev3fzwAAAP__T4ND9Q==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUt1O20wQvf-eYjQ32J8WyDqlRSshOSWmNTIOjQ1FqiLLigdwcbzp7loxoLx7tQ64oWoR3YvVnPk5Mzozj6h_VCgwuDqPRmEMzjhM0uRL5EISRMFxCv_DyXRyBs7lKLoIEnA4Az5wGTgeA68zhgziiyhyXRgl0ICzYtC68PVzMA0gnqQQXFlKcF4SVlLeNcuM2qWydeapwGn2VnAEZm_lwigeW9x2uHVdZFjLguJ8QRrFN-Q4Y7hUck5aS2Vdj11CWLQoBgzLetkY654xnEtFKB7RlKYiFHiZVw3p_QEyLMjkZbVh5PARnCHMb5v6TtuGU6oLUgIOhBBhnB4y8DkD38PZmqFszK8O2uQ31PXtRwrHKAZr9vapTmVZTykvSO3zl5Ol90sSEAUnKYziNITTSRgjwy0V_S07U1mb3WcP2SorixYZRl0MvsuyBlkLcBzH8d-BXfgO5drsCCGSdBrGnxjsrGjb4T4twv_QpfNBr4T3bLp9zhCOwH_fQ27hYQ89Cw-srMeyaha1FqAY2HthcM_gARlOGiPA95g__KvC_DeF-b8oPCW9lLWmF-q-dZe7fD1jSMUNbY5Ny0bN6VzJeZe7gZOOqHMUpM0myjcgrJ9D2ijKF_2BbDPxV5m815hmDK8raZeOAgdPb_cP3_NDW5DfaCtRcitXHa29NY3iOq80MTzL72hMhtSirEttyjkKoxpar__7GQAA__9bSkP1
 
 # The following tests check that if the joiners can separate a row request
 # into separate families that it does, and generates spans for each family
@@ -2266,7 +2266,7 @@ vectorized: true
     │ estimated row count: 33
     │ table: def_e_decimal@def_e_decimal_pkey
     │ equality: (b) = (f)
-    │ pred: column11 >= e
+    │ pred: column15 >= e
     │
     └── • render
         │

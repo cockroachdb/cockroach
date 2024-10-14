@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -27,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,6 +35,7 @@ import (
 
 func TestLWWInsertQueryGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -74,9 +73,6 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 	createTable := func(t *testing.T, stmt string) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(stmt, tableName))
-		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s "+lwwColumnAdd,
-			tableName))
 		tableNumber++
 		return tableName
 	}
@@ -150,7 +146,6 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	tableName := "tab"
 	runner.Exec(b, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-	runner.Exec(b, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
@@ -311,6 +306,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 // last write wins mode.
 func TestLWWConflictResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -325,9 +321,6 @@ func TestLWWConflictResolution(t *testing.T) {
 	createTable := func(t *testing.T) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (pk int primary key, payload string)`, tableName))
-		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s "+lwwColumnAdd,
-			tableName))
 		tableNumber++
 		return tableName
 	}
@@ -363,8 +356,7 @@ func TestLWWConflictResolution(t *testing.T) {
 					dstDesc.GetID(): {
 						srcDesc: srcDesc,
 					},
-				},
-				rp.(*sqlRowProcessor))
+				})
 			require.NoError(t, err)
 		}
 		return tableNameDst, rp, func(originTimestamp hlc.Timestamp, datums ...interface{}) roachpb.KeyValue {
@@ -375,10 +367,8 @@ func TestLWWConflictResolution(t *testing.T) {
 	}
 
 	insertRow := func(rp RowProcessor, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
-		return s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			_, err := rp.ProcessRow(ctx, txn, keyValue, prevValue)
-			return err
-		})
+		_, err := rp.ProcessRow(ctx, nil, keyValue, prevValue)
+		return err
 	}
 
 	timeNow := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -398,7 +388,7 @@ func TestLWWConflictResolution(t *testing.T) {
 
 			// Write to both the remote and the local table and see how conflicts are handled
 			// When a remote insert conflicts with a local write, the mvcc timestamp of the remote
-			// write is compared with the mvcc timestamp of the local write
+			// write is compared with the mvcc timestamp of the local write.
 			t.Run("cross-cluster-insert", func(t *testing.T) {
 				tableNameDst, rp, encoder := setup(t, useKVProc)
 
@@ -406,7 +396,6 @@ func TestLWWConflictResolution(t *testing.T) {
 
 				keyValue2 := encoder(timeOneDayBackward, row2...)
 				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
-
 				expectedRows := [][]string{
 					{"1", "row1"},
 				}
@@ -417,6 +406,146 @@ func TestLWWConflictResolution(t *testing.T) {
 
 				expectedRows = [][]string{
 					{"1", "row2"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("remote-update-with-outdated-previous", func(t *testing.T) {
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+
+				keyValue2 := encoder(timeOneDayBackward, row2...)
+				keyValue3 := encoder(timeOneDayBackward, row3...)
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+				expectedRows := [][]string{
+					{"1", "row1"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+
+				keyValue3 = encoder(timeOneDayForward, row3...)
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+
+				expectedRows = [][]string{
+					{"1", "row3"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("remote-delete-with-outdated-previous", func(t *testing.T) {
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+
+				// To old, doesn't work even with value refresh.
+				keyValue2 := encoder(timeOneDayBackward, row2...)
+
+				keyValue3 := encoder(timeOneDayBackward, row3...)
+				keyValue3.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+
+				expectedRows := [][]string{
+					{"1", "row1"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+
+				keyValue3 = encoder(timeOneDayForward, row3...)
+				keyValue3.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+				expectedRows = [][]string{}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("cross-cluster-local-delete", func(t *testing.T) {
+				if !useKVProc {
+					skip.IgnoreLint(t, "local delete ordering is not handled correctly by the SQL processor")
+				}
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+				runner.Exec(t, fmt.Sprintf("DELETE FROM %s WHERE pk = $1", tableNameDst), row1[0])
+
+				// An insert older than the delete is ignored.
+				keyValue2 := encoder(timeOneDayBackward, row2...)
+				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
+
+				expectedRows := [][]string{}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+
+				// An insert newer than the delete is respected
+				keyValue3 := encoder(timeOneDayForward, row2...)
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+
+				expectedRows = [][]string{
+					{"1", "row2"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("cross-cluster-remote-delete", func(t *testing.T) {
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+
+				// A delete older than the insert is ignored
+				keyValue2 := encoder(timeOneDayBackward, row2...)
+				keyValue2.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
+
+				expectedRows := [][]string{
+					{"1", "row1"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+
+				// A delete newer than the insert is respected
+				keyValue3 := encoder(timeOneDayForward, row2...)
+				keyValue3.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue3, keyValue2.Value))
+
+				expectedRows = [][]string{}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("remote-delete-after-local-delete", func(t *testing.T) {
+				if !useKVProc {
+					skip.IgnoreLint(t, "local delete ordering is not handled correctly by the SQL processor")
+				}
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+				runner.Exec(t, fmt.Sprintf("DELETE FROM %s WHERE pk = $1", tableNameDst), row1[0])
+
+				keyValue1 := encoder(timeOneDayForward, row1...)
+				keyValue2 := encoder(timeOneDayForward, row2...)
+				keyValue2.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue2, keyValue1.Value))
+				expectedRows := [][]string{}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+
+			t.Run("remote-delete-after-remote-delete", func(t *testing.T) {
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+
+				t2 := timeOneDayForward
+				t2.WallTime++
+				keyValue1 := encoder(timeOneDayForward, row1...)
+				keyValue2 := encoder(t2, row2...)
+				keyValue2.Value.RawBytes = nil
+				require.NoError(t, insertRow(rp, keyValue2, keyValue1.Value))
+				// Issue a second remote delete. Nothing should error.
+				require.NoError(t, insertRow(rp, keyValue2, keyValue1.Value))
+
+				expectedRows := [][]string{}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+			t.Run("remote-insert-after-local-delete", func(t *testing.T) {
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+				runner.Exec(t, fmt.Sprintf("DELETE FROM %s WHERE pk = $1", tableNameDst), row1[0])
+
+				keyValue1 := encoder(timeOneDayForward, row1...)
+				require.NoError(t, insertRow(rp, keyValue1, roachpb.Value{}))
+
+				expectedRows := [][]string{
+					{"1", "row1"},
 				}
 				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
 			})
@@ -444,6 +573,8 @@ func TestLWWConflictResolution(t *testing.T) {
 				// Validate that the remote timestamp is used to handle the conflict between two remote rows.
 				// Try to add a row with a slightly higher MVCC timestamp than any currently in the table, however
 				// this value will still be lower than crdb_replication_origin_timestamp for row2 and row2 should persist
+				//
+				// TODO(ssd): This test is no longer testing what we would like for the KV-writer.
 				var maxMVCC float64
 				runner.QueryRow(t, fmt.Sprintf("SELECT max(crdb_internal_mvcc_timestamp) FROM %s", tableNameDst)).Scan(&maxMVCC)
 
@@ -458,7 +589,7 @@ func TestLWWConflictResolution(t *testing.T) {
 			// From the perspective of the row processor, once the first row is processed, the next incoming event from the
 			// remote rangefeed should have a "previous row" that matches the row currently in the local table. If writes on
 			// the local and remote table occur too close together, both tables will attempt to propagate to the other, and
-			//the winner of the conflict will depend on the MVCC timestamp just like the cross cluster write scenario
+			// the winner of the conflict will depend on the MVCC timestamp just like the cross cluster write scenario
 			t.Run("outdated-write-conflict", func(t *testing.T) {
 				tableNameDst, rp, encoder := setup(t, useKVProc)
 

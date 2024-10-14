@@ -14,6 +14,8 @@ STRINGER_SRCS = [
     "//pkg/kv/kvserver:refreshraftreason_string.go",
     "//pkg/multitenant/tenantcapabilities:id_string.go",
     "//pkg/raft/quorum:voteresult_string.go",
+    "//pkg/roachpb:leasetype_string.go",
+    "//pkg/server/license:lictype_string.go",
     "//pkg/sql/catalog/catalogkeys:commenttype_string.go",
     "//pkg/sql/catalog/catpb:privilegedescversion_string.go",
     "//pkg/sql/catalog/descpb:formatversion_string.go",

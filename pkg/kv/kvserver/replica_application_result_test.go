@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -43,7 +38,7 @@ func makeProposalData() *ProposalData {
 	}
 
 	return &ProposalData{
-		ctx:                     context.WithValue(context.Background(), struct{}{}, "nonempty-ctx"),
+		ctx:                     context.WithValue(context.Background(), &contextKeyPtr, "nonempty-ctx"),
 		sp:                      &tracing.Span{},
 		idKey:                   "deadbeef",
 		proposedAtTicks:         1,
@@ -71,7 +66,7 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 
 	prop := makeProposalData()
 	// If you are adding a field to ProposalData or RaftCommand, please consider the
-	// desired semantics of that field in `tryReproposeWithNewLeaseIndex{,v2}`. Once
+	// desired semantics of that field in `tryReproposeWithNewLeaseIndexRaftMuLocked{,v2}`. Once
 	// this has been done, adjust the expected number of fields below, and populate
 	// the field above, to let this test pass.
 	//
@@ -124,3 +119,7 @@ func TestReplicaMakeReproposalChaininig(t *testing.T) {
 	_, _ = reproposal, onSuccess // No onSuccess call, assume the proposal failed.
 	verify()
 }
+
+type contextKey struct{}
+
+var contextKeyPtr contextKey

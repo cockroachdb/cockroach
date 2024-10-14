@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -94,29 +94,17 @@ func TestStorageEntries(t *testing.T) {
 func TestStorageLastIndex(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
 	s := &MemoryStorage{ents: ents}
-
-	last, err := s.LastIndex()
-	require.NoError(t, err)
-	require.Equal(t, uint64(5), last)
-
+	require.Equal(t, uint64(5), s.LastIndex())
 	require.NoError(t, s.Append(index(6).terms(5)))
-	last, err = s.LastIndex()
-	require.NoError(t, err)
-	require.Equal(t, uint64(6), last)
+	require.Equal(t, uint64(6), s.LastIndex())
 }
 
 func TestStorageFirstIndex(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
 	s := &MemoryStorage{ents: ents}
-
-	first, err := s.FirstIndex()
-	require.NoError(t, err)
-	require.Equal(t, uint64(4), first)
-
+	require.Equal(t, uint64(4), s.FirstIndex())
 	require.NoError(t, s.Compact(4))
-	first, err = s.FirstIndex()
-	require.NoError(t, err)
-	require.Equal(t, uint64(5), first)
+	require.Equal(t, uint64(5), s.FirstIndex())
 }
 
 func TestStorageCompact(t *testing.T) {

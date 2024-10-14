@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -25,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
@@ -51,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -63,10 +58,10 @@ import (
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -114,6 +109,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -183,9 +179,6 @@ type topLevelServer struct {
 	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
 	keyVisualizerServer *KeyVisualizerServer
 
-	// The Observability Server, used by the Observability Service to subscribe to
-	// CRDB data.
-	eventsExporter obs.EventsExporterInterface
 	recoveryServer *loqrecovery.Server
 	raftTransport  *kvserver.RaftTransport
 	stopper        *stop.Stopper
@@ -596,9 +589,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.Elastic
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
-	stopper.AddCloser(stop.CloserFn(func() {
-		goschedstats.UnregisterRunnableCountCallback(cbID)
-	}))
+	if cbID >= 0 {
+		stopper.AddCloser(stop.CloserFn(func() {
+			goschedstats.UnregisterRunnableCountCallback(cbID)
+		}))
+	}
 	stopper.AddCloser(gcoords)
 
 	var admissionControl struct {
@@ -628,6 +623,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
+	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
+	sendTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{})
+	evalWaitMetrics := rac2.NewEvalWaitMetrics()
+	rangeControllerMetrics := rac2.NewRangeControllerMetrics()
+	nodeRegistry.AddMetricStruct(evalWaitMetrics)
+	nodeRegistry.AddMetricStruct(rangeControllerMetrics)
+	nodeRegistry.AddMetricStruct(streamTokenCounterProvider.Metrics())
+
 	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
 	if knobs := cfg.TestingKnobs.RaftTransport; knobs != nil {
 		raftTransportKnobs = knobs.(*kvserver.RaftTransportTestingKnobs)
@@ -647,6 +650,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
+
+	storeLivenessTransport := storeliveness.NewTransport(
+		cfg.AmbientCtx, stopper, clock, kvNodeDialer, grpcServer.Server, nil, /* knobs */
+	)
+	nodeRegistry.AddMetricStruct(storeLivenessTransport.Metrics())
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -854,6 +862,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Gossip:                       g,
 		NodeLiveness:                 nodeLiveness,
 		Transport:                    raftTransport,
+		StoreLivenessTransport:       storeLivenessTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,
 		ScanInterval:                 cfg.ScanInterval,
@@ -880,6 +889,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
+		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
+		KVFlowSendTokenWatcher:       sendTokenWatcher,
+		KVFlowEvalWaitMetrics:        evalWaitMetrics,
+		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}
@@ -939,6 +952,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		spanConfig.kvAccessor,
 		spanConfig.reporter,
 		distSender,
+		cfg.LicenseEnforcer,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1046,54 +1060,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 	nodeRegistry.AddMetricStruct(kvProber.Metrics())
 
-	flushInterval := 5 * time.Second
-	flushTriggerBytesSize := uint64(1 << 20) // 1MB
-	if cfg.TestingKnobs.EventExporter != nil {
-		knobs := cfg.TestingKnobs.EventExporter.(*obs.EventExporterTestingKnobs)
-		if knobs.FlushInterval != time.Duration(0) {
-			flushInterval = knobs.FlushInterval
-		}
-		if knobs.FlushTriggerByteSize != 0 {
-			flushTriggerBytesSize = knobs.FlushTriggerByteSize
-		}
-	}
-
-	// Create the EventExporter, which will export events to the Obs Service.
-	// We'll start it later, once we know our node ID.
-	var eventsExporter obs.EventsExporterInterface
-	if cfg.ObsServiceAddr != "" {
-		if cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-			ee := obs.NewEventsExporter(
-				"", // targetAddr - we'll configure a custom dialer connecting to the local node later
-				timeutil.DefaultTimeSource{},
-				cfg.Tracer,
-				flushInterval,
-				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
-				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-			)
-			eventsExporter = ee
-		} else {
-			targetAddr, err := obs.ValidateOTLPTargetAddr(cfg.ObsServiceAddr)
-			if err != nil {
-				return nil, err
-			}
-			ee := obs.NewEventsExporter(
-				targetAddr,
-				timeutil.DefaultTimeSource{},
-				cfg.Tracer,
-				flushInterval,
-				flushTriggerBytesSize,
-				10*1<<20, // maxBufferSizeBytes - 10MB
-				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-			)
-			log.Infof(ctx, "will export events over OTLP to: %s", cfg.ObsServiceAddr)
-			eventsExporter = ee
-		}
-	} else {
-		eventsExporter = &obs.NoopEventsExporter{}
-	}
-
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
@@ -1117,9 +1083,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	inspectzServer := inspectz.NewServer(
 		cfg.BaseConfig.AmbientCtx,
 		node.storeCfg.KVFlowHandles,
+		storesForRACv2,
 		node.storeCfg.KVFlowController,
+		node.storeCfg.KVFlowStreamTokenProvider,
 	)
-	cfg.CidrLookup.Start(ctx, stopper)
+	if err = cfg.CidrLookup.Start(ctx, stopper); err != nil {
+		return nil, err
+	}
 
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
@@ -1169,7 +1139,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
-		eventsExporter:           eventsExporter,
 		admissionPacerFactory:    gcoords.Elastic,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
@@ -1309,7 +1278,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		authentication:            sAuth,
 		tsDB:                      tsDB,
 		tsServer:                  &sTS,
-		eventsExporter:            eventsExporter,
 		recoveryServer:            recoveryServer,
 		raftTransport:             raftTransport,
 		stopper:                   stopper,
@@ -1344,13 +1312,13 @@ func newClockFromConfig(ctx context.Context, cfg BaseConfig) (*hlc.Clock, error)
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
-		clock = hlc.NewClock(ptpClock, maxOffset, toleratedOffset)
+		clock = hlc.NewClock(ptpClock, maxOffset, toleratedOffset, logger.CRDBLogger)
 	} else if cfg.TestingKnobs.Server != nil &&
 		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
 		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
-			maxOffset, toleratedOffset)
+			maxOffset, toleratedOffset, logger.CRDBLogger)
 	} else {
-		clock = hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset)
+		clock = hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset, logger.CRDBLogger)
 	}
 	return clock, nil
 }
@@ -1570,7 +1538,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// below when the server has initialized.
 	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, s.cfg.BaseConfig,
-		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */)
+		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
 		return err
 	}
@@ -2115,18 +2083,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// If enabled, start reporting diagnostics.
 	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
-	}
-
-	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
-		ClusterID:     state.clusterID,
-		NodeID:        int32(state.nodeID),
-		TenantID:      0,
-		BinaryVersion: build.BinaryVersion(),
-	})
-	if s.cfg.ObsServiceAddr != base.ObsServiceEmbedFlagValue {
-		if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
-			return errors.Wrapf(err, "failed to start events exporter")
-		}
 	}
 
 	if storage.WorkloadCollectorEnabled {

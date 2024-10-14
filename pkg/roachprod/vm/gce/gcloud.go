@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package gce
 
@@ -101,6 +96,7 @@ func Init() error {
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
+		fmt.Printf("WARNING: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead")
 		providerInstance.Projects = []string{projectFromEnv}
 	}
 	providerInstance.ServiceAccount = os.Getenv("GCE_SERVICE_ACCOUNT")
@@ -218,7 +214,7 @@ func (jsonVM *jsonVM) toVM(
 	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
-	if !opts.useSharedUser {
+	if !config.UseSharedUser {
 		// N.B. gcloud uses the local username to log into instances rather
 		// than the username on the authenticated Google account but we set
 		// up the shared user at cluster creation time. Allow use of the
@@ -318,7 +314,6 @@ func DefaultProviderOpts() *ProviderOpts {
 		PDVolumeSize:         500,
 		TerminateOnMigration: false,
 		UseSpot:              false,
-		useSharedUser:        true,
 		preemptible:          false,
 	}
 }
@@ -356,9 +351,6 @@ type ProviderOpts struct {
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
-	// useSharedUser indicates that the shared user rather than the personal
-	// user should be used to ssh into the remote machines.
-	useSharedUser bool
 	// use preemptible instances
 	preemptible bool
 }
@@ -958,7 +950,7 @@ type ProjectsVal struct {
 	AcceptMultipleProjects bool
 }
 
-// defaultZones is the list of  zones used by default for cluster creation.
+// DefaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
 // https://cloud.google.com/compute/docs/regions-zones#available
@@ -968,7 +960,7 @@ type ProjectsVal struct {
 // ARM64 builds), but we randomize the specific zone. This is to avoid
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
-func defaultZones(arch string) []string {
+func DefaultZones(arch string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
 	if vm.ParseArch(arch) == vm.ArchARM64 {
 		// T2A instances are only available in us-central1 in NA.
@@ -1070,7 +1062,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
+			strings.Join(DefaultZones(string(vm.ArchAMD64)), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1098,11 +1090,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		},
 		ProviderName+"-project", /* name */
 		usage)
-
-	flags.BoolVar(&o.useSharedUser,
-		ProviderName+"-use-shared-user", true,
-		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
-			config.SharedUser, config.OSUser.Username))
 
 	// Flags about DNS override the default values in
 	// providerInstance.dnsProvider.
@@ -1285,9 +1272,9 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones(opts.Arch)
+			zones = DefaultZones(opts.Arch)
 		} else {
-			zones = []string{defaultZones(opts.Arch)[0]}
+			zones = []string{DefaultZones(opts.Arch)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {

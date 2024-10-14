@@ -199,6 +199,24 @@ SELECT tableoid, x FROM tab3@i WHERE x = 1
 statement error pq: relation "bad" \([0-9]+\): column name "tableoid" conflicts with a system column name
 CREATE TABLE bad (tableoid int)
 
+subtest origin_id
+
+statement ok
+CREATE TABLE origin_id_tab (x INT PRIMARY KEY);
+INSERT INTO origin_id_tab VALUES (1), (2);
+
+query II rowsort
+SELECT x, crdb_internal_origin_id FROM origin_id_tab
+----
+1  0
+2  0
+
+query IR rowsort
+SELECT x, crdb_internal_origin_timestamp FROM origin_id_tab
+----
+1  NULL
+2  NULL
+
 subtest use_in_indexes
 
 statement error pgcode 0A000 cannot index system column tableoid
@@ -215,6 +233,15 @@ CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
 
 statement error pgcode 42703 column "crdb_internal_mvcc_timestamp" does not exist
 CREATE INDEX idx ON tab3(x, (crdb_internal_mvcc_timestamp + 10))
+
+statement error pgcode 0A000 cannot index system column crdb_internal_origin_id
+CREATE INDEX idx ON tab3(x, crdb_internal_origin_id)
+
+statement error pgcode 0A000 index cannot store system column crdb_internal_origin_id
+CREATE INDEX idx ON tab3(x) STORING (crdb_internal_origin_id)
+
+statement error pgcode 42703 column "crdb_internal_origin_id" does not exist
+CREATE INDEX idx ON tab3(x, (crdb_internal_origin_id + 10))
 
 subtest alter_commands
 

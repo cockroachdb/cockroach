@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { CaretLeftOutlined, CaretDownOutlined } from "@ant-design/icons";
 import cn from "classnames";
@@ -107,7 +102,9 @@ class TableSection extends React.Component<
         </section>
         <div className={contentClass}>
           {children}
-          {this.props.footer && <div className="table-section__footer">{this.props.footer}</div>}
+          {this.props.footer && (
+            <div className="table-section__footer">{this.props.footer}</div>
+          )}
         </div>
       </div>
     );
@@ -117,7 +114,10 @@ class TableSection extends React.Component<
 const getTableSectionKey = (id: string) =>
   `cluster_overview/table_section/${id}/is_expanded`;
 
-const mapStateToProps = (state: AdminUIState, props: TableSectionProps): MapStateToProps => {
+const mapStateToProps = (
+  state: AdminUIState,
+  props: TableSectionProps,
+): MapStateToProps => {
   const tableSectionState = new LocalSetting<AdminUIState, boolean>(
     getTableSectionKey(props.id),
     s => s.localSettings,
@@ -138,4 +138,12 @@ const mapDispatchToProps = (
   },
 });
 
-export default connect<MapStateToProps, MapDispatchToProps, TableSectionProps, AdminUIState>(mapStateToProps, mapDispatchToProps)(TableSection);
+export default connect<
+  MapStateToProps,
+  MapDispatchToProps,
+  TableSectionProps,
+  AdminUIState
+>(
+  mapStateToProps,
+  mapDispatchToProps,
+)(TableSection);

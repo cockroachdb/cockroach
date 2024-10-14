@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -1514,4 +1511,42 @@ func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 	var newZcfg string
 	c.DestTenantSQL.QueryRow(c.T, `SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FROM DATABASE test]`).Scan(&zcfg)
 	require.NotContains(t, newZcfg, `region=mars`)
+}
+
+func TestReplicationJobWithReaderTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	require.NotNil(t, stats.IngestionDetails.ReadTenantID)
+
+	var (
+		name   string
+		status string
+	)
+	expectedReaderTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+
+	c.DestSysSQL.QueryRow(t, fmt.Sprintf(`
+SELECT 
+	name,
+	status
+FROM [SHOW VIRTUAL CLUSTER '%s' WITH REPLICATION STATUS]
+`, expectedReaderTenantName)).Scan(&name, &status)
+
+	require.Equal(t, expectedReaderTenantName, name)
+	require.Equal(t, "ready", status)
 }

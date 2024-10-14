@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvtenant
 
@@ -27,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -75,6 +71,11 @@ type Connector interface {
 	// TenantInfo retrieves current metadata about the tenant record and
 	// an update channel to track changes
 	TenantInfo() (tenantcapabilities.Entry, <-chan struct{})
+
+	// ReadFromTenantInfoAccessor allows retrieving the other tenant, if any, from
+	// which the calling tenant should configure itself to read, along with the
+	// latest timestamp at which it should perform such reads at this time.
+	mtinfo.ReadFromTenantInfoAccessor
 
 	// NodeDescStore provides information on each of the KV nodes in the cluster
 	// in the form of NodeDescriptors and StoreDescriptors. This obviates the
@@ -132,6 +133,11 @@ type Connector interface {
 	// mixed version 21.2->22.1 state where the tenant has not yet configured
 	// its own zones.
 	config.SystemConfigProvider
+
+	// GetClusterInitGracePeriodTS will return the timestamp used to signal the
+	// end of the grace period for clusters with a license. The timestamp is
+	// represented as the number of seconds since the Unix epoch.
+	GetClusterInitGracePeriodTS() int64
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -211,10 +217,11 @@ type connector struct {
 		// metadata bits has been received.
 		receivedFirstMetadata bool
 
-		tenantName   roachpb.TenantName
-		dataState    mtinfopb.TenantDataState
-		serviceMode  mtinfopb.TenantServiceMode
-		capabilities *tenantcapabilitiespb.TenantCapabilities
+		tenantName               roachpb.TenantName
+		dataState                mtinfopb.TenantDataState
+		serviceMode              mtinfopb.TenantServiceMode
+		capabilities             *tenantcapabilitiespb.TenantCapabilities
+		clusterInitGracePeriodTS int64
 
 		// notifyCh is closed when there are changes to the metadata.
 		notifyCh chan struct{}
@@ -650,6 +657,17 @@ func (c *connector) Regions(
 ) (resp *serverpb.RegionsResponse, retErr error) {
 	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
 		resp, err = client.Regions(ctx, req)
+		return
+	})
+	return
+}
+
+// Ranges implements the serverpb.TenantStatusServer interface
+func (c *connector) Ranges(
+	ctx context.Context, req *serverpb.RangesRequest,
+) (resp *serverpb.RangesResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Ranges(ctx, req)
 		return
 	})
 	return

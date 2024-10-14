@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -17,8 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -359,6 +358,16 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
 		}
+		// Only set up the reader tenant once during PCR: when PCR finishes the initial
+		// scan and persists a replicated time for the first time.
+		if replicationDetails.ReadTenantID.IsSet() && sf.replicatedTimeAtStart.IsEmpty() && replicatedTime.IsSet() {
+			readerToActivate := replicationDetails.ReadTenantID
+			err := sf.activateReaderTenant(ctx, txn, readerToActivate)
+			if err != nil {
+				return err
+			}
+		}
+
 		ptp := sf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 		record, err := ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
 		if err != nil {
@@ -375,12 +384,11 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		if record.Timestamp.Less(newProtectAbove) {
 			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
-
 		return nil
 	}); err != nil {
 		return err
 	}
-	sf.metrics.JobProgressUpdates.Inc(1)
+
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
@@ -423,11 +431,7 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 
 func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 	ctx := sf.Ctx()
-
-	// We halve the frequency relative to the ReplanFrequency setting (i.e.
-	// check twice as often), because the node lag checker will only restart the
-	// distSQL plan if a node is lagging for 2 checks in a row.
-	checkFreq := crosscluster.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV) / 2
+	checkFreq := crosscluster.LagCheckFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	maxLag := crosscluster.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if sf.persistedReplicatedTime.IsEmpty() {
 		log.VEvent(ctx, 2, "skipping lag replanning check: no persisted replicated time")
@@ -468,4 +472,18 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 	default:
 		return errors.Wrapf(err, "unable to handle replanning error with replicated time %s and last node lag check replicated time %s", sf.persistedReplicatedTime, sf.replicatedTimeAtLastPositiveLagNodeCheck)
 	}
+}
+
+func (sf *streamIngestionFrontier) activateReaderTenant(
+	ctx context.Context, txn isql.Txn, readerToActivate roachpb.TenantID,
+) error {
+	info, err := sql.GetTenantRecordByID(ctx, txn, readerToActivate, sf.FlowCtx.Cfg.Settings)
+	if err != nil {
+		return err
+	}
+
+	info.DataState = mtinfopb.DataStateReady
+	info.ServiceMode = mtinfopb.ServiceModeShared
+
+	return sql.UpdateTenantRecord(ctx, sf.FlowCtx.Cfg.Settings, txn, info)
 }

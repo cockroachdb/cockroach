@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -450,6 +445,8 @@ func init() {
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
 
+		cliflagcfg.BoolFlag(f, &serverCfg.AcceptProxyProtocolHeaders, cliflags.AcceptProxyProtocolHeaders)
+
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
@@ -463,6 +460,7 @@ func init() {
 			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.HTTPAdvertiseAddr.Name)
+			_ = f.MarkHidden(cliflags.AcceptProxyProtocolHeaders.Name)
 		}
 
 		if cmd == startCmd || cmd == startSingleNodeCmd {
@@ -593,10 +591,6 @@ func init() {
 	telemetryEnabledCmds := append(serverCmds, demoCmd, statementBundleRecreateCmd)
 	telemetryEnabledCmds = append(telemetryEnabledCmds, demoCmd.Commands()...)
 	for _, cmd := range telemetryEnabledCmds {
-		f := cmd.Flags()
-		cliflagcfg.StringFlag(f, &serverCfg.ObsServiceAddr, cliflags.ObsServiceAddr)
-		_ = f.MarkHidden(cliflags.ObsServiceAddr.Name)
-
 		// Report flag usage for server commands in telemetry. We do this
 		// only for server commands, as there is no point in accumulating
 		// telemetry if there's no telemetry reporting loop being started.
@@ -815,6 +809,12 @@ func init() {
 		}
 
 		f := cmd.PersistentFlags()
+
+		// The strict TLS validation below fails if the client cert names don't match
+		// the username. But if the user flag isn't hooked up, it will always expect
+		// 'root'.
+		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
+
 		cliflagcfg.VarFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, true /* strictTLS */, func(format string, args ...interface{}) {
 			fmt.Fprintf(stderr, format, args...)
 		}), cliflags.URL)

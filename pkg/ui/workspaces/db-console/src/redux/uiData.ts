@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import clone from "lodash/clone";
 import each from "lodash/each";
@@ -61,6 +56,11 @@ export class OptInAttributes {
 // VERSION_DISMISSED_KEY is the uiData key on the server that tracks when the outdated banner
 // was last dismissed.
 export const VERSION_DISMISSED_KEY = "version_dismissed";
+
+// LICENSE_UPDATE_DISMISSED_KEY is the uiData key on the server that tracks when the licence
+// update banner was last dismissed. This banner notifies the user that we've changed our
+// licensing if they're deployed without an active license.
+export const LICENSE_UPDATE_DISMISSED_KEY = "license_update_dismissed";
 
 // INSTRUCTIONS_BOX_COLLAPSED_KEY is the uiData key on the server that tracks whether the
 // instructions box on the cluster viz has been collapsed or not.

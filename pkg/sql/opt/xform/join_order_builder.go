@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package xform
 
@@ -709,13 +704,13 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 func (jb *JoinOrderBuilder) makeInnerEdge(op *operator, filters memo.FiltersExpr) {
 	if len(filters) == 0 {
 		// This is a cross join. Create a single edge for the empty FiltersExpr.
-		jb.edges = append(jb.edges, *jb.makeEdge(op, filters))
+		jb.edges = append(jb.edges, jb.makeEdge(op, filters))
 		jb.innerEdges.Add(len(jb.edges) - 1)
 		return
 	}
 	for i := range filters {
 		// Create an edge for each conjunct.
-		jb.edges = append(jb.edges, *jb.makeEdge(op, filters[i:i+1]))
+		jb.edges = append(jb.edges, jb.makeEdge(op, filters[i:i+1]))
 		jb.innerEdges.Add(len(jb.edges) - 1)
 	}
 }
@@ -724,7 +719,7 @@ func (jb *JoinOrderBuilder) makeInnerEdge(op *operator, filters memo.FiltersExpr
 // join. For any given non-inner join, exactly one edge is constructed.
 func (jb *JoinOrderBuilder) makeNonInnerEdge(op *operator, filters memo.FiltersExpr) {
 	// Always create a single edge from a non-inner join.
-	jb.edges = append(jb.edges, *jb.makeEdge(op, filters))
+	jb.edges = append(jb.edges, jb.makeEdge(op, filters))
 	jb.nonInnerEdges.Add(len(jb.edges) - 1)
 }
 
@@ -776,13 +771,13 @@ func (jb *JoinOrderBuilder) makeTransitiveEdge(col1, col2 opt.ColumnID) {
 	filters := memo.FiltersExpr{jb.f.ConstructFiltersItem(condition)}
 
 	// Add the edge to the join graph.
-	jb.edges = append(jb.edges, *jb.makeEdge(op, filters))
+	jb.edges = append(jb.edges, jb.makeEdge(op, filters))
 	jb.innerEdges.Add(len(jb.edges) - 1)
 }
 
 // makeEdge returns a new edge given an operator and set of filters.
-func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e *edge) {
-	e = &edge{op: op, filters: filters}
+func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e edge) {
+	e = edge{op: op, filters: filters}
 	e.calcNullRejectedRels(jb)
 	e.calcSES(jb)
 	e.calcTES(jb.edges)

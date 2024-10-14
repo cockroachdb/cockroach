@@ -47,6 +47,7 @@ go_test(
         "//pkg/testutils/metrictestutils",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
+        "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

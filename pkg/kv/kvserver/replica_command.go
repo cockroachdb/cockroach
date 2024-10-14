@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -141,7 +136,7 @@ func maybeDescriptorChangedError(
 
 func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redact.RedactableString {
 	var s redact.RedactableString
-	if status != nil && status.RaftState == raft.StateLeader {
+	if status != nil && status.RaftState == raftpb.StateLeader {
 		for replicaID, pr := range status.Progress {
 			if replicaID == status.Lead {
 				// TODO(tschottdorf): remove this line once we have picked up
@@ -2267,27 +2262,16 @@ func prepareChangeReplicasTrigger(
 				}
 				added = append(added, rDesc)
 			case internalChangeTypeRemoveLearner, internalChangeTypeRemoveNonVoter:
-				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
+				rDesc, ok := updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
 				if !ok {
-					return nil, errors.Errorf("target %s not found", chg.target)
+					return nil, errors.Errorf("target %v not found", chg.target)
 				}
-				prevTyp := rDesc.Type
-				isRaftLearner := prevTyp == roachpb.LEARNER || prevTyp == roachpb.NON_VOTER
-				if !useJoint || isRaftLearner {
-					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
-				} else if prevTyp != roachpb.VOTER_FULL {
-					// NB: prevTyp is already known to be VOTER_FULL because of
-					// !InAtomicReplicationChange() and the learner handling
-					// above. We check it anyway.
-					return nil, errors.AssertionFailedf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
-				} else {
-					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+				if prevTyp := rDesc.Type; prevTyp != roachpb.LEARNER && prevTyp != roachpb.NON_VOTER {
+					return nil, errors.Errorf("cannot remove %s target %v, not a LEARNER or NON_VOTER",
+						prevTyp, chg.target)
 				}
 				removed = append(removed, rDesc)
 			case internalChangeTypeDemoteVoterToLearner:
-				// Demotion is similar to removal, except that a demotion
-				// cannot apply to a learner, and that the resulting type is
-				// different when entering a joint config.
 				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
@@ -2333,6 +2317,9 @@ func prepareChangeReplicasTrigger(
 				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
 				isJoint = true
 			case roachpb.VOTER_OUTGOING:
+				// Note: Replicas have not been given a VOTER_OUTGOING type since v20.1.
+				// However, we have not run the migration to remove existing replicas
+				// with the type from old clusters, so we retain this code. See #42251.
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
 				isJoint = true
 			case roachpb.VOTER_DEMOTING_LEARNER:
@@ -3110,7 +3097,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// is not too far behind the leaseholder. If the delegate is too far behind
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
 	r.mu.RLock()
-	replIdx := r.mu.state.RaftAppliedIndex + 1
+	replIdx := r.shMu.state.RaftAppliedIndex + 1
 	status := r.raftBasicStatusRLocked()
 	r.mu.RUnlock()
 

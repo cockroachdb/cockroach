@@ -1,0 +1,251 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./sharedButtonStyles";
+
+.crl-button {
+  @include button-styles;
+
+  @at-root a.crl-button {
+    vertical-align: top;
+  }
+
+  &--primary {
+    background-color: $color-base-purple;
+    color: $color-base-white;
+    border-width: 1px;
+    border-style: solid;
+    border-color: $color-base-purple;
+
+    &:hover {
+      background-color: $color-core-purple-4;
+      color: $color-base-white;
+    }
+
+    &:active {
+      background-color: $color-core-purple-4;
+      border-width: 1px;
+      border-color: mix($color-core-neutral-9, $color-core-purple-4, 10%);
+    }
+
+    &:focus {
+      border-width: 1px;
+      border-color: mix($color-core-neutral-9, $color-core-purple-4, 20%);
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-base-purple, 0.4));
+    }
+
+    &:disabled {
+      background-color: $color-core-purple-2;
+      border-color: $color-core-purple-2;
+
+      &:hover {
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &--secondary, &--action-menu {
+    background-color: $color-base-white;
+    color: $crl-base-text--dark;
+    border-width: 1px;
+    border-style: solid;
+    border-color: $color-core-neutral-4;
+
+    &:hover {
+      background-color: $color-core-neutral-1;
+      border-color: $color-core-neutral-4;
+      color: $color-core-neutral-8;
+
+      svg {
+        fill: $color-core-neutral-8;
+      }
+    }
+
+    &:active {
+      background-color: $color-core-neutral-1;
+      border-width: 1px;
+      border-color: $crl-base-divider;
+    }
+
+    &:focus {
+      background-color: $color-core-neutral-1;
+      border-width: 1px;
+      border-color: $crl-base-divider;
+      @include crl-box-shadow(0, 0, 0, 3px, $color-core-neutral-4);
+    }
+
+    &:disabled {
+      background-color: $color-core-neutral-1;
+      border-color: $color-core-neutral-4;
+      color: $color-core-neutral-4;
+
+      &:hover {
+        cursor: not-allowed;
+      }
+
+      svg {
+        fill: $color-core-neutral-4;
+      }
+    }
+
+    svg {
+      fill: $crl-base-text--dark;
+    }
+  }
+
+  &--tertiary {
+    background-color: transparent;
+    color: $color-base-blue;
+    border: 1px;
+    border-style: solid;
+    border-color: transparent;
+
+    &:hover {
+      color: $color-core-blue-4;
+
+      svg {
+        fill: $color-core-blue-4;
+      }
+    }
+
+    &:active {
+      border-color: rgba($color-base-blue, 0.4);
+    }
+
+    &:focus {
+      border-color: $color-base-blue;
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-base-blue, 0.4));
+    }
+
+    &:disabled {
+      &:hover {
+        cursor: not-allowed;
+      }
+
+      svg {
+        fill: $crl-base-text--light;
+      }
+    }
+
+    svg {
+      fill: $color-base-blue;
+    }
+  }
+
+  &--flat {
+    background-color: $color-core-neutral-1;
+    color: $color-base-blue;
+    border-width: 1px;
+    border-style: solid;
+    border-color: transparent;
+
+    &:hover {
+      color: $color-core-blue-4;
+
+      svg {
+        fill: $color-core-blue-4;
+      }
+    }
+
+    &:active {
+      border-color: $color-core-blue-1;
+    }
+
+    &:focus {
+      border-color: $color-base-blue;
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-core-blue-2, 0.15));
+    }
+
+    &:disabled {
+      &:hover {
+        cursor: not-allowed;
+      }
+
+      svg {
+        fill: $crl-base-text--light;
+      }
+    }
+
+    svg {
+      fill: $color-base-blue;
+    }
+  }
+
+  &--danger {
+    background-color: $color-base-red;
+    color: $color-base-white;
+    border-width: 2px;
+    border-style: solid;
+    border-color: $color-base-red;
+
+    &:hover {
+      background-color: $color-core-red-4;
+      border-color: $color-core-red-4;
+      color: $color-base-white;
+    }
+
+    &:active {
+      background-color: $color-core-red-4;
+      border-color: mix($color-core-neutral-9, $color-core-red-4, 20%);
+    }
+
+    &:focus {
+      @include crl-box-shadow(0, 0, 0, 3px, rgba($color-base-red, 0.4));
+    }
+
+    &:disabled {
+      background-color: $color-core-red-2;
+      border-color: $color-core-red-2;
+
+      &:hover {
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &--no-style {
+    background-color: transparent;
+    color: inherit;
+    border-width: 1px;
+    border-color: transparent;
+
+    &:hover,
+    &:active,
+    &:focus {
+      background-color: transparent;
+      color: inherit;
+      border-width: 1px;
+      border-color: transparent;
+    }
+
+    &:disabled {
+      color: inherit;
+
+      &:hover {
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &--action-menu-item {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background-color: $color-base-white;
+    color: $crl-base-text;
+    letter-spacing: 0;
+    @include crl-type-button--action-menu-item;
+
+    &:hover {
+      background-color: $color-base-white;
+      color: $crl-base-text--dark;
+    }
+  }
+
+  &--icon-container {
+    border: 0;
+    background-color: transparent;
+  }
+}

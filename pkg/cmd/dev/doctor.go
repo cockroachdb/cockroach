@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -296,14 +291,15 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 	{
 		name: "nogo_configured",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
-			if err != nil {
+			configured := d.checkUsingConfig(cfg.workspace, "lintonbuild") ||
+				d.checkUsingConfig(cfg.workspace, "nolintonbuild")
+			if !configured {
 				return "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
 This may be because you haven't configured whether to run lints during builds.
 Put EXACTLY ONE of the following lines in your .bazelrc.user:
-    build --config lintonbuild
+    build --config=lintonbuild
         OR
-    build --config nolintonbuild
+    build --config=nolintonbuild
 The former will run lint checks while you build. This will make incremental builds
 slightly slower and introduce a noticeable delay in first-time build setup.`
 			}

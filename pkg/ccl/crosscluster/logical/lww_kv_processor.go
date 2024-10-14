@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -43,7 +40,6 @@ type kvRowProcessor struct {
 	dstBySrc map[descpb.ID]descpb.ID
 	writers  map[descpb.ID]*kvTableWriter
 
-	fallback *sqlRowProcessor
 	failureInjector
 }
 
@@ -53,14 +49,13 @@ func newKVRowProcessor(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
-	srcTablesByDestID map[descpb.ID]sqlProcessorTableConfig,
-	fallback *sqlRowProcessor,
+	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 ) (*kvRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
-	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(srcTablesByDestID))
-	dstBySrc := make(map[descpb.ID]descpb.ID, len(srcTablesByDestID))
+	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(procConfigByDestID))
+	dstBySrc := make(map[descpb.ID]descpb.ID, len(procConfigByDestID))
 
-	for dstID, s := range srcTablesByDestID {
+	for dstID, s := range procConfigByDestID {
 		dstBySrc[s.srcDesc.GetID()] = dstID
 		srcTablesBySrcID[s.srcDesc.GetID()] = s.srcDesc
 		cdcEventTargets.Add(changefeedbase.Target{
@@ -82,10 +77,9 @@ func newKVRowProcessor(
 		cfg:      cfg,
 		evalCtx:  evalCtx,
 		dstBySrc: dstBySrc,
-		writers:  make(map[descpb.ID]*kvTableWriter, len(srcTablesByDestID)),
+		writers:  make(map[descpb.ID]*kvTableWriter, len(procConfigByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		alloc:    &tree.DatumAlloc{},
-		fallback: fallback,
 	}
 	return p, nil
 }
@@ -95,10 +89,6 @@ var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 func (p *kvRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, keyValue roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
-	if err := p.injectFailure(); err != nil {
-		return batchStats{}, err
-	}
-
 	var err error
 	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
 	if err != nil {
@@ -112,32 +102,28 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 	p.lastRow = row
 
-	// TODO(dt, ssd): the rangefeed prev value does not include its mvcc ts, which
-	// is a problem for us if we want to use CPut to replace the old row with the
-	// new row, because our local version of the old row is likely to have the
-	// remote version's mvcc timestamp in its origin ts column, i.e. in the value.
-	// Without knowing the remote previous row's ts, we cannot exactly reconstruct
-	// the value of our local row to put in the expected value for a CPut.
-	// Instead, for now, we just don't use the direct CPut for anything other than
-	// inserts. If/when we have a LDR-flavor CPut (or if we move the TS out and
-	// decide that equal values negate LWW) we can remove this.
-	if prevValue.IsPresent() {
-		return p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
+	if err = p.injectFailure(); err != nil {
+		return batchStats{}, err
 	}
 
-	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
-		stats, err := p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
-		if err == nil {
-			stats.kvWriteFallbacks += 1
-		}
-		return stats, err
+	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue, 0); err != nil {
+		return batchStats{}, err
 	}
 	return batchStats{}, nil
 
 }
 
+// maxRefreshCount is the maximum number of times we will retry a KV batch that has failed with a
+// ConditionFailedError with HadNewerOriginTimetamp=true.
+const maxRefreshCount = 10
+
 func (p *kvRowProcessor) processParsedRow(
-	ctx context.Context, txn isql.Txn, row cdcevent.Row, k roachpb.KeyValue, prevValue roachpb.Value,
+	ctx context.Context,
+	txn isql.Txn,
+	row cdcevent.Row,
+	k roachpb.KeyValue,
+	prevValue roachpb.Value,
+	refreshCount int,
 ) error {
 	dstTableID, ok := p.dstBySrc[row.TableID]
 	if !ok {
@@ -161,19 +147,63 @@ func (p *kvRowProcessor) processParsedRow(
 			}
 			return txn.CommitInBatch(ctx, b)
 		}); err != nil {
+			if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+				// If OriginTimestampOlderThan is set, then this was the LWW
+				// loser. We ignore the error and move onto the next row row we have
+				// to process.
+				if condErr.OriginTimestampOlderThan.IsSet() {
+					return nil
+				}
+				// If HadNewerOriginTimestamp is true, it implies that the row we
+				// are processing was the LWW winner but the previous value from the
+				// rangefeed event doesn't represent what was on disk. In this case,
+				// we use the ActualValue returned in the error and retry the
+				// request. We don't do this via the retry queue because we want to
+				// do it without delay since we are likely to succeed on the first
+				// retry unless the key has a high rate of cross-cluster writes.
+				if condErr.HadNewerOriginTimestamp {
+					// We limit the number of times we hit this in a row, but we
+					// don't expect to hit this many times in a row. Any
+					// intervening write that would invalidate our refreshed
+					// expected value is likely to have been written at a higher
+					// MVCC timestamp and thus we would get a LWW failure rather
+					// than another refresh attempt.
+					//
+					// However, this does protect us against the job just
+					// running forever in the case of some bug in the above
+					// reasoning or our ConditionalPut code.
+					if refreshCount > maxRefreshCount {
+						return errors.Wrapf(err, "max refresh count (%d) reached", maxRefreshCount)
+					}
+					var refreshedValue roachpb.Value
+					if condErr.ActualValue != nil {
+						refreshedValue = *condErr.ActualValue
+					}
+					return p.processParsedRow(ctx, txn, row, k, refreshedValue, refreshCount+1)
+				}
+			}
 			return err
 		}
-
 		return nil
 	}
-
-	kvTxn := txn.KV()
-	b := makeBatch(kvTxn)
-
-	if err := p.addToBatch(ctx, kvTxn, b, dstTableID, row, k, prevValue); err != nil {
-		return err
-	}
-	return txn.KV().Run(ctx, b)
+	// TODO(ssd,dt): There are two levels of batching we may care about: putting multiple
+	// batches (each generated by 1 row) into a single transaction or putting multiple rows into
+	// a single batch.
+	//
+	// In either case, the problem with batching is when the error indicates we need to refresh
+	// our expected value -- We need some way to associate the refreshed value contained in the
+	// error with the row that generated the error.
+	//
+	// We could forgo that completely and use the existing batch-splitting logic in the
+	// logicalReplicationWriterProcessor: Any failure results in the batch being retried one row
+	// at a time. If that original failure was an error requiring a value refresh, the
+	// single-row batch it will fail again with the same error, but can be individually retried
+	// by the code above.
+	//
+	// But, even then, since a LWW failure often means we are now processing duplicates, we may
+	// want batch handling with a bit of hysteresis that prevents constantly building
+	// multi-batch transactions that are likely to fail.
+	return errors.AssertionFailedf("TODO: multi-row transactions not supported by the kvRowProcessor")
 }
 
 func (p *kvRowProcessor) addToBatch(
@@ -194,29 +224,31 @@ func (p *kvRowProcessor) addToBatch(
 	if err := txn.UpdateDeadline(ctx, w.leased.Expiration(ctx)); err != nil {
 		return err
 	}
-	if prevValue.IsPresent() {
-		prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
-			Key:   keyValue.Key,
-			Value: prevValue,
-		}, cdcevent.PrevRow, prevValue.Timestamp, false)
-		if err != nil {
+
+	prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
+		Key:   keyValue.Key,
+		Value: prevValue,
+	}, cdcevent.PrevRow, prevValue.Timestamp, false)
+	if err != nil {
+		return err
+	}
+
+	if row.IsDeleted() {
+		if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
 			return err
 		}
-
-		if row.IsDeleted() {
-			if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
-				return err
-			}
-		} else {
+	} else {
+		if prevValue.IsPresent() {
 			if err := w.updateRow(ctx, b, prevRow, row); err != nil {
 				return err
 			}
-		}
-	} else {
-		if err := w.insertRow(ctx, b, row); err != nil {
-			return err
+		} else {
+			if err := w.insertRow(ctx, b, row); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -227,7 +259,7 @@ func (p *kvRowProcessor) GetLastRow() cdcevent.Row {
 
 // SetSyntheticFailurePercent implements the RowProcessor interface.
 func (p *kvRowProcessor) SetSyntheticFailurePercent(rate uint32) {
-	// TODO(dt): support failure injection.
+	p.rate = rate
 }
 
 func (p *kvRowProcessor) Close(ctx context.Context) {
@@ -281,7 +313,6 @@ type kvTableWriter struct {
 	ru               row.Updater
 	ri               row.Inserter
 	rd               row.Deleter
-	scratchTS        tree.DDecimal
 }
 
 func newKVTableWriter(
@@ -293,7 +324,11 @@ func newKVTableWriter(
 	const internal = true
 
 	// TODO(dt): figure out the right sets of columns here and in fillNew/fillOld.
-	readCols, writeCols := tableDesc.PublicColumns(), tableDesc.PublicColumns()
+	writeCols, err := writeableColunms(ctx, tableDesc)
+	if err != nil {
+		return nil, err
+	}
+	readCols := writeCols
 
 	// TODO(dt): pass these some sort fo flag to have them use versions of CPut
 	// or a new LWW KV API. For now they're not detecting/handling conflicts.
@@ -319,6 +354,29 @@ func newKVTableWriter(
 	}, nil
 }
 
+// writeableColumns are 'writable' in the sense that they are stored on disk in the primary index.
+//
+// We assume this is all public non-virtual columns and all virtual columns stored in the primary
+// indexes value or key.
+//
+// NOTE: We don't handle virtual columns that are stored in secondary index keys or values here
+// because we assume tables with such columns were disallowed earlier. This function will need to be
+// updated if that restriction is relaxed.
+func writeableColunms(ctx context.Context, td catalog.TableDescriptor) ([]catalog.Column, error) {
+	// TODO(ssd): Validate with SQL foundations that this is correct.
+	keyColumnIDs := td.GetPrimaryIndex().CollectKeyColumnIDs()
+
+	pubCols := td.PublicColumns()
+	ret := make([]catalog.Column, 0, len(pubCols))
+	for _, c := range pubCols {
+		if c.IsComputed() && c.IsVirtual() && !keyColumnIDs.Contains(c.GetID()) {
+			continue
+		}
+		ret = append(ret, c)
+	}
+	return ret, nil
+}
+
 func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdcevent.Row) error {
 	if err := p.fillNew(after); err != nil {
 		return err
@@ -326,8 +384,13 @@ func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdceve
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
-
-	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, false, false)
+	oth := &row.OriginTimestampCPutHelper{
+		OriginTimestamp: after.MvccTimestamp,
+		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
+		// and destination clusters.
+		ShouldWinTie: true,
+	}
+	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, oth, false, false)
 }
 
 func (p *kvTableWriter) updateRow(
@@ -342,8 +405,13 @@ func (p *kvTableWriter) updateRow(
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
-
-	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, false)
+	oth := &row.OriginTimestampCPutHelper{
+		OriginTimestamp: after.MvccTimestamp,
+		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
+		// and destination clusters.
+		ShouldWinTie: true,
+	}
+	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, oth, false)
 	return err
 }
 
@@ -356,8 +424,15 @@ func (p *kvTableWriter) deleteRow(
 
 	var ph row.PartialIndexUpdateHelper
 	// TODO(dt): support partial indexes.
+	oth := &row.OriginTimestampCPutHelper{
+		PreviousWasDeleted: before.IsDeleted(),
+		OriginTimestamp:    after.MvccTimestamp,
+		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
+		// and destination clusters.
+		ShouldWinTie: true,
+	}
 
-	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, false)
+	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, oth, false)
 }
 
 func (p *kvTableWriter) fillOld(vals cdcevent.Row) error {
@@ -375,11 +450,6 @@ func (p *kvTableWriter) fillOld(vals cdcevent.Row) error {
 func (p *kvTableWriter) fillNew(vals cdcevent.Row) error {
 	p.newVals = p.newVals[:0]
 	if err := vals.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		// TODO(dt): add indirection from col ID to offset.
-		if col.Name == originTimestampColumnName {
-			p.scratchTS.Decimal = eval.TimestampToDecimal(vals.MvccTimestamp)
-			d = &p.scratchTS
-		}
 		p.newVals = append(p.newVals, d)
 		return nil
 	}); err != nil {

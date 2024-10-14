@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -87,8 +82,7 @@ var (
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-		settings.WithName("server.shutdown.jobs.timeout"),
-		settings.WithPublic)
+		settings.WithName("server.shutdown.jobs.timeout"))
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -260,7 +254,7 @@ func delegateDrain(
 			if err == io.EOF {
 				break
 			}
-			if grpcutil.IsClosedConnection(err) {
+			if req.Shutdown && grpcutil.IsClosedConnection(err) {
 				// If the drain request contained Shutdown==true, it's
 				// possible for the RPC connection to the target node to be
 				// shut down before a DrainResponse and EOF is
@@ -332,6 +326,14 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
+	if s.sqlServer.sqlLivenessSessionID != "" {
+		// Set draining only if SQL instance was initialized
+		if err := s.sqlServer.sqlInstanceStorage.SetInstanceDraining(
+			ctx, s.sqlServer.sqlLivenessSessionID, s.sqlServer.SQLInstanceID()); err != nil {
+			return err
+		}
+	}
+
 	if s.serverCtl != nil {
 		// We are on a KV node, with a server controller.
 		//

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -142,6 +137,7 @@ const (
 	exprKindWhere
 	exprKindWindowFrameStart
 	exprKindWindowFrameEnd
+	exprKindWhen
 )
 
 var exprKindName = [...]string{
@@ -165,6 +161,7 @@ var exprKindName = [...]string{
 	exprKindWhere:             "WHERE",
 	exprKindWindowFrameStart:  "WINDOW FRAME START",
 	exprKindWindowFrameEnd:    "WINDOW FRAME END",
+	exprKindWhen:              "WHEN",
 }
 
 func (k exprKind) String() string {
@@ -566,6 +563,17 @@ func (s *scope) colList() opt.ColList {
 		colList[i] = s.cols[i].id
 	}
 	return colList
+}
+
+// forEachColWithExtras applies the given function to every column in the scope,
+// including extra columns.
+func (s *scope) forEachColWithExtras(fn func(col *scopeColumn)) {
+	for i := range s.cols {
+		fn(&s.cols[i])
+	}
+	for i := range s.extraCols {
+		fn(&s.extraCols[i])
+	}
 }
 
 // hasSameColumns returns true if this scope has the same columns

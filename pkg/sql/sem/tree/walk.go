@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -1074,31 +1069,9 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 	return ret
 }
 
-// copyNode makes a copy of this node without recursing.
-func (n *LikeTenantSpec) copyNode() *LikeTenantSpec {
-	nodeCopy := *n
-	return &nodeCopy
-}
-
-// copyNode makes a copy of this Statement without recursing in any child Statements.
-func (n *CreateTenant) copyNode() *CreateTenant {
-	stmtCopy := *n
-	return &stmtCopy
-}
-
 // walkStmt is part of the walkableStmt interface.
 func (n *CreateTenant) walkStmt(v Visitor) Statement {
 	ret := n
-	if n.Like.OtherTenant != nil {
-		ts, changed := walkTenantSpec(v, n.TenantSpec)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.Like = n.Like.copyNode()
-			ret.Like.OtherTenant = ts
-		}
-	}
 	return ret
 }
 
@@ -1143,16 +1116,6 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 			ret.Options.ExpirationWindow = e
 		}
 	}
-	if n.Like.OtherTenant != nil {
-		ts, changed := walkTenantSpec(v, n.TenantSpec)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.Like = n.Like.copyNode()
-			ret.Like.OtherTenant = ts
-		}
-	}
 	return ret
 }
 
@@ -1184,12 +1147,14 @@ func (n *ShowFingerprints) copyNode() *ShowFingerprints {
 // walkStmt is part of the walkableStmt interface.
 func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
 	ret := n
-	ts, changed := walkTenantSpec(v, n.TenantSpec)
-	if changed {
-		if ret == n {
-			ret = n.copyNode()
+	if n.TenantSpec != nil {
+		ts, changed := walkTenantSpec(v, n.TenantSpec)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.TenantSpec = ts
 		}
-		ret.TenantSpec = ts
 	}
 	if n.Options.StartTimestamp != nil {
 		e, changed := WalkExpr(v, n.Options.StartTimestamp)

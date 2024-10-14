@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -130,7 +125,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		// Now we know that the Store's Replica is identical to the passed-in
 		// Replica.
-		desc := rep.mu.state.Desc
+		desc := rep.shMu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 			// The ReplicaID of a Replica is immutable.
 			return nil, errors.AssertionFailedf("replica descriptor's ID has changed (%s >= %s)",

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -98,8 +93,11 @@ table_name NOT IN (
 	'kv_dropped_relations',
 	'kv_inherited_role_members',
 	'kv_flow_control_handles',
+	'kv_flow_control_handles_v2',
 	'kv_flow_controller',
+	'kv_flow_controller_v2',
 	'kv_flow_token_deductions',
+	'kv_flow_token_deductions_v2',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',
@@ -1201,4 +1199,54 @@ func TestZipJobTrace(t *testing.T) {
 	close(blockCh)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID2)
+}
+
+// This test the command flags values set during command execution.
+func TestCommandFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 --exclude-nodes=1" +
+		" --redact --nodes=1 --exclude-files=*.log --include-goroutine-stacks --include-running-job-traces " + dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := zip.OpenReader(dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range r.File {
+		if f.Name == "debug/debug_zip_command_flags.txt" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rc.Close()
+
+			actualFlags, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, " --concurrency=1 --cpu-profile-duration=0s --exclude-files=[*.log] --exclude-nodes=1"+
+				" --include-goroutine-stacks=true --include-running-job-traces=true --insecure=false --nodes=1 --redact=true",
+				string(actualFlags))
+			return
+		}
+	}
+	assert.Fail(t, "debug/debug_zip_command_flags.txt is not generated")
+
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

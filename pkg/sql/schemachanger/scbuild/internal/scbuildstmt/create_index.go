@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -136,7 +131,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 		))
 	}
-	panicIfSchemaIsLocked(relationElements)
+	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
 	// Inverted indexes do not support hash sharding or unique.
 	if n.Inverted {
@@ -573,7 +568,7 @@ func addColumnsForSecondaryIndex(
 			// Add column needs to support materialized views for the
 			// declarative schema changer to work.
 			fallbackIfRelationIsNotTable(n, relation)
-			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
+			colNameStr := maybeCreateVirtualColumnForIndex(b, n, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
 			if !expressionTelemtryCounted {
 				b.IncrementSchemaChangeIndexCounter("expression")
@@ -796,7 +791,13 @@ func maybeCreateAndAddShardCol(
 }
 
 func maybeCreateVirtualColumnForIndex(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, expr tree.Expr, inverted bool, lastColumn bool,
+	b BuildCtx,
+	stmt tree.Statement,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	expr tree.Expr,
+	inverted bool,
+	lastColumn bool,
 ) string {
 	validateColumnIndexableType := func(t *types.T) {
 		if t.IsAmbiguous() {
@@ -895,7 +896,7 @@ func maybeCreateVirtualColumnForIndex(
 		d.Type = typedExpr.ResolvedType()
 		validateColumnIndexableType(typedExpr.ResolvedType())
 	}
-	alterTableAddColumn(b, tn, tbl, &tree.AlterTableAddColumn{ColumnDef: d})
+	alterTableAddColumn(b, tn, tbl, stmt, &tree.AlterTableAddColumn{ColumnDef: d})
 	// When a virtual column for an index expression gets added for CREATE INDEX
 	// it must be inaccessible, so we will manipulate the newly added element to
 	// be inaccessible after going through the normal add column code path.

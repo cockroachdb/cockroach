@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -20,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -42,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -168,12 +166,29 @@ func TestTenantRateLimiter(t *testing.T) {
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	timeSource := timeutil.NewManualTime(t0)
 
+	// This test shouldn't take forever. If we're going to fail, better to
+	// do it in minutes than in an hour.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	// We're testing the server-side tenant rate limiter, but there is also a tenant-side one.
+	// That one actually throttles too in this test (making it take 10+s) unless we work around that.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
+	var numAcquired atomic.Int32
+	acqFunc := func(
+		ctx context.Context, poolName string, r quotapool.Request, start time.Time,
+	) {
+		numAcquired.Add(1)
+	}
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TenantRateKnobs: tenantrate.TestingKnobs{
-					TimeSource: timeSource,
+					QuotaPoolOptions: []quotapool.Option{
+						quotapool.WithTimeSource(timeSource),
+						quotapool.OnAcquisition(acqFunc),
+					},
 				},
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
@@ -186,7 +201,6 @@ func TestTenantRateLimiter(t *testing.T) {
 			},
 		},
 	})
-	ctx := context.Background()
 	tenantID := serverutils.TestTenantID()
 	ts, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
@@ -230,54 +244,120 @@ func TestTenantRateLimiter(t *testing.T) {
 	cfg := tenantrate.ConfigFromSettings(&s.ClusterSettings().SV)
 
 	// We don't know the exact size of the write, but we can set lower and upper
-	// bounds.
-	writeCostLower := cfg.WriteBatchUnits + cfg.WriteRequestUnits
-	writeCostUpper := cfg.WriteBatchUnits + cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
-	tolerance := 50.0 // Leave space for a couple of other background requests.
-	// burstWrites is a number of writes that don't exceed the burst limit.
-	burstWrites := int((cfg.Burst - tolerance) / writeCostUpper)
-	// tooManyWrites is a number of writes which definitely exceed the burst
-	// limit.
-	tooManyWrites := int(cfg.Burst/writeCostLower) + 2
+	// bounds for a "small" (up to 32 bytes) request.
 
-	// This test shouldn't take forever. If we're going to fail, better to
-	// do it in minutes than in an hour.
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
+	// If we put at least that many bytes into a single put, it should consume at
+	// least one percent of the configured burst, meaning if we send 100 such requests
+	// we should expect blocking. (We may block earlier due to background writes
+	// sneaking in).
+	//
+	// The below is based on the equation
+	//
+	//   cost = WriteBatchUnits + WriteRequestUnits + bytes * WriteUnitsPerByte.
+	//
+	// and solving for the case in which cost is a percent of Burst.
+	numBytesForAtLeastOnePercentOfBurst := int((cfg.Burst/100 - cfg.WriteBatchUnits - cfg.WriteRequestUnits) / cfg.WriteUnitsPerByte)
+	require.NotZero(t, numBytesForAtLeastOnePercentOfBurst)
+	t.Logf("bytes for one percent of burst: %d", numBytesForAtLeastOnePercentOfBurst)
+	atLeastOnePercentValue := strings.Repeat("x", numBytesForAtLeastOnePercentOfBurst)
+
+	// Spawn a helper that will detect if the rate limiter is blocking us.
+	// This prevents cases where the test would stall and fail opaquely instead
+	// of making it clear that writes on the main goroutine blocked unexpectedly.
+	watcher := func(ctx context.Context, t *testing.T, msg string) (_ context.Context, cancel func()) {
+		t.Helper()
+		t.Logf("testing: %v", msg)
+		ctx, cancel = context.WithCancel(ctx)
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Second):
+					t.Logf("total acquisitions: %d", numAcquired.Load())
+				}
+				if !assert.Len(t, timeSource.Timers(), 0, msg) {
+					cancel()
+				}
+			}
+		}()
+		return ctx, cancel
+	}
 
 	// Make sure that writes to the system tenant don't block, even if we
 	// definitely exceed the burst rate.
-	for i := 0; i < tooManyWrites; i++ {
-		require.NoError(t, db.Put(ctx, mkKey(), 0))
+	{
+		ctx, cancel := watcher(ctx, t, "system tenant should not be rate limited")
+		defer cancel()
+
+		for i := 0; i < 100; i++ {
+			require.NoError(t, db.Put(ctx, mkKey(), atLeastOnePercentValue))
+		}
+		cancel()
 	}
 	timeSource.Advance(time.Second)
 	// Now ensure that in the same instant the write QPS limit does affect the
-	// tenant. First issue requests that can happen without blocking.
-	for i := 0; i < burstWrites; i++ {
-		require.NoError(t, ts.DB().Put(ctx, mkKey(), 0))
+	// tenant. First issue a handful of small requests, which should not block
+	// as we can send ~100 larger requests before running out of burst budget.
+	//
+	// In the past, this test was trying to get very close to cfg.Burst without
+	// blocking, but that is quite brittle because there are dozens of background
+	// writes that sneak in during an average test run. So we are now intentionally
+	// staying very far from running out of burst.
+	{
+		ctx, cancel := watcher(ctx, t, "first writes should not experience blocking")
+		defer cancel()
+
+		for i := 0; i < 5; i++ {
+			require.NoError(t, ts.DB().Put(ctx, mkKey(), 0))
+		}
+		cancel()
 	}
-	// Attempt to issue another request, make sure that it gets blocked by
-	// observing a timer.
+	// Now intentionally break through the burst and make sure this blocks.
+	// We observe blocking by noticing that a timer was created via the custom
+	// timeSource which we only handed to the tenant rate limiter.
+	t.Logf("testing: requests should eventually block")
 	errCh := make(chan error, 1)
+	// doneCh is closed once we've verified blocking and have unblocked.
+	// This prevents the additional writes from potentially running into
+	// blocking again.
+	doneCh := make(chan struct{})
 	go func() {
 		// Issue enough requests so that one has to block.
-		for i := burstWrites; i < tooManyWrites; i++ {
-			if err := ts.DB().Put(ctx, mkKey(), 0); err != nil {
+		ev := log.Every(100 * time.Millisecond)
+		for i := 0; i < 100; i++ {
+			if ev.ShouldLog() {
+				t.Logf("put %d", i+1)
+			}
+			if err := ts.DB().Put(ctx, mkKey(), atLeastOnePercentValue); err != nil {
 				errCh <- err
 				return
 			}
+			select {
+			default:
+			case <-doneCh:
+				errCh <- nil
+				return
+			}
 		}
-		errCh <- nil
+		t.Error("never blocked")
+		errCh <- errors.New("never blocked")
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
-		timers := timeSource.Timers()
-		if len(timers) != 1 {
-			return errors.Errorf("seeing %d timers: %v", len(timers), timers)
+		if len(timeSource.Timers()) == 0 {
+			return errors.Errorf("not seeing any timers")
 		}
 		return nil
 	})
+	t.Log("blocking confirmed")
 
+	// Allow the blocked request to proceed.
+	close(doneCh) // close first so that goroutine terminates once unblocked
+	timeSource.Advance(time.Second)
+	require.NoError(t, <-errCh)
+
+	t.Log("checking metrics")
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
 	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
@@ -292,30 +372,28 @@ func TestTenantRateLimiter(t *testing.T) {
 		return string(read)
 	}
 
-	// Allow the blocked request to proceed.
-	timeSource.Advance(time.Second)
-	require.NoError(t, <-errCh)
-
 	// Ensure that the metric for the admitted requests reflects the number of
-	// admitted requests.
-	// TODO(radu): this is fragile because a background write could sneak in and
-	// the count wouldn't match exactly.
+	// admitted requests. We run only shallow checks here due to background writes.
 	m := getMetrics()
 	lines := strings.Split(m, "\n")
-	tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
+	tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",node_id="1",tenant_id="%d"}`, tenantID.ToUint64())
 	re := regexp.MustCompile(tenantMetricStr + ` (\d*)`)
+	var matched bool
 	for _, line := range lines {
 		match := re.FindStringSubmatch(line)
 		if match != nil {
+			matched = true
 			admittedMetricVal, err := strconv.Atoi(match[1])
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, admittedMetricVal, tooManyWrites)
-			// Allow a tolerance for other requests performed while starting the
-			// tenant server.
-			require.Less(t, admittedMetricVal, tooManyWrites+400)
+			// The background chatter alone tends to put north of 100 writes in.
+			// But let's be conservative and not rely on that. Our blocking writes should
+			// get at least 50 in (we know 100 result in blocking). We can't and shouldn't
+			// add tighter checks here because they're a nightmare to debug should they fail.
+			require.GreaterOrEqual(t, admittedMetricVal, 50)
 			break
 		}
 	}
+	require.True(t, matched, "did not match %s:\n\n%s", tenantMetricStr, m)
 }
 
 // Test that KV requests made by a tenant get a context annotated with the tenant ID.

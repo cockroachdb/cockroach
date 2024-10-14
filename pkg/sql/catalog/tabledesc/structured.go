@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tabledesc
 
@@ -237,8 +232,11 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 
 // ForEachExprStringInTableDesc runs a closure for each expression string
 // within a TableDescriptor. The closure takes in a string pointer so that
-// it can mutate the TableDescriptor if desired.
-func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *string) error) error {
+// it can mutate the TableDescriptor if desired. It also takes SerializedExprTyp
+// to indicate the type of the expression.
+func ForEachExprStringInTableDesc(
+	descI catalog.TableDescriptor, f func(expr *string, typ catalog.DescExprType) error,
+) error {
 	var desc *wrapper
 	switch descV := descI.(type) {
 	case *wrapper:
@@ -253,17 +251,17 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	// Helpers for each schema element type that can contain an expression.
 	doCol := func(c *descpb.ColumnDescriptor) error {
 		if c.HasDefault() {
-			if err := f(c.DefaultExpr); err != nil {
+			if err := f(c.DefaultExpr, catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if c.IsComputed() {
-			if err := f(c.ComputeExpr); err != nil {
+			if err := f(c.ComputeExpr, catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
 		if c.HasOnUpdate() {
-			if err := f(c.OnUpdateExpr); err != nil {
+			if err := f(c.OnUpdateExpr, catalog.SQLExpr); err != nil {
 				return err
 			}
 		}
@@ -271,18 +269,29 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	}
 	doIndex := func(i catalog.Index) error {
 		if i.IsPartial() {
-			return f(&i.IndexDesc().Predicate)
+			return f(&i.IndexDesc().Predicate, catalog.SQLExpr)
 		}
 		return nil
 	}
 	doCheck := func(c *descpb.TableDescriptor_CheckConstraint) error {
-		return f(&c.Expr)
+		return f(&c.Expr, catalog.SQLExpr)
 	}
 	doUwi := func(uwi *descpb.UniqueWithoutIndexConstraint) error {
 		if uwi.Predicate != "" {
-			return f(&uwi.Predicate)
+			return f(&uwi.Predicate, catalog.SQLExpr)
 		}
 		return nil
+	}
+	doTrigger := func(t *descpb.TriggerDescriptor) error {
+		if t.WhenExpr != "" {
+			if err := f(&t.WhenExpr, catalog.SQLExpr); err != nil {
+				return err
+			}
+		}
+		if t.FuncBody == "" {
+			panic(errors.AssertionFailedf("expected non-empty trigger function body"))
+		}
+		return f(&t.FuncBody, catalog.PLpgSQLStmt)
 	}
 
 	// Process columns.
@@ -335,7 +344,35 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 			}
 		}
 	}
+
+	// Process all triggers.
+	for i := range desc.Triggers {
+		if err := doTrigger(&desc.Triggers[i]); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// GetAllReferencedTableIDs implements the TableDescriptor interface.
+func (desc *wrapper) GetAllReferencedTableIDs() descpb.IDs {
+	var ids catalog.DescriptorIDSet
+
+	// Collect referenced table IDs in foreign keys.
+	for _, fk := range desc.OutboundForeignKeys() {
+		ids.Add(fk.GetReferencedTableID())
+	}
+	for _, fk := range desc.InboundForeignKeys() {
+		ids.Add(fk.GetOriginTableID())
+	}
+	// Add trigger dependencies.
+	for i := range desc.Triggers {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+	}
+	// Add view dependencies.
+	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
+
+	return ids.Ordered()
 }
 
 // GetAllReferencedTypeIDs implements the TableDescriptor interface.
@@ -356,6 +393,11 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 			return nil, nil, err
 		}
 		ids.Add(regionEnumID)
+	}
+
+	// Add type dependencies from triggers.
+	for i := range desc.Triggers {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnTypes...))
 	}
 
 	// Add any other type dependencies that are not
@@ -382,6 +424,10 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 			ret.Add(id)
 		}
 	}
+	// Add routine dependencies from triggers.
+	for i := range desc.Triggers {
+		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnRoutines...))
+	}
 	// TODO(chengxiong): add logic to extract references from indexes when UDFs
 	// are allowed in them.
 	return ret.Union(catalog.MakeDescriptorIDSet(desc.DependsOnFunctions...)), nil
@@ -402,6 +448,18 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInConstraint(
 		return catalog.DescriptorIDSet{}, err
 	}
 	return ret, nil
+}
+
+// GetAllReferencedFunctionIDsInTrigger implements the TableDescriptor
+// interface.
+func (desc *wrapper) GetAllReferencedFunctionIDsInTrigger(
+	triggerID descpb.TriggerID,
+) (fnIDs catalog.DescriptorIDSet) {
+	t := catalog.FindTriggerByID(desc, triggerID)
+	for _, id := range t.DependsOnRoutines {
+		fnIDs.Add(id)
+	}
+	return fnIDs
 }
 
 // GetAllReferencedFunctionIDsInColumnExprs implements the TableDescriptor
@@ -441,7 +499,7 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInColumnExprs(
 // show for it is a REGIONAL BY TABLE table (homed in the non-primary region).
 // These use a value from the multi-region enum to denote the homing region, but
 // do so in the locality config as opposed to through a column.
-// GetAllReferencedTypesByID accounts for this dependency.
+// GetAllReferencedTypeIDs accounts for this dependency.
 func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	getType func(descpb.ID) (catalog.TypeDescriptor, error),
 ) (ret catalog.DescriptorIDSet, _ error) {
@@ -451,7 +509,11 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 		OIDs: make(map[oid.Oid]struct{}),
 	}
 
-	addOIDsInExpr := func(exprStr *string) error {
+	addOIDsInExpr := func(exprStr *string, typ catalog.DescExprType) error {
+		if typ != catalog.SQLExpr {
+			// Skip trigger function bodies.
+			return nil
+		}
 		expr, err := parser.ParseExpr(*exprStr)
 		if err != nil {
 			return err
@@ -2215,12 +2277,31 @@ func (desc *wrapper) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
 
 // IndexSpan implements the TableDescriptor interface.
 func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roachpb.Span {
+	if desc.External != nil {
+		panic(errors.AssertionFailedf("%s uses external row data", desc.Name))
+	}
 	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), indexID))
+	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+}
+
+// IndexSpanAllowingExternalRowData implements the TableDescriptor interface.
+func (desc *wrapper) IndexSpanAllowingExternalRowData(
+	codec keys.SQLCodec, indexID descpb.IndexID,
+) roachpb.Span {
+	tableID := desc.GetID()
+	if desc.External != nil {
+		codec = keys.MakeSQLCodec(desc.External.TenantID)
+		tableID = desc.External.TableID
+	}
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, tableID, indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
 // TableSpan implements the TableDescriptor interface.
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
+	if desc.External != nil {
+		panic(errors.AssertionFailedf("%s uses external row data", desc.Name))
+	}
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
@@ -2329,6 +2410,13 @@ func (desc *Mutable) SetDropped() {
 func (desc *Mutable) SetOffline(reason string) {
 	desc.State = descpb.DescriptorState_OFFLINE
 	desc.OfflineReason = reason
+}
+
+func (desc *Mutable) SetExternalRowData(ext *descpb.ExternalRowData) {
+	// Do not set materialized views for sequences, they will
+	// handle this on their own.
+	desc.IsMaterializedView = !desc.IsSequence()
+	desc.External = ext
 }
 
 // IsLocalityRegionalByRow implements the TableDescriptor interface.
@@ -2567,6 +2655,11 @@ func (desc *wrapper) HistogramBucketsCount() (histogramBucketsCount uint32, ok b
 	return *desc.HistogramBuckets, true
 }
 
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (desc *wrapper) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedPCRVersion
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
 // (or its alias PrimaryRegionNotSpecifiedName) denotes that the table is homed in
@@ -2666,4 +2759,18 @@ func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.Tabl
 		}
 	}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
+}
+
+// BumpExternalAsOf increases the timestamp for external data row tables.
+func (desc *Mutable) BumpExternalAsOf(timestamp hlc.Timestamp) error {
+	if desc.External == nil {
+		return errors.AssertionFailedf("cannot advanced timestamp on a real table (%d)", desc.GetID())
+	}
+	if timestamp.Less(desc.External.AsOf) {
+		return errors.AssertionFailedf("new timestamp (%s) is less than the existing as of timestamp (%s)",
+			timestamp,
+			desc.External.AsOf)
+	}
+	desc.External.AsOf = timestamp
+	return nil
 }

@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 //go:build lint
 // +build lint
@@ -43,23 +38,15 @@ import (
 
 // Various copyright file headers we lint on.
 var (
-	bslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
+	cslHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 `)
-	cclHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License \(the "License"\); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+	cslHeaderHash = regexp.MustCompile(`# Copyright 20\d\d The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 `)
 
 	apacheHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
@@ -88,8 +75,8 @@ var (
 	// cockroachModifiedCopyright is a header that's required to be added any
 	// time a file with etcdApacheHeader is modified by authors from CRL.
 	cockroachModifiedCopyright = regexp.MustCompile(
-		`// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
+		`// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 20\d\d The Cockroach Authors.`)
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
@@ -280,15 +267,20 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestCopyrightHeaders", func(t *testing.T) {
+	t.Run("TestCopyrightHeadersWithSlash", func(t *testing.T) {
 		t.Parallel()
 
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
-			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
+			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.scss", "*.styl", "*.proto", "*.rl",
+		}
+		fullExtensions := make([]string, len(extensions)*2)
+		for i, extension := range extensions {
+			fullExtensions[i*2] = "build/**/" + extension
+			fullExtensions[i*2+1] = "pkg/**/" + extension
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{"ls-files"}, extensions...)...)
+		cmd, stderr, filter, err := dirCmd(crdbDir, "git", append([]string{"ls-files"}, fullExtensions...)...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,17 +299,14 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`/embedded.go`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
-			// The opentelemetry-proto files are copied from otel with their own
-			// license.
-			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
 			// These files are copied from raft upstream with its own license.
-			stream.GrepNot(`^raft/.*`),
+			stream.GrepNot(`^pkg/raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
-			file, err := os.Open(filepath.Join(pkgDir, filename))
+			file, err := os.Open(filepath.Join(crdbDir, filename))
 			if err != nil {
 				t.Error(err)
 				return
@@ -330,21 +319,55 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isCCL := strings.Contains(filename, "ccl/")
-			isApache := strings.HasPrefix(filename, "obsservice")
-			switch {
-			case isCCL:
-				if cclHeader.Find(data) == nil {
-					t.Errorf("did not find expected CCL license header in %s", filename)
-				}
-			case isApache:
-				if apacheHeader.Find(data) == nil {
-					t.Errorf("did not find expected Apache license header in %s", filename)
-				}
-			default:
-				if bslHeader.Find(data) == nil {
-					t.Errorf("did not find expected BSL license header in %s", filename)
-				}
+			if cslHeader.Find(data) == nil {
+				t.Errorf("did not find expected CSL license header in %s", filename)
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestCopyrightHeadersWithHash", func(t *testing.T) {
+		t.Parallel()
+
+		// These extensions identify source files that should have copyright headers.
+		extensions := []string{"GNUmakefile", "Makefile", "*.py", "*.sh"}
+
+		cmd, stderr, filter, err := dirCmd(crdbDir, "git", append([]string{"ls-files"}, extensions...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(filter,
+			stream.GrepNot(`^c-deps/.*`),
+			// These files are copied from raft upstream with its own license.
+			stream.GrepNot(`^raft/.*`),
+		), func(filename string) {
+			file, err := os.Open(filepath.Join(crdbDir, filename))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer file.Close()
+			data := make([]byte, 1024)
+			n, err := file.Read(data)
+			if err != nil {
+				t.Errorf("reading start of %s: %s", filename, err)
+			}
+			data = data[0:n]
+
+			if cslHeaderHash.Find(data) == nil {
+				t.Errorf("did not find expected CSL license header in %s", filename)
 			}
 		}); err != nil {
 			t.Fatal(err)
@@ -418,14 +441,15 @@ func TestLint(t *testing.T) {
 			data = data[0:n]
 			if _, ok := added[filename]; ok {
 				// Typically, any new file that is added will include a
-				// Cockroach BSL header. However, if most of it isn't new code,
-				// and is moved from an existing etcd forked file, the author
-				// may consider it as modified; the linter is liberal enough to
-				// allow either of these.
-				assert.True(t, (bslHeader.Find(data) != nil) ||
+				// CockroachDB Software Licens header. However, if most of it isn't
+				// new code, and is moved from an existing etcd forked file, the
+				// author may consider it as modified; the linter is liberal enough
+				// to allow either of these.
+				assert.True(t, (cslHeader.Find(data) != nil) ||
 					(etcdApacheHeader.Find(data) != nil && cockroachModifiedCopyright.Find(data) != nil),
-					"did not find expected either Cockroach BSL license header or Apache "+
-						"license header and Cockroach copyright header in %s", filename)
+					"did not find expected a) CockroachDB Software License header or b) "+
+						"Apache license header and Cockroach copyright header in %s",
+					filename)
 			} else {
 				assert.NotNilf(t, etcdApacheHeader.Find(data),
 					"did not find expected Apache license header in %s", filename)
@@ -1207,8 +1231,6 @@ func TestLint(t *testing.T) {
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
-			":!obsservice/cmd/obsservice/main.go",
-			":!obsservice/obslib/ingest/ingest_test.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {
@@ -1448,6 +1470,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!storage/mvcc_value.go",
+			":!roachpb/data.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
@@ -1835,11 +1858,18 @@ func TestLint(t *testing.T) {
 			pkgs, err := packages.Load(
 				&packages.Config{
 					Mode: packages.NeedImports | packages.NeedName,
+					Dir:  crdbDir,
 				},
 				pkgPath,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "error loading package %s", pkgPath)
+			}
+			// NB: if no packages were found, this API confusingly
+			// returns no error, so we need to explicitly check that
+			// something was returned.
+			if len(pkgs) == 0 {
+				return errors.Newf("could not list packages under %s", pkgPath)
 			}
 			for _, pkg := range pkgs {
 				for _, s := range pkg.Imports {
@@ -1860,6 +1890,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/build/bazel/util/tinystringer: errors$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/build/engflow: github\.com/golang/protobuf/proto$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/build/engflow: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/grpcutil: github\.com/cockroachdb\/errors\/errbase$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/future: github\.com/cockroachdb\/errors\/errbase$`),
 			stream.GrepNot(`cockroach/pkg/roachprod/install: syscall$`), // TODO: switch to sysutil
@@ -1873,6 +1904,10 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroachdb/cockroach/pkg/kv/kvpb/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/log/gen: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
+			// See #132262.
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/raft/raftlogger: log$`),
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/raft/rafttest: log$`),
+			stream.GrepNot(`github.com/cockroachdb/cockroach/pkg/workload/debug: log$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
 			importingPkg, importedPkg := pkgStr[0], pkgStr[1]

@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scpb
 
@@ -39,7 +34,7 @@ type HumanReadableNameProvider interface {
 	// to a placeholder if none was found.
 	FamilyName(relationID catid.DescID, familyID catid.FamilyID) string
 
-	// ConstraintName returns the name mapped to a family ID, falling back
+	// ConstraintName returns the name mapped to a constraint ID, falling back
 	// to a placeholder if none was found.
 	ConstraintName(relationID catid.DescID, constraintID catid.ConstraintID) string
 }

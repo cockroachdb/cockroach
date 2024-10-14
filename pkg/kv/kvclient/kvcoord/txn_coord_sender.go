@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -842,13 +837,6 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 
 	case *kvpb.WriteTooOldError:
 		tc.metrics.RestartsWriteTooOld.Inc()
-		// Also increment the deprecated "txn.restarts.writetoooldmulti" metric.
-		// We preserve this for one release to avoid confusion in mixed-version
-		// clusters.
-		// TODO(nvanbenschoten): remove this when compatibility with v23.2 is no
-		// longer needed. At the same time, also remove the corresponding metric
-		// from the "Transaction Restarts" graph in the SQL Dashboard.
-		tc.metrics.RestartsWriteTooOldMulti.Inc()
 
 	case *kvpb.ReadWithinUncertaintyIntervalError:
 		tc.metrics.RestartsReadWithinUncertainty.Inc()

@@ -1,3 +1,7 @@
+init term=5
+----
+ok
+
 track
 term=1 index=10 tokens=100 pri=LowPri
 term=1 index=20 tokens=200 pri=NormalPri
@@ -39,6 +43,58 @@ NormalPri:
 HighPri:
   term=1 index=30 tokens=300
 
+# The inspect state should match up with the formatted state printed above.
+inspect
+----
+{
+  "priority": -128,
+  "tokens": "100",
+  "raft_log_position": {
+    "term": "1",
+    "index": "10"
+  }
+}
+{
+  "priority": -128,
+  "tokens": "400",
+  "raft_log_position": {
+    "term": "2",
+    "index": "40"
+  }
+}
+{
+  "priority": -128,
+  "tokens": "400",
+  "raft_log_position": {
+    "term": "2",
+    "index": "51"
+  }
+}
+{
+  "priority": 0,
+  "tokens": "200",
+  "raft_log_position": {
+    "term": "1",
+    "index": "20"
+  }
+}
+{
+  "priority": 0,
+  "tokens": "500",
+  "raft_log_position": {
+    "term": "2",
+    "index": "50"
+  }
+}
+{
+  "priority": 127,
+  "tokens": "300",
+  "raft_log_position": {
+    "term": "1",
+    "index": "30"
+  }
+}
+
 track
 term=3 index=60 tokens=600 pri=HighPri
 term=3 index=70 tokens=700 pri=LowPri
@@ -60,14 +116,26 @@ HighPri:
   term=1 index=30 tokens=300
   term=3 index=60 tokens=600
 
-untrack term=2
+# Stale leader term, untrack returns nothing.
+untrack term=4 eval-tokens-ge-index=40
+LowPri=45
+----
+
+# Newer leader term. Currently we return nothing, but we could also return all
+# the tokens.
+untrack term=6 eval-tokens-ge-index=40
+LowPri=45
+----
+
+# For the right-term admitted vector, untrack returns only the tokens covered by
+# the admitted indices at the corresponding priorities.
+untrack term=5 eval-tokens-ge-index=40
 LowPri=45
 NormalPri=0
 HighPri=0
 ----
-returned: tokens=500  pri=LowPri
-returned: tokens=200  pri=NormalPri
-returned: tokens=300  pri=HighPri
+send returned: tokens=500  pri=LowPri
+eval returned: tokens=400  pri=LowPri
 
 state
 ----
@@ -75,44 +143,67 @@ LowPri:
   term=2 index=51 tokens=400
   term=3 index=70 tokens=700
 NormalPri:
+  term=1 index=20 tokens=200
   term=2 index=50 tokens=500
 HighPri:
+  term=1 index=30 tokens=300
   term=3 index=60 tokens=600
 
-# Untrack with a higher term.
-untrack term=3
+untrack term=5 eval-tokens-ge-index=51
 NormalPri=60
 HighPri=60
 ----
-returned: tokens=400  pri=LowPri
-returned: tokens=500  pri=NormalPri
-returned: tokens=600  pri=HighPri
+send returned: tokens=700  pri=NormalPri
+send returned: tokens=900  pri=HighPri
+eval returned: tokens=600  pri=HighPri
 
 state
 ----
 LowPri:
+  term=2 index=51 tokens=400
   term=3 index=70 tokens=700
 
-untrack_ge index=40
+# The inspect state should match up with the formatted state printed above.
+inspect
 ----
-returned: tokens=700  pri=LowPri
-
-state
-----
+{
+  "priority": -128,
+  "tokens": "400",
+  "raft_log_position": {
+    "term": "2",
+    "index": "51"
+  }
+}
+{
+  "priority": -128,
+  "tokens": "700",
+  "raft_log_position": {
+    "term": "3",
+    "index": "70"
+  }
+}
 
 untrack_all
 ----
+send returned: tokens=1100 pri=LowPri
 
+# Everything is returned.
 state
 ----
 
 # Test tracking and untracking with different terms
+init term=5
+----
+ok
+
 track
 term=4 index=80 tokens=800 pri=NormalPri
+term=4 index=85 tokens=800 pri=NormalPri
 term=5 index=90 tokens=900 pri=NormalPri
 term=5 index=100 tokens=999 pri=HighPri
 ----
 tracked: term=4 index=80 tokens=800 pri=NormalPri
+tracked: term=4 index=85 tokens=800 pri=NormalPri
 tracked: term=5 index=90 tokens=900 pri=NormalPri
 tracked: term=5 index=100 tokens=999 pri=HighPri
 
@@ -120,29 +211,33 @@ state
 ----
 NormalPri:
   term=4 index=80 tokens=800
+  term=4 index=85 tokens=800
   term=5 index=90 tokens=900
 HighPri:
   term=5 index=100 tokens=999
 
-untrack term=4
+untrack term=5 eval-tokens-ge-index=80
 NormalPri=95
 HighPri=95
 ----
-returned: tokens=800  pri=NormalPri
+send returned: tokens=2500 pri=NormalPri
+eval returned: tokens=2500 pri=NormalPri
 
 state
 ----
-NormalPri:
-  term=5 index=90 tokens=900
 HighPri:
   term=5 index=100 tokens=999
 
 untrack_all
 ----
-returned: tokens=900  pri=NormalPri
-returned: tokens=999  pri=HighPri
+send returned: tokens=999  pri=HighPri
 
 state
+----
+
+# The inspect state should match up with the formatted state printed above
+# (nothing).
+inspect
 ----
 
 # vim:ft=sh

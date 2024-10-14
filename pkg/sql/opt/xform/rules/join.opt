@@ -152,13 +152,11 @@
     $on:* &
         (Let
             (
-                $firstJoin
-                $secondJoin
-                $newRelationCols
-                $aggCols
-                $groupingCols
+                $firstOnClause
+                $secondOnClause
+                $itemToReplace
                 $ok
-            ):(SplitJoinWithDisjuncts (Root) $on)
+            ):(CanSplitJoinWithDisjuncts (Root) $on)
             $ok
         )
     *
@@ -167,7 +165,22 @@
 (Project
     (DistinctOn
         (UnionAll
-            $firstJoin
+            (Let
+                (
+                    $firstJoin
+                    $secondJoin
+                    $newRelationCols
+                    $aggCols
+                    $groupingCols
+                ):(SplitJoinWithDisjuncts
+                    (Root)
+                    $on
+                    $firstOnClause
+                    $secondOnClause
+                    $itemToReplace
+                )
+                $firstJoin
+            )
             $secondJoin
             (MakeSetPrivate
                 $firstJoinCols:(OutputCols $firstJoin)
@@ -195,22 +208,34 @@
     $on:* &
         (Let
             (
-                $firstJoin
-                $secondJoin
-                $newRelationCols
-                $aggCols
-                $groupingCols
+                $firstOnClause
+                $secondOnClause
+                $itemToReplace
                 $ok
-            ):(SplitJoinWithDisjuncts (Root) $on)
+            ):(CanSplitJoinWithDisjuncts (Root) $on)
             $ok
         )
-    *
 )
 =>
 (Project
     (DistinctOn
         (IntersectAll
-            $firstJoin
+            (Let
+                (
+                    $firstJoin
+                    $secondJoin
+                    $newRelationCols
+                    $aggCols
+                    $groupingCols
+                ):(SplitJoinWithDisjuncts
+                    (Root)
+                    $on
+                    $firstOnClause
+                    $secondOnClause
+                    $itemToReplace
+                )
+                $firstJoin
+            )
             $secondJoin
             (MakeSetPrivate
                 $firstJoinCols:(OutputCols $firstJoin)

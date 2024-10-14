@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -94,14 +91,14 @@ type DeadLetterQueueClient interface {
 	) error
 }
 
-type loggingDeadLetterQueueClient struct {
+type noopDeadLetterQueueClient struct {
 }
 
-func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context) error {
+func (dlq *noopDeadLetterQueueClient) Create(_ context.Context) error {
 	return nil
 }
 
-func (dlq *loggingDeadLetterQueueClient) Log(
+func (dlq *noopDeadLetterQueueClient) Log(
 	ctx context.Context,
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
@@ -137,13 +134,13 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
-	ie                   isql.Executor
-	srcTableIDToDestMeta map[descpb.ID]dstTableMetadata
+	ie               isql.Executor
+	destTableBySrcID map[descpb.ID]dstTableMetadata
 }
 
 func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 	// Create a dlq table for each table to be replicated.
-	for _, dstTableMeta := range dlq.srcTableIDToDestMeta {
+	for _, dstTableMeta := range dlq.destTableBySrcID {
 		dlqTableName := dstTableMeta.toDLQTableName()
 		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-schema", nil, createSchemaStmt); err != nil {
@@ -169,7 +166,7 @@ func (dlq *deadLetterQueueClient) Log(
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
 	reason error,
-	stoppedRetyingReason retryEligibility,
+	stoppedRetryingReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
@@ -177,11 +174,11 @@ func (dlq *deadLetterQueueClient) Log(
 
 	// TableID in cdcEventRow is the source table ID.
 	srcTableID := cdcEventRow.TableID
-	dstTableMd, ok := dlq.srcTableIDToDestMeta[srcTableID]
+	dstTableMeta, ok := dlq.destTableBySrcID[srcTableID]
 	if !ok {
-		return errors.Newf("failed to look up fully qualified name for table %d", dstTableMd.tableID)
+		return errors.Newf("failed to look up fully qualified name for src table id %d", srcTableID)
 	}
-	dlqTableName := dstTableMd.toDLQTableName()
+	dlqTableName := dstTableMeta.toDLQTableName()
 
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
@@ -205,8 +202,8 @@ func (dlq *deadLetterQueueClient) Log(
 			nil, /* txn */
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
-			dstTableMd.tableID,
-			fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+			dstTableMeta.tableID,
+			fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 			mutationType.String(),
 			bytes,
 		); err != nil {
@@ -221,8 +218,8 @@ func (dlq *deadLetterQueueClient) Log(
 		nil, /* txn */
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
-		dstTableMd.tableID,
-		fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+		dstTableMeta.tableID,
+		fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 		mutationType.String(),
 		bytes,
 		jsonRow,
@@ -233,14 +230,14 @@ func (dlq *deadLetterQueueClient) Log(
 }
 
 func InitDeadLetterQueueClient(
-	ie isql.Executor, srcTableIDToDestMeta map[descpb.ID]dstTableMetadata,
+	ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
 ) DeadLetterQueueClient {
 	if testingDLQ != nil {
 		return testingDLQ
 	}
 	return &deadLetterQueueClient{
-		ie:                   ie,
-		srcTableIDToDestMeta: srcTableIDToDestMeta,
+		ie:               ie,
+		destTableBySrcID: destTableBySrcID,
 	}
 }
 
@@ -254,6 +251,6 @@ func TestingSetDLQ(d DeadLetterQueueClient) func() {
 	return func() { testingDLQ = v }
 }
 
-func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
-	return &loggingDeadLetterQueueClient{}
+func InitNoopDeadLetterQueueClient() DeadLetterQueueClient {
+	return &noopDeadLetterQueueClient{}
 }

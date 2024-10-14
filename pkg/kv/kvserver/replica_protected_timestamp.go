@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -68,7 +63,7 @@ func (r *Replica) readProtectedTimestampsRLocked(
 	ctx context.Context,
 ) (ts cachedProtectedTimestampState, _ error) {
 	desc := r.descRLocked()
-	gcThreshold := *r.mu.state.GCThreshold
+	gcThreshold := *r.shMu.state.GCThreshold
 
 	sp := roachpb.Span{
 		Key:    roachpb.Key(desc.StartKey),
@@ -126,8 +121,8 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	defer r.mu.RUnlock()
 	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
 
-	oldThreshold = *r.mu.state.GCThreshold
-	lease := *r.mu.state.Lease
+	oldThreshold = *r.shMu.state.GCThreshold
+	lease := *r.shMu.state.Lease
 
 	// read.earliestRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.

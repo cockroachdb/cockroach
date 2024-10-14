@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -42,7 +37,9 @@ func registerGossip(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-		err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), 1))
+		conn := c.Conn(ctx, t.L(), 1)
+		defer conn.Close()
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn)
 		require.NoError(t, err)
 
 		gossipNetworkAccordingTo := func(node int) (nodes []int) {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests_test
 
@@ -63,7 +58,7 @@ func TestCreateRandomSchema(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	for i := 0; i < 100; i++ {
-		createTable := randgen.RandCreateTable(ctx, rng, "table", i, false /* isMultiRegion */)
+		createTable := randgen.RandCreateTable(ctx, rng, "table", i, randgen.TableOptNone)
 		setDb(t, db, "test")
 		_, err := db.Exec(toStr(createTable))
 		if err != nil {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -29,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -202,7 +196,7 @@ func setupTPCC(
 			require.NoError(t, enableIsolationLevels(ctx, t, db))
 		}
 
-		require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
+		require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 		estimatedSetupTimeStr := ""
 		if opts.EstimatedSetupTime != 0 {
@@ -675,7 +669,7 @@ func registerTPCC(r registry.Registry) {
 				// Increase the vmodule level around transaction pushes so that if we do
 				// see a transaction retry error, we can debug it. This may affect perf,
 				// so we should not use this as a performance test.
-				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2"},
+				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2,lock_table_waiter=3,manager=2"},
 				WorkloadInstances: func() (ret []workloadInstance) {
 					isoLevels := []string{"read_uncommitted", "read_committed", "repeatable_read", "snapshot", "serializable"}
 					for i, isoLevel := range isoLevels {
@@ -1468,7 +1462,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	err := WaitFor3XReplication(ctx, t, t.L(), db)
+	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 	var pgurl string
 	if b.SharedProcessMT {
@@ -1565,16 +1559,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
-			// cockroach gen haproxy does not support specifying a non root user
-			pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
-				External: true,
-				Auth:     install.AuthRootCert,
-				Secure:   c.IsSecure(),
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.Run(ctx, option.WithNodes(loadNodes), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --url {pgurl:1}")
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a

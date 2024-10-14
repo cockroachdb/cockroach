@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -246,6 +241,12 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 }
 
 func (n *createTableNode) startExec(params runParams) error {
+	// Check if the parent object is a replicated PCR descriptor, which will block
+	// schema changes.
+	if n.dbDesc.GetReplicatedPCRVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
+	}
+
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
 	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)

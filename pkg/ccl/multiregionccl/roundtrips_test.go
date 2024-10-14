@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package multiregionccl_test
 
@@ -123,7 +120,9 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 
 			// Check that the cache was indeed populated.
 			cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-			entry, err := cache.TestingGetCached(context.Background(), tablePrefix, false /* inverted */)
+			entry, err := cache.TestingGetCached(
+				context.Background(), tablePrefix, false /* inverted */, roachpb.LAG_BY_CLUSTER_SETTING,
+			)
 			require.NoError(t, err)
 			require.False(t, entry.Lease.Empty())
 

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -3023,7 +3018,8 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		// Condition matches.
 		value2,
 	} {
-		_, err = MVCCConditionalPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, value3, expVal.TagAndDataBytes(), CPutFailIfMissing, MVCCWriteOptions{})
+		_, err = MVCCConditionalPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, value3, expVal.TagAndDataBytes(),
+			ConditionalPutWriteOptions{AllowIfDoesNotExist: CPutFailIfMissing})
 		require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
 
 		// Either way, no new value is written.
@@ -5400,13 +5396,47 @@ func (d rangeTestData) populateEngine(
 			}
 			ts = v.point.Key.Timestamp
 		} else {
-			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
+			rw := mvccRangeKeyEncodedTimestampReadWriter{engine}
+			require.NoError(t, MVCCDeleteRangeUsingTombstone(ctx, rw, ms, v.rangeTombstone.StartKey,
 				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil),
 				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
 			ts = v.rangeTombstone.Timestamp
 		}
 	}
 	return ts
+}
+
+// mvccRangeKeyEncodedTimestampReadWriter wraps a ReadWriter, overriding
+// PutMVCCRangeKey so that if MVCCRangeKey.EncodedTimestampSuffix is non-empty,
+// the resulting range key uses the encoded suffix verbatim. This is a bit of a
+// subtle and convoluted test construction, but it allows testing of range keys
+// with the synthetic bit without needing to bring back knowledge of the
+// synthetic bit to the various MVCC key encoding and decoding routines.
+//
+// Note that all production ReadWriter implementations only use
+// EncodedTimestampSuffix in their ClearMVCCRangeKey implementations, not in
+// their PutMVCCRangeKey implementations.
+//
+// TODO(jackson): Remove this when we've guaranteed that all range keys have
+// timestamps without the synthetic bit.
+type mvccRangeKeyEncodedTimestampReadWriter struct {
+	ReadWriter
+}
+
+func (w mvccRangeKeyEncodedTimestampReadWriter) PutMVCCRangeKey(
+	rk MVCCRangeKey, v MVCCValue,
+) error {
+	if len(rk.EncodedTimestampSuffix) == 0 {
+		return w.ReadWriter.PutMVCCRangeKey(rk, v)
+	}
+	valueRaw, err := EncodeMVCCValue(v)
+	if err != nil {
+		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rk)
+	} else if err := rk.Validate(); err != nil {
+		return err
+	}
+	return w.ReadWriter.PutEngineRangeKey(
+		rk.StartKey, rk.EndKey, rk.EncodedTimestampSuffix, valueRaw)
 }
 
 // pt creates a point update for key with default value.
@@ -5507,7 +5537,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyB, EndKey: keyC, Timestamp: ts4},
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts4, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts4)},
 			},
 		},
 		{
@@ -5531,8 +5561,8 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
-				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5554,7 +5584,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyA, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5566,7 +5596,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5578,8 +5608,8 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
-				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5591,7 +5621,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5613,7 +5643,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5636,7 +5666,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5649,7 +5679,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5662,7 +5692,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyC, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5675,7 +5705,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts2)},
 			},
 		},
 		{
@@ -5776,11 +5806,11 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts3},
-				{StartKey: keyA, EndKey: keyB, Timestamp: ts1},
-				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
-				{StartKey: keyC, EndKey: keyD, Timestamp: ts3},
-				{StartKey: keyC, EndKey: keyD, Timestamp: ts1},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts1, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts1)},
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts1, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts1)},
 			},
 		},
 		{
@@ -5793,7 +5823,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
 			},
 		},
 		{
@@ -5806,7 +5836,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyC, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
 			},
 		},
 		{
@@ -5819,7 +5849,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyA, EndKey: keyB, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
 			},
 		},
 		{
@@ -5835,8 +5865,8 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyD, EndKey: keyE, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyF, Timestamp: ts4},
-				{StartKey: keyA, EndKey: keyF, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyF, Timestamp: ts4, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts4)},
+				{StartKey: keyA, EndKey: keyF, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
 			},
 		},
 		{
@@ -5851,7 +5881,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
-				{StartKey: keyA, EndKey: keyE, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyE, Timestamp: ts3, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts3)},
 			},
 		},
 		{
@@ -5867,10 +5897,25 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			after: []MVCCRangeKey{
 				// We only iterate data within range, so range keys would be
 				// truncated.
-				{StartKey: keyB, EndKey: keyC, Timestamp: ts4},
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts4, EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(ts4)},
 			},
 			rangeStart: keyB,
 			rangeEnd:   keyC,
+		},
+		{
+			name: "synthetic bit range keys",
+			before: rangeTestData{
+				rangeTestDataItem{rangeTombstone: MVCCRangeKey{
+					StartKey:               keyA,
+					EndKey:                 keyC,
+					Timestamp:              ts4,
+					EncodedTimestampSuffix: EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(ts4),
+				}},
+			},
+			request: []kvpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts4},
+			},
+			after: []MVCCRangeKey{},
 		},
 	}
 

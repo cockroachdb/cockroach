@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package authserver
 
@@ -15,10 +10,12 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 )
@@ -69,6 +66,19 @@ type Server interface {
 		ctx context.Context, cookie *serverpb.SessionCookie,
 	) (bool, string, error)
 
+	// VerifyUserSessionDBConsole verifies the passed username against the
+	// system.users table. The returned boolean indicates whether or not the
+	// verification succeeded and if the user session could be retrieved for DB
+	// console login; an error is returned if the validation process could not be
+	// completed.
+	VerifyUserSessionDBConsole(
+		ctx context.Context, userName username.SQLUsername,
+	) (
+		valid bool,
+		pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
+		err error,
+	)
+
 	// VerifyPasswordDBConsole verifies the passed username/password
 	// pair against the system.users table. The returned boolean indicates
 	// whether or not the verification succeeded; an error is returned if
@@ -85,12 +95,24 @@ type Server interface {
 	// PostgreSQL.)
 	VerifyPasswordDBConsole(
 		ctx context.Context, userName username.SQLUsername, passwordStr string,
+		pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	) (valid bool, expired bool, err error)
+
+	// VerifyJWT verifies the JWT for authenticating the request. An optional username may be provided
+	// if the JWT is likely to match multiple user identities.
+	// It returns three parameters:
+	// - a boolean indicating if the JWT is valid,
+	// - the username associated with the JWT (if validated), and
+	// - an error for any internal errors which prevented validation.
+	VerifyJWT(
+		ctx context.Context, jwtStr, usernameOptional string,
+	) (valid bool, userName string, err error)
 }
 
 type SQLServerInterface interface {
 	ExecutorConfig() *sql.ExecutorConfig
 	InternalExecutor() isql.Executor
+	PGServer() *pgwire.Server
 }
 
 type AuthMux interface {

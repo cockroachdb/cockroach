@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -15,6 +12,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -61,12 +59,48 @@ func TestParquetRows(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
+	newDecimal := func(s string) *tree.DDecimal {
+		d, _, _ := apd.NewFromString(s)
+		return &tree.DDecimal{Decimal: *d}
+	}
+
 	for _, tc := range []struct {
 		testName          string
 		createTable       string
 		stmts             []string
 		expectedDatumRows [][]tree.Datum
 	}{
+		{
+			testName: "decimal",
+			createTable: `
+				CREATE TABLE foo (
+				i INT PRIMARY KEY,
+				d DECIMAL(18,9)
+				)
+				`,
+			stmts: []string{
+				`INSERT INTO foo VALUES (0, 0)`,
+				`DELETE FROM foo WHERE d = 0.0`,
+				`INSERT INTO foo VALUES (1, 1.000000000)`,
+				`UPDATE foo SET d = 2.000000000 WHERE d = 1.000000000`,
+				`INSERT INTO foo VALUES (2, 3.14)`,
+				`INSERT INTO foo VALUES (3, 1.234567890123456789)`,
+				`INSERT INTO foo VALUES (4, '-Inf'::DECIMAL)`,
+				`INSERT INTO foo VALUES (5, 'Inf'::DECIMAL)`,
+				`INSERT INTO foo VALUES (6, 'NaN'::DECIMAL)`,
+			},
+			expectedDatumRows: [][]tree.Datum{
+				{tree.NewDInt(0), newDecimal("0.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(0), tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
+				{tree.NewDInt(1), newDecimal("1.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(1), newDecimal("2.000000000"), parquetEventTypeDatumStringMap[parquetEventUpdate]},
+				{tree.NewDInt(2), newDecimal("3.140000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(3), newDecimal("1.234567890"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(4), tree.DNegInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(5), tree.DPosInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(6), tree.DNaNDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+			},
+		},
 		{
 			testName: "mixed",
 			createTable: `
@@ -203,9 +237,6 @@ func TestParquetRows(t *testing.T) {
 
 			err = writer.close()
 			require.NoError(t, err)
-
-			// We inserted 18 updates, but may get dupes from rangefeeds.
-			require.GreaterOrEqual(t, numRows, 18)
 
 			meta, readDatums, err := parquet.ReadFile(f.Name())
 			require.NoError(t, err)

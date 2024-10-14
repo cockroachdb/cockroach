@@ -1,10 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package backupccl implements backup logic.
 package backupccl
@@ -636,6 +633,15 @@ func backupPlanHook(
 			}
 		default:
 			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
+		}
+
+		for _, t := range targetDescs {
+			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+				if tbl.ExternalRowData().TenantID.IsSet() {
+					return errors.UnimplementedError(errors.IssueLink{}, "backing up from a replication target is not supported")
+				}
+				return errors.UnimplementedError(errors.IssueLink{}, "backing up from external tables is not supported")
+			}
 		}
 
 		// Check BACKUP privileges.

@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rulebasedscanner
 
@@ -41,6 +36,10 @@ type lex struct {
 	// comma is set to true if the last found token was succeeded by a
 	// comma.
 	comma bool
+
+	// equals is set to true if the last found token was succeeded by a
+	// comma.
+	equals bool
 
 	// lexed is set to the portion of the text matched by the current
 	// rule, and is provided as input to the rule's action function.
@@ -84,7 +83,7 @@ var rules = []struct {
 }{
 	{r: rule{`[ \t\r,]*` /***********/, func(l *lex) (bool, error) { return false, nil }}},
 	{r: rule{`#.*$` /****************/, func(l *lex) (bool, error) { return false, nil }}},
-	{r: rule{`[^[:cntrl:] ",]+,?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.Value = l.lexed; return true, nil }}},
+	{r: rule{`[^[:cntrl:] ",]+,?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.checkEquals(); l.Value = l.lexed; return true, nil }}},
 	{r: rule{`"[^[:cntrl:]"]*",?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.stripQuotes(); l.Value = l.lexed; return true, nil }}},
 	{r: rule{`"[^"]*$` /*************/, func(l *lex) (bool, error) { return false, errors.New("unterminated quoted string") }}},
 	{r: rule{`"[^"]*"` /*************/, func(l *lex) (bool, error) { return false, errors.New("invalid characters in quoted string") }}},
@@ -96,6 +95,10 @@ func (l *lex) checkComma() {
 	if l.comma {
 		l.lexed = l.lexed[:len(l.lexed)-1]
 	}
+}
+
+func (l *lex) checkEquals() {
+	l.equals = l.lexed[len(l.lexed)-1] == '='
 }
 
 func (l *lex) stripQuotes() {
@@ -115,7 +118,9 @@ func init() {
 // is immediately followed by a comma.
 //
 // Inspired from pg's src/backend/libpq/hba.c, next_token().
-func NextToken(buf string) (remaining string, tok String, trailingComma bool, err error) {
+func NextToken(
+	buf string,
+) (remaining string, tok String, trailingComma bool, trailingEquals bool, err error) {
 	remaining = buf
 	var l lex
 outer:
@@ -135,7 +140,7 @@ outer:
 			}
 		}
 	}
-	return remaining, l.String, l.comma, err
+	return remaining, l.String, l.comma, l.equals, err
 }
 
 // nextFieldExpand reads the next comma-separated list of string from buf.
@@ -145,14 +150,14 @@ outer:
 func nextFieldExpand(buf string) (remaining string, field []String, err error) {
 	remaining = buf
 	for {
-		var trailingComma bool
+		var trailingComma, trailingEquals bool
 		var tok String
-		remaining, tok, trailingComma, err = NextToken(remaining)
+		remaining, tok, trailingComma, trailingEquals, err = NextToken(remaining)
 		if tok.Empty() || err != nil {
 			return
 		}
 		field = append(field, tok)
-		if !trailingComma {
+		if !(trailingComma || trailingEquals) {
 			break
 		}
 	}

@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -65,7 +60,7 @@ type testProposer struct {
 	onRejectProposalWithErrLocked func(err error)
 	// If not nil, this is called by onErrProposalDropped.
 	onProposalsDropped func(
-		ents []raftpb.Entry, proposalData []*ProposalData, stateType raft.StateType,
+		ents []raftpb.Entry, proposalData []*ProposalData, stateType raftpb.StateType,
 	)
 	// validLease is returned by ownsValidLease.
 	validLease bool
@@ -194,7 +189,7 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 }
 
 func (rp *testProposer) onErrProposalDropped(
-	ents []raftpb.Entry, props []*ProposalData, typ raft.StateType,
+	ents []raftpb.Entry, props []*ProposalData, typ raftpb.StateType,
 ) {
 	if rp.onProposalsDropped == nil {
 		return
@@ -521,7 +516,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	// scenario. Some proposals should be allowed, some should be rejected.
 	for _, tc := range []struct {
 		name  string
-		state raft.StateType
+		state raftpb.StateType
 		// raft.None means there's no leader, or the leader is unknown.
 		leader raftpb.PeerID
 		// Empty means VOTER_FULL.
@@ -540,14 +535,14 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	}{
 		{
 			name:   "leader",
-			state:  raft.StateLeader,
+			state:  raftpb.StateLeader,
 			leader: self,
 			// No rejection. The leader can request a lease.
 			expRejection: false,
 		},
 		{
 			name:  "follower, known eligible leader",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Someone else is leader.
 			leader: self + 1,
 			// Rejection - a follower can't request a lease.
@@ -555,7 +550,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		},
 		{
 			name:  "follower, lease extension despite known eligible leader",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Someone else is leader, but we're the leaseholder.
 			leader:         self + 1,
 			ownsValidLease: true,
@@ -564,7 +559,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		},
 		{
 			name:  "follower, known ineligible leader",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Someone else is leader.
 			leader: self + 1,
 			// The leader type makes it ineligible to get the lease. Thus, the local
@@ -576,7 +571,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			// Here we simulate the leader being known by Raft, but the local replica
 			// is so far behind that it doesn't contain the leader replica.
 			name:  "follower, known leader not in range descriptor",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Someone else is leader.
 			leader:             self + 1,
 			leaderNotInRngDesc: true,
@@ -585,7 +580,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		},
 		{
 			name:  "follower, unknown leader",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Unknown leader.
 			leader: raft.None,
 			// No rejection if the leader is unknown. See comments in
@@ -594,7 +589,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		},
 		{
 			name:  "follower, known eligible non-live leader",
-			state: raft.StateFollower,
+			state: raftpb.StateFollower,
 			// Someone else is leader.
 			leader:        self + 1,
 			leaderNotLive: true,
@@ -691,7 +686,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	// scenario. Some proposals should be allowed, some should be rejected.
 	for _, tc := range []struct {
 		name          string
-		proposerState raft.StateType
+		proposerState raftpb.StateType
 		// math.MaxUint64 if the target is not in the raft group.
 		targetState rafttracker.StateType
 		targetMatch kvpb.RaftIndex
@@ -701,40 +696,40 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	}{
 		{
 			name:               "follower",
-			proposerState:      raft.StateFollower,
+			proposerState:      raftpb.StateFollower,
 			expRejection:       true,
 			expRejectionReason: raftutil.LocalReplicaNotLeader,
 		},
 		{
 			name:               "candidate",
-			proposerState:      raft.StateCandidate,
+			proposerState:      raftpb.StateCandidate,
 			expRejection:       true,
 			expRejectionReason: raftutil.LocalReplicaNotLeader,
 		},
 		{
 			name:               "leader, no progress for target",
-			proposerState:      raft.StateLeader,
+			proposerState:      raftpb.StateLeader,
 			targetState:        math.MaxUint64,
 			expRejection:       true,
 			expRejectionReason: raftutil.ReplicaUnknown,
 		},
 		{
 			name:               "leader, target state probe",
-			proposerState:      raft.StateLeader,
+			proposerState:      raftpb.StateLeader,
 			targetState:        rafttracker.StateProbe,
 			expRejection:       true,
 			expRejectionReason: raftutil.ReplicaStateProbe,
 		},
 		{
 			name:               "leader, target state snapshot",
-			proposerState:      raft.StateLeader,
+			proposerState:      raftpb.StateLeader,
 			targetState:        rafttracker.StateSnapshot,
 			expRejection:       true,
 			expRejectionReason: raftutil.ReplicaStateSnapshot,
 		},
 		{
 			name:               "leader, target state replicate, match+1 < firstIndex",
-			proposerState:      raft.StateLeader,
+			proposerState:      raftpb.StateLeader,
 			targetState:        rafttracker.StateReplicate,
 			targetMatch:        proposerFirstIndex - 2,
 			expRejection:       true,
@@ -742,14 +737,14 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		},
 		{
 			name:          "leader, target state replicate, match+1 == firstIndex",
-			proposerState: raft.StateLeader,
+			proposerState: raftpb.StateLeader,
 			targetState:   rafttracker.StateReplicate,
 			targetMatch:   proposerFirstIndex - 1,
 			expRejection:  false,
 		},
 		{
 			name:          "leader, target state replicate, match+1 > firstIndex",
-			proposerState: raft.StateLeader,
+			proposerState: raftpb.StateLeader,
 			targetState:   rafttracker.StateReplicate,
 			targetMatch:   proposerFirstIndex,
 			expRejection:  false,
@@ -778,7 +773,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			var raftStatus raft.Status
 			raftStatus.ID = proposer
 			raftStatus.RaftState = tc.proposerState
-			if tc.proposerState == raft.StateLeader {
+			if tc.proposerState == raftpb.StateLeader {
 				raftStatus.Lead = proposer
 				raftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
 					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
@@ -836,7 +831,7 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 
 	var matchingDroppedProposalsSeen int
 	p := testProposer{
-		onProposalsDropped: func(ents []raftpb.Entry, props []*ProposalData, _ raft.StateType) {
+		onProposalsDropped: func(ents []raftpb.Entry, props []*ProposalData, _ raftpb.StateType) {
 			require.Equal(t, len(ents), len(props))
 			for i := range ents {
 				if ents[i].Type == raftpb.EntryNormal {
@@ -918,7 +913,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 
 	const maxOffset = 500 * time.Millisecond
 	mc := timeutil.NewManualTime(timeutil.Unix(1613588135, 0))
-	clock := hlc.NewClock(mc, maxOffset, maxOffset)
+	clock := hlc.NewClock(mc, maxOffset, maxOffset, hlc.PanicLogger)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, time.Second)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 200*time.Millisecond)
@@ -1102,7 +1097,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
 			r.status.Lead = 1
-			r.status.RaftState = raft.StateLeader
+			r.status.RaftState = raftpb.StateLeader
 			r.status.Progress = map[raftpb.PeerID]rafttracker.Progress{
 				1: {State: rafttracker.StateReplicate},
 			}

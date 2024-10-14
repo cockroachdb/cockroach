@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient
 
@@ -300,6 +297,7 @@ type LogicalReplicationPlan struct {
 	Topology      Topology
 	SourceSpans   []roachpb.Span
 	DescriptorMap map[int32]descpb.TableDescriptor
+	SourceTypes   []*descpb.TypeDescriptor
 }
 
 func (p *partitionedStreamClient) PlanLogicalReplication(
@@ -344,10 +342,16 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 		descMap[int32(desc.ID)] = desc
 	}
 
+	sourceTypes := make([]*descpb.TypeDescriptor, len(streamSpec.TypeDescriptors))
+	for _, desc := range streamSpec.TypeDescriptors {
+		sourceTypes = append(sourceTypes, &desc)
+	}
+
 	return LogicalReplicationPlan{
 		Topology:      topology,
 		SourceSpans:   streamSpec.TableSpans,
 		DescriptorMap: descMap,
+		SourceTypes:   sourceTypes,
 	}, nil
 }
 

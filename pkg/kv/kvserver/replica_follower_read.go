@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -153,9 +148,9 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.Batc
 func (r *Replica) getCurrentClosedTimestampLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
-	appliedLAI := r.mu.state.LeaseAppliedIndex
-	leaseholder := r.mu.state.Lease.Replica.NodeID
-	raftClosed := r.mu.state.RaftClosedTimestamp
+	appliedLAI := r.shMu.state.LeaseAppliedIndex
+	leaseholder := r.shMu.state.Lease.Replica.NodeID
+	raftClosed := r.shMu.state.RaftClosedTimestamp
 	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, sufficient)
 
 	var maxClosed hlc.Timestamp

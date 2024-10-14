@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // This file includes test-only helper methods added to types in
 // package storage. These methods are only linked in to tests in this
@@ -445,7 +440,7 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.raftLogSize, r.mu.raftLogSizeTrusted
+	return r.shMu.raftLogSize, r.shMu.raftLogSizeTrusted
 }
 
 // GetCachedLastTerm returns the cached last term value. May return
@@ -453,7 +448,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastTermNotDurable
+	return r.shMu.lastTermNotDurable
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call

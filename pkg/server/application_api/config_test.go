@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package application_api_test
 
@@ -294,8 +289,8 @@ func TestClusterAPI(t *testing.T) {
 				if a, e := resp.ReportingEnabled, reportingOn; a != e {
 					return errors.Errorf("reportingEnabled = %t, wanted %t", a, e)
 				}
-				if a, e := resp.EnterpriseEnabled, enterpriseOn; a != e {
-					return errors.Errorf("enterpriseEnabled = %t, wanted %t", a, e)
+				if a := resp.EnterpriseEnabled; !a {
+					return errors.Errorf("enterpriseEnabled = %t, wanted true", a)
 				}
 				return nil
 			})

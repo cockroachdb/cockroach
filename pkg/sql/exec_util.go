@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -50,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -108,6 +102,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
+	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -633,7 +628,9 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 var disallowFullTableScans = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	`sql.defaults.disallow_full_table_scans.enabled`,
-	"setting to true rejects queries that have planned a full table scan",
+	"setting to true rejects queries that have planned a full table scan; set "+
+		"large_full_scan_rows > 0 to allow small full table scans estimated to "+
+		"read fewer than large_full_scan_rows",
 	false,
 	settings.WithPublic)
 
@@ -709,10 +706,11 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 var largeFullScanRows = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.large_full_scan_rows",
-	"default value for large_full_scan_rows session setting which determines "+
-		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
-		"is set to true",
-	1000.0,
+	"default value for large_full_scan_rows session variable which determines "+
+		"the table size at which full scans are considered large and disallowed "+
+		"when disallow_full_table_scans is set to true; set to 0 to reject all "+
+		"full table or full index scans when disallow_full_table_scans is true",
+	0,
 	settings.WithPublic)
 
 var costScansWithDefaultColSize = settings.RegisterBoolSetting(
@@ -1306,6 +1304,7 @@ type ExecutorConfig struct {
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
 	EventLogTestingKnobs                 *EventLogTestingKnobs
 	InsightsTestingKnobs                 *insights.TestingKnobs
+	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
@@ -1453,9 +1452,6 @@ type ExecutorConfig struct {
 
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher eval.RangeStatsFetcher
-
-	// EventsExporter is the client for the Observability Service.
-	EventsExporter obs.EventsExporterInterface
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvclient.NodeDescStore
@@ -1865,6 +1861,8 @@ type StreamingTestingKnobs struct {
 	SkipSpanConfigReplication bool
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
+
+	FailureRate uint32
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -2263,8 +2261,9 @@ type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
 	IsSSL                       bool
+	AuthenticationMethod        redact.SafeString
 	ReplicationMode             sessiondatapb.ReplicationMode
-	SystemIdentity              username.SQLUsername
+	SystemIdentity              string
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
@@ -3864,6 +3863,10 @@ func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
 	m.data.OptimizerUseConditionalHoistFix = val
+}
+
+func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bool) {
+	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

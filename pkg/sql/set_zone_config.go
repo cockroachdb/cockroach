@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -42,6 +37,7 @@ import (
 )
 
 type setZoneConfigNode struct {
+	stmt          *tree.SetZoneConfig
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool
 	yamlConfig    tree.TypedExpr
@@ -162,8 +158,9 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	}
 
 	return &setZoneConfigNode{
+		stmt:          n,
 		zoneSpecifier: n.ZoneSpecifier,
-		allIndexes:    n.AllIndexes,
+		allIndexes:    n.ZoneSpecifier.StarIndex,
 		yamlConfig:    yamlConfig,
 		options:       options,
 		setDefault:    n.SetDefault,
@@ -336,7 +333,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = checkTableSchemaUnlocked(table); err != nil {
+	if err = checkSchemaChangeIsAllowed(table, n.stmt); err != nil {
 		return err
 	}
 

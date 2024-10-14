@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package base
 
@@ -438,6 +433,11 @@ type Config struct {
 	// LocalityAddresses contains private IP addresses that can only be accessed
 	// in the corresponding locality.
 	LocalityAddresses []roachpb.LocalityAddress
+
+	// AcceptProxyProtocolHeaders allows CockroachDB to parse proxy protocol
+	// headers, and use the client IP information contained within instead of
+	// using the IP information in the source IP field of the incoming packets.
+	AcceptProxyProtocolHeaders bool
 }
 
 // AdvertiseAddr is the type of the AdvertiseAddr field in Config.
@@ -745,6 +745,14 @@ func (cfg RaftConfig) RangeLeaseAcquireTimeout() time.Duration {
 func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal time.Duration) {
 	livenessActive = cfg.RangeLeaseDuration
 	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
+	return
+}
+
+// StoreLivenessDurations computes durations for store liveness heartbeat
+// interval and liveness interval.
+func (cfg RaftConfig) StoreLivenessDurations() (livenessInterval, heartbeatInterval time.Duration) {
+	livenessInterval = cfg.RangeLeaseDuration
+	heartbeatInterval = time.Duration(float64(livenessInterval) * livenessRenewalFraction)
 	return
 }
 

@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cdcevent
 
@@ -88,7 +85,7 @@ func (f *dbTableDescFetcher) FetchTableDesc(
 	// Immediately release the lease, since we only need it for the exact
 	// timestamp requested.
 	desc.Release(ctx)
-	if catalog.MaybeRequiresHydration(tableDesc) {
+	if tableDesc.MaybeRequiresTypeHydration() {
 		tableDesc, err = refreshUDT(ctx, tableID, f.db, f.collection, ts)
 		if err != nil {
 			return nil, err

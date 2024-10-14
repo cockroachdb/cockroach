@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -62,24 +57,29 @@ func prefixAll(params map[string]string) map[string]string {
 }
 
 func TestShouldPost(t *testing.T) {
+	preemptionFailure := []failure{
+		{errors: []error{vmPreemptionError("vm1")}},
+	}
 	testCases := []struct {
 		disableIssues     bool
 		nodeCount         int
 		envGithubAPIToken string
 		envTcBuildBranch  string
-		expectedPost      bool
+		failures          []failure
 		expectedReason    string
 	}{
 		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
-		{true, 1, "token", "master", false, "issue posting was disabled via command line flag"},
+		{true, 1, "token", "master", nil, "issue posting was disabled via command line flag"},
 		// nodeCount
-		{false, 0, "token", "master", false, "Cluster.NodeCount is zero"},
+		{false, 0, "token", "master", nil, "Cluster.NodeCount is zero"},
 		// apiToken
-		{false, 1, "", "master", false, "GitHub API token not set"},
+		{false, 1, "", "master", nil, "GitHub API token not set"},
 		// branch
-		{false, 1, "token", "", false, `not a release branch: "branch-not-found-in-env"`},
-		{false, 1, "token", "master", true, ""},
+		{false, 1, "token", "", nil, `not a release branch: "branch-not-found-in-env"`},
+		// VM preemtion while test ran
+		{false, 1, "token", "master", preemptionFailure, "non-reportable: preempted VMs: vm1 [owner=test-eng]"},
+		{false, 1, "token", "master", nil, ""},
 	}
 
 	reg := makeTestRegistry()
@@ -98,10 +98,10 @@ func TestShouldPost(t *testing.T) {
 		}
 
 		ti := &testImpl{spec: testSpec}
+		ti.mu.failures = c.failures
 		github := &githubIssues{disable: c.disableIssues}
 
-		doPost, skipReason := github.shouldPost(ti)
-		require.Equal(t, c.expectedPost, doPost)
+		skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedReason, skipReason)
 	}
 }
@@ -253,13 +253,12 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":          "false",
 			}),
 		},
-		// 7. Verify that release-blocker label is not applied on runtime assertion builds
-		// (for now).
+		// 7. Verify that release-blocker label is applied on runtime assertion builds
 		{
 			runtimeAssertionsBuild: true,
 			failures:               []failure{createFailure(errors.New("other"))},
 			expectedPost:           true,
-			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled"},
+			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled", "release-blocker"},
 			expectedTeam:           "@cockroachdb/unowned",
 			expectedName:           testName,
 			expectedParams: prefixAll(map[string]string{
@@ -335,7 +334,28 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 12. Arbitrary transient failures lead to an issue assigned to
+		// 12. Nested ErrorWithOwnership -- assignment is based on innermost
+		// error in the chain.
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				createFailure(registry.ErrorWithOwner(
+					registry.OwnerSQLFoundations,
+					registry.ErrorWithOwner(
+						registry.OwnerTestEng,
+						errors.New("oops"),
+						registry.WithTitleOverride("monitor_failure"),
+						registry.InfraFlake,
+					),
+				)),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "monitor_failure",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 13. Arbitrary transient failures lead to an issue assigned to
 		// test eng with the corresponding title override.
 		{
 			nonReleaseBlocker: true,
@@ -348,7 +368,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 13. When a transient error happens as a result of *another*
+		// 14. When a transient error happens as a result of *another*
 		// transient error, the corresponding issue uses the first
 		// transient error in the chain.
 		{
@@ -363,7 +383,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 14. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
+		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
 		// first failure is a non-handled error.
 		{
 			nonReleaseBlocker:     true,
@@ -374,7 +394,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
+		// 16. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
 		// hostError failure
 		{
 			nonReleaseBlocker: true,
@@ -387,7 +407,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 16. Verify that a Side-Eye URL is rendered in the issue.
+		// 17. Verify that a Side-Eye URL is rendered in the issue.
 		{
 			nonReleaseBlocker: true,
 			failures: []failure{

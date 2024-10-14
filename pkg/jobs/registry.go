@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobs
 
@@ -35,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -224,6 +220,7 @@ func MakeRegistry(
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
 	knobs *TestingKnobs,
+	lookup *cidr.Lookup,
 ) *Registry {
 	r := &Registry{
 		serverCtx:               ctx,
@@ -254,7 +251,7 @@ func MakeRegistry(
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
-	r.metrics.init(histogramWindowInterval)
+	r.metrics.init(histogramWindowInterval, lookup)
 	return r
 }
 
@@ -707,21 +704,19 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		}
 		typ := j.mu.payload.Type().String()
 
-		cols := []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
-		placeholders := []string{"$1", "$2", "$3", "$4", "$5"}
-		values := []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
-		nCols := len(cols)
+		cols := []string{"id", "created", "status", "created_by_type", "created_by_id", "job_type"}
+		placeholders := []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5"}
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
 		// be adopted by the node which next runs the adoption loop.
 		stmt := fmt.Sprintf(
 			`INSERT INTO system.jobs (%s) VALUES (%s);`,
-			strings.Join(cols[:nCols], ","), strings.Join(placeholders[:nCols], ","),
+			strings.Join(cols, ","), strings.Join(placeholders, ","),
 		)
 		_, err = txn.ExecEx(ctx, "job-insert", txn.KV(), sessiondata.InternalExecutorOverride{
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
-		}, stmt, values[:nCols]...)
+		}, stmt, jobID, StatusRunning, createdByType, createdByID, typ)
 		if err != nil {
 			return err
 		}
@@ -1411,6 +1406,14 @@ func WithJobMetrics(m metric.Struct) RegisterOption {
 	}
 }
 
+// WithResolvedMetric registers a gauge metric that the poller will update to
+// reflect the minimum resolved timestamp of all the jobs of this type.
+func WithResolvedMetric(m *metric.Gauge) RegisterOption {
+	return func(opts *registerOptions) {
+		opts.resolvedMetric = m
+	}
+}
+
 // registerOptions are passed to RegisterConstructor and control how a job
 // resumer is created and configured.
 type registerOptions struct {
@@ -1425,6 +1428,9 @@ type registerOptions struct {
 
 	// metrics allow jobs to register job specific metrics.
 	metrics metric.Struct
+
+	// resolvedMetric, if set, is the metric to update using the min resolved ts.
+	resolvedMetric *metric.Gauge
 }
 
 // JobResultsReporter is an interface for reporting the results of the job execution.

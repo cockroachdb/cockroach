@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package gc
 
@@ -782,9 +777,10 @@ func mergeRanges(fragments [][]storage.MVCCRangeKeyValue) []storage.MVCCRangeKey
 					// tombstone types.
 					newPartial = append(newPartial, storage.MVCCRangeKeyValue{
 						RangeKey: storage.MVCCRangeKey{
-							StartKey:  partialRangeKeys[j].RangeKey.StartKey,
-							EndKey:    stack[i].RangeKey.EndKey,
-							Timestamp: partialRangeKeys[j].RangeKey.Timestamp,
+							StartKey:               partialRangeKeys[j].RangeKey.StartKey,
+							EndKey:                 stack[i].RangeKey.EndKey,
+							Timestamp:              partialRangeKeys[j].RangeKey.Timestamp,
+							EncodedTimestampSuffix: partialRangeKeys[j].RangeKey.EncodedTimestampSuffix,
 						},
 						Value: partialRangeKeys[j].Value,
 					})

@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -295,6 +290,11 @@ type Overload struct {
 	// UDFContainsOnlySignature is false, then DEFAULT expressions are included
 	// into RoutineParams.
 	DefaultExprs Exprs
+
+	// SecurityMode is true when privilege checks during function execution
+	// should be performed against the function owner rather than the invoking
+	// user.
+	SecurityMode RoutineSecurity
 }
 
 // params implements the overloadImpl interface.
@@ -417,7 +417,7 @@ type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
 	// MatchIdentical is similar to match but checks that the types are identical matches,
-	//instead of equivalent matches. See types.T.Equivalent and types.T.Identical.
+	// instead of equivalent matches. See types.T.Equivalent and types.T.Identical.
 	MatchIdentical(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
@@ -493,7 +493,11 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 
 // MatchAtIdentical is part of the TypeList interface.
 func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
-	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
+	return i < len(p) && (typ.Family() == types.UnknownFamily ||
+		p[i].Typ.Identical(typ) ||
+		// Special case for CHAR, CHAR(N), and BPCHAR which are not "identical"
+		// but have the same OID. See #129007.
+		(p[i].Typ.Oid() == oid.T_bpchar && typ.Oid() == oid.T_bpchar))
 }
 
 // MatchLen is part of the TypeList interface.

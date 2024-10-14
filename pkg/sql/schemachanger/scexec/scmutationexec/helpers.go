@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scmutationexec
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,6 +120,21 @@ func (i *immediateVisitor) checkOutFunction(
 		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 	}
 	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutTrigger(
+	ctx context.Context, tableID descpb.ID, triggerID catid.TriggerID,
+) (*descpb.TriggerDescriptor, error) {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return nil, err
+	}
+	trigger := catalog.FindTriggerByID(tbl, triggerID)
+	if trigger != nil {
+		return trigger, nil
+	}
+	panic(errors.AssertionFailedf("failed to find trigger with ID %d in table %q (%d)",
+		triggerID, tbl.GetName(), tbl.GetID()))
 }
 
 func mutationStateChange(

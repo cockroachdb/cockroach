@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -14,11 +9,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -187,100 +180,4 @@ func GetExtendedTenantInfo(
 	}
 
 	return res, nil
-}
-
-var defaultTenantConfigTemplate = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	"sql.create_tenant.default_template",
-	"tenant to use as configuration template when LIKE is not specified in CREATE VIRTUAL CLUSTER",
-	// We use the empty string so that no template is used by default
-	// (i.e. empty proto, no setting overrides).
-	"",
-	settings.WithName("sql.create_virtual_cluster.default_template"),
-	settings.WithReportable(true),
-)
-
-// GetTenantTemplate loads the tenant template corresponding to the
-// provided origin tenant. If info is nil, likeTenantID is zero and
-// likeTenantName is empty, the default template is returned.
-func GetTenantTemplate(
-	ctx context.Context,
-	settings *cluster.Settings,
-	txn isql.Txn,
-	info *mtinfopb.TenantInfo,
-	likeTenantID uint64,
-	likeTenantName string,
-) (res *mtinfopb.TenantInfoWithUsage, err error) {
-	if info != nil && (likeTenantID != 0 || likeTenantName != "") {
-		// Sanity check
-		return nil, errors.AssertionFailedf("programming error: cannot pass both default info struct and tenant reference")
-	}
-	if info == nil {
-		if likeTenantID == 0 && likeTenantName == "" {
-			// No LIKE at all. Do we have something in the cluster setting?
-			tmplName := defaultTenantConfigTemplate.Get(&settings.SV)
-			if tmplName == "" {
-				// No template at all - just use an empty protobuf.
-				return &mtinfopb.TenantInfoWithUsage{}, nil
-			}
-			// Use the template specified in the setting.
-			info, err = GetTenantRecordByName(ctx, settings, txn, roachpb.TenantName(tmplName))
-			if err != nil {
-				return nil, errors.Wrapf(err, "retrieving default tenant configuration template %q", tmplName)
-			}
-		} else {
-			if likeTenantID != 0 && likeTenantName != "" {
-				return nil, errors.AssertionFailedf("programming error: conflicting input tenant spec from caller")
-			}
-			// No pre-loaded info, but we have a LIKE clause. Is it by-ID or by-Name?
-			if likeTenantID != 0 {
-				// By-ID.
-				tid, err := roachpb.MakeTenantID(likeTenantID)
-				if err != nil {
-					return nil, errors.Wrap(err, "invalid LIKE tenant ID")
-				}
-				info, err = GetTenantRecordByID(ctx, txn, tid, settings)
-				if err != nil {
-					return nil, errors.Wrap(err, "retrieving LIKE tenant record")
-				}
-			} else {
-				// By-name.
-				info, err = GetTenantRecordByName(ctx, settings, txn, roachpb.TenantName(likeTenantName))
-				if err != nil {
-					return nil, errors.Wrap(err, "retrieving LIKE tenant record")
-				}
-			}
-		}
-	}
-
-	// For now, prevent use of the record for the system tenant. The
-	// user may have the mistaken assumption that "LIKE system" would
-	// create a tenant with all the special cases of the system tenant,
-	// and we do not guarantee that for now.
-	if roachpb.MustMakeTenantID(info.ID).IsSystem() {
-		return nil, errors.WithHint(
-			pgerror.New(pgcode.WrongObjectType, "using the system tenant as config template"),
-			"Create another secondary tenant as template, grant it extra capabilities, and then use that as config template.")
-	}
-
-	// Now we have our info field. Expand it.
-	tmplInfo, err := GetExtendedTenantInfo(ctx, txn, info)
-	if err != nil {
-		return nil, errors.Wrap(err, "retrieving tenant template details")
-	}
-
-	// Clear out the fields we can't reuse in a fresh tenant record.
-	tmplInfo.ID = 0
-	tmplInfo.Name = ""
-	tmplInfo.DataState = mtinfopb.DataStateReady
-	tmplInfo.ServiceMode = mtinfopb.ServiceModeNone
-	tmplInfo.DroppedName = ""
-	tmplInfo.DeprecatedID = 0
-	tmplInfo.DeprecatedDataState = 0
-	tmplInfo.PhysicalReplicationConsumerJobID = 0
-	if tmplInfo.Usage != nil {
-		tmplInfo.Usage.Consumption = kvpb.TenantConsumption{}
-	}
-
-	return tmplInfo, nil
 }

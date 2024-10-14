@@ -48,7 +48,7 @@ SELECT * FROM t
 
 # LSC and DSC would return slightly different error message when attempting to create a
 # database as of system time follower_read_timestamp() soon after a node has started.
-statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found)
+statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found|database \"\[1\]\" does not exist)
 CREATE DATABASE IF NOT EXISTS d2
 
 statement error pgcode 3D000 pq: database "test" does not exist
@@ -60,7 +60,7 @@ ROLLBACK
 statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
 BEGIN READ WRITE
 
-statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+statement error (pq: cannot execute CREATE DATABASE in a read-only transaction|database \"\[1\]\" does not exist)
 BEGIN; CREATE DATABASE IF NOT EXISTS d2
 
 statement ok
@@ -92,7 +92,7 @@ SELECT * FROM t
 
 # LSC and DSC would return slightly different error message when attempting to create a
 # database as of system time follower_read_timestamp() soon after a node has started.
-statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found)
+statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found|database \"\[1\]\" does not exist)
 CREATE DATABASE IF NOT EXISTS d2
 
 statement error pgcode 3D000 pq: database "test" does not exist
@@ -104,7 +104,7 @@ ROLLBACK
 statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
 BEGIN READ WRITE
 
-statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+statement error (pq: cannot execute CREATE DATABASE in a read-only transaction|database \"\[1\]\" does not exist)
 BEGIN; CREATE DATABASE IF NOT EXISTS d2
 
 statement ok
@@ -189,9 +189,9 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2 AND i = 1
 ----
-memo (optimized, ~9KB, required=[presentation: info:6] [distribution: test])
+memo (optimized, ~9KB, required=[presentation: info:8] [distribution: test])
  ├── G1: (explain G2 [presentation: i:1,j:2,k:3] [distribution: test])
- │    └── [presentation: info:6] [distribution: test]
+ │    └── [presentation: info:8] [distribution: test]
  │         ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
  │         └── cost: 9.18
  ├── G2: (select G3 G4) (select G5 G6)

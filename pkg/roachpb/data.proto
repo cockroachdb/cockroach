@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.roachpb;
@@ -833,6 +828,15 @@ message LeafTxnFinalState {
 enum RangeClosedTimestampPolicy {
   option (gogoproto.goproto_enum_prefix) = false;
 
+  // NB: there is a local-only enum value of -1, see `rangecache.UnknownClosedTimestampPolicy`.
+  // This value is used for the range cache as a placeholder.
+  //
+  // Whenever we send a RangeInfo via DistSender, this unknown policy
+  // instead defaults to `kvcoord.defaultSendClosedTimestampPolicy`.
+  //
+  // If we re-did this today, we'd reserve the zero value of the enum
+  // for an UNKNOWN value.
+
   // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
   // configured to lag behind present time by the value configured for the
   // `kv.closed_timestamp.target_duration` cluster setting.
@@ -857,6 +861,11 @@ enum RangeClosedTimestampPolicy {
 message ClientRangeInfo {
   int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
+  // NB: This field may occasionally be constructed with the (wire-invalid)
+  // value of -1, corresponding to rangecache's unknownClosedTimestampPolicy.
+  // Before attaching to a request, it is coalesced to a valid enum value.
+  //
+  // See: https://github.com/cockroachdb/cockroach/issues/129981.
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
   // ExplicitlyRequested causes range info to be returned even if other fields
   // are up-to-date or empty.

@@ -486,11 +486,9 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
- │              │   histogram(6)=  0            100             0             0
- │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
- │              ├── key: (3)
- │              └── fd: (3)-->(6)
+ │              └── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
+ │                  histogram(6)=  0            100             0             0
+ │                               <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
  └── filters
       └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -529,11 +527,9 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=t_g_idx
-      │              ├── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
-      │              │   histogram(6)=  0            100             0             0
-      │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
-      │              ├── key: (3)
-      │              └── fd: (3)-->(6)
+      │              └── stats: [rows=100, distinct(3)=76.9231, null(3)=0, distinct(6)=1, null(6)=0]
+      │                  histogram(6)=  0            100             0             0
+      │                               <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 

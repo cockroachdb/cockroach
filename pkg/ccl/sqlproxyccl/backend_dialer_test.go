@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -19,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -33,6 +31,7 @@ import (
 
 func TestBackendDialTLSInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -49,6 +48,7 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 
 func TestBackendDialBlackhole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -74,6 +74,7 @@ func TestBackendDialBlackhole(t *testing.T) {
 
 func TestBackendDialTLS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
@@ -172,6 +173,7 @@ func (n *closeCounter) CloseCount() int {
 
 func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	conn := &closeCounter{}
@@ -186,6 +188,7 @@ func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
 
 func TestCloseOnCancelCancelBeforeCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	conn := &closeCounter{}

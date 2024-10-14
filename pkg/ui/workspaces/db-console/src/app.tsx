@@ -1,17 +1,15 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import {
   CockroachCloudContext,
   crlTheme,
   ConfigProvider as ClusterUIConfigProvider,
+  DatabasesPageV2,
+  DatabaseDetailsPageV2,
+  TableDetailsPageV2,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -34,6 +32,7 @@ import {
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
+  databaseIDAttr,
   executionIdAttr,
   implicitTxnAttr,
   indexNameAttr,
@@ -47,6 +46,7 @@ import {
   txnFingerprintIdAttr,
   viewAttr,
   idAttr,
+  tableIdAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
@@ -55,8 +55,8 @@ import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
-import { DatabasesPage } from "src/views/databases/databasesPage";
+import { DatabaseDetailsPageLegacy } from "src/views/databases/databaseDetailsPage";
+import { DatabasesPageLegacy } from "src/views/databases/databasesPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
@@ -207,18 +207,23 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         {/* databases */}
                         <Route
                           exact
-                          path="/databases"
-                          component={DatabasesPage}
+                          path={"/databases"}
+                          component={DatabasesPageV2}
                         />
-                        <Redirect
+                        <Route
                           exact
-                          from="/databases/tables"
-                          to="/databases"
+                          path={`/databases/:${databaseIDAttr}`}
+                          component={DatabaseDetailsPageV2}
                         />
-                        <Redirect
+                        <Route
                           exact
-                          from="/databases/grants"
-                          to="/databases"
+                          path={`/table/:${tableIdAttr}`}
+                          component={TableDetailsPageV2}
+                        />
+                        <Route
+                          exact
+                          path="/legacy/databases"
+                          component={DatabasesPageLegacy}
                         />
                         <Redirect
                           from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
@@ -229,7 +234,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         <Route
                           exact
                           path={`/database/:${databaseNameAttr}`}
-                          component={DatabaseDetailsPage}
+                          component={DatabaseDetailsPageLegacy}
                         />
                         <Redirect
                           exact

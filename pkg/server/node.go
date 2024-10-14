@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -14,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -44,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -289,6 +286,13 @@ var (
 		`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
 		time.Second*30,
 	)
+
+	livenessRangeCompactInterval = settings.RegisterDurationSetting(
+		settings.SystemOnly,
+		"kv.liveness_range_compact.interval",
+		`interval at which the liveness range is compacted. A value of 0 disables the periodic compaction`,
+		0,
+	)
 )
 
 // By default, stores will be started concurrently.
@@ -527,6 +531,9 @@ type Node struct {
 
 	// Event handler called in logStructuredEvent. Used in tests only.
 	onStructuredEvent func(ctx context.Context, event logpb.EventPayload)
+
+	// licenseEnforcer is used to enforce license policies on the cluster
+	licenseEnforcer *license.Enforcer
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -680,6 +687,7 @@ func NewNode(
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 	proxySender kv.Sender,
+	licenseEnforcer *license.Enforcer,
 ) *Node {
 	n := &Node{
 		storeCfg:              cfg,
@@ -698,6 +706,7 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 		proxySender:           proxySender,
+		licenseEnforcer:       licenseEnforcer,
 	}
 	n.diskSlowCoalescerMu.lastDiskSlow = make(map[roachpb.StoreID]time.Time)
 	n.versionUpdateMu.updateCh = make(chan struct{})
@@ -914,6 +923,8 @@ func (n *Node) start(
 		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+
+	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
 	return nil
 }
 
@@ -1205,6 +1216,87 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	})
 }
 
+// startPeriodicLivenessCompaction starts a loop where it periodically compacts
+// the liveness range.
+func (n *Node) startPeriodicLivenessCompaction(
+	stopper *stop.Stopper, livenessRangeCompactInterval *settings.DurationSetting,
+) {
+	ctx := n.AnnotateCtx(context.Background())
+
+	// getCompactionInterval() returns the interval at which the liveness range is
+	// set to be compacted. If the interval is set to 0, the period is set to the
+	// max possible duration because a value of 0 cause the ticker to panic.
+	getCompactionInterval := func() time.Duration {
+		interval := livenessRangeCompactInterval.Get(&n.storeCfg.Settings.SV)
+		if interval == 0 {
+			interval = math.MaxInt64
+		}
+		return interval
+	}
+
+	if err := stopper.RunAsyncTask(ctx, "liveness-compaction", func(ctx context.Context) {
+		interval := getCompactionInterval()
+		ticker := time.NewTicker(interval)
+
+		intervalChangeChan := make(chan time.Duration)
+
+		// Update the compaction interval when the setting changes.
+		livenessRangeCompactInterval.SetOnChange(&n.storeCfg.Settings.SV, func(ctx context.Context) {
+			// intervalChangeChan is used to signal the compaction loop that the
+			// interval has changed. Avoid blocking the main goroutine that is
+			// responsible for handling all settings updates.
+			select {
+			case intervalChangeChan <- getCompactionInterval():
+			default:
+			}
+		})
+
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Find the liveness replica in order to compact it.
+				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+					store.VisitReplicas(func(repl *kvserver.Replica) bool {
+						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
+						if keys.NodeLivenessSpan.Overlaps(span) {
+
+							// The CompactRange() method expects the start and end keys to be
+							// encoded.
+							startEngineKey :=
+								storage.EngineKey{
+									Key: span.Key,
+								}.Encode()
+
+							endEngineKey :=
+								storage.EngineKey{
+									Key: span.EndKey,
+								}.Encode()
+
+							timeBeforeCompaction := timeutil.Now()
+							if err := store.StateEngine().CompactRange(startEngineKey, endEngineKey); err != nil {
+								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+							}
+
+							log.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+								repl, timeutil.Since(timeBeforeCompaction))
+						}
+						return true
+					})
+					return nil
+				})
+			case newInterval := <-intervalChangeChan:
+				ticker.Reset(newInterval)
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	}); err != nil {
+		log.Errorf(ctx, "failed to start the async liveness compaction task")
+	}
+
+}
+
 // updateNodeRangeCount updates the internal counter of the total ranges across
 // all stores. This value is used to make a decision on whether the node should
 // use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
@@ -1246,6 +1338,7 @@ func (n *Node) computeMetricsPeriodically(
 		return nil
 	})
 	n.updateNodeRangeCount()
+	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
 	return err
 }
 
@@ -2461,6 +2554,9 @@ func (n *Node) TenantSettings(
 			// between the protobufs.
 			ServiceMode: uint32(tInfo.ServiceMode),
 			DataState:   uint32(tInfo.DataState),
+			// Flow the cluster init grace period end ts. Secondary tenant cannot
+			// access the KV location where this is stored.
+			ClusterInitGracePeriodEndTS: n.licenseEnforcer.GetClusterInitGracePeriodEndTS().Unix(),
 		})
 	}
 

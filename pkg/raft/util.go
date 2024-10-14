@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -22,12 +22,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
-
-func (st StateType) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%q", st.String())), nil
-}
 
 var isLocalMsg = [...]bool{
 	pb.MsgHup:               true,
@@ -52,6 +49,15 @@ var isResponseMsg = [...]bool{
 	pb.MsgFortifyLeaderResp: true,
 }
 
+var isMsgFromLeader = [...]bool{
+	pb.MsgApp:             true,
+	pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
+}
+
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
 	i := int(msgt)
 	return i < len(arr) && arr[i]
@@ -63,6 +69,10 @@ func IsLocalMsg(msgt pb.MessageType) bool {
 
 func IsResponseMsg(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isResponseMsg[:])
+}
+
+func IsMsgFromLeader(msgt pb.MessageType) bool {
+	return isMsgInArray(msgt, isMsgFromLeader[:])
 }
 
 func IsLocalMsgTarget(id pb.PeerID) bool {
@@ -301,7 +311,7 @@ func payloadsSize(ents []pb.Entry) entryPayloadSize {
 	return s
 }
 
-func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
+func assertConfStatesEquivalent(l raftlogger.Logger, cs1, cs2 pb.ConfState) {
 	err := cs1.Equivalent(cs2)
 	if err == nil {
 		return

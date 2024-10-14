@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package security
 
@@ -38,6 +33,11 @@ var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
 	"the maximum number of client cert expirations stored",
 	1000,
 	settings.WithPublic)
+
+type clientCertExpirationMetrics struct {
+	expiration aggmetric.Gauge
+	ttl        aggmetric.Gauge
+}
 
 // ClientCertExpirationCache contains a cache of gauge objects keyed by
 // SQL username strings. It is a FIFO cache that stores gauges valued by
@@ -87,12 +87,14 @@ func NewClientCertExpirationCache(
 			return int64(size) > capacity
 		},
 		OnEvictedEntry: func(entry *cache.Entry) {
-			gauge := entry.Value.(*aggmetric.Gauge)
+			metrics := entry.Value.(*clientCertExpirationMetrics)
 			// The child metric will continue to report into the parent metric even
 			// after unlinking, so we also reset it to 0.
-			gauge.Update(0)
-			gauge.Unlink()
-			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*gauge)))
+			metrics.expiration.Update(0)
+			metrics.expiration.Unlink()
+			metrics.ttl.Update(0)
+			metrics.ttl.Unlink()
+			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*metrics)))
 		},
 	})
 	c.mon = mon.NewMonitorInheritWithLimit(
@@ -112,23 +114,56 @@ func NewClientCertExpirationCache(
 	return c
 }
 
-// Get retrieves the cert expiration for the given username, if it exists.
-// An expiration of 0 indicates an entry was not found.
-func (c *ClientCertExpirationCache) Get(key string) (int64, bool) {
+// GetTTL retrieves seconds till cert expiration for the given username, if it exists.
+// A TTL of 0 indicates an entry was not found.
+func (c *ClientCertExpirationCache) GetTTL(key string) (int64, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	value, ok := c.mu.cache.Get(key)
 	if !ok {
 		return 0, ok
 	}
-	// If the expiration has already been reached, remove the entry and indicate
+	// If the metrics has already been reached, remove the entry and indicate
 	// that the entry was not found.
-	gauge := value.(*aggmetric.Gauge)
-	if gauge.Value() < c.timeNow() {
+	metrics := value.(*clientCertExpirationMetrics)
+	if metrics.expiration.Value() < c.timeNow() {
 		c.mu.cache.Del(key)
 		return 0, false
 	}
-	return gauge.Value(), ok
+	return metrics.ttl.Value(), ok
+}
+
+// GetExpiration retrieves the cert expiration for the given username, if it exists.
+// An expiration of 0 indicates an entry was not found.
+func (c *ClientCertExpirationCache) GetExpiration(key string) (int64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	value, ok := c.mu.cache.Get(key)
+	if !ok {
+		return 0, ok
+	}
+	// If the metrics has already been reached, remove the entry and indicate
+	// that the entry was not found.
+	metrics := value.(*clientCertExpirationMetrics)
+	if metrics.expiration.Value() < c.timeNow() {
+		c.mu.cache.Del(key)
+		return 0, false
+	}
+	return metrics.expiration.Value(), ok
+}
+
+// ttlFunc returns a function function which takes a time,
+// if the time is past returns 0, otherwise returns the number
+// of seconds until that timestamp
+func ttlFunc(now func() int64, exp int64) func() int64 {
+	return func() int64 {
+		ttl := exp - now()
+		if ttl > 0 {
+			return ttl
+		} else {
+			return 0
+		}
+	}
 }
 
 // MaybeUpsert may update or insert a client cert expiration gauge for a
@@ -136,26 +171,32 @@ func (c *ClientCertExpirationCache) Get(key string) (int64, bool) {
 // old expiration is after the new expiration. This ensures that the cache
 // maintains the minimum expiration for each user.
 func (c *ClientCertExpirationCache) MaybeUpsert(
-	ctx context.Context, key string, newExpiry int64, parentGauge *aggmetric.AggGauge,
+	ctx context.Context,
+	key string,
+	newExpiry int64,
+	parentExpirationGauge *aggmetric.AggGauge,
+	parentTTLGauge *aggmetric.AggGauge,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	value, ok := c.mu.cache.Get(key)
 	if !ok {
-		err := c.mu.acc.Grow(ctx, int64(unsafe.Sizeof(aggmetric.Gauge{})))
+		err := c.mu.acc.Grow(ctx, int64(unsafe.Sizeof(clientCertExpirationMetrics{})))
 		if err == nil {
 			// Only create new gauges for expirations in the future.
 			if newExpiry > c.timeNow() {
-				gauge := parentGauge.AddChild(key)
-				gauge.Update(newExpiry)
-				c.mu.cache.Add(key, gauge)
+				expiration := parentExpirationGauge.AddChild(key)
+				expiration.Update(newExpiry)
+				ttl := parentTTLGauge.AddFunctionalChild(ttlFunc(c.timeNow, newExpiry), key)
+				c.mu.cache.Add(key, &clientCertExpirationMetrics{*expiration, *ttl})
 			}
 		} else {
 			log.Ops.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
 		}
-	} else if gauge := value.(*aggmetric.Gauge); newExpiry < gauge.Value() || gauge.Value() == 0 {
-		gauge.Update(newExpiry)
+	} else if metrics := value.(*clientCertExpirationMetrics); newExpiry < metrics.expiration.Value() || metrics.expiration.Value() == 0 {
+		metrics.expiration.Update(newExpiry)
+		metrics.ttl.UpdateFn(ttlFunc(c.timeNow, newExpiry))
 	}
 }
 
@@ -216,8 +257,8 @@ func (c *ClientCertExpirationCache) PurgePastExpirations() {
 	var deleteEntryKeys []interface{}
 	now := c.timeNow()
 	c.mu.cache.Do(func(entry *cache.Entry) {
-		gauge := entry.Value.(*aggmetric.Gauge)
-		if gauge.Value() <= now {
+		metrics := entry.Value.(*clientCertExpirationMetrics)
+		if metrics.expiration.Value() <= now {
 			deleteEntryKeys = append(deleteEntryKeys, entry.Key)
 		}
 	})

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -90,7 +85,7 @@ func runDiskStalledWALFailover(
 	defer n1Conn.Close()
 	require.NoError(t, n1Conn.PingContext(ctx))
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n1Conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n1Conn))
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
 	require.NoError(t, err)
 	adminURL := adminUIAddrs[0]
@@ -128,6 +123,7 @@ func runDiskStalledWALFailover(
 				continue
 			}
 			func() {
+				stopStall := time.After(30 * time.Second)
 				s.Stall(ctx, c.Node(1))
 				// NB: We use a background context in the defer'ed unstall command,
 				// otherwise on test failure our Unstall calls will be ignored. Leaving
@@ -142,7 +138,7 @@ func runDiskStalledWALFailover(
 				select {
 				case <-ctx.Done():
 					t.Fatalf("context done while stall induced: %s", ctx.Err())
-				case <-time.After(30 * time.Second):
+				case <-stopStall:
 					// Return from the anonymous function, allowing the
 					// defer to unstall the node.
 					return
@@ -156,7 +152,7 @@ func runDiskStalledWALFailover(
 	time.Sleep(1 * time.Second)
 	exit, ok := getProcessExitMonotonic(ctx, t, c, 1)
 	if ok && exit > 0 {
-		t.Fatal("process exited unexectedly")
+		t.Fatal("process exited unexpectedly")
 	}
 
 	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,
@@ -276,7 +272,7 @@ func runDiskStalledDetection(
 	require.NoError(t, n1Conn.PingContext(ctx))
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n2conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n2conn))
 
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
@@ -312,7 +308,7 @@ func runDiskStalledDetection(
 		{name: "cr.node.sql.query.count", queryType: total},
 	})
 	cum := response.Results[0].Datapoints
-	totalQueriesPreStall := cum[len(cum)-1].Value - cum[0].Value
+	totalQueriesPreStall := sumCounterIncreases(cum)
 	t.L().PrintfCtx(ctx, "%.2f queries completed before stall", totalQueriesPreStall)
 
 	t.Status("inducing write stall")
@@ -350,7 +346,8 @@ func runDiskStalledDetection(
 	}
 
 	// Let the workload continue after the stall.
-	workloadAfterDur := 10*time.Minute - timeutil.Since(workloadStartAt)
+	workloadContinuedAt := timeutil.Now()
+	workloadAfterDur := 10*time.Minute - workloadContinuedAt.Sub(workloadStartAt)
 	t.Status("letting workload continue for ", workloadAfterDur, " with n1 stalled")
 	select {
 	case <-ctx.Done():
@@ -360,11 +357,11 @@ func runDiskStalledDetection(
 
 	{
 		now := timeutil.Now()
-		response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadStartAt, now, []tsQuery{
+		response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadContinuedAt, now, []tsQuery{
 			{name: "cr.node.sql.query.count", queryType: total},
 		})
 		cum := response.Results[0].Datapoints
-		totalQueriesPostStall := cum[len(cum)-1].Value - totalQueriesPreStall
+		totalQueriesPostStall := sumCounterIncreases(cum)
 		preStallQPS := totalQueriesPreStall / stallAt.Sub(workloadStartAt).Seconds()
 		postStallQPS := totalQueriesPostStall / workloadAfterDur.Seconds()
 		t.L().PrintfCtx(ctx, "%.2f total queries committed after stall\n", totalQueriesPostStall)

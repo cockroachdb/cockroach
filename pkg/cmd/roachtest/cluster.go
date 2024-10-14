@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -940,10 +935,6 @@ func (f *clusterFactory) newCluster(
 	if err != nil {
 		return nil, nil, err
 	}
-	if clusterCloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(clusterCloud.String(), providerOpts)
-		workloadProviderOptsContainer.SetProviderOpts(clusterCloud.String(), workloadProviderOpts)
-	}
 
 	createFlagsOverride(&createVMOpts)
 	// Make sure expiration is changed if --lifetime override flag
@@ -966,6 +957,15 @@ func (f *clusterFactory) newCluster(
 		//
 		// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
 		genName := f.genName(cfg)
+
+		// Set the zones used for the cluster. We call this in the loop as the default GCE zone
+		// is randomized to avoid zone exhaustion errors.
+		providerOpts, workloadProviderOpts = cfg.spec.SetRoachprodOptsZones(providerOpts, workloadProviderOpts, params, string(selectedArch))
+		if clusterCloud != spec.Local {
+			providerOptsContainer.SetProviderOpts(clusterCloud.String(), providerOpts)
+			workloadProviderOptsContainer.SetProviderOpts(clusterCloud.String(), workloadProviderOpts)
+		}
+
 		// Logs for creating a new cluster go to a dedicated log file.
 		var retryStr string
 		if i > 1 {
@@ -1209,53 +1209,24 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 		return nil
 	}
 
-	l.Printf("fetching logs")
 	c.status("fetching logs")
 
-	// Don't hang forever if we can't fetch the logs.
-	return timeutil.RunWithTimeout(ctx, "fetch logs", 5*time.Minute, func(ctx context.Context) error {
-		// Find all log directories, which might include logs for
-		// external-process virtual clusters.
-		listLogDirsCmd := "find logs* -maxdepth 0 -type d"
-		results, err := c.RunWithDetails(ctx, l, option.WithNodes(c.All()), listLogDirsCmd)
-		if err != nil {
-			return err
+	err := roachprod.FetchLogs(ctx, l, c.name, c.t.ArtifactsDir(), 5*time.Minute)
+
+	var logFileFull string
+	if l.File != nil {
+		logFileFull = l.File.Name()
+	}
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			l.Printf("(note: incoming context was canceled: %s)", err)
+			return ctxErr
 		}
 
-		logDirs := make(map[string]struct{})
-		for _, r := range results {
-			if r.Err != nil {
-				l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
-			}
-
-			for _, logDir := range strings.Fields(r.Stdout) {
-				logDirs[logDir] = struct{}{}
-			}
-		}
-
-		for logDir := range logDirs {
-			path := filepath.Join(c.t.ArtifactsDir(), logDir, "unredacted")
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-				return err
-			}
-
-			if err := c.Get(ctx, c.l, logDir /* src */, path /* dest */); err != nil {
-				l.Printf("failed to fetch log directory %s: %v", logDir, err)
-				if ctx.Err() != nil {
-					return errors.Wrap(err, "cluster.FetchLogs")
-				}
-			}
-		}
-
-		if err := c.RunE(ctx, option.WithNodes(c.All()), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
-			l.Printf("failed to redact logs: %v", err)
-			if ctx.Err() != nil {
-				return err
-			}
-		}
-		dest := filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log")
-		return errors.Wrap(c.Get(ctx, c.l, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
-	})
+		l.Printf("> result: %s", err)
+		createFailedFile(logFileFull)
+	}
+	return err
 }
 
 // saveDiskUsageToLogsDir collects a summary of the disk usage to logs/diskusage.txt on each node.
@@ -1328,7 +1299,11 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 			sec = fmt.Sprintf("--certs-dir=%s", certs)
 		}
 		if err := c.RunE(
-			ctx, option.WithNodes(c.Node(node)), fmt.Sprintf("%s debug tsdump %s --port={pgport%s} --format=raw > tsdump.gob", test.DefaultCockroachPath, sec, c.Node(node)),
+			ctx, option.WithNodes(c.Node(node)),
+			fmt.Sprintf(
+				"%s debug tsdump %s --port={pgport%s:%s} --format=raw > tsdump.gob",
+				test.DefaultCockroachPath, sec, c.Node(node), install.SystemInterfaceName,
+			),
 		); err != nil {
 			return err
 		}
@@ -1390,15 +1365,7 @@ func (c *clusterImpl) FetchDebugZip(
 	l.Printf("fetching debug zip")
 	c.status("fetching debug zip")
 
-	var nodes option.NodeListOption
-	for _, o := range opts {
-		if s, ok := o.(nodeSelector); ok {
-			nodes = s.Merge(nodes)
-		}
-	}
-	if len(nodes) == 0 {
-		nodes = c.All()
-	}
+	nodes := selectedNodesOrDefault(opts, c.All())
 
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
@@ -1411,8 +1378,14 @@ func (c *clusterImpl) FetchDebugZip(
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
 		for _, node := range nodes {
-			// `cockroach debug zip` does not support non root authentication.
-			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
+			pgURLOpts := roachprod.PGURLOptions{
+				// `cockroach debug zip` does not support non root authentication.
+				Auth: install.AuthRootCert,
+				// request the system tenant specifically in case the test
+				// changed the default virtual cluster.
+				VirtualClusterName: install.SystemInterfaceName,
+			}
+			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), pgURLOpts)
 			if err != nil {
 				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", node, err)
 				continue
@@ -1524,6 +1497,23 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
 	}
 	return nil
+}
+
+func selectedNodesOrDefault(
+	opts []option.Option, defaultNodes option.NodeListOption,
+) option.NodeListOption {
+	var nodes option.NodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.Merge(nodes)
+		}
+	}
+
+	if len(nodes) == 0 {
+		return defaultNodes
+	}
+
+	return nodes
 }
 
 type HealthStatusResult struct {
@@ -2077,12 +2067,7 @@ func (c *clusterImpl) GitClone(
 func (c *clusterImpl) setStatusForClusterOpt(
 	operation string, worker bool, nodesOptions ...option.Option,
 ) {
-	var nodes option.NodeListOption
-	for _, o := range nodesOptions {
-		if s, ok := o.(nodeSelector); ok {
-			nodes = s.Merge(nodes)
-		}
-	}
+	nodes := selectedNodesOrDefault(nodesOptions, nil)
 
 	nodesString := " cluster"
 	if len(nodes) != 0 {
@@ -2182,6 +2167,24 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
+
+	if startOpts.WaitForReplicationFactor > 0 {
+		l.Printf("WaitForReplicationFactor: waiting for replication factor of at least %d", startOpts.WaitForReplicationFactor)
+		nodes := selectedNodesOrDefault(opts, c.All())
+
+		conn, err := c.ConnE(ctx, l, nodes[0])
+		if err != nil {
+			return errors.Wrapf(err, "failed to connect to n%d", nodes[0])
+		}
+		defer conn.Close()
+
+		if err := roachtestutil.WaitForReplication(
+			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,
+		); err != nil {
+			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
+		}
+	}
+
 	return nil
 }
 
@@ -2202,8 +2205,8 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	// user customized the storage cluster in the `StartOpts`, we use
 	// that.
 	storageCluster := c.All()
-	if len(startOpts.SeparateProcessStorageNodes) > 0 {
-		storageCluster = startOpts.SeparateProcessStorageNodes
+	if len(startOpts.StorageNodes) > 0 {
+		storageCluster = startOpts.StorageNodes
 	}
 
 	// If the user indicated nodes where the virtual cluster should be
@@ -2538,9 +2541,12 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	l.Printf("> %s", cmd)
+	expanderCfg := install.ExpanderConfig{
+		DefaultVirtualCluster: c.defaultVirtualCluster,
+	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, options,
+		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg),
 	)
 
 	var logFileFull string
@@ -2958,13 +2964,7 @@ func (c *clusterImpl) ConnE(
 }
 
 func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
-	var r option.NodeListOption
-	for _, o := range opts {
-		if s, ok := o.(nodeSelector); ok {
-			r = s.Merge(r)
-		}
-	}
-	return c.name + r.String()
+	return c.name + selectedNodesOrDefault(opts, nil).String()
 }
 
 func (c *clusterImpl) Cloud() spec.Cloud {
@@ -3097,6 +3097,10 @@ func (c *clusterImpl) WipeForReuse(
 	// particular, this overwrites the reuse policy to reflect what the test
 	// intends to do with it.
 	c.spec = newClusterSpec
+	// Reset the default virtual cluster before running a new test on
+	// this cluster.
+	c.defaultVirtualCluster = ""
+
 	return nil
 }
 

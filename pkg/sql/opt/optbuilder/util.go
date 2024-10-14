@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -510,7 +505,7 @@ func (b *Builder) resolveSchemaForCreate(
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
 		panic(err)
 	}
 
@@ -662,7 +657,7 @@ func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking descriptor leases when we're creating a view or a
 		// function.
 		flags.AvoidDescriptorCaches = true
@@ -690,7 +685,7 @@ func (b *Builder) resolveDataSourceRef(
 	ref *tree.TableRef, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking table leases when we're creating a view or a function.
 		flags.AvoidDescriptorCaches = true
 	}
@@ -710,7 +705,7 @@ func (b *Builder) resolveDataSourceRef(
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
 		if err != nil {
 			panic(err)
 		}

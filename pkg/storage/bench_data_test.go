@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -204,6 +199,10 @@ type mvccBenchData struct {
 	// mode simulates data that has been RESTOREd or is old enough to have been
 	// fully compacted.
 	transactional bool
+
+	// When includeHeader is set, values will be written with
+	// non-empty MVCCValueHeaders.
+	includeHeader bool
 }
 
 var _ initialState = mvccBenchData{}
@@ -223,6 +222,9 @@ func (d mvccBenchData) Key() []string {
 	}
 	if d.transactional {
 		key = append(key, fmt.Sprintf("transactional_%t", d.transactional))
+	}
+	if d.includeHeader {
+		key = append(key, fmt.Sprintf("headers_%t", d.includeHeader))
 	}
 	return key
 }
@@ -321,7 +323,11 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn})
+		originID := uint32(0)
+		if d.includeHeader {
+			originID = 1
+		}
+		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn, OriginID: originID})
 		require.NoError(b, err)
 	}
 

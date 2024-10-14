@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logictest
 
@@ -953,6 +948,10 @@ type logicQuery struct {
 	// noticetrace indicates we're comparing the output of a notice trace.
 	noticetrace bool
 
+	// regexp indicates the output should be compared as a regexp expression,
+	// rather than via direct string comparison.
+	regexp bool
+
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
@@ -1253,26 +1252,30 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 	}
 	pgURL.Path = "test"
 
-	db := t.openDB(pgURL)
-
-	// The default value for extra_float_digits assumed by tests is
-	// 1. However, lib/pq by default configures this to 2 during
-	// connection initialization, so we need to set it back to 1 before
-	// we run anything.
-	if _, err := db.Exec("SET extra_float_digits = 1"); err != nil {
+	// Set some session variables to non-default values in every connection. We do
+	// this via PG URL options rather than SET SQL statements because we need
+	// lib/pq to set these session variables in every new connection created for
+	// the database/sql connection pool.
+	opts, err := url.ParseQuery(pgURL.RawQuery)
+	if err != nil {
 		t.Fatal(err)
 	}
+	// The default value for extra_float_digits assumed by tests is 1. However,
+	// lib/pq by default configures this to 2 during connection initialization, so
+	// we need to set it back to 1 before we run anything.
+	opts.Add("extra_float_digits", "1")
 	// The default setting for index_recommendations_enabled is true. We do not
 	// want to display index recommendations in logic tests, so we disable them
 	// here.
-	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
-		t.Fatal(err)
-	}
+	opts.Add("index_recommendations_enabled", "false")
+	// Set default transaction isolation if it is not serializable.
 	if iso := t.cfg.EnableDefaultIsolationLevel; iso != 0 {
-		if _, err := db.Exec(fmt.Sprintf("SET default_transaction_isolation = '%s'", iso)); err != nil {
-			t.Fatal(err)
-		}
+		opts.Add("default_transaction_isolation", iso.String())
 	}
+	pgURL.RawQuery = opts.Encode()
+
+	db := t.openDB(pgURL)
+
 	if t.clients == nil {
 		t.clients = make(map[string]map[int]*gosql.DB)
 	}
@@ -1353,7 +1356,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 
 	ts, err := testserver.NewTestServer(opts...)
 	if err != nil {
-		t.Fatal(err)
+		t.handleWaitForInitErr(ts, err)
 	}
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
@@ -1378,49 +1381,54 @@ func (t *logicTest) waitForAllNodes() {
 	for i := 0; i < t.cfg.NumNodes; i++ {
 		// Wait for each node to be reachable.
 		if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-			if testutils.IsError(err, "init did not finish for node") {
-				// Check for `Can't find decompressor for snappy` error in the logs.
-				// This error appears to be some sort of infra issue where CRDB is
-				// unable to connect to another node, possibly because there is
-				// another non-CRDB server listening on that port. Since this is a rare
-				// issue, and we haven't been able to investigate it effectively, we
-				// will ignore this error.
-				// See https://github.com/cockroachdb/cockroach/issues/128759.
-				foundSnappyErr := false
-				walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
-					if err != nil {
-						return err
-					}
-					if d.IsDir() {
-						return nil
-					}
-					file, err := os.Open(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-
-					scanner := bufio.NewScanner(file)
-					for scanner.Scan() {
-						if strings.Contains(scanner.Text(), "Can't find decompressor for snappy") {
-							foundSnappyErr = true
-							return filepath.SkipAll
-						}
-					}
-					if err := scanner.Err(); err != nil {
-						return err
-					}
-					return nil
-				})
-				if walkErr != nil {
-					t.t().Logf("error while walking logs directory: %v", walkErr)
-				} else if foundSnappyErr {
-					t.t().Skip("ignoring init did not finish for node error due to snappy error")
-				}
-			}
-			t.Fatal(err)
+			t.handleWaitForInitErr(t.testserverCluster, err)
 		}
 	}
+}
+
+// Check for `Can't find decompressor for snappy` error in the logs.
+// This error appears to be some sort of infra issue where CRDB is
+// unable to connect to another node, possibly because there is
+// another non-CRDB server listening on that port. Since this is a rare
+// issue, and we haven't been able to investigate it effectively, we
+// will ignore this error.
+// See https://github.com/cockroachdb/cockroach/issues/128759.
+func (t *logicTest) handleWaitForInitErr(ts testserver.TestServer, err error) {
+	if testutils.IsError(err, "init did not finish for node") {
+		foundSnappyErr := false
+		walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				if strings.Contains(scanner.Text(), "Can't find decompressor for snappy") {
+					foundSnappyErr = true
+					return filepath.SkipAll
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+			return nil
+		})
+		if walkErr != nil {
+			t.t().Logf("error while walking logs directory: %v", walkErr)
+		} else if foundSnappyErr {
+			ts.Stop()
+			t.t().Skip("ignoring init did not finish for node error due to snappy error")
+		}
+	}
+	t.Fatal(err)
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
@@ -2835,6 +2843,9 @@ func (t *logicTest) processSubtest(
 						case "noticetrace":
 							query.noticetrace = true
 
+						case "regexp":
+							query.regexp = true
+
 						case "async":
 							query.expectAsync = true
 
@@ -3502,11 +3513,18 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	return t.finishExecStatement(stmt, execSQL, res, err)
 }
 
+var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
+
 func (t *logicTest) finishExecStatement(
 	stmt logicStatement, execSQL string, res gosql.Result, err error,
 ) (bool, error) {
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
+		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
+		// not work because only unique hash-sharded indexes are allowed, yet we
+		// format them as unique constraints.
+		if !uniqueHashPattern.MatchString(stmt.sql) {
+			sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
+		}
 	}
 	if err == nil && stmt.expectCount >= 0 {
 		var count int64
@@ -3589,7 +3607,12 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err error) error {
 	if err == nil {
-		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
+		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
+		// not work because only unique hash-sharded indexes are allowed, yet we
+		// format them as unique constraints.
+		if !uniqueHashPattern.MatchString(query.sql) {
+			sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
+		}
 
 		// If expecting an error, then read all result rows, since some errors are
 		// only triggered after initial rows are returned.
@@ -3856,7 +3879,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		for i := range query.expectedResults {
 			expected, actual := query.expectedResults[i], actualResults[i]
 			var resultMatches bool
-			if query.noticetrace {
+			if query.regexp {
 				resultMatches, err = regexp.MatchString(expected, actual)
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)

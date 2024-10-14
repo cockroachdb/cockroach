@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tenantcapabilitiesauthorizer
 
@@ -27,6 +22,13 @@ var _ tenantcapabilities.Authorizer = &AllowEverythingAuthorizer{}
 // NewAllowEverythingAuthorizer constructs and returns a AllowEverythingAuthorizer.
 func NewAllowEverythingAuthorizer() *AllowEverythingAuthorizer {
 	return &AllowEverythingAuthorizer{}
+}
+
+// HasCrossTenantRead returns true if a tenant can read from other tenants.
+func (n *AllowEverythingAuthorizer) HasCrossTenantRead(
+	ctx context.Context, tenID roachpb.TenantID,
+) bool {
+	return true
 }
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rac2
 
@@ -22,28 +17,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
 func formatTrackerState(t *Tracker) string {
 	var result strings.Builder
 	for pri, tracked := range t.tracked {
-		if len(tracked) > 0 {
+		if n := tracked.Length(); n > 0 {
 			result.WriteString(fmt.Sprintf("%v:\n", raftpb.Priority(pri)))
-			for _, tr := range tracked {
+			for i := 0; i < n; i++ {
+				tr := tracked.At(i)
 				result.WriteString(fmt.Sprintf("  term=%d index=%-2d tokens=%-3d\n",
-					tr.term, tr.index, tr.tokens))
+					tr.id.term, tr.id.index, tr.tokens))
 			}
 		}
 	}
 	return result.String()
 }
 
-func formatUntracked(untracked [raftpb.NumPriorities]kvflowcontrol.Tokens) string {
+func formatUntracked(prefix string, untracked [raftpb.NumPriorities]kvflowcontrol.Tokens) string {
 	var buf strings.Builder
 	for pri, tokens := range untracked {
 		if tokens > 0 {
-			buf.WriteString(fmt.Sprintf("returned: tokens=%-4d pri=%v\n", tokens, raftpb.Priority(pri)))
+			buf.WriteString(fmt.Sprintf("%s returned: tokens=%-4d pri=%v\n",
+				prefix, tokens, raftpb.Priority(pri)))
 		}
 	}
 	return buf.String()
@@ -55,9 +53,22 @@ func TestTokenTracker(t *testing.T) {
 
 	ctx := context.Background()
 	tracker := &Tracker{}
-	tracker.Init(kvflowcontrol.Stream{})
+
+	// Used to marshal the output of the Inspect() method into a human-readable
+	// formatted JSON string. See case "inspect" below.
+	marshaller := jsonpb.Marshaler{
+		Indent:       "  ",
+		EmitDefaults: true,
+		OrigName:     true,
+	}
 	datadriven.RunTest(t, "testdata/token_tracker", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
+		case "init":
+			var term uint64
+			d.ScanArgs(t, "term", &term)
+			tracker.Init(term, kvflowcontrol.Stream{})
+			return "ok"
+
 		case "track":
 			var buf strings.Builder
 			for _, line := range strings.Split(d.Input, "\n") {
@@ -88,16 +99,18 @@ func TestTokenTracker(t *testing.T) {
 				parts[3] = strings.TrimPrefix(parts[3], "pri=")
 				pri := AdmissionToRaftPriority(parsePriority(t, parts[3]))
 
-				tracker.Track(ctx, term, index, pri, kvflowcontrol.Tokens(tokens))
+				tracker.Track(ctx, entryID{index: index, term: term}, pri,
+					kvflowcontrol.Tokens(tokens))
 				buf.WriteString(fmt.Sprintf("tracked: term=%d index=%-2d tokens=%-3d pri=%v\n",
 					term, index, tokens, pri))
 			}
 			return buf.String()
 
 		case "untrack":
-			var term uint64
-			d.ScanArgs(t, "term", &term)
-			var admitted [raftpb.NumPriorities]uint64
+			var av AdmittedVector
+			d.ScanArgs(t, "term", &av.Term)
+			var evalTokensGEIndex uint64
+			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -110,20 +123,26 @@ func TestTokenTracker(t *testing.T) {
 				pri := AdmissionToRaftPriority(parsePriority(t, priStr))
 				index, err := strconv.ParseUint(indexStr, 10, 64)
 				require.NoError(t, err)
-				admitted[pri] = index
+				av.Admitted[pri] = index
 			}
-			return formatUntracked(tracker.Untrack(term, admitted))
-
-		case "untrack_ge":
-			var index uint64
-			d.ScanArgs(t, "index", &index)
-			return formatUntracked(tracker.UntrackGE(index))
+			returnedSend, returnedEval := tracker.Untrack(av, evalTokensGEIndex)
+			return fmt.Sprintf("%s%s", formatUntracked("send", returnedSend),
+				formatUntracked("eval", returnedEval))
 
 		case "untrack_all":
-			return formatUntracked(tracker.UntrackAll())
+			return formatUntracked("send", tracker.UntrackAll())
 
 		case "state":
 			return formatTrackerState(tracker)
+
+		case "inspect":
+			var buf strings.Builder
+			for _, deduction := range tracker.Inspect() {
+				marshaled, err := marshaller.MarshalToString(&deduction)
+				require.NoError(t, err)
+				fmt.Fprintf(&buf, "%s\n", marshaled)
+			}
+			return buf.String()
 
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)

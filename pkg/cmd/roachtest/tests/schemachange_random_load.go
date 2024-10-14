@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -96,7 +91,12 @@ func runSchemaChangeRandomLoad(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+
+	settings := install.MakeClusterSettings(install.ClusterSettingsOption{
+		"sql.log.all_statements.enabled": "true",
+	})
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, roachNodes)
 
 	c.Run(ctx, option.WithNodes(loadNode), "./workload init schemachange {pgurl:1}")
 

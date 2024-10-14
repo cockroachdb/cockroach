@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowexec
 
@@ -322,7 +317,7 @@ func TestProcessorBaseContext(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Use a custom context to distinguish it from the background one.
-	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
+	ctx := context.WithValue(context.Background(), &contextKeyPtr, struct{}{})
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
@@ -938,3 +933,7 @@ func testReaderProcessorDrain(
 		}
 	})
 }
+
+type contextKey struct{}
+
+var contextKeyPtr contextKey

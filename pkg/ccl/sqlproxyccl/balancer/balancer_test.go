@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package balancer
 
@@ -19,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,6 +30,7 @@ import (
 
 func TestBalancer_SelectTenantPod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -64,6 +63,7 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 
 func TestRebalancer_processQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -243,6 +243,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 // the manual timer is difficult to get it right (and often flaky).
 func TestRebalancer_rebalanceLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -345,6 +346,7 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 
 func TestRebalancer_rebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -718,6 +720,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 
 func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -793,6 +796,7 @@ func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
 
 func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -896,6 +900,7 @@ func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 
 func TestEnqueueRebalanceRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	baseCtx := context.Background()
 	stopper := stop.NewStopper()
@@ -937,6 +942,7 @@ func TestEnqueueRebalanceRequests(t *testing.T) {
 
 func TestCollectRunningPodAssignments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	// Use a deterministic behavior in tests.
 	defer func(
@@ -1101,6 +1107,7 @@ func TestCollectRunningPodAssignments(t *testing.T) {
 
 func TestCollectDrainingPodAssignments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	t.Run("no pods", func(t *testing.T) {
 		set := collectDrainingPodAssignments(
@@ -1150,6 +1157,7 @@ func TestCollectDrainingPodAssignments(t *testing.T) {
 
 func TestPartitionNRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	generateSrc := func(count int) []*ServerAssignment {
 		var partition []*ServerAssignment
@@ -1227,6 +1235,7 @@ func TestPartitionNRandom(t *testing.T) {
 
 func TestRebalancerQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1300,6 +1309,7 @@ func TestRebalancerQueue(t *testing.T) {
 // dequeue.
 func TestRebalancerQueueBlocking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

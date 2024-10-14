@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -389,6 +386,7 @@ func newStreamIngestionDataProcessor(
 // Start implements the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
+	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
 	log.Infof(ctx, "starting ingest proc")
 	sip.agg = bulkutil.TracingAggregatorForContext(ctx)
 
@@ -664,7 +662,6 @@ func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
 
 func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb.BulkOpSummary) {
 	sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
-	sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -951,9 +948,6 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-
-	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
-	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }

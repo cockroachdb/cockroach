@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -117,6 +112,12 @@ var (
 	metaOverReplicatedRangeCount = metric.Metadata{
 		Name:        "ranges.overreplicated",
 		Help:        "Number of ranges with more live replicas than the replication target",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDecommissioningRangeCount = metric.Metadata{
+		Name:        "ranges.decommissioning",
+		Help:        "Number of ranges with at lease one replica on a decommissioning node",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -758,6 +759,16 @@ which can be useful to determine whether the maximum compaction concurrency is
 fully utilized.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStorageWriteAmplification = metric.Metadata{
+		Name: "storage.write-amplification",
+		Help: `Running measure of write-amplification.
+
+Write amplification is measured as the ratio of bytes written to disk relative to the logical
+bytes present in sstables, over the life of a store. This metric is a running average
+of the write amplification as tracked by Pebble.`,
+		Measurement: "Ratio of bytes written to logical bytes",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaStorageCompactionsKeysPinnedCount = metric.Metadata{
 		Name: "storage.compactions.keys.pinned.count",
@@ -1615,6 +1626,12 @@ cache will already have moved on to newer entries.
 	metaRaftRcvdFortifyLeaderResp = metric.Metadata{
 		Name:        "raft.rcvd.fortifyleaderresp",
 		Help:        "Number of MsgFortifyLeaderResp messages received by this store",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftRcvdDeFortifyLeader = metric.Metadata{
+		Name:        "raft.rcvd.defortifyleader",
+		Help:        "Number of MsgDeFortifyLeader messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2566,6 +2583,7 @@ type StoreMetrics struct {
 	UnavailableRangeCount     *metric.Gauge
 	UnderReplicatedRangeCount *metric.Gauge
 	OverReplicatedRangeCount  *metric.Gauge
+	DecommissioningRangeCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -2669,6 +2687,7 @@ type StoreMetrics struct {
 	StorageCompactionsPinnedKeys      *metric.Counter
 	StorageCompactionsPinnedBytes     *metric.Counter
 	StorageCompactionsDuration        *metric.Counter
+	StorageWriteAmplification         *metric.GaugeFloat64
 	IterBlockBytes                    *metric.Counter
 	IterBlockBytesInCache             *metric.Counter
 	IterBlockReadDuration             *metric.Counter
@@ -3263,6 +3282,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
 		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
+		DecommissioningRangeCount: metric.NewGauge(metaDecommissioningRangeCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
@@ -3390,6 +3410,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		StorageCompactionsPinnedKeys:      metric.NewCounter(metaStorageCompactionsKeysPinnedCount),
 		StorageCompactionsPinnedBytes:     metric.NewCounter(metaStorageCompactionsKeysPinnedBytes),
 		StorageCompactionsDuration:        metric.NewCounter(metaStorageCompactionsDuration),
+		StorageWriteAmplification:         metric.NewGaugeFloat64(metaStorageWriteAmplification),
 		FlushableIngestCount:              metric.NewCounter(metaFlushableIngestCount),
 		FlushableIngestTableCount:         metric.NewCounter(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:          metric.NewCounter(metaFlushableIngestTableBytes),
@@ -3548,6 +3569,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgTimeoutNow:        metric.NewCounter(metaRaftRcvdTimeoutNow),
 			raftpb.MsgFortifyLeader:     metric.NewCounter(metaRaftRcvdFortifyLeader),
 			raftpb.MsgFortifyLeaderResp: metric.NewCounter(metaRaftRcvdFortifyLeaderResp),
+			raftpb.MsgDeFortifyLeader:   metric.NewCounter(metaRaftRcvdDeFortifyLeader),
 		},
 		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
 		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),
@@ -3861,11 +3883,14 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
+	totalWriteAmp := float64(0)
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
 		sm.RdbLevelSize[level].Update(stats.Size)
 		sm.RdbLevelScore[level].Update(stats.Score)
+		totalWriteAmp += stats.WriteAmp()
 	}
+	sm.StorageWriteAmplification.Update(totalWriteAmp)
 }
 
 // updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
@@ -3947,17 +3972,26 @@ func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
-func (sm *StoreMetrics) updateDiskStats(rollingStats disk.StatsWindow) {
-	cumulativeStats := rollingStats.Latest()
-	sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
-	sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
-	sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
-	sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
-	sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
-	sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
-	sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
-	sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
-	sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
+func (sm *StoreMetrics) updateDiskStats(
+	ctx context.Context,
+	rollingStats disk.StatsWindow,
+	cumulativeStats disk.Stats,
+	cumulativeStatsErr error,
+) {
+	if cumulativeStatsErr == nil {
+		sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
+		sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
+		sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
+		sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
+		sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
+		sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
+		sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
+		sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
+		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
+	} else {
+		// Don't update cumulative stats to the useless zero value.
+		log.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
+	}
 	maxRollingStats := rollingStats.Max()
 	// maxRollingStats is computed as the change in stats every 100ms, so we
 	// scale them to represent the change in stats every 1s.

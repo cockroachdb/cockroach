@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -60,6 +57,7 @@ func TestPurgatory(t *testing.T) {
 			resolved = int(sp[0].Timestamp.WallTime)
 			return nil
 		},
+		debug: &streampb.DebugLogicalConsumerStatus{},
 	}
 
 	sz := int64((&streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: roachpb.Key("a")}}).Size())

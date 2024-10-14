@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -14,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -385,6 +381,20 @@ type MVCCRangeKey struct {
 	StartKey  roachpb.Key
 	EndKey    roachpb.Key
 	Timestamp hlc.Timestamp
+	// EncodedTimestampSuffix is an optional encoded representation of Timestamp
+	// as a Pebble "suffix". When reading range keys from the engine, the
+	// iterator copies the verbatim encoded timestamp here. There historically
+	// have been multiple representations of a timestamp that were intended to
+	// be logically equivalent. A bug in CockroachDB's pebble.Comparer
+	// implementation prevented some encodings from being considered equivalent.
+	// See #129592.
+	//
+	// To work around this wart within the comparer, we preserve a copy of the
+	// physical encoded timestamp we read off the engine. If a MVCCRangeKey with
+	// a non-empty EncodedTimestampSuffix is cleared via ClearMVCCRangeKey, the
+	// RangeKeyUnset tombstone is written with the verbatim
+	// EncodedTimestampSuffix.
+	EncodedTimestampSuffix []byte
 }
 
 // AsStack returns the range key as a range key stack with the given value.
@@ -392,8 +402,9 @@ func (k MVCCRangeKey) AsStack(valueRaw []byte) MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{
 		Bounds: k.Bounds(),
 		Versions: MVCCRangeKeyVersions{{
-			Timestamp: k.Timestamp,
-			Value:     valueRaw,
+			Timestamp:              k.Timestamp,
+			Value:                  valueRaw,
+			EncodedTimestampSuffix: k.EncodedTimestampSuffix,
 		}},
 	}
 }
@@ -408,6 +419,7 @@ func (k MVCCRangeKey) Clone() MVCCRangeKey {
 	// k is already a copy, but byte slices must be cloned.
 	k.StartKey = k.StartKey.Clone()
 	k.EndKey = k.EndKey.Clone()
+	k.EncodedTimestampSuffix = slices.Clone(k.EncodedTimestampSuffix)
 	return k
 }
 
@@ -507,6 +519,20 @@ type MVCCRangeKeyVersions []MVCCRangeKeyVersion
 type MVCCRangeKeyVersion struct {
 	Timestamp hlc.Timestamp
 	Value     []byte
+	// EncodedTimestampSuffix is an optional encoded representation of Timestamp
+	// as a Pebble "suffix". When reading range keys from the engine, the
+	// iterator copies the verbatim encoded timestamp here. There historically
+	// have been multiple representations of a timestamp that were intended to
+	// be logically equivalent. A bug in CockroachDB's pebble.Comparer
+	// implementation prevented some encodings from being considered equivalent.
+	// See #129592.
+	//
+	// To work around this wart within the comparer, we preserve a copy of the
+	// physical encoded timestamp we read off the engine. If a MVCCRangeKey with
+	// a non-empty EncodedTimestampSuffix is cleared via ClearMVCCRangeKey, the
+	// RangeKeyUnset tombstone is written with the verbatim
+	// EncodedTimestampSuffix.
+	EncodedTimestampSuffix []byte
 }
 
 // CloneInto copies the version into the provided destination
@@ -514,15 +540,17 @@ type MVCCRangeKeyVersion struct {
 func (v MVCCRangeKeyVersion) CloneInto(dst *MVCCRangeKeyVersion) {
 	dst.Timestamp = v.Timestamp
 	dst.Value = append(dst.Value[:0], v.Value...)
+	dst.EncodedTimestampSuffix = append(dst.EncodedTimestampSuffix[:0], v.EncodedTimestampSuffix...)
 }
 
 // AsRangeKey returns an MVCCRangeKey for the given version. Byte slices
 // are shared with the stack.
 func (s MVCCRangeKeyStack) AsRangeKey(v MVCCRangeKeyVersion) MVCCRangeKey {
 	return MVCCRangeKey{
-		StartKey:  s.Bounds.Key,
-		EndKey:    s.Bounds.EndKey,
-		Timestamp: v.Timestamp,
+		StartKey:               s.Bounds.Key,
+		EndKey:                 s.Bounds.EndKey,
+		Timestamp:              v.Timestamp,
+		EncodedTimestampSuffix: v.EncodedTimestampSuffix,
 	}
 }
 
@@ -707,6 +735,7 @@ func (v MVCCRangeKeyVersions) CloneInto(c *MVCCRangeKeyVersions) {
 	for i := range v {
 		(*c)[i].Timestamp = v[i].Timestamp
 		(*c)[i].Value = append((*c)[i].Value[:0], v[i].Value...)
+		(*c)[i].EncodedTimestampSuffix = append((*c)[i].EncodedTimestampSuffix[:0], v[i].EncodedTimestampSuffix...)
 	}
 }
 
@@ -898,6 +927,9 @@ func (v MVCCRangeKeyVersion) Clone() MVCCRangeKeyVersion {
 	if v.Value != nil {
 		v.Value = append([]byte(nil), v.Value...)
 	}
+	if v.EncodedTimestampSuffix != nil {
+		v.EncodedTimestampSuffix = append([]byte(nil), v.EncodedTimestampSuffix...)
+	}
 	return v
 }
 
@@ -909,4 +941,31 @@ func (v MVCCRangeKeyVersion) Equal(o MVCCRangeKeyVersion) bool {
 // String formats the MVCCRangeKeyVersion as a string.
 func (v MVCCRangeKeyVersion) String() string {
 	return fmt.Sprintf("%s=%x", v.Timestamp, v.Value)
+}
+
+// EncodeMVCCTimestampSuffixWithSyntheticBitForTesting is a utility to encode
+// the provided timestamp as a MVCC timestamp key suffix with the synthetic bit
+// set. The synthetic bit is no longer encoded/decoded into the hlc.Timestamp
+// but may exist in existing databases. This utility allows a test to construct
+// a timestamp with the synthetic bit for testing appropriate handling of
+// existing keys with the bit set. It should only be used in tests. See #129592.
+//
+// TODO(jackson): Remove this function when we've migrated all keys to unset the
+// synthetic bit.
+func EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(ts hlc.Timestamp) []byte {
+	const mvccEncodedTimestampWithSyntheticBitLen = mvccEncodedTimeWallLen +
+		mvccEncodedTimeLogicalLen +
+		mvccEncodedTimeSyntheticLen +
+		mvccEncodedTimeLengthLen
+	suffix := make([]byte, mvccEncodedTimestampWithSyntheticBitLen)
+	encodeMVCCTimestampToBuf(suffix, ts)
+	suffix[len(suffix)-2] = 0x01 // Synthetic bit.
+	suffix[len(suffix)-1] = mvccEncodedTimestampWithSyntheticBitLen
+	if decodedTS, err := DecodeMVCCTimestampSuffix(suffix); err != nil {
+		panic(err)
+	} else if !ts.Equal(decodedTS) {
+		panic(errors.AssertionFailedf("manufactured MVCC timestamp with synthetic bit decoded to %s not %s",
+			ts, decodedTS))
+	}
+	return suffix
 }

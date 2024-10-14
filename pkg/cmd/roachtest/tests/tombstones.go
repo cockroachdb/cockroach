@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -53,7 +49,7 @@ func registerPointTombstone(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 2)
 			defer conn.Close()
 			require.NoError(t, conn.PingContext(ctx))
-			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 			execSQLOrFail := func(statement string, args ...interface{}) {
 				if _, err := conn.ExecContext(ctx, statement, args...); err != nil {

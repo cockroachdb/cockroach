@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire
 
@@ -30,18 +25,27 @@ import (
 // maps groups of users onto database roles.
 type RoleMapper = func(
 	ctx context.Context,
-	systemIdentity username.SQLUsername,
+	systemIdentity string,
 ) ([]username.SQLUsername, error)
 
 // UseProvidedIdentity is a trivial implementation of RoleMapper which always
 // returns its input.
-func UseProvidedIdentity(
-	_ context.Context, id username.SQLUsername,
-) ([]username.SQLUsername, error) {
-	return []username.SQLUsername{id}, nil
+func UseProvidedIdentity(_ context.Context, id string) ([]username.SQLUsername, error) {
+	u, err := username.MakeSQLUsernameFromUserInput(id, username.PurposeValidation)
+	if err != nil {
+		return nil, err
+	}
+	return []username.SQLUsername{u}, nil
 }
 
 var _ RoleMapper = UseProvidedIdentity
+
+// UseSpecifiedIdentity is a RoleMapper that always returns a fixed user.
+func UseSpecifiedIdentity(user username.SQLUsername) RoleMapper {
+	return func(_ context.Context, _ string) ([]username.SQLUsername, error) {
+		return []username.SQLUsername{user}, nil
+	}
+}
 
 // HbaMapper implements the "map" option that may be defined in a
 // host-based authentication rule. If the HBA entry does not define a
@@ -55,15 +59,15 @@ func HbaMapper(hbaEntry *hba.Entry, identMap *identmap.Conf) RoleMapper {
 	if mapName == "" {
 		return UseProvidedIdentity
 	}
-	return func(_ context.Context, id username.SQLUsername) ([]username.SQLUsername, error) {
-		users, _, err := identMap.Map(mapName, id.Normalized())
+	return func(_ context.Context, id string) ([]username.SQLUsername, error) {
+		users, _, err := identMap.Map(mapName, id)
 		if err != nil {
 			return nil, err
 		}
 		for _, user := range users {
 			if user.IsRootUser() || user.IsReserved() {
 				return nil, errors.Newf("system identity %q mapped to reserved database role %q",
-					id.Normalized(), user.Normalized())
+					id, user.Normalized())
 			}
 		}
 		return users, nil

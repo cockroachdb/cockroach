@@ -21,7 +21,6 @@ go_test(
         "pgcryptoccl_test.go",
     ],
     deps = [
-        ":pgcryptoccl",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/security/securityassets",

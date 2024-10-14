@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -18,13 +18,13 @@
 package confchange
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/errors"
 )
 
 // Changer facilitates configuration changes. It exposes methods to handle
@@ -271,10 +271,11 @@ func (c Changer) initProgress(
 		// at all (and will thus likely need a snapshot), though the app may
 		// have applied a snapshot out of band before adding the replica (thus
 		// making the first index the better choice).
-		Match:     0,
-		Next:      max(c.LastIndex, 1), // invariant: Match < Next
-		Inflights: tracker.NewInflights(c.MaxInflight, c.MaxInflightBytes),
-		IsLearner: isLearner,
+		Match:       0,
+		MatchCommit: 0,
+		Next:        max(c.LastIndex, 1), // invariant: Match < Next
+		Inflights:   tracker.NewInflights(c.MaxInflight, c.MaxInflightBytes),
+		IsLearner:   isLearner,
 		// When a node is first added, we should mark it as recently active.
 		// Otherwise, CheckQuorum may cause us to step down if it is invoked
 		// before the added node has had a chance to communicate with us.

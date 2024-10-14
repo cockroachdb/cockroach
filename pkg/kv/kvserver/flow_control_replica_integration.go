@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -226,7 +221,7 @@ func (f *replicaFlowControlIntegrationImpl) onRaftTransportDisconnected(
 		return // nothing to do
 	}
 
-	if fn := f.knobs.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
+	if fn := f.knobs.V1.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
 		return // nothing to do
 	}
 
@@ -311,12 +306,12 @@ func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb
 	inactiveFollowers := f.replicaForFlowControl.getInactiveFollowers()
 	disconnectedFollowers := f.replicaForFlowControl.getDisconnectedFollowers()
 
-	maintainStreamsForBrokenRaftTransport := f.knobs.MaintainStreamsForBrokenRaftTransport != nil &&
-		f.knobs.MaintainStreamsForBrokenRaftTransport()
-	maintainStreamsForInactiveFollowers := f.knobs.MaintainStreamsForInactiveFollowers != nil &&
-		f.knobs.MaintainStreamsForInactiveFollowers()
-	maintainStreamsForBehindFollowers := f.knobs.MaintainStreamsForBehindFollowers != nil &&
-		f.knobs.MaintainStreamsForBehindFollowers()
+	maintainStreamsForBrokenRaftTransport := f.knobs.V1.MaintainStreamsForBrokenRaftTransport != nil &&
+		f.knobs.V1.MaintainStreamsForBrokenRaftTransport()
+	maintainStreamsForInactiveFollowers := f.knobs.V1.MaintainStreamsForInactiveFollowers != nil &&
+		f.knobs.V1.MaintainStreamsForInactiveFollowers()
+	maintainStreamsForBehindFollowers := f.knobs.V1.MaintainStreamsForBehindFollowers != nil &&
+		f.knobs.V1.MaintainStreamsForBehindFollowers()
 
 	notActivelyReplicatingTo := make(map[roachpb.ReplicaDescriptor]struct{})
 	ourReplicaID := f.replicaForFlowControl.getReplicaID()
@@ -472,22 +467,17 @@ func (r *replicaForRACv2) MuAssertHeld() {
 	r.mu.AssertHeld()
 }
 
-// MuLock implements replica_rac2.Replica.
+// IsScratchRange implements replica_rac2.Replica.
+func (r *replicaForRACv2) IsScratchRange() bool {
+	return (*Replica)(r).IsScratchRange()
+}
+
+// MuLock implements replica_rac2.ReplicaForRaftNode.
 func (r *replicaForRACv2) MuLock() {
 	r.mu.Lock()
 }
 
-// MuUnlock implements replica_rac2.Replica.
+// MuUnlock implements replica_rac2.ReplicaForRaftNode.
 func (r *replicaForRACv2) MuUnlock() {
 	r.mu.Unlock()
-}
-
-// RaftNodeMuLocked implements replica_rac2.Replica.
-func (r *replicaForRACv2) RaftNodeMuLocked() replica_rac2.RaftNode {
-	return raftNodeForRACv2{RawNode: r.mu.internalRaftGroup}
-}
-
-// LeaseholderMuLocked implements replica_rac2.Replica.
-func (r *replicaForRACv2) LeaseholderMuLocked() roachpb.ReplicaID {
-	return r.mu.state.Lease.Replica.ReplicaID
 }

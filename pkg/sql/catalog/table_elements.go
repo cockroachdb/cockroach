@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package catalog
 
@@ -1170,6 +1165,19 @@ func MustFindConstraintWithName(tbl TableDescriptor, name string) (Constraint, e
 
 // silence the linter
 var _ = MustFindConstraintWithName
+
+// FindTriggerByID traverses the slice returned by the GetTriggers method on the
+// table descriptor and returns the first trigger that matches the desired ID,
+// or nil if none was found.
+func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDescriptor {
+	triggers := tbl.GetTriggers()
+	for i := range triggers {
+		if triggers[i].ID == id {
+			return &triggers[i]
+		}
+	}
+	return nil
+}
 
 // FindFamilyByID traverses the family descriptors on the table descriptor
 // and returns the first column family with the desired ID, or nil if none was

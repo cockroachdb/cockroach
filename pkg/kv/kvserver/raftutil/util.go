@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package raftutil
 
@@ -27,7 +22,7 @@ func ReplicaIsBehind(st *raft.Status, replicaID roachpb.ReplicaID) bool {
 		// Testing only.
 		return true
 	}
-	if st.RaftState != raft.StateLeader {
+	if st.RaftState != raftpb.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it's not behind.
 		return true
@@ -136,7 +131,7 @@ func ReplicaMayNeedSnapshot(
 		// Testing only.
 		return NoRaftStatusAvailable
 	}
-	if st.RaftState != raft.StateLeader {
+	if st.RaftState != raftpb.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it does not need a snapshot.
 		return LocalReplicaNotLeader
