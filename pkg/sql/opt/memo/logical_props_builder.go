@@ -43,6 +43,7 @@ type logicalPropsBuilder struct {
 	evalCtx *eval.Context
 	mem     *Memo
 	sb      statisticsBuilder
+	jph     joinPropsHelper
 
 	// When set to true, disableStats disables stat generation during
 	// logical prop building. Useful in checkExpr when we don't want
@@ -66,6 +67,7 @@ func (b *logicalPropsBuilder) clear() {
 	b.evalCtx = nil
 	b.mem = nil
 	b.sb.clear()
+	b.jph = joinPropsHelper{}
 }
 
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
@@ -455,33 +457,32 @@ func (b *logicalPropsBuilder) buildAntiJoinApplyProps(
 func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational) {
 	BuildSharedProps(join, &rel.Shared, b.evalCtx)
 
-	var h joinPropsHelper
-	h.init(b, join)
+	b.jph.init(b, join)
 
 	// Output Columns
 	// --------------
-	rel.OutputCols = h.outputCols()
+	rel.OutputCols = b.jph.outputCols()
 
 	// Not Null Columns
 	// ----------------
-	rel.NotNullCols = h.notNullCols()
+	rel.NotNullCols = b.jph.notNullCols()
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
 	// Outer Columns
 	// -------------
 	// Outer columns were initially set by BuildSharedProps. Remove any that are
 	// bound by the input columns.
-	inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
+	inputCols := b.jph.leftProps.OutputCols.Union(b.jph.rightProps.OutputCols)
 	rel.OuterCols.DifferenceWith(inputCols)
 
 	// Functional Dependencies
 	// -----------------------
-	h.setFuncDeps(rel)
+	b.jph.setFuncDeps(rel)
 
 	// Cardinality
 	// -----------
 	// Calculate cardinality, depending on join type.
-	rel.Cardinality = h.cardinality()
+	rel.Cardinality = b.jph.cardinality()
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
 	}
@@ -489,7 +490,7 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildJoin(join, rel, &h)
+		b.sb.buildJoin(join, rel, &b.jph)
 	}
 }
 
@@ -2372,7 +2373,14 @@ type joinPropsHelper struct {
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
+	*h = joinPropsHelper{
+		evalCtx: b.evalCtx,
+		join:    joinExpr,
+		tables:  h.tables,
+	}
+	h.tables.left = h.tables.left[:0]
+	h.tables.right = h.tables.right[:0]
+	h.tables.set = false
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
