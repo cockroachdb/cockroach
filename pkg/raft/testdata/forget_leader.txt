@@ -225,6 +225,11 @@ set-randomized-election-timeout 2 timeout=5
 ----
 ok
 
+# Tick 2 once so that it correctly updates wasSupportingFortifiedLeaderLastTick.
+tick-heartbeat 2
+----
+ok
+
 withdraw-support 2 3
 ----
   1 2 3 4

@@ -397,6 +397,10 @@ type raft struct {
 	// valid message from current leader when it is a follower.
 	electionElapsed int
 
+	// wasSupportingFortifiedLeaderLastTick tracks whether a follower/candidate
+	// was supporting a fortified leader on the previous tick.
+	wasSupportingFortifiedLeaderLastTick bool
+
 	// number of ticks since it reached last heartbeatTimeout.
 	// only leader keeps heartbeatElapsed.
 	heartbeatElapsed int
@@ -982,6 +986,7 @@ func (r *raft) reset(term uint64) {
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
+	r.wasSupportingFortifiedLeaderLastTick = false
 	r.resetRandomizedElectionTimeout()
 
 	r.abortLeaderTransfer()
@@ -1049,11 +1054,13 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 func (r *raft) tickElection() {
 	assertTrue(r.state != pb.StateLeader, "tickElection called by leader")
 
+	r.electionElapsed++
+
 	if r.leadEpoch != 0 {
 		if r.supportingFortifiedLeader() {
-			// There's a fortified leader and we're supporting it. Reset the
-			// electionElapsed ticker and early return.
-			r.electionElapsed = 0
+			// There's a fortified leader and we're supporting it. Track this state
+			// and early return.
+			r.wasSupportingFortifiedLeaderLastTick = true
 			return
 		}
 		// We're no longer supporting the fortified leader. Let's make this
@@ -1062,7 +1069,7 @@ func (r *raft) tickElection() {
 		// re-fortified, which means we'll only ever skip the initial part of the
 		// election timeout once per fortified -> no longer fortified transition.
 		r.deFortify(r.id, r.Term)
-		if r.electionElapsed == 0 {
+		if r.wasSupportingFortifiedLeaderLastTick {
 			// NB: The peer was supporting a leader who had fortified until the last
 			// tick, but that support has now expired. As a result:
 			// 1. We don't want to wait out an entire election timeout before
@@ -1075,10 +1082,11 @@ func (r *raft) tickElection() {
 				"%d setting election elapsed to start from %d ticks after store liveness support expired",
 				r.id, r.electionTimeout,
 			)
-			r.electionElapsed = r.electionTimeout - 1 // -1 because we'll add one below.
+			r.electionElapsed = r.electionTimeout
 		}
 	}
-	r.electionElapsed++
+
+	r.wasSupportingFortifiedLeaderLastTick = false // otherwise we'd have early returned above
 
 	if r.promotable() && r.pastElectionTimeout() {
 		r.electionElapsed = 0
