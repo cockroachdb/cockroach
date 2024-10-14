@@ -254,9 +254,16 @@ func (p *pulsarSink) Flush(ctx context.Context) error {
 func (p *pulsarSink) msgCallback(
 	ctx context.Context, a kvevent.Alloc, mvcc hlc.Timestamp,
 ) func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+	// Since we cannot distinguish between time spent buffering inside the
+	// pulsar client and time spent sending the message, we just set the value
+	// of DownstreamClientSend equal to BatchHistNanos.
+	sendCb := p.metrics.timers().DownstreamClientSend.Start()
+	oneMsgCb := p.metrics.recordOneMessage()
+
 	return func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+		sendCb()
 		if err == nil {
-			p.metrics.recordOneMessage()(mvcc, len(message.Payload), len(message.Payload))
+			oneMsgCb(mvcc, len(message.Payload), len(message.Payload))
 		} else {
 			p.setError(id, message, err)
 		}
