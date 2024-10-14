@@ -620,7 +620,7 @@ func (ts *testServer) startDefaultTestTenant(
 
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		params.TestingKnobs.Server.(*TestingKnobs).LicenseTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
 	return ts.StartTenant(ctx, params)
 }
@@ -637,7 +637,7 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 	args.Knobs.Server = &TestingKnobs{}
 	if ts.params.Knobs.Server != nil {
 		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		args.Knobs.Server.(*TestingKnobs).LicenseTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
 	return args
 }
