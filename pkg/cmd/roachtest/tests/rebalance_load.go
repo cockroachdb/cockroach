@@ -104,6 +104,9 @@ func registerRebalanceLoad(r registry.Registry) {
 					mixedversion.SystemOnlyDeployment,
 					mixedversion.SharedProcessDeployment,
 				),
+
+				// Only use the latest version of each release to work around #127029.
+				mixedversion.AlwaysUseLatestPredecessors,
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
