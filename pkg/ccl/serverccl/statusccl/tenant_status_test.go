@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1597,10 +1596,8 @@ func TestThrottlingMetadata(t *testing.T) {
 	s := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					LicenseTestingKnobs: license.TestingKnobs{
-						OverrideStartTime: &testtime,
-					},
+				LicenseTestingKnobs: &license.TestingKnobs{
+					OverrideStartTime: &testtime,
 				},
 			},
 		},
