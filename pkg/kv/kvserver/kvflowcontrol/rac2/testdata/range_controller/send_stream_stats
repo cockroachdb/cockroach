@@ -26,14 +26,14 @@ range_id=1
   sending
     replica_id=1 [1,4)
     replica_id=2 [1,4)
-    replica_id=2 [1,2)
+    replica_id=3 [1,2)
 ----
 t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
        send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
@@ -47,9 +47,11 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+3.0 MiB
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+2.0 MiB
 eval deducted: reg=+3.0 MiB ela=+0 B
-eval original in send-q: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
 ++++
 
 # Print out the send stream stats:
@@ -68,7 +70,7 @@ send_stream_stats range_id=1 refresh=true
 ----
 (n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
 (n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+3.0 MiB / 3 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
 
 # Next, add another entry, which will also be queued. We want to see the stats
 # tick over and update by themselves (refresh=false) by ticking the clock the
@@ -87,14 +89,14 @@ t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
 
 # The stats shouldn't have changed, as we haven't refreshed them via ticking.
 send_stream_stats range_id=1 refresh=false
 ----
 (n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
 (n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+3.0 MiB / 3 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
 
 tick duration=7s
 ----
@@ -110,7 +112,7 @@ t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
 
 
 # The stats now should have been populated.
@@ -118,14 +120,14 @@ send_stream_stats range_id=1 refresh=false
 ----
 (n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
 (n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+15 MiB / 4 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
 
 # Sanity check they are the same when refreshing.
 send_stream_stats range_id=1 refresh=true
 ----
 (n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
 (n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+15 MiB / 4 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
 
 close_rcs
 ----
