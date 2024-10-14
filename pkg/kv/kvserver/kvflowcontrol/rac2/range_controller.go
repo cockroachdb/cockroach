@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -144,7 +145,7 @@ type RaftInterface interface {
 	//
 	// If it returns true, all the entries in the slice are in the message, and
 	// Next is advanced to be equal to end.
-	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice RaftLogSlice) (raftpb.Message, bool)
+	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice raft.LogSlice) (raftpb.Message, bool)
 }
 
 // RaftLogSnapshot abstract raft.LogSnapshot.
@@ -163,10 +164,8 @@ type RaftLogSnapshot interface {
 	//
 	// NB: the [start, end) interval is different from RawNode.LogSlice which
 	// accepts an open-closed interval.
-	LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error)
+	LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error)
 }
-
-type RaftLogSlice interface{}
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In
 // both modes, Raft knows that (Match(i), Next(i)) are in-flight for a
@@ -538,7 +537,9 @@ type rangeController struct {
 
 	mu struct {
 		// All the fields in this struct are modified while holding raftMu and
-		// this mutex. So readers can hold either mutex.
+		// this mutex. So readers can hold either mutex. This mutex must be
+		// released quickly, since it is needed by rangeController.WaitForEval
+		// which can have high concurrency.
 		syncutil.RWMutex
 
 		// State for waiters. When anything in voterSets or nonVoterSets changes,
@@ -572,7 +573,8 @@ type rangeController struct {
 		// to call into the replicaSendStreams that have asked to be scheduled.
 		replicas map[roachpb.ReplicaID]struct{}
 	}
-	entryFCStateScratch []entryFCState
+	entryFCStateScratch       []entryFCState
+	lastSendQueueStatsScratch RangeSendQueueStats
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -1090,7 +1092,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 
 	// It may have been longer than the sendQueueStatRefreshInterval since we
 	// last updated the send queue stats. Maybe update them now.
-	rc.maybeUpdateSendQueueStats()
+	rc.maybeUpdateSendQueueStatsRaftMuLocked()
 
 	return nil
 }
@@ -1373,13 +1375,15 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	if log.V(1) {
 		log.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
 	}
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
+	func() {
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
 
-	rc.mu.voterSets = nil
-	rc.mu.nonVoterSet = nil
-	close(rc.mu.waiterSetRefreshCh)
-	rc.mu.waiterSetRefreshCh = nil
+		rc.mu.voterSets = nil
+		rc.mu.nonVoterSet = nil
+		close(rc.mu.waiterSetRefreshCh)
+		rc.mu.waiterSetRefreshCh = nil
+	}()
 	// Return any tracked token deductions, as we don't expect to receive more
 	// AdmittedVector updates.
 	for _, rs := range rc.replicaMap {
@@ -1430,8 +1434,8 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 		panic(errors.AssertionFailedf("statsToSet is non-empty %v", statsToSet.internal))
 	}
 	statsToSet.Clear()
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
 
 	statsToSet.internal = slices.Grow(statsToSet.internal, len(rc.mu.lastSendQueueStats))
 	// We will update the cheaper stats to ensure they are up-to-date. For the
@@ -1459,23 +1463,28 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	}
 }
 
-func (rc *rangeController) maybeUpdateSendQueueStats() {
+func (rc *rangeController) maybeUpdateSendQueueStatsRaftMuLocked() {
 	now := rc.opts.Clock.PhysicalTime()
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	if nextUpdateTime := rc.mu.lastSendQueueStatRefresh.Add(
-		sendQueueStatRefreshInterval); now.After(nextUpdateTime) {
-		// We should update the stats, it has been longer than
-		// sendQueueStatRefreshInterval.
-		rc.updateSendQueueStatsRaftMuRCLocked(now)
+	updateStats := false
+	func() {
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
+		if nextUpdateTime := rc.mu.lastSendQueueStatRefresh.Add(
+			sendQueueStatRefreshInterval); now.After(nextUpdateTime) {
+			// We should update the stats, it has been longer than
+			// sendQueueStatRefreshInterval.
+			updateStats = true
+		}
+	}()
+	if !updateStats {
+		// Common case.
+		return
 	}
+	rc.updateSendQueueStatsRaftMuLocked(now)
 }
 
-func (rc *rangeController) updateSendQueueStatsRaftMuRCLocked(now time.Time) {
-	rc.mu.AssertHeld()
-
-	rc.mu.lastSendQueueStats.Clear()
+func (rc *rangeController) updateSendQueueStatsRaftMuLocked(now time.Time) {
+	rc.lastSendQueueStatsScratch.Clear()
 	for _, rs := range rc.replicaMap {
 		stats := ReplicaSendQueueStats{
 			ReplicaID: rs.desc.ReplicaID,
@@ -1488,8 +1497,12 @@ func (rc *rangeController) updateSendQueueStatsRaftMuRCLocked(now time.Time) {
 				stats.SendQueueCount = rs.sendStream.queueLengthLocked()
 			}()
 		}
-		rc.mu.lastSendQueueStats.Set(stats)
+		rc.lastSendQueueStatsScratch.Set(stats)
 	}
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.mu.lastSendQueueStats, rc.lastSendQueueStatsScratch =
+		rc.lastSendQueueStatsScratch, rc.mu.lastSendQueueStats
 	rc.mu.lastSendQueueStatRefresh = now
 }
 
@@ -1620,8 +1633,8 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 	replicas := map[roachpb.ReplicaID]stateForWaiters{}
 	func() {
 		var leaderID, leaseholderID roachpb.ReplicaID
-		rc.mu.Lock()
-		defer rc.mu.Unlock()
+		rc.mu.RLock()
+		defer rc.mu.RUnlock()
 		for _, vs := range rc.mu.voterSets {
 			for _, v := range vs {
 				if v.isLeader {

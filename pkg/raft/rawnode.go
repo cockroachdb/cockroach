@@ -206,7 +206,7 @@ func (rn *RawNode) LogSnapshot() LogSnapshot {
 //   - the first slice index matches the Next index to send to this peer
 //
 // Returns false if the message can not be sent.
-func (rn *RawNode) SendMsgApp(to pb.PeerID, slice logSlice) (pb.Message, bool) {
+func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LogSlice) (pb.Message, bool) {
 	return rn.raft.maybePrepareMsgApp(to, slice)
 }
 
