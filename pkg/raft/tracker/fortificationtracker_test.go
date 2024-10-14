@@ -39,7 +39,7 @@ func TestFortificationEnabled(t *testing.T) {
 	for _, tc := range testCases {
 		cfg := quorum.MakeEmptyConfig()
 		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness, raftlogger.DiscardLogger)
-		require.Equal(t, tc.expectEnabled, fortificationTracker.FortificationEnabled())
+		require.Equal(t, tc.expectEnabled, fortificationTracker.FortificationEnabledForTerm())
 	}
 }
 
