@@ -4,18 +4,21 @@
 // included in the /LICENSE file.
 
 import { Icon } from "@cockroachlabs/ui-components";
-import { Col, Row, Skeleton, Tooltip } from "antd";
+import { Col, Row, Skeleton } from "antd";
 import moment from "moment-timezone";
 import React from "react";
 
 import { useNodeStatuses } from "src/api";
 import { TableDetails } from "src/api/databases/getTableMetadataApi";
+import { Tooltip } from "src/components/tooltip";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Timestamp } from "src/timestamp";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
+
+import { TABLE_METADATA_LAST_UPDATED_HELP } from "../constants/tooltipMessages";
 
 type TableOverviewProps = {
   tableDetails: TableDetails;
@@ -60,7 +63,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
 
   const formattedErrorText = metadata.lastUpdateError
     ? "Update error: " + metadata.lastUpdateError
-    : "";
+    : null;
 
   return (
     <>
@@ -70,12 +73,17 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       <PageSection>
         <Row justify={"end"}>
           <Col>
-            <Tooltip title={formattedErrorText}>
+            <Tooltip
+              title={formattedErrorText ?? TABLE_METADATA_LAST_UPDATED_HELP}
+            >
               <Row gutter={8} align={"middle"} justify={"center"}>
-                {metadata.lastUpdateError && (
-                  <Icon fill="warning" iconName={"Caution"} />
+                {metadata.lastUpdateError ? (
+                  <Icon fill={"warning"} iconName={"Caution"} />
+                ) : (
+                  <Icon fill="info" iconName={"InfoCircle"} />
                 )}
                 <Col>
+                  {" "}
                   Last updated:{" "}
                   <Timestamp
                     format={DATE_WITH_SECONDS_FORMAT_24_TZ}

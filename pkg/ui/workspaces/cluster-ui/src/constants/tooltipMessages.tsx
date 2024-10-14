@@ -10,9 +10,12 @@ import { tableStatsClusterSetting } from "src/util";
 export const AUTO_STATS_COLLECTION_HELP = (
   <span>
     Automatic statistics can help improve query performance. Learn how to{" "}
-    <Link underline href={tableStatsClusterSetting} target="_blank">
+    <Link strong underline href={tableStatsClusterSetting} target="_blank">
       <span>manage statistics collection</span>
     </Link>{" "}
     .
   </span>
 );
+
+export const TABLE_METADATA_LAST_UPDATED_HELP =
+  "Data is last refreshed automatically (per cluster setting) or manually.";
