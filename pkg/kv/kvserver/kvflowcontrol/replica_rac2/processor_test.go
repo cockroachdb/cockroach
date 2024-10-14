@@ -204,7 +204,7 @@ func (c *testRangeController) HandleRaftEventRaftMuLocked(
 }
 
 func (c *testRangeController) HandleSchedulerEventRaftMuLocked(
-	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot,
+	_ context.Context, _ rac2.RaftMsgAppMode, _ raft.LogSnapshot,
 ) {
 	panic("HandleSchedulerEventRaftMuLocked is unimplemented")
 }
