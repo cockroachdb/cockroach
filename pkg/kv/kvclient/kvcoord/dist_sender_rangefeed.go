@@ -496,6 +496,7 @@ func newActiveRangeFeed(
 	rr *rangeFeedRegistry,
 	metrics *DistSenderRangeFeedMetrics,
 	parentMetadata parentRangeFeedMetadata,
+	initialRangeID roachpb.RangeID,
 ) *activeRangeFeed {
 	// Register partial range feed with registry.
 	active := &activeRangeFeed{
@@ -504,6 +505,7 @@ func newActiveRangeFeed(
 			StartAfter:              startAfter,
 			ParentRangefeedMetadata: parentMetadata,
 			CreatedTime:             timeutil.Now(),
+			RangeID:                 initialRangeID,
 		},
 	}
 
