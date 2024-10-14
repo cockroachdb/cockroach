@@ -544,3 +544,128 @@ index 43aba98dce..a076c93b8e 100644
  		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
  
+diff --git a/src/runtime/time.go b/src/runtime/time.go
+index 6d47eba..3353502 100644
+--- a/src/runtime/time.go
++++ b/src/runtime/time.go
+@@ -1114,6 +1114,11 @@
+ 		// started to send the value. That lets them correctly return
+ 		// true meaning that no value was sent.
+ 		lock(&t.sendLock)
++
++		// We are committed to possibly sending a value based on seq,
++		// so no need to keep telling stop/modify that we are sending.
++		t.isSending.And(^isSendingClear)
++
+ 		if t.seq != seq {
+ 			f = func(any, uintptr, int64) {}
+ 		}
+@@ -1122,9 +1127,6 @@
+ 	f(arg, seq, delay)
+ 
+ 	if !async && t.isChan {
+-		// We are no longer sending a value.
+-		t.isSending.And(^isSendingClear)
+-
+ 		unlock(&t.sendLock)
+ 	}
+ 
+diff --git a/src/runtime/time.go b/src/runtime/time.go
+index 7abd15e..19b4ac9 100644
+--- a/src/runtime/time.go
++++ b/src/runtime/time.go
+@@ -33,6 +33,7 @@
+ 	// isSending is used to handle races between running a
+ 	// channel timer and stopping or resetting the timer.
+ 	// It is used only for channel timers (t.isChan == true).
++	// It is not used for tickers.
+ 	// The lowest zero bit is set when about to send a value on the channel,
+ 	// and cleared after sending the value.
+ 	// The stop/reset code uses this to detect whether it
+@@ -467,7 +468,7 @@
+ 		// send from actually happening. That means
+ 		// that we should return true: the timer was
+ 		// stopped, even though t.when may be zero.
+-		if t.isSending.Load() > 0 {
++		if t.period == 0 && t.isSending.Load() > 0 {
+ 			pending = true
+ 		}
+ 	}
+@@ -529,6 +530,7 @@
+ 		t.maybeRunAsync()
+ 	}
+ 	t.trace("modify")
++	oldPeriod := t.period
+ 	t.period = period
+ 	if f != nil {
+ 		t.f = f
+@@ -570,7 +572,7 @@
+ 		// send from actually happening. That means
+ 		// that we should return true: the timer was
+ 		// stopped, even though t.when may be zero.
+-		if t.isSending.Load() > 0 {
++		if oldPeriod == 0 && t.isSending.Load() > 0 {
+ 			pending = true
+ 		}
+ 	}
+@@ -1064,7 +1066,7 @@
+ 
+ 	async := debug.asynctimerchan.Load() != 0
+ 	var isSendingClear uint8
+-	if !async && t.isChan {
++	if !async && t.isChan && t.period == 0 {
+ 		// Tell Stop/Reset that we are sending a value.
+ 		// Set the lowest zero bit.
+ 		// We do this awkward step because atomic.Uint8
+@@ -1115,9 +1117,12 @@
+ 		// true meaning that no value was sent.
+ 		lock(&t.sendLock)
+ 
+-		// We are committed to possibly sending a value based on seq,
+-		// so no need to keep telling stop/modify that we are sending.
+-		t.isSending.And(^isSendingClear)
++		if t.period == 0 {
++			// We are committed to possibly sending a value
++			// based on seq, so no need to keep telling
++			// stop/modify that we are sending.
++			t.isSending.And(^isSendingClear)
++		}
+ 
+ 		if t.seq != seq {
+ 			f = func(any, uintptr, int64) {}
+diff --git a/src/time/sleep_test.go b/src/time/sleep_test.go
+index 5357ed2..520ff95 100644
+--- a/src/time/sleep_test.go
++++ b/src/time/sleep_test.go
+@@ -847,6 +847,31 @@
+ 	wg.Wait()
+ }
+ 
++// Test having a large number of goroutines wake up a timer simultaneously.
++// This used to trigger a crash when run under x/tools/cmd/stress.
++func TestMultiWakeup(t *testing.T) {
++	if testing.Short() {
++		t.Skip("-short")
++	}
++
++	goroutines := runtime.GOMAXPROCS(0)
++	timer := NewTicker(Microsecond)
++	var wg sync.WaitGroup
++	wg.Add(goroutines)
++	for range goroutines {
++		go func() {
++			defer wg.Done()
++			for range 100000 {
++				select {
++				case <-timer.C:
++				case <-After(Millisecond):
++				}
++			}
++		}()
++	}
++	wg.Wait()
++}
++
+ // Benchmark timer latency when the thread that creates the timer is busy with
+ // other work and the timers must be serviced by other threads.
+ // https://golang.org/issue/38860
