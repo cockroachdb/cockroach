@@ -308,6 +308,13 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		return
 	}
 
+	if r.shouldReplicationAdmissionControlUsePullMode(ctx) {
+		// Replication admission control is enabled and is using pull-mode which
+		// allows for formation of a send-queue. The send-queue and pull-mode
+		// behavior is RAC2 subsumes follower pausing, so do not pause.
+		return
+	}
+
 	if !quotaPoolEnabledForRange(desc) {
 		// If the quota pool isn't enabled (like for the liveness range), play it
 		// safe. The range is unlikely to be a major contributor to any follower's
