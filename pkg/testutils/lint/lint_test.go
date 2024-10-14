@@ -48,15 +48,6 @@ var (
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
 `)
-
-	apacheHeader = regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed under the Apache License, Version 2.0 \(the "License"\);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-`)
 	// etcdApacheHeader is the header of pkg/raft at the time it was imported.
 	etcdApacheHeader = regexp.MustCompile(`// Copyright 20\d\d The etcd Authors
 //
