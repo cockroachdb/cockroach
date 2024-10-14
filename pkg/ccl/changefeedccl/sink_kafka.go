@@ -370,11 +370,21 @@ func (s *kafkaSink) EmitRow(
 		return err
 	}
 
+	// Since we cannot distinguish between time spent buffering vs emitting
+	// inside sarama, set the DownstreamClientSend timer to the same value as
+	// BatchHistNanos.
+	recordOneMessageCb := s.metrics.recordOneMessage()
+	downstreamClientSendCb := s.metrics.timers().DownstreamClientSend.Start()
+	updateMetrics := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		recordOneMessageCb(mvcc, bytes, compressedBytes)
+		downstreamClientSendCb()
+	}
+
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: updateMetrics},
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
