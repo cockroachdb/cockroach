@@ -835,7 +835,16 @@ func (r *raft) sendDeFortify(to pb.PeerID) {
 	if to == r.id {
 		// We handle the case where the leader is trying to de-fortify itself
 		// specially. Doing so avoids a self-addressed message.
-		r.deFortify(r.id, r.fortificationTracker.Term())
+		switch {
+		case r.Term == r.fortificationTracker.Term():
+			r.deFortify(r.id, r.fortificationTracker.Term())
+		case r.Term > r.fortificationTracker.Term():
+			r.logger.Debugf("de-foritfying self at term %d is a no-op; current term %d",
+				r.fortificationTracker.Term(), r.Term,
+			)
+		case r.Term < r.fortificationTracker.Term():
+			panic("fortification tracker's term cannot be higher than raft groups")
+		}
 		return
 	}
 	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.fortificationTracker.Term()})
@@ -892,9 +901,15 @@ func (r *raft) bcastDeFortify() {
 // MsgDeFortifyLeader to all peers or not.
 func (r *raft) shouldBcastDeFortify() bool {
 	assertTrue(r.state != pb.StateLeader, "leaders should not be de-fortifying without stepping down")
-	// TODO(arul): expand this condition to ensure a new leader has committed an
-	// entry.
-	return r.fortificationTracker.FortificationEnabled() && r.fortificationTracker.CanDefortify()
+	hasNewLeaderCommittedEntry := false
+	committedTerm, err := r.raftLog.storage.Term(r.raftLog.committed)
+	if err == nil && committedTerm > r.fortificationTracker.Term() {
+		// NB: If there's an error getting the committed term, we must
+		// conservatively assume a new leader hasn't committed an entry. As a
+		// result, we'll still send out a MsgDeFortifyLeader, if it's safe to do so
+		hasNewLeaderCommittedEntry = true
+	}
+	return r.fortificationTracker.FortificationEnabled() && r.fortificationTracker.CanDefortify() && !hasNewLeaderCommittedEntry
 }
 
 // maybeUnpauseAndBcastAppend unpauses and attempts to send an MsgApp to all the
