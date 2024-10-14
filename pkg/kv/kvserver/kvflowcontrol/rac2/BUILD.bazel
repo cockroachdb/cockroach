@@ -60,6 +60,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",

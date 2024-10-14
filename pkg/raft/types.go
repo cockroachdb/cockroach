@@ -99,6 +99,21 @@ type LogSlice struct {
 	entries []pb.Entry
 }
 
+// MakeLogSlice creates a fake log slice containing the supplied entries. Only
+// for testing.
+//
+// TODO(pav-kv): this is not a correct LogSlice. Remove this function, and help
+// construct a correct one.
+func MakeLogSlice(entries []pb.Entry) LogSlice {
+	return LogSlice{entries: entries}
+}
+
+// Entries returns the log entries covered by this slice. The returned slice
+// must not be mutated.
+func (s LogSlice) Entries() []pb.Entry {
+	return s.entries
+}
+
 // lastIndex returns the index of the last entry in this log slice. Returns
 // prev.index if there are no entries.
 func (s LogSlice) lastIndex() uint64 {
