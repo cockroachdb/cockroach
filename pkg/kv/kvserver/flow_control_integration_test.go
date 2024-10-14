@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -2207,7 +2206,6 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 func TestFlowControlBasicV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2302,7 +2300,6 @@ ORDER BY streams DESC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2417,7 +2414,6 @@ ORDER BY streams DESC;
 func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2519,7 +2515,6 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2670,7 +2665,6 @@ ORDER BY streams DESC;
 func TestFlowControlCrashedNodeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2775,7 +2769,6 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	const numServers int = 5
 
@@ -3043,7 +3036,6 @@ SELECT store_id,
 func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3176,7 +3168,6 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3313,7 +3304,6 @@ ORDER BY streams DESC;
 func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3404,7 +3394,6 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3423,7 +3412,6 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 			settings := cluster.MakeTestingClusterSettings()
 			// Override metamorphism to allow range quiescence.
 			kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, false)
-			pinnedLease := kvserver.NewPinnedLeases()
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
@@ -3435,10 +3423,6 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							// Pin the lease to the first store to prevent lease and leader
-							// moves which disrupt this test.
-							PinnedLeases: pinnedLease,
-
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
 								OverrideV2EnabledWhenLeaderLevel: func() kvflowcontrol.V2EnabledWhenLeaderLevel {
@@ -3475,7 +3459,6 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 			k := tc.ScratchRange(t)
 			desc, err := tc.LookupRange(k)
 			require.NoError(t, err)
-			pinnedLease.PinLease(desc.RangeID, tc.GetFirstStoreFromServer(t, 0).StoreID())
 
 			tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 			h := newFlowControlTestHelperV2(t, tc, v2EnabledWhenLeaderLevel)
@@ -3539,7 +3522,6 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 func TestFlowControlTransferLeaseV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3628,7 +3610,6 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3741,7 +3722,6 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuressWithIssue(t, 132272, "non-determinism under duress: stress/race/deadlock")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
