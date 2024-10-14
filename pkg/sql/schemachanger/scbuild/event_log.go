@@ -461,7 +461,8 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 				FunctionName: functionName(b, e),
 			}
 		}
-	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig:
+	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig, *scpb.IndexZoneConfig,
+		*scpb.PartitionZoneConfig:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			var zcDetails eventpb.CommonZoneConfigDetails
 			if pb.maybePayload != nil {
