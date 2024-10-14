@@ -32,6 +32,20 @@ func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanF
 	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
 
+// joinIndexNames emits a string of index names on table 'table' as specified in
+// 'ords', with each name separated by 'sep'.
+func joinIndexNames(table cat.Table, ords cat.IndexOrdinals, sep string) string {
+	var sb strings.Builder
+	for i, idx := range ords {
+		index := table.Index(idx)
+		if i > 0 {
+			sb.WriteString(sep)
+		}
+		sb.WriteString(string(index.Name()))
+	}
+	return sb.String()
+}
+
 // - visitedFKsByCascades is updated on recursive calls for each cascade plan.
 // Can be nil if the plan doesn't have any cascades. In this map the key is the
 // "id" of the FK constraint that we construct as OriginTableID || Name.
@@ -872,16 +886,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind := joinIndexNames(a.Table, a.ArbiterIndexes, ", "); arbind != "" {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
@@ -893,6 +899,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				sb.WriteString(uniqueConstraint.Name())
 			}
 			ob.Attr("arbiter constraints", sb.String())
+		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
 
 	case insertFastPathOp:
@@ -917,6 +926,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			)
 			e.emitLockingPolicyWithPrefix("uniqueness check ", uniq.Locking)
 		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
@@ -931,16 +943,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind := joinIndexNames(a.Table, a.ArbiterIndexes, ", "); arbind != "" {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
@@ -957,6 +961,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	case updateOp:
 		a := n.args.(*updateArgs)
 		ob.Attrf("table", "%s", a.Table.Name())
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		ob.Attr("set", printColumns(tableColumns(a.Table, a.UpdateCols)))
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")

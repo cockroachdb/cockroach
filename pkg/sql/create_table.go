@@ -540,6 +540,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
+				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
 				&tree.DatumAlloc{},
 				&params.ExecCfg().Settings.SV,
