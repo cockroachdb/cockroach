@@ -164,7 +164,24 @@ type RaftLogSnapshot interface {
 	//
 	// NB: the [start, end) interval is different from RawNode.LogSlice which
 	// accepts an open-closed interval.
+	// TODO(pav-kv): don't do this, since it's bug-prone. Both raft.LogSnapshot
+	// and this interface have the same signature, but different semantics; it is
+	// easy to make a mistake and pass one instead of another. Use the LogSnapshot
+	// directly.
 	LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error)
+}
+
+// NewRaftLogSnapshot returns a RACv2 wrapper around the raft.LogSnapshot.
+func NewRaftLogSnapshot(from raft.LogSnapshot) RaftLogSnapshot {
+	return raftLogSnapshot(from)
+}
+
+// raftLogSnapshot implements RaftLogSnapshot.
+type raftLogSnapshot raft.LogSnapshot
+
+// LogSlice implements RaftLogSnapshot.
+func (l raftLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
+	return (raft.LogSnapshot(l)).LogSlice(start-1, end-1, maxSize)
 }
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In

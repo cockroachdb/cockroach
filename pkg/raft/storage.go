@@ -323,3 +323,14 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	}
 	return nil
 }
+
+// MakeLogSnapshot converts the MemoryStorage to a LogSnapshot type serving the
+// log from the MemoryStorage snapshot. Only for testing.
+func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
+	return LogSnapshot{
+		first:    ms.FirstIndex(),
+		storage:  ms.LogSnapshot(),
+		unstable: ms.ls.forward(ms.ls.lastIndex()),
+		logger:   raftlogger.DiscardLogger,
+	}
+}
