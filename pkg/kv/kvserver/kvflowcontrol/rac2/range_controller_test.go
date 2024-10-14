@@ -9,6 +9,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -317,6 +318,9 @@ func (s *testingRCState) getOrInitRange(
 		testRC.mu.evals = make(map[string]*testingRCEval)
 		testRC.mu.outstandingReturns = make(map[roachpb.ReplicaID]kvflowcontrol.Tokens)
 		testRC.mu.quorumPosition = kvflowcontrolpb.RaftLogPosition{Term: 1, Index: 0}
+		_ = testRC.raftLog.ApplySnapshot(raftpb.Snapshot{
+			Metadata: raftpb.SnapshotMetadata{Index: r.nextRaftIndex - 1},
+		})
 		options := RangeControllerOptions{
 			RangeID:                r.rangeID,
 			TenantID:               r.tenantID,
@@ -365,7 +369,7 @@ type testingRCRange struct {
 	// snapshots contain snapshots of the tracker state for different replicas,
 	// at various points in time. It is used in TestUsingSimulation.
 	snapshots []testingTrackerSnapshot
-	entries   []raftpb.Entry
+	raftLog   raft.MemoryStorage
 
 	mu struct {
 		syncutil.Mutex
@@ -428,28 +432,8 @@ func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 	r.scheduleControllerEventCount.Add(1)
 }
 
-func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
-	if start >= end {
-		panic("start >= end")
-	}
-	var size uint64
-	var entries []raftpb.Entry
-	for _, entry := range r.entries {
-		if entry.Index < start || entry.Index >= end {
-			continue
-		}
-		size += uint64(entry.Size())
-		// Allow exceeding the size limit only if this is the first entry.
-		if size > maxSize && len(entries) != 0 {
-			break
-		}
-		entries = append(entries, entry)
-		if size >= maxSize {
-			break
-		}
-	}
-	// TODO(pav-kv): use a real LogSnapshot and construct a correct LogSlice.
-	return raft.MakeLogSlice(entries), nil
+func (r *testingRCRange) logSnapshot() RaftLogSnapshot {
+	return raftLogSnapshot(raft.MakeLogSnapshot(&r.raftLog))
 }
 
 func (r *testingRCRange) SendMsgAppRaftMuLocked(
@@ -1203,16 +1187,19 @@ func TestRangeController(t *testing.T) {
 					mode = MsgAppPull
 				}
 				for _, event := range parseRaftEvents(t, d.Input) {
+					entries := make([]raftpb.Entry, len(event.entries))
+					for i, entry := range event.entries {
+						entries[i] = testingCreateEntry(t, entry)
+					}
 					testRC := state.ranges[event.rangeID]
+					require.NoError(t, testRC.raftLog.Append(entries))
+
 					raftEvent := RaftEvent{
 						MsgAppMode:        mode,
-						Entries:           make([]raftpb.Entry, len(event.entries)),
+						Entries:           entries,
 						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
-						LogSnapshot:       testRC,
+						LogSnapshot:       testRC.logSnapshot(),
 						ReplicasStateInfo: state.ranges[event.rangeID].replicasStateInfo(),
-					}
-					for i, entry := range event.entries {
-						raftEvent.Entries[i] = testingCreateEntry(t, entry)
 					}
 					msgApp := raftpb.Message{
 						Type: raftpb.MsgApp,
@@ -1221,7 +1208,6 @@ func TestRangeController(t *testing.T) {
 						// suffix of entries that were previously appended, down below.
 						Entries: nil,
 					}
-					testRC.entries = append(testRC.entries, raftEvent.Entries...)
 					func() {
 						testRC.mu.Lock()
 						defer testRC.mu.Unlock()
@@ -1238,11 +1224,9 @@ func TestRangeController(t *testing.T) {
 								} else {
 									fromIndex := event.sendingEntryRange[replicaID].fromIndex
 									toIndex := event.sendingEntryRange[replicaID].toIndex
-									for _, entry := range testRC.entries {
-										if entry.Index >= fromIndex && entry.Index <= toIndex {
-											msgApp.Entries = append(msgApp.Entries, entry)
-										}
-									}
+									entries, err := testRC.raftLog.Entries(fromIndex, toIndex+1, math.MaxUint64)
+									require.NoError(t, err)
+									msgApp.Entries = entries
 								}
 								raftEvent.MsgApps[replicaID] = append([]raftpb.Message(nil), msgApp)
 							}
@@ -1292,7 +1276,7 @@ func TestRangeController(t *testing.T) {
 				if d.HasArg("push-mode") {
 					mode = MsgAppPush
 				}
-				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx, mode, testRC)
+				testRC.rc.HandleSchedulerEventRaftMuLocked(ctx, mode, testRC.logSnapshot())
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
 				return state.sendStreamString(roachpb.RangeID(rangeID))
@@ -1517,12 +1501,6 @@ func testingFirst(args ...interface{}) interface{} {
 	return nil
 }
 
-type testLogSnapshot struct{}
-
-func (testLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
-	return raft.LogSlice{}, nil
-}
-
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// raftpb.Entry and raftpb.Message are only partially populated below, which
 	// could be improved in the future.
@@ -1565,10 +1543,10 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		},
 	}
 	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
-	var logSnap testLogSnapshot
+	logSnap := NewRaftLogSnapshot(raft.LogSnapshot{})
 	infoMap := map[roachpb.ReplicaID]ReplicaStateInfo{}
 	checkSnapAndMap := func(event RaftEvent) {
-		require.Equal(t, logSnap, event.LogSnapshot.(testLogSnapshot))
+		require.Equal(t, logSnap, event.LogSnapshot)
 		require.Equal(t, infoMap, event.ReplicasStateInfo)
 	}
 
