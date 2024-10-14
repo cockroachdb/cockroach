@@ -875,10 +875,7 @@ func (r *raft) bcastFortify() {
 // support, we skip unpausing and sending MsgApp because the message is likely
 // to be dropped.
 func (r *raft) maybeUnpauseAndBcastAppend() {
-	if !r.fortificationTracker.FortificationEnabled() {
-		// The underlying store liveness fabric hasn't been enabled.
-		return
-	}
+	assertTrue(r.fortificationTracker.FortificationEnabled(), "should only be called when fortification is enabled")
 
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		if r.id == id {
@@ -1113,25 +1110,30 @@ func (r *raft) tickHeartbeat() {
 
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
-		if !r.fortificationTracker.FortificationEnabled() {
+
+		if r.fortificationTracker.FortificationEnabled() {
+			// Mark fortifying followers as recently active. We disable heartbeats
+			// when leader fortification is enabled, instead deferring to
+			// StoreLiveness for failure detection. As such, if there is no append
+			// activity for a raft group, it's possible for the leader to not
+			// communicate with a follower within an electionTimeout. We do not want
+			// to infer that the leader can't communicate with a follower in such
+			// cases, which could then cause the leader to spuriously step down
+			// because of CheckQuorum. Instead, we compute RecentlyActive based on
+			// StoreLiveness instead.
+			r.markFortifyingFollowersAsRecentlyActive()
+
+			// Try to refortify any followers that currently support us in
+			// StoreLiveness but aren't fortified.
+			r.bcastFortify()
+			r.maybeUnpauseAndBcastAppend()
+		} else {
+			// Leader fortification isn't enabled, so we rely on sending out periodic
+			// heartbeats to all followers to prevent them from calling an election.
 			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
 				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 			}
 		}
-
-		// Mark fortifying followers as recently active. We disable heartbeats when
-		// leader fortification is enabled, instead deferring to StoreLiveness for
-		// failure detection. As such, if there is no append activity for a raft
-		// group, it's possible for the leader to not communicate with a follower in
-		// a electionTimeout. We do not want to infer that the leader can't
-		// communicate with a follower in such cases, which could then cause the
-		// leader to spuriously step down because of CheckQuorum. Instead, we
-		// compute RecentlyActive based on StoreLiveness instead.
-		r.markFortifyingFollowersAsRecentlyActive()
-
-		// Try to refortify any followers that don't currently support us.
-		r.bcastFortify()
-		r.maybeUnpauseAndBcastAppend()
 	}
 }
 
@@ -2548,9 +2550,7 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 // markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
 // mark them as recently active if they are supporting the leader.
 func (r *raft) markFortifyingFollowersAsRecentlyActive() {
-	if !r.fortificationTracker.FortificationEnabled() {
-		return
-	}
+	assertTrue(r.fortificationTracker.FortificationEnabled(), "fortification disabled")
 
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		if pr.RecentActive {
