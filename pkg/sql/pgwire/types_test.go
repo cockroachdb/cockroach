@@ -504,6 +504,10 @@ func benchmarkWriteColumnarString(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteColumnar(b, getBatch(types.String), format)
 }
 
+func benchmarkWriteColumnarChar(b *testing.B, format pgwirebase.FormatCode) {
+	benchmarkWriteColumnar(b, getBatch(types.MakeChar(16)), format)
+}
+
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
 	d, _, err := tree.ParseDDate(nil, "2010-09-28")
 	if err != nil {
@@ -669,6 +673,13 @@ func BenchmarkWriteTextColumnarString(b *testing.B) {
 }
 func BenchmarkWriteBinaryColumnarString(b *testing.B) {
 	benchmarkWriteColumnarString(b, pgwirebase.FormatBinary)
+}
+
+func BenchmarkWriteTextColumnarChar(b *testing.B) {
+	benchmarkWriteColumnarChar(b, pgwirebase.FormatText)
+}
+func BenchmarkWriteBinaryColumnarChar(b *testing.B) {
+	benchmarkWriteColumnarChar(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDate(b *testing.B) {
