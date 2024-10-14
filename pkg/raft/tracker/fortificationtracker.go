@@ -35,6 +35,12 @@ type FortificationTracker struct {
 	// a leader at since it was restarted.
 	term uint64
 
+	// attemptedFortification tracks whether fortification was enabled or not
+	// at any point for the leadership term being tracked in the
+	// FortificationTracker. If it was, we conservatively assume the raft leader
+	// attempted to fortify its term, and save this state.
+	attemptedFortification bool
+
 	// fortification contains a map of nodes which have fortified the leader
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
@@ -68,10 +74,11 @@ func NewFortificationTracker(
 	config *quorum.Config, storeLiveness raftstoreliveness.StoreLiveness, logger raftlogger.Logger,
 ) *FortificationTracker {
 	st := FortificationTracker{
-		config:        config,
-		storeLiveness: storeLiveness,
-		fortification: map[pb.PeerID]pb.Epoch{},
-		logger:        logger,
+		config:                 config,
+		storeLiveness:          storeLiveness,
+		attemptedFortification: false,
+		fortification:          map[pb.PeerID]pb.Epoch{},
+		logger:                 logger,
 	}
 	return &st
 }
@@ -79,7 +86,9 @@ func NewFortificationTracker(
 // FortificationEnabled returns whether the raft fortification protocol is
 // enabled or not.
 func (ft *FortificationTracker) FortificationEnabled() bool {
-	return ft.storeLiveness.SupportFromEnabled()
+	fortificationCurrentlyEnabled := ft.storeLiveness.SupportFromEnabled()
+	ft.attemptedFortification = ft.attemptedFortification || fortificationCurrentlyEnabled
+	return fortificationCurrentlyEnabled
 }
 
 // RecordFortification records fortification of the given peer for the supplied
@@ -94,6 +103,7 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 // fortification tracker to be used by a newly elected leader.
 func (ft *FortificationTracker) Reset(term uint64) {
 	ft.term = term
+	ft.attemptedFortification = false
 	clear(ft.fortification)
 	ft.leaderMaxSupported.Reset()
 }
