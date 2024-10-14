@@ -41,7 +41,7 @@ type LogSnapshot struct {
 	// storage contains the stable log entries.
 	storage LogStorage
 	// unstable contains the unstable log entries.
-	unstable logSlice
+	unstable LogSlice
 	// logger gives access to logging errors.
 	logger raftlogger.Logger
 }
@@ -155,7 +155,7 @@ func (l *raftLog) accTerm() uint64 {
 // the log (so this log slice is insufficient to make our log consistent with
 // the leader log), the slice is out of bounds (appending it would introduce a
 // gap), or a.term is outdated.
-func (l *raftLog) maybeAppend(a logSlice) bool {
+func (l *raftLog) maybeAppend(a LogSlice) bool {
 	match, ok := l.match(a)
 	if !ok {
 		return false
@@ -179,7 +179,7 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 //
 // Returns false if the operation can not be done: entry a.prev does not match
 // the lastEntryID of this log, or a.term is outdated.
-func (l *raftLog) append(a logSlice) bool {
+func (l *raftLog) append(a LogSlice) bool {
 	return l.unstable.append(a)
 }
 
@@ -191,8 +191,8 @@ func (l *raftLog) append(a logSlice) bool {
 //
 // All the entries up to the returned index are already present in the log, and
 // do not need to be rewritten. The caller can safely fast-forward the appended
-// logSlice to this index.
-func (l *raftLog) match(s logSlice) (uint64, bool) {
+// LogSlice to this index.
+func (l *raftLog) match(s LogSlice) (uint64, bool) {
 	if !l.matchTerm(s.prev) {
 		return 0, false
 	}
@@ -558,13 +558,13 @@ func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (LogSlice, error) {
 	if err != nil {
 		// The log is probably compacted at index > lo (err == ErrCompacted), or it
 		// can be a custom storage error.
-		return logSlice{}, err
+		return LogSlice{}, err
 	}
 	ents, err := l.slice(lo, hi, entryEncodingSize(maxSize))
 	if err != nil {
-		return logSlice{}, err
+		return LogSlice{}, err
 	}
-	return logSlice{
+	return LogSlice{
 		term:    l.unstable.term,
 		prev:    entryID{term: prevTerm, index: lo},
 		entries: ents,
@@ -659,7 +659,7 @@ func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	return LogSnapshot{
 		first:    l.firstIndex(),
 		storage:  storage,
-		unstable: l.unstable.logSlice,
+		unstable: l.unstable.LogSlice,
 		logger:   l.logger,
 	}
 }

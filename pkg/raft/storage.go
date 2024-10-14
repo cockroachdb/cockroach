@@ -82,8 +82,8 @@ type LogStorage interface {
 	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
 	// this index is not available.
 	//
-	// TODO(pav-kv): replace this with a Prev() method equivalent to logSlice's
-	// prev field. The log storage is just a storage-backed logSlice.
+	// TODO(pav-kv): replace this with a Prev() method equivalent to LogSlice's
+	// prev field. The log storage is just a storage-backed LogSlice.
 	FirstIndex() uint64
 
 	// LogSnapshot returns an immutable point-in-time log storage snapshot.
