@@ -885,10 +885,12 @@ func (t *RaftTransport) processQueue(
 				dispatchPendingFlowTokensTimer.Reset(0)
 			}
 
-			req := newRaftMessageRequest()
-			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
-			batch.Requests = append(batch.Requests, *req)
-			releaseRaftMessageRequest(req)
+			if len(pendingDispatches) != 0 {
+				req := newRaftMessageRequest()
+				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+				batch.Requests = append(batch.Requests, *req)
+				releaseRaftMessageRequest(req)
+			}
 
 			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
