@@ -26,7 +26,7 @@ const (
 	schemaIDIdx
 	schemaNameIdx
 	columnCountIdx
-	indexCountIdx
+	secondaryIndexCountIdx
 	tableTypeIdx
 	autoStatsEnabledIdx
 	statsLastUpdatedIdx
@@ -162,8 +162,9 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 				schemaID:    int(tree.MustBeDInt(row[schemaIDIdx])),
 				schemaName:  string(tree.MustBeDString(row[schemaNameIdx])),
 				columnCount: int(tree.MustBeDInt(row[columnCountIdx])),
-				indexCount:  int(tree.MustBeDInt(row[indexCountIdx])),
-				tableType:   string(tree.MustBeDString(row[tableTypeIdx])),
+				// Add 1 to the index count to account for the primary index.
+				indexCount: int(tree.MustBeDInt(row[secondaryIndexCountIdx])) + 1,
+				tableType:  string(tree.MustBeDString(row[tableTypeIdx])),
 			}
 
 			if row[autoStatsEnabledIdx] != tree.DNull {

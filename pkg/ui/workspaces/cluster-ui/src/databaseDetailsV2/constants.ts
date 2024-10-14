@@ -8,6 +8,7 @@ export enum TableColName {
   REPLICATION_SIZE = "Replication Size",
   RANGE_COUNT = "Ranges",
   COLUMN_COUNT = "Columns",
+  INDEX_COUNT = "Indexes",
   NODE_REGIONS = "Regions / Nodes",
   LIVE_DATA_PERCENTAGE = "% of Live data",
   STATS_LAST_UPDATED = "Stats last updated",

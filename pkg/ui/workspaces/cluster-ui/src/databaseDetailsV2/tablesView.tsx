@@ -93,6 +93,16 @@ const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
       sortKey: TableSortOption.COLUMNS,
     },
     {
+      title: TableColName.INDEX_COUNT,
+      width: "fit-content",
+      sorter: true,
+      render: (t: TableRow) => {
+        // We always include the primary index.
+        return t.indexCount;
+      },
+      sortKey: TableSortOption.INDEXES,
+    },
+    {
       title: (
         <Tooltip title={"Regions/Nodes on which the table's data is stored."}>
           {TableColName.NODE_REGIONS}
