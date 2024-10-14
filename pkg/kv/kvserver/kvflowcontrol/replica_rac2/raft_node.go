@@ -73,12 +73,3 @@ func (rn raftNodeForRACv2) SendMsgAppRaftMuLocked(
 	defer rn.r.MuUnlock()
 	return rn.RawNode.SendMsgApp(raftpb.PeerID(replicaID), ls)
 }
-
-type RaftLogSnapshot raft.LogSnapshot
-
-var _ rac2.RaftLogSnapshot = RaftLogSnapshot{}
-
-// LogSlice implements rac2.RaftLogSnapshot.
-func (l RaftLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
-	return (raft.LogSnapshot(l)).LogSlice(start-1, end-1, maxSize)
-}
