@@ -36,7 +36,7 @@ require (
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
-	github.com/google/uuid v1.5.0
+	github.com/google/uuid v1.5.0 // indirect
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.56.3
@@ -216,7 +216,6 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/pressly/goose/v3 v3.5.3
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.42.0
@@ -314,6 +313,7 @@ require (
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
+	github.com/dnaeon/go-vcr v1.2.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/eapache/go-resiliency v1.4.0 // indirect

@@ -161,10 +161,6 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
-
-	// ObsServiceAddr is the address to which events will be exported over OTLP.
-	// If empty, exporting events is inhibited.
-	ObsServiceAddr string
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
