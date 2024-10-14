@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -144,7 +145,7 @@ type RaftInterface interface {
 	//
 	// If it returns true, all the entries in the slice are in the message, and
 	// Next is advanced to be equal to end.
-	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice RaftLogSlice) (raftpb.Message, bool)
+	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice raft.LogSlice) (raftpb.Message, bool)
 }
 
 // RaftLogSnapshot abstract raft.LogSnapshot.
@@ -163,10 +164,8 @@ type RaftLogSnapshot interface {
 	//
 	// NB: the [start, end) interval is different from RawNode.LogSlice which
 	// accepts an open-closed interval.
-	LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error)
+	LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error)
 }
-
-type RaftLogSlice interface{}
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In
 // both modes, Raft knows that (Match(i), Next(i)) are in-flight for a

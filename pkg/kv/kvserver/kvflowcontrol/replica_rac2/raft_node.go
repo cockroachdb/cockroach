@@ -66,9 +66,8 @@ func (rn raftNodeForRACv2) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
 
 // SendMsgAppRaftMuLocked implements rac2.RaftInterface.
 func (rn raftNodeForRACv2) SendMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, slice rac2.RaftLogSlice,
+	replicaID roachpb.ReplicaID, ls raft.LogSlice,
 ) (raftpb.Message, bool) {
-	ls := slice.(raft.LogSlice)
 	rn.r.MuLock()
 	defer rn.r.MuUnlock()
 	return rn.RawNode.SendMsgApp(raftpb.PeerID(replicaID), ls)
@@ -79,6 +78,6 @@ type RaftLogSnapshot raft.LogSnapshot
 var _ rac2.RaftLogSnapshot = RaftLogSnapshot{}
 
 // LogSlice implements rac2.RaftLogSnapshot.
-func (l RaftLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (rac2.RaftLogSlice, error) {
+func (l RaftLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
 	return (raft.LogSnapshot(l)).LogSlice(start-1, end-1, maxSize)
 }
