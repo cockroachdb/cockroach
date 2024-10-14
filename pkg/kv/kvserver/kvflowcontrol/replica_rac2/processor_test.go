@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -94,7 +95,7 @@ func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
 }
 
 func (rn *testRaftNode) SendMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, slice rac2.RaftLogSlice,
+	_ roachpb.ReplicaID, _ raft.LogSlice,
 ) (raftpb.Message, bool) {
 	panic("unimplemented")
 }

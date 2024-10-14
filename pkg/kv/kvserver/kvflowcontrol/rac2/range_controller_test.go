@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -422,31 +423,35 @@ func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 	r.mu.scheduleControllerEventCount++
 }
 
-func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error) {
+func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
 	if start >= end {
 		panic("start >= end")
 	}
-	msg := raftpb.Message{
-		Type: raftpb.MsgApp,
-	}
 	var size uint64
+	var entries []raftpb.Entry
 	for _, entry := range r.entries {
 		if entry.Index >= start && entry.Index < end {
-			msg.Entries = append(msg.Entries, entry)
+			entries = append(entries, entry)
 			size += uint64(len(entry.Data))
 			if size > maxSize {
 				break
 			}
 		}
 	}
-	return msg, nil
+	// TODO(pav-kv): use a real LogSnapshot and construct a correct LogSlice.
+	return raft.MakeLogSlice(entries), nil
 }
 
 func (r *testingRCRange) SendMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, slice RaftLogSlice,
+	replicaID roachpb.ReplicaID, ls raft.LogSlice,
 ) (raftpb.Message, bool) {
-	msg := slice.(raftpb.Message)
-	msg.To = raftpb.PeerID(replicaID)
+	// TODO(pav-kv): populate the message correctly.
+	// TODO(pav-kv): use the real RawNode instead of fakes.
+	msg := raftpb.Message{
+		Type:    raftpb.MsgApp,
+		To:      raftpb.PeerID(replicaID),
+		Entries: ls.Entries(),
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	testR, ok := r.mu.r.replicaSet[replicaID]
@@ -1323,11 +1328,7 @@ func TestRangeController(t *testing.T) {
 					var sizeCount, sizeBytes int64
 					for _, rcState := range state.ranges {
 						stats := RangeSendStreamStats{}
-						func() {
-							rcState.rc.mu.Lock()
-							defer rcState.rc.mu.Unlock()
-							rcState.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
-						}()
+						rcState.rc.updateSendQueueStatsRaftMuLocked(state.ts.Now())
 						rcState.rc.SendStreamStats(&stats)
 						count, bytes := stats.SumSendQueues()
 						sizeCount += count
@@ -1371,11 +1372,7 @@ func TestRangeController(t *testing.T) {
 
 				r := state.ranges[roachpb.RangeID(rangeID)]
 				if refresh {
-					func() {
-						r.rc.mu.Lock()
-						defer r.rc.mu.Unlock()
-						r.rc.updateSendQueueStatsRaftMuRCLocked(state.ts.Now())
-					}()
+					r.rc.updateSendQueueStatsRaftMuLocked(state.ts.Now())
 				}
 				stats := RangeSendStreamStats{}
 				r.rc.SendStreamStats(&stats)
@@ -1512,8 +1509,8 @@ func testingFirst(args ...interface{}) interface{} {
 
 type testLogSnapshot struct{}
 
-func (testLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (RaftLogSlice, error) {
-	return nil, nil
+func (testLogSnapshot) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
+	return raft.LogSlice{}, nil
 }
 
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
