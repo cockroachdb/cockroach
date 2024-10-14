@@ -2582,6 +2582,13 @@ func TestRepeatableReadLogic_zone_config_system_tenant(
 	runLogicTest(t, "zone_config_system_tenant")
 }
 
+func TestRepeatableReadLogicCCL_event_log(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "event_log")
+}
+
 func TestRepeatableReadLogicCCL_fips_ready(
 	t *testing.T,
 ) {

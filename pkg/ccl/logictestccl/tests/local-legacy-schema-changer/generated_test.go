@@ -75,6 +75,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_event_log_legacy(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "event_log_legacy")
+}
+
 func TestCCLLogic_fips_ready(
 	t *testing.T,
 ) {

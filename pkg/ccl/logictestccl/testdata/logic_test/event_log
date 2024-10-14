@@ -1,0 +1,41 @@
+# Legacy schema changer is skipped because mutation IDs throughout log
+# entries will differ. "event_log_legacy" file is for the legacy schema changer.
+# LogicTest: !local-legacy-schema-changer
+# knob-opt: sync-event-log
+
+# For some reason, some of the queries produce non-deterministic results if
+# distsql_workmem value is randomized, so we'll override it to the production
+# value.
+# TODO(yuzefovich): figure it out.
+statement ok
+SET distsql_workmem = '64MiB'
+
+# Set and unset zone configs
+##################
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY, foo INT, INDEX bar (foo))
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER INDEX a@a_pkey CONFIGURE ZONE USING gc.ttlseconds = 13000
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER INDEX a@bar CONFIGURE ZONE USING gc.ttlseconds = 15000
+
+# verify zone config changes are logged
+##################
+skipif config 3node-tenant-default-configs
+skipif config local-mixed-24.1
+query IT
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+WHERE "eventType" = 'set_zone_config'
+ORDER BY "timestamp", info
+----
+1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.statement_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.transaction_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.statement_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_activity", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.transaction_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_activity", "User": "node"}
