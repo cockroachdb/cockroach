@@ -1840,13 +1840,11 @@ type replicaSendStream struct {
 			// LowPri.
 			originalEvalTokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 
-			// Approximate size stat for send-queue. For indices <
-			// nextRaftIndexInitial.
+			// entryTokensApproximator approximates the tokens needed per entry, for
+			// indices < nextRaftIndexInitial, in the send-queue.
 			//
-			// approxMeanSizeBytes is useful since it guides how many bytes to grab
-			// in deductedForScheduler.tokens. If each entry is 100 bytes, and half
-			// the entries are subject to AC, this should be ~50.
-			approxMeanSizeBytes kvflowcontrol.Tokens
+			// It guides how many bytes to grab in deductedForScheduler.tokens.
+			entryTokensApproximator entryTokensApproximator
 
 			// preciseSizeSum is the total size of entries subject to AC, and have
 			// an index >= nextRaftIndexInitial and >= indexToSend.
@@ -1939,9 +1937,6 @@ func (rs *replicaState) createReplicaSendStream(
 	rss.mu.nextRaftIndexInitial = nextRaftIndex
 	rss.mu.sendQueue.indexToSend = indexToSend
 	rss.mu.sendQueue.nextRaftIndex = nextRaftIndex
-	// TODO(sumeer): initialize based on recent appends seen by the
-	// RangeController.
-	rss.mu.sendQueue.approxMeanSizeBytes = 500
 	if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
 		// NB: need to lock rss.mu since
 		// startAttemptingToEmptySendQueueViaWatcherLocked can hand a reference to
@@ -2525,6 +2520,8 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 ) {
 	rss.mu.AssertHeld()
 	var tokensNeeded kvflowcontrol.Tokens
+	var approximatedNumEntries int
+	var approximatedNumActualTokens kvflowcontrol.Tokens
 	for _, entry := range msg.Entries {
 		entryState := getEntryFCStateOrFatal(ctx, entry)
 		if entryState.id.index != rss.mu.sendQueue.indexToSend {
@@ -2536,17 +2533,26 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 				rss.mu.sendQueue.nextRaftIndex))
 		}
 		rss.mu.sendQueue.indexToSend++
+		isApproximatedEntry := entryState.id.index < rss.mu.nextRaftIndexInitial
+		if isApproximatedEntry {
+			approximatedNumEntries++
+			if entryState.usesFlowControl {
+				approximatedNumActualTokens += entryState.tokens
+			}
+		}
 		if entryState.usesFlowControl {
-			if entryState.id.index >= rss.mu.nextRaftIndexInitial {
+			if !isApproximatedEntry {
 				rss.mu.sendQueue.preciseSizeSum -= entryState.tokens
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entryState.pri)] -=
 					entryState.tokens
 			}
-			// TODO(sumeer): use knowledge from entries < nextRaftIndexInitial to
-			// adjust approxMeanSizeBytes.
 			tokensNeeded += entryState.tokens
 			rss.mu.tracker.Track(ctx, entryState.id, raftpb.LowPri, entryState.tokens)
 		}
+	}
+	if approximatedNumEntries > 0 {
+		rss.mu.sendQueue.entryTokensApproximator.addStats(
+			approximatedNumEntries, approximatedNumActualTokens)
 	}
 	if !rss.mu.sendQueue.forceFlushScheduled {
 		// Subtract from already deducted tokens.
@@ -2703,7 +2709,8 @@ func (rss *replicaSendStream) approxQueueSizeLocked() kvflowcontrol.Tokens {
 	var size kvflowcontrol.Tokens
 	countWithApproxStats := int64(rss.mu.nextRaftIndexInitial) - int64(rss.mu.sendQueue.indexToSend)
 	if countWithApproxStats > 0 {
-		size = kvflowcontrol.Tokens(countWithApproxStats) * rss.mu.sendQueue.approxMeanSizeBytes
+		size = kvflowcontrol.Tokens(countWithApproxStats) *
+			rss.mu.sendQueue.entryTokensApproximator.meanTokensPerEntry()
 	}
 	size += rss.mu.sendQueue.preciseSizeSum
 	return size
@@ -2824,4 +2831,29 @@ func (cs connectedState) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		panic(fmt.Sprintf("unknown connectedState %v", cs))
 	}
+}
+
+// entryTokensApproximator simply uses a mean of the entries observed to
+// approximate the tokens needed. More sophisticated heuristics can be
+// devised, if needed.
+type entryTokensApproximator struct {
+	numEntries int
+	numTokens  kvflowcontrol.Tokens
+}
+
+// REQUIRES: numEntries > 0.
+func (a *entryTokensApproximator) addStats(numEntries int, numTokens kvflowcontrol.Tokens) {
+	a.numEntries += numEntries
+	a.numTokens += numTokens
+}
+
+func (a *entryTokensApproximator) meanTokensPerEntry() kvflowcontrol.Tokens {
+	if a.numEntries == 0 {
+		return 500
+	}
+	mean := a.numTokens / kvflowcontrol.Tokens(a.numEntries)
+	if mean == 0 {
+		mean = 1
+	}
+	return mean
 }
