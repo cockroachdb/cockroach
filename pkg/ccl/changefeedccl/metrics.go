@@ -114,6 +114,7 @@ type metricsRecorder interface {
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	netMetrics() *cidr.NetMetrics
+	timers() *timers.ScopedTimers
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -406,6 +407,14 @@ func (m *sliMetrics) netMetrics() *cidr.NetMetrics {
 	return m.NetMetrics
 }
 
+func (m *sliMetrics) timers() *timers.ScopedTimers {
+	if m == nil {
+		return timers.NoopScopedTimers
+	}
+
+	return m.Timers
+}
+
 // JobScopedUsageMetrics are aggregated metrics keeping track of
 // per-changefeed usage metrics by job_id. Note that its members are public so
 // they get registered with the metrics registry, but you should NOT modify them
@@ -570,6 +579,10 @@ func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetric
 
 func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
 	return w.inner.netMetrics()
+}
+
+func (w *wrappingCostController) timers() *timers.ScopedTimers {
+	return w.inner.timers()
 }
 
 var (

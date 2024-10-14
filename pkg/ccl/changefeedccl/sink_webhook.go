@@ -576,7 +576,9 @@ func (s *deprecatedWebhookSink) sendMessageWithRetries(
 	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
 }
 
-func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
+func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) (retErr error) {
+	defer s.metrics.timers().DownstreamClientSend.Start()()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return err
