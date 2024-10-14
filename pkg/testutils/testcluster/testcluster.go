@@ -581,6 +581,7 @@ func (tc *TestCluster) AddServer(
 		stkCopy.DisableSplitQueue = true
 		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
+		stkCopy.DisableStoreRebalancer = true
 		serverArgs.Knobs.Store = &stkCopy
 	}
 
