@@ -178,7 +178,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	n *tree.SetZoneConfig,
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
-) error {
+) (*zonepb.ZoneConfig, error) {
 	// TODO(annie): once we allow configuring zones for named zones/system ranges,
 	// we will need to guard against secondary tenants from configuring such
 	// ranges.
@@ -218,7 +218,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	completeZone, completeSubZone, err := izo.retrieveCompleteZoneConfig(b,
 		n.SetDefault /* getInheritedDefault */)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// We need to inherit zone configuration information from the correct zone,
@@ -226,7 +226,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	{
 		zoneInheritedFields, err := izo.getInheritedFieldsForPartialSubzone(b, partialZone)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		partialSubzone.Config.CopyFromZone(*zoneInheritedFields, copyFromParentList)
 	}
@@ -240,22 +240,25 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	// If an existing subzone is being modified, finalZone is overridden.
 	finalZone := partialSubzone.Config
 
+	// Clone our zone config to log the old zone config as well as the new one.
+	oldZone := protoutil.Clone(&newZone).(*zonepb.ZoneConfig)
+
 	if n.SetDefault {
 		finalZone = *zonepb.NewZoneConfig()
 	}
 
 	// Fill in our zone configs with var = val assignments.
 	if err := loadSettingsToZoneConfigs(setters, &newZone, &finalZone); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Validate that there are no conflicts in the zone setup.
 	if err := zonepb.ValidateNoRepeatKeysInZone(&newZone); err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZone); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Fill in the final zone config with subzones.
@@ -264,7 +267,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 
 	// Finally, revalidate everything. Validate only the completeZone config.
 	if err := completeZone.Validate(); err != nil {
-		return pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+		return nil, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
 	}
 
 	// Finally, check for the extra protection partial zone configs would
@@ -282,10 +285,10 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 		err = errors.WithHint(err,
 			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to "+
 				"populate the field")
-		return err
+		return nil, err
 	}
 	izo.setZoneConfigToWrite(partialZone)
-	return err
+	return oldZone, err
 }
 
 // fillIndexFromZoneSpecifier fills out the index id in the zone

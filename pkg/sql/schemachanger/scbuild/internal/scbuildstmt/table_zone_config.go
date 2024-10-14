@@ -181,8 +181,8 @@ func (tzo *tableZoneConfigObj) applyZoneConfig(
 	n *tree.SetZoneConfig,
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
-) error {
-	partialZone, err := prepareZoneConfig(b, n, copyFromParentList, setters, tzo)
+) (*zonepb.ZoneConfig, error) {
+	oldZone, partialZone, err := prepareZoneConfig(b, n, copyFromParentList, setters, tzo)
 	tzo.setZoneConfigToWrite(partialZone)
-	return err
+	return oldZone, err
 }
