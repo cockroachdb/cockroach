@@ -2621,6 +2621,7 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 	if h.evalCtx.SessionData().OptimizerUseImprovedJoinElimination {
 		h.addSelfJoinImpliedFDs(rel)
 	}
+	h.addFKJoinImpliedFDs(rel)
 }
 
 // leftAndRightTables returns two lists of distinct base tables the produce
@@ -2698,6 +2699,81 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 			}
 		}
 	}
+}
+
+// forEachFK invokes the given function for each FK relationship in which
+// columns from one table in the FK come from the LHS, and columns from the
+// other table come from the RHS. The FK, the origin table ID, and the
+// referenced table ID are provided to the function.
+func (h *joinPropsHelper) forEachFK(
+	fn func(fk cat.ForeignKeyConstraint, originTabID, refTabID opt.TableID),
+) {
+	md := h.join.Memo().Metadata()
+	leftTables, rightTables := h.leftAndRightTables()
+	for _, leftTableID := range leftTables {
+		leftTable := md.Table(leftTableID)
+		for _, rightTableID := range rightTables {
+			rightTable := md.Table(rightTableID)
+			for i, n := 0, leftTable.OutboundForeignKeyCount(); i < n; i++ {
+				fk := leftTable.OutboundForeignKey(i)
+				if !fk.Validated() || fk.ReferencedTableID() != rightTable.ID() {
+					continue
+				}
+				fn(fk, leftTableID, rightTableID)
+			}
+			for i, n := 0, leftTable.InboundForeignKeyCount(); i < n; i++ {
+				fk := leftTable.InboundForeignKey(i)
+				if !fk.Validated() || fk.OriginTableID() != rightTable.ID() {
+					continue
+				}
+				fn(fk, rightTableID, leftTableID)
+			}
+		}
+	}
+}
+
+// addFKJoinImpliedFDs adds any extra equality FDs that are implied by a join
+// equality and a foreign key join.
+//
+// TODO(mgartner): Explain this in greater detail.
+func (h *joinPropsHelper) addFKJoinImpliedFDs(rel *props.Relational) {
+	md := h.join.Memo().Metadata()
+	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
+	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
+		// There are no equalities between left and right columns.
+		return
+	}
+	h.forEachFK(func(fk cat.ForeignKeyConstraint, originTabID, refTabID opt.TableID) {
+		// If there are equalities between columns in the FK that form a key on
+		// the base table of the referenced table, then all columns in the FK
+		// are equal.
+		originTab := md.Table(originTabID)
+		refTab := md.Table(refTabID)
+		var fkRefCols opt.ColSet
+		for i, n := 0, fk.ColumnCount(); i < n; i++ {
+			originColID := originTabID.ColumnID(fk.OriginColumnOrdinal(originTab, i))
+			refColID := refTabID.ColumnID(fk.ReferencedColumnOrdinal(refTab, i))
+			if rel.FuncDeps.AreColsEquiv(originColID, refColID) {
+				fkRefCols.Add(refColID)
+			}
+		}
+		if n := fkRefCols.Len(); n == fk.ColumnCount() || n == 0 {
+			// If all columns in the FK are equal, then there are no additional
+			// equalities to add. If none of the columns in the FK are equal,
+			// then there are no implied equalities.
+			return
+		}
+		// TODO(mgartner): What about tree.MatchFull? Do we need to do something
+		// special for the FK type?
+		refTabFDs := MakeTableFuncDep(md, refTabID)
+		if refTabFDs.ColsAreStrictKey(fkRefCols) {
+			for i, n := 0, fk.ColumnCount(); i < n; i++ {
+				originColID := originTabID.ColumnID(fk.OriginColumnOrdinal(originTab, i))
+				refColID := refTabID.ColumnID(fk.ReferencedColumnOrdinal(refTab, i))
+				rel.FuncDeps.AddEquivalency(originColID, refColID)
+			}
+		}
+	})
 }
 
 func (h *joinPropsHelper) cardinality() props.Cardinality {
