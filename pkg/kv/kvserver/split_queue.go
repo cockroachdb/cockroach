@@ -243,7 +243,7 @@ func (sq *splitQueue) processAttemptWithTracing(
 ) (processed bool, _ error) {
 	processStart := r.Clock().PhysicalTime()
 	ctx, sp := tracing.EnsureChildSpan(ctx, sq.Tracer, "split",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
+		tracing.WithRecording(tracingpb.RecordingStructured))
 	defer sp.Finish()
 
 	processed, err := sq.processAttempt(ctx, r, confReader)
