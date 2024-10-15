@@ -107,7 +107,8 @@ func (r *Replica) getQuotaPoolEnabledRLocked(ctx context.Context) bool {
 
 // shouldReplicationAdmissionControlUsePullMode returns whether replication
 // admission/flow control should use pull mode, which allows for a send-queue
-// and disabled raft's own flow control.
+// and disables raft's own flow control. If replication admission/flow control
+// is completely disabled, it returns false.
 func (r *Replica) shouldReplicationAdmissionControlUsePullMode(ctx context.Context) bool {
 	if knobs := r.store.cfg.TestingKnobs.FlowControlTestingKnobs; knobs != nil &&
 		knobs.OverridePullPushMode != nil {
@@ -121,9 +122,9 @@ func (r *Replica) shouldReplicationAdmissionControlUsePullMode(ctx context.Conte
 		versionEnabled = r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full)
 	}
 
-	return (versionEnabled &&
+	return versionEnabled &&
 		kvflowcontrol.Mode.Get(&r.store.cfg.Settings.SV) == kvflowcontrol.ApplyToAll &&
-		kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV))
+		kvflowcontrol.Enabled.Get(&r.store.cfg.Settings.SV)
 }
 
 func (r *Replica) replicationAdmissionControlModeToUse(ctx context.Context) rac2.RaftMsgAppMode {
