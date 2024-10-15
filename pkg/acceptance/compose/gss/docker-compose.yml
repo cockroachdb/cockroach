@@ -24,7 +24,7 @@ services:
       timeout: 10s
       retries: 25
   psql:
-    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-psql:20241011-130122
+    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-psql:20241015-163425
     user: "${UID}:${GID}"
     depends_on:
       cockroach:
