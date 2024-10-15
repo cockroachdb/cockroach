@@ -745,8 +745,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
-	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica")
 	defer sp.Finish()
 
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,

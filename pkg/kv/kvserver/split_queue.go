@@ -242,9 +242,13 @@ func (sq *splitQueue) processAttemptWithTracing(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, _ error) {
 	processStart := r.Clock().PhysicalTime()
-	ctx, sp := tracing.EnsureChildSpan(ctx, sq.Tracer, "split",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
-	defer sp.Finish()
+	var sp *tracing.Span
+	// TODO(baptist): Use an explicit flag for tracing.
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		ctx, sp = tracing.EnsureChildSpan(ctx, sq.Tracer, "split",
+			tracing.WithRecording(tracingpb.RecordingVerbose))
+		defer sp.Finish()
+	}
 
 	processed, err := sq.processAttempt(ctx, r, confReader)
 
@@ -256,7 +260,7 @@ func (sq *splitQueue) processAttemptWithTracing(
 		exceededDuration := sq.logTracesThreshold > time.Duration(0) && processDuration > sq.logTracesThreshold
 
 		var traceOutput redact.RedactableString
-		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
+		traceLoggingNeeded := (err != nil || exceededDuration) && sp != nil
 		if traceLoggingNeeded {
 			// Add any trace filtering here if the output is too verbose.
 			rec := sp.GetConfiguredRecording()
