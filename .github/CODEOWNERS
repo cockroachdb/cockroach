@@ -575,6 +575,7 @@
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/addr/              @cockroachdb/obs-prs
 /pkg/util/admission/         @cockroachdb/admission-control
+/pkg/util/goschedstats       @cockroachdb/admission-control
 /pkg/util/grunning/          @cockroachdb/admission-control
 /pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
