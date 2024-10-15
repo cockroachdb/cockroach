@@ -23,6 +23,7 @@ changefeed.min_highwater_advance	duration	0s	minimum amount of time the changefe
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
+changefeed.protect_timestamp_jitter	float	0	controls the jitter of the protected timestamp update interval (`changefeed.protect_timestamp_interval`) in the range of [0, 1). 0, the default, means no jitter	application
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
 changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently the batching versions of webhook, pubsub, and kafka sinks that are enabled by changefeed.new_<sink type>_sink_enabled only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
