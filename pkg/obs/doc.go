@@ -5,6 +5,4 @@
 
 package obs
 
-// Package obs represents the client library for the Observability Service.
-//
-// The Obs Service lives in pkg/obsservice.
+// Package obs contains internal utilities used by observability systems.

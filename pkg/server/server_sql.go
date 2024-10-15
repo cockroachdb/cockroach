@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -392,9 +391,6 @@ type sqlServerArgs struct {
 
 	// grpc is the RPC service.
 	grpc *grpcServer
-
-	// eventsExporter communicates with the Observability Service.
-	eventsExporter obs.EventsExporterInterface
 
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
@@ -1050,7 +1046,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
 		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
-		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
