@@ -103,6 +103,8 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 	allowAnonymous := opts.sqlServer.cfg.Insecure
 	authMux := authserver.NewV2Mux(authServer, innerMux, allowAnonymous)
 	outerMux := mux.NewRouter()
+	serverMetrics := NewServerHttpMetrics(opts.sqlServer.MetricsRegistry(), opts.sqlServer.execCfg.Settings)
+	serverMetrics.registerMetricsMiddleware(outerMux)
 
 	systemAdmin, saOk := opts.admin.(*systemAdminServer)
 	systemStatus, ssOk := opts.status.(*systemStatusServer)
