@@ -60,6 +60,7 @@ func (w sysbenchWorkload) String() string {
 
 type sysbenchOptions struct {
 	workload     sysbenchWorkload
+	distribution string // default `uniform`
 	duration     time.Duration
 	concurrency  int
 	tables       int
@@ -74,6 +75,10 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		pghost = "127.0.0.1"
 		pgport = "26257"
 	}
+	distribution := "uniform"
+	if o.distribution != "" {
+		distribution = o.distribution
+	}
 	return fmt.Sprintf(`sysbench \
 		--db-driver=pgsql \
 		--pgsql-host=%s \
@@ -82,6 +87,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--pgsql-password=%s \
 		--pgsql-db=sysbench \
 		--report-interval=1 \
+		--rand-type=%s \
 		--time=%d \
 		--threads=%d \
 		--tables=%d \
@@ -92,6 +98,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		pgport,
 		install.DefaultUser,
 		install.DefaultPassword,
+		distribution,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
