@@ -1630,31 +1630,14 @@ func stepLeader(r *raft, m pb.Message) error {
 				cc = ccc
 			}
 			if cc != nil {
-				// Per the "Apply" invariant in the config change safety argument[^1],
-				// the leader must not append a config change if it hasn't applied all
-				// config changes in its log.
-				//
-				// [^1]: https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
-				alreadyPending := r.pendingConfIndex > r.raftLog.applied
-
-				alreadyJoint := len(r.config.Voters[1]) > 0
-				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
-
-				var failedCheck string
-				if alreadyPending {
-					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
-				} else if alreadyJoint && !wantsLeaveJoint {
-					failedCheck = "must transition out of joint config first"
-				} else if !alreadyJoint && wantsLeaveJoint {
-					failedCheck = "not in joint state; refusing empty conf change"
+				ccCtx := confchange.ValidationContext{
+					CurConfig:                         &r.config,
+					Applied:                           r.raftLog.applied,
+					PendingConfIndex:                  r.pendingConfIndex,
+					DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
 				}
-
-				// Allow disabling config change constraints that are guaranteed by the
-				// upper state machine layer (incorrect ones will apply as no-ops).
-				//
-				// NB: !alreadyPending requirement is always respected, for safety.
-				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
+				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
@@ -2430,11 +2413,34 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	// node is removed.
 	r.isLearner = pr != nil && pr.IsLearner
 
-	if (pr == nil || r.isLearner) && r.state == pb.StateLeader {
-		// This node is leader and was removed or demoted, step down.
-		//
-		// We prevent demotions at the time writing but hypothetically we handle
-		// them the same way as removing the leader.
+	// The remaining steps only make sense if this node is the leader and there
+	// are other nodes.
+	if r.state != pb.StateLeader || len(cs.Voters) == 0 {
+		return cs
+	}
+
+	if pr == nil {
+		// This node is leader and was removed. This should not be possible, as we
+		// do not allow voters to be removed directly without first being demoted
+		// to a learner, and only voters may serve as leader. Direct removal of the
+		// raft leader is unsafe for at least two reasons:
+		// 1. the leader (or any voter) may be needed to vote for a candidate who
+		//    has not yet applied the configuration change. This is a liveness issue
+		//    if the leader/voter is immediately removed without stepping down to a
+		//    learner first and waiting for a second configuration change to
+		//    succeed.
+		//    For details, see: https://github.com/cockroachdb/cockroach/pull/42251.
+		// 2. the leader may have fortified its leadership term, binding the
+		//    liveness of the leader replica to the leader's store's store liveness
+		//    heartbeats. Removal of the leader replica from a store while that
+		//    store continues to heartbeat in the store liveness fabric will lead to
+		//    the leader disappearing without any other replica deciding that the
+		//    leader is gone and stepping up to campaign.
+		r.logger.Panicf("%x leader removed from configuration %s", r.id, r.config)
+	}
+
+	if r.isLearner {
+		// This node is leader and was demoted, step down.
 		//
 		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
 		// interruption). This might still drop some proposals but it's better than
@@ -2443,12 +2449,6 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		// NB: Similar to the CheckQuorum step down case, we must remember our
 		// prior stint as leader, lest we regress the QSE.
 		r.becomeFollower(r.Term, r.lead)
-		return cs
-	}
-
-	// The remaining steps only make sense if this node is the leader and there
-	// are other nodes.
-	if r.state != pb.StateLeader || len(cs.Voters) == 0 {
 		return cs
 	}
 
