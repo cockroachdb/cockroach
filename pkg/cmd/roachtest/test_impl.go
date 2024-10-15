@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -546,6 +547,70 @@ func failuresMatchingError(failures []failure, refError any) bool {
 	}
 
 	return false
+}
+
+var transientErrorRegex = regexp.MustCompile(`TRANSIENT_ERROR\((.+)\)`)
+
+// transientErrorOwnershipFallback string matches for `TRANSIENT_ERROR` in the provided
+// failures and returns a new ErrorWithOwnership if it does. It iterates through each failure,
+// checking both the squashedErr and list of errors for `TRANSIENT_ERROR`.
+//
+// This is needed as the `require` package does not preserve the error object needed
+// for us to properly check if it is a transient error using `failuresMatchingError`.
+// Note the match is additionally guarded by the unique substring which denotes that
+// the error originated from the require package. If we see somewhere else that does not
+// preserve the error object, we want to investigate whether it can be fixed before resorting
+// to this fallback. See: #131094
+func transientErrorOwnershipFallback(failures []failure) *registry.ErrorWithOwnership {
+	const unexpectedErrPrefix = "Received unexpected error:"
+	var errWithOwner registry.ErrorWithOwnership
+	isTransient := func(err error) bool {
+		// Both squashedErr and errors should be non nil in actual roachtest failures,
+		// but for testing we sometimes only set one for simplicity.
+		if err == nil {
+			return false
+		}
+		// The require package prepends this message to `require.NoError` failures.
+		// We may see `TRANSIENT_ERROR` without this prefix, but don't mark it as
+		// a flake as we may be able to fix the code that doesn't preserve the error.
+		if !strings.Contains(err.Error(), unexpectedErrPrefix) {
+			return false
+		}
+
+		if match := transientErrorRegex.FindString(err.Error()); match != "" {
+			problemCause := strings.TrimPrefix(match, "TRANSIENT_ERROR(")
+			problemCause = strings.TrimSuffix(problemCause, ")")
+			// The cause will be used to create the github issue creation, so we don't want
+			// it to be blank. Instead, return false and let us investigate what is creating
+			// a transient error with no cause.
+			if problemCause == "" {
+				return false
+			}
+
+			errWithOwner = registry.ErrorWithOwner(
+				registry.OwnerTestEng, err,
+				registry.WithTitleOverride(problemCause),
+				registry.InfraFlake,
+			)
+			return true
+		}
+
+		return false
+	}
+
+	for _, f := range failures {
+		for _, err := range f.errors {
+			if isTransient(err) {
+				return &errWithOwner
+			}
+		}
+
+		if isTransient(f.squashedErr) {
+			return &errWithOwner
+		}
+	}
+
+	return nil
 }
 
 func (t *testImpl) ArtifactsDir() string {

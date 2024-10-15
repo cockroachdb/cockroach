@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -526,4 +527,70 @@ func TestGCESameDefaultZone(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTransientErrorFallback(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          logger.NoTee,
+		stdout:       &buf,
+		stderr:       &buf,
+		artifactsDir: "",
+	}
+	copt := clustersOpt{
+		typ:       roachprodCluster,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
+	}
+
+	// Test that if a test fails with a transient error handled by the `require` package,
+	// the test runner will correctly still identify it as a flake and the run will have
+	// no failed tests.
+	t.Run("Require API", func(t *testing.T) {
+		mockTest := registry.TestSpec{
+			Name:             `ssh flake`,
+			Owner:            OwnerUnitTest,
+			Cluster:          spec.MakeClusterSpec(0),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			CockroachBinary:  registry.StandardCockroach,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				require.NoError(t, rperrors.NewSSHError(errors.New("oops")))
+			},
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		require.NoError(t, err)
+	})
+
+	// Now test that if the transient error is not handled by the `require` package,
+	// but similarly lost due to casting to a string, the test runner *won't* mark
+	// it as a flake and we will have a failed test.
+	t.Run("Require API Not Used", func(t *testing.T) {
+		mockTest := registry.TestSpec{
+			Name:             `ssh flake`,
+			Owner:            OwnerUnitTest,
+			Cluster:          spec.MakeClusterSpec(0),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			CockroachBinary:  registry.StandardCockroach,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				err := errors.Newf("%s", rperrors.NewSSHError(errors.New("oops")))
+				t.Fatal(err)
+			},
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		if !testutils.IsError(err, "some tests failed") {
+			t.Fatalf("expected error \"some tests failed\", got: %v", err)
+		}
+	})
 }
