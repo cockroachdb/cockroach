@@ -575,6 +575,9 @@ type rangeController struct {
 	}
 	entryFCStateScratch       []entryFCState
 	lastSendQueueStatsScratch RangeSendQueueStats
+
+	consistencyCheckerScratchMap map[roachpb.ReplicaID]stateForWaiters
+	consistencyCheckerCount      int
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -1086,9 +1089,11 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	if shouldWaitChange {
 		rc.updateWaiterSetsRaftMuLocked()
 	}
-	if buildutil.CrdbTestBuild {
+
+	if buildutil.CrdbTestBuild || rc.consistencyCheckerCount == 0 {
 		rc.checkConsistencyRaftMuLocked(ctx)
 	}
+	rc.consistencyCheckerCount = (rc.consistencyCheckerCount + 1) % 100
 
 	// It may have been longer than the sendQueueStatRefreshInterval since we
 	// last updated the send queue stats. Maybe update them now.
@@ -1630,7 +1635,11 @@ func (rc *rangeController) scheduleReplica(r roachpb.ReplicaID) {
 
 // checkConsistencyRaftMuLocked is an expensive function to check consistency.
 func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
-	replicas := map[roachpb.ReplicaID]stateForWaiters{}
+	if rc.consistencyCheckerScratchMap == nil {
+		rc.consistencyCheckerScratchMap = map[roachpb.ReplicaID]stateForWaiters{}
+	}
+	replicas := rc.consistencyCheckerScratchMap
+	clear(replicas)
 	func() {
 		var leaderID, leaseholderID roachpb.ReplicaID
 		rc.mu.RLock()
@@ -1689,6 +1698,51 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 		if !ok {
 			panic(errors.AssertionFailedf("replica %s not in replicaSet", replicaID))
 		}
+		rss := rs.sendStream
+		if rss == nil {
+			continue
+		}
+		// Check internal consistency of replicaSendStream.
+		func() {
+			rss.mu.Lock()
+			defer rss.mu.Unlock()
+			if rss.mu.connectedState == probeRecentlyNoSendQ {
+				if !rss.mu.tracker.Empty() {
+					panic(errors.AssertionFailedf("tracker is not empty in state probe"))
+				}
+				for _, tokens := range rss.mu.eval.tokensDeducted {
+					if tokens != 0 {
+						panic(errors.AssertionFailedf("non-zero eval tokens deducted in state probe"))
+					}
+				}
+				if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+					panic(errors.AssertionFailedf("non-zero deductedForSchedulerTokens in state probe"))
+				}
+				return
+			}
+			// replicate state.
+			trackerTokens := rss.mu.tracker.tokensGE(rss.mu.nextRaftIndexInitial)
+			var tokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+			for pri, t := range trackerTokens {
+				tokens[WorkClassFromRaftPriority(raftpb.Priority(pri))] += t
+			}
+			for wc, t := range rss.mu.sendQueue.originalEvalTokens {
+				effectiveWC := admissionpb.WorkClass(wc)
+				if rss.mu.mode == MsgAppPull {
+					effectiveWC = admissionpb.ElasticWorkClass
+				}
+				tokens[effectiveWC] += t
+			}
+			for wc, t := range rss.mu.eval.tokensDeducted {
+				if t != tokens[wc] {
+					panic(errors.AssertionFailedf("%v: eval tokens deducted %v != %v",
+						admissionpb.WorkClass(wc), t, tokens[wc]))
+				}
+			}
+			if rss.isEmptySendQueueLocked() && rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+				panic(errors.AssertionFailedf("empty send-queue and non-zero deductedForSchedulerTokens"))
+			}
+		}()
 	}
 }
 

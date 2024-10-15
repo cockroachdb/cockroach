@@ -140,6 +140,22 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 	return returned
 }
 
+// tokens returns the sum of the current tokens in the tracker with index >=
+// index.
+func (t *Tracker) tokensGE(index uint64) [raftpb.NumPriorities]kvflowcontrol.Tokens {
+	var tokens [raftpb.NumPriorities]kvflowcontrol.Tokens
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			tracked := t.tracked[pri].At(i)
+			if tracked.id.index >= index {
+				tokens[pri] += tracked.tokens
+			}
+		}
+	}
+	return tokens
+}
+
 // Inspect returns a snapshot of all tracked token deductions. It's used to
 // power /inspectz-style debugging pages.
 func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
