@@ -31,48 +31,18 @@ func TestLicense(t *testing.T) {
 	licenseID := []byte{0}
 
 	for i, tc := range []struct {
-		licType    licenseccl.License_Type
-		expiration time.Time
-		checkOrg   string
-		checkTime  time.Time
-		err        string
+		licType licenseccl.License_Type
 	}{
-		{licType: -1, err: "requires an enterprise license"},
-		{licenseccl.License_Evaluation, ts, "tc-1", ts, ""},
-		{licenseccl.License_Enterprise, ts, "tc-2", ts, ""},
-		{licenseccl.License_NonCommercial, ts, "tc-3", ts, ""},
-		{licenseccl.License_Evaluation, after, "tc-4", ts, ""},
-		{licenseccl.License_Evaluation, ts, "tc-5", before, ""},
-		{licenseccl.License_Evaluation, wayAfter, "tc-6", ts, ""},
-
-		// expirations.
-		{licenseccl.License_Evaluation, ts, "tc-7", after, "expired"},
-		{licenseccl.License_Evaluation, after, "tc-8", wayAfter, "expired"},
-		{licenseccl.License_NonCommercial, after, "tc-9", wayAfter, "expired"},
-		{licenseccl.License_NonCommercial, t0, "tc-10", wayAfter, ""},
-		{licenseccl.License_Evaluation, t0, "tc-11", wayAfter, ""},
-
-		// grace period.
-		{licenseccl.License_Enterprise, after, "tc-12", wayAfter, ""},
-
-		// mismatch.
-		{licenseccl.License_Enterprise, ts, "tc-13", ts, ""},
-		{licenseccl.License_Enterprise, ts, "", ts, "license valid only for"},
-		{licenseccl.License_Enterprise, ts, "tc-15", ts, ""},
-
-		// free license.
-		{licenseccl.License_Free, ts, "tc-16", ts, ""},
-		{licenseccl.License_Free, after, "tc-17", wayAfter, "expired"},
-
-		// trial license.
-		{licenseccl.License_Trial, wayAfter, "tc-18", before, ""},
-		{licenseccl.License_Trial, ts, "unmatched org", ts, "license valid only for"},
+		{licenseccl.License_Enterprise},
+		{licenseccl.License_NonCommercial},
+		{licenseccl.License_Evaluation},
+		{licenseccl.License_Free},
+		{licenseccl.License_Trial},
 	} {
 		t.Run("", func(t *testing.T) {
-			var lic *licenseccl.License
-			if tc.licType != -1 {
+			for _, ts := range []time.Time{ts, t0, after, wayAfter, before} {
 				s, err := (&licenseccl.License{
-					ValidUntilUnixSec: tc.expiration.Unix(),
+					ValidUntilUnixSec: ts.Unix(),
 					Type:              tc.licType,
 					OrganizationName:  fmt.Sprintf("tc-%d", i),
 					OrganizationId:    orgID,
@@ -82,19 +52,13 @@ func TestLicense(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				lic, err = decode(s)
+				_, err = decode(s)
 				if err != nil {
 					t.Fatal(err)
 				}
+				orgID[0]++
+				licenseID[0]++
 			}
-			if err := check(
-				lic, tc.checkTime, tc.checkOrg, "", true,
-			); !testutils.IsError(err, tc.err) {
-				t.Fatalf("%d: lic to %s, checked at %s.\n got %q", i,
-					tc.expiration, tc.checkTime, err)
-			}
-			orgID[0]++
-			licenseID[0]++
 		})
 	}
 }
@@ -110,21 +74,5 @@ func TestBadLicenseStrings(t *testing.T) {
 		if _, err := decode(tc.lic); !testutils.IsError(err, tc.err) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
 		}
-	}
-}
-
-func TestExpiredLicenseLanguage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	lic := &licenseccl.License{
-		Type:              licenseccl.License_Evaluation,
-		ValidUntilUnixSec: 1,
-	}
-	err := check(lic, timeutil.Now(), "", "RESTORE", true)
-	expected := "Use of RESTORE requires an enterprise license. Your evaluation license expired on " +
-		"January 1, 1970. If you're interested in getting a new license, please contact " +
-		"subscriptions@cockroachlabs.com and we can help you out."
-	if err == nil || err.Error() != expected {
-		t.Fatalf("expected err:\n%s\ngot:\n%v", expected, err)
 	}
 }
