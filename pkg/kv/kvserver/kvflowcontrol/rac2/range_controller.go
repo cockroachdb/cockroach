@@ -575,6 +575,9 @@ type rangeController struct {
 	}
 	entryFCStateScratch       []entryFCState
 	lastSendQueueStatsScratch RangeSendQueueStats
+
+	consistencyCheckerScratchMap map[roachpb.ReplicaID]stateForWaiters
+	consistencyCheckerCount      int
 }
 
 // voterStateForWaiters informs whether WaitForEval is required to wait for
@@ -1086,9 +1089,11 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	if shouldWaitChange {
 		rc.updateWaiterSetsRaftMuLocked()
 	}
-	if buildutil.CrdbTestBuild {
+
+	if buildutil.CrdbTestBuild || rc.consistencyCheckerCount == 0 {
 		rc.checkConsistencyRaftMuLocked(ctx)
 	}
+	rc.consistencyCheckerCount = (rc.consistencyCheckerCount + 1) % 100
 
 	// It may have been longer than the sendQueueStatRefreshInterval since we
 	// last updated the send queue stats. Maybe update them now.
@@ -1630,7 +1635,12 @@ func (rc *rangeController) scheduleReplica(r roachpb.ReplicaID) {
 
 // checkConsistencyRaftMuLocked is an expensive function to check consistency.
 func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
-	replicas := map[roachpb.ReplicaID]stateForWaiters{}
+	if rc.consistencyCheckerScratchMap == nil {
+		rc.consistencyCheckerScratchMap = map[roachpb.ReplicaID]stateForWaiters{}
+	}
+	// replicas contains everything in rc.mu.voterSets and rc.mu.nonVoterSet.
+	replicas := rc.consistencyCheckerScratchMap
+	clear(replicas)
 	func() {
 		var leaderID, leaseholderID roachpb.ReplicaID
 		rc.mu.RLock()
@@ -1659,6 +1669,8 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 			replicas[nv.replicaID] = nv
 		}
 	}()
+	// Check that every member of replicas is also in rc.replicaMap and
+	// rc.replicaSet, and that the state is consistent.
 	for _, state := range replicas {
 		rs, ok := rc.replicaMap[state.replicaID]
 		if !ok {
@@ -1678,6 +1690,9 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 			panic(errors.AssertionFailedf("replica %s not in replicaSet", state.replicaID))
 		}
 	}
+	// Check that every member of rc.replicaMap is in rc.replicaSet, and if it
+	// is a voter or non-voter it is in replicas. Additionally check each
+	// replicaSendStream for internal consistency.
 	for replicaID, rs := range rc.replicaMap {
 		if rs.desc.IsAnyVoter() || rs.desc.IsNonVoter() {
 			_, ok := replicas[replicaID]
@@ -1689,6 +1704,12 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 		if !ok {
 			panic(errors.AssertionFailedf("replica %s not in replicaSet", replicaID))
 		}
+		rss := rs.sendStream
+		if rss == nil {
+			continue
+		}
+		// Check internal consistency of replicaSendStream.
+		rss.checkConsistencyRaftMuLocked()
 	}
 }
 
@@ -1836,8 +1857,7 @@ type replicaSendStream struct {
 			// subject to replication flow control.
 			//
 			// In push mode, we deduct based on originalEvalTokens. In pull mode,
-			// all originalEvalTokens[RegularWorkClass] are also deducted as
-			// elastic.
+			// all originalEvalTokens[RegularWorkClass] are deducted as elastic.
 			//
 			// When switching from push to pull:
 			//  evalTokenCounter.Deduct(ElasticWorkClass, originalEvalTokensDeducted[RegularWorkClass])
@@ -2781,6 +2801,57 @@ func (rss *replicaSendStream) returnAllEvalTokensLocked(ctx context.Context) {
 			rss.parent.evalTokenCounter.Return(ctx, admissionpb.WorkClass(wc), tokens, AdjDisconnect)
 		}
 		rss.mu.eval.tokensDeducted[wc] = 0
+	}
+}
+
+func (rss *replicaSendStream) checkConsistencyRaftMuLocked() {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	if rss.mu.connectedState == probeRecentlyNoSendQ {
+		if !rss.mu.tracker.Empty() {
+			panic(errors.AssertionFailedf("tracker is not empty in state probe"))
+		}
+		for _, tokens := range rss.mu.eval.tokensDeducted {
+			if tokens != 0 {
+				panic(errors.AssertionFailedf("non-zero eval tokens deducted in state probe"))
+			}
+		}
+		if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+			panic(errors.AssertionFailedf("non-zero deductedForSchedulerTokens in state probe"))
+		}
+		return
+	}
+	// replicate state.
+
+	// tokens is the expected number of eval tokens that have been deducted.
+	var tokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+	// trackerTokens is all the send tokens in the tracker that have eval tokens
+	// deducted. NB: indices < rss.mu.nextRaftIndexInitial were in the
+	// send-queue when the replicaSendStream was created, so did not have eval
+	// tokens deducted.
+	trackerTokens := rss.mu.tracker.tokensGE(rss.mu.nextRaftIndexInitial)
+	for pri, t := range trackerTokens {
+		tokens[WorkClassFromRaftPriority(raftpb.Priority(pri))] += t
+	}
+	// There are tokens in the send-queue that also have eval tokens deducted.
+	// Add them to the expected number.
+	for wc, t := range rss.mu.sendQueue.originalEvalTokens {
+		effectiveWC := admissionpb.WorkClass(wc)
+		if rss.mu.mode == MsgAppPull {
+			// NB: regular work deducts elastic (eval and send) tokens in pull mode.
+			effectiveWC = admissionpb.ElasticWorkClass
+		}
+		tokens[effectiveWC] += t
+	}
+	// Check that the expected number is equal to rss.mu.eval.tokensDeducted.
+	for wc, t := range rss.mu.eval.tokensDeducted {
+		if t != tokens[wc] {
+			panic(errors.AssertionFailedf("%v: eval tokens deducted %v != %v",
+				admissionpb.WorkClass(wc), t, tokens[wc]))
+		}
+	}
+	if rss.isEmptySendQueueLocked() && rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+		panic(errors.AssertionFailedf("empty send-queue and non-zero deductedForSchedulerTokens"))
 	}
 }
 
