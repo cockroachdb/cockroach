@@ -100,7 +100,7 @@ func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	s.wrapped.SendBufferedError(ev)
+	s.wrapped.sendBufferedError(ev)
 }
 
 func (s *BufferedPerRangeEventSink) AddRegistration(r registration, cleanup func(registration) bool) {

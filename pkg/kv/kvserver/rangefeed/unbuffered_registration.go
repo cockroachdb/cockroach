@@ -139,11 +139,11 @@ func newUnbufferedRegistration(
 	stream BufferedStream,
 	unregisterFn func(),
 ) *unbufferedRegistration {
-	brCtx, cancel := context.WithCancel(ctx)
+	//brCtx, cancel := context.WithCancel(ctx)
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
-			ctx:              brCtx,
-			cancelFunc:       cancel,
+			//ctx:              brCtx,
+			//cancelFunc:       cancel,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -207,14 +207,43 @@ func (ubr *unbufferedRegistration) publish(
 //
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (ubr *unbufferedRegistration) disconnect(pErr *kvpb.Error) {
+	//ubr.mu.Lock()
+	//defer ubr.mu.Unlock()
+	//if alreadyDisconnected := ubr.setDisconnectedIfNotWithLock(); !alreadyDisconnected {
+	//	ubr.stream.Disconnect(pErr)
+	//	//if f := ubr.getUnreg(); f != nil {
+	//	//	f()
+	//	//}
+	//}
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
-	if alreadyDisconnected := ubr.setDisconnectedIfNotWithLock(); !alreadyDisconnected {
-		ubr.stream.Disconnect(pErr)
-		//if f := ubr.getUnreg(); f != nil {
-		//	f()
-		//}
+	if ubr.mu.disconnected {
+		return
 	}
+	if ubr.mu.catchUpIter != nil {
+		// catch-up scan hasn't started yet.
+		ubr.mu.catchUpIter.Close()
+		ubr.mu.catchUpIter = nil
+	}
+	if ubr.mu.catchUpScanCancelFn != nil {
+		ubr.mu.catchUpScanCancelFn()
+	}
+	ubr.mu.disconnected = true
+	// TODO (wenyihu6): is there anything inside Disconnect that needs to happen
+	// while holding the locks
+	if pErr != nil {
+		ubr.stream.Disconnect(pErr)
+	}
+}
+
+//func (ubr *unbufferedRegistration) cancel() {
+//	ubr.mu.Lock()
+//	defer ubr.mu.Unlock()
+//	ubr.setDisconnectedIfNotWithLock()
+//}
+
+func (ubr *unbufferedRegistration) close(ctx context.Context) {
+	ubr.discardCatchUpBuffer(ctx)
 }
 
 // runOutputLoop is run in a goroutine. It is short-lived and responsible for
@@ -335,16 +364,11 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	return errors.Errorf("unbufferedRegistration %v failed to empty in time", ubr.Range())
 }
 
-func (ubr *unbufferedRegistration) close(ctx context.Context) {
-	ubr.setDisconnectedIfNot()
-	ubr.discardCatchUpBuffer(ctx)
-}
-
-func (ubr *unbufferedRegistration) setDisconnectedIfNot() {
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-	ubr.setDisconnectedIfNotWithLock()
-}
+//func (ubr *unbufferedRegistration) setDisconnectedIfNot() {
+//	ubr.mu.Lock()
+//	defer ubr.mu.Unlock()
+//	ubr.setDisconnectedIfNotWithLock()
+//}
 
 // setDisconnectedIfNotWithLock sets disconnected to true if it is not already
 // set. It handles registration level cleanup. It is called from BufferedSender
@@ -420,8 +444,8 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 				}
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-ubr.ctx.Done():
-				return ubr.ctx.Err()
+			//case <-ubr.ctx.Done():
+			//	return ubr.ctx.Err()
 			default:
 				// Done.
 				return nil

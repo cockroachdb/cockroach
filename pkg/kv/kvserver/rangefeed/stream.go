@@ -39,7 +39,7 @@ type StreamManager interface {
 	// SendBufferedError disconnects the stream with the ev.StreamID and sends
 	// error back to client. This call is un-blocking, and additional clean-up
 	// takes place async. Caller cannot expect immediate disconnection.
-	SendBufferedError(ev *kvpb.MuxRangeFeedEvent)
+	Disconnect(streamID int64, err *kvpb.Error)
 	// AddStream adds a new per-range stream for the streamManager to manage.
 	//AddStream(streamID int64, cancel context.CancelFunc)
 	// Start starts the streamManager background job to manage all active streams.
@@ -106,7 +106,7 @@ func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	s.wrapped.SendBufferedError(ev)
+	s.wrapped.sendBufferedError(ev)
 }
 
 func (s *PerRangeEventSink) AddRegistration(r registration, cleanup func(registration) bool) {

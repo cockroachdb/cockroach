@@ -251,7 +251,8 @@ func (p *ScheduledProcessor) cleanup() {
 // nil Processor. It is not valid to restart a processor after it has been
 // stopped.
 func (p *ScheduledProcessor) Stop() {
-	p.StopWithErr(nil)
+	//p.StopWithErr(nil)
+	p.StopWithErr(kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 }
 
 // StopWithErr shuts down the processor and closes all registrations with the

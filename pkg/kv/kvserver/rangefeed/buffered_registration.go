@@ -88,11 +88,11 @@ func newBufferedRegistration(
 	stream Stream,
 	unregisterFn func(),
 ) *bufferedRegistration {
-	rCtx, cancel := context.WithCancel(ctx)
+	//rCtx, cancel := context.WithCancel(ctx)
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
-			ctx:              rCtx,
-			cancelFunc:       cancel,
+			//ctx:              rCtx,
+			//cancelFunc:       cancel,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -155,6 +155,10 @@ func (br *bufferedRegistration) publish(
 	}
 }
 
+//func (br *bufferedRegistration) cancel() {
+//	br.disconnect()
+//}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
@@ -170,7 +174,9 @@ func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
 			br.mu.outputLoopCancelFn()
 		}
 		br.mu.disconnected = true
-		br.stream.Disconnect(pErr)
+		if pErr != nil {
+			br.stream.Disconnect(pErr)
+		}
 	}
 }
 
@@ -221,8 +227,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.ctx.Done():
-			return br.ctx.Err()
+			//case <-br.ctx.Done():
+			//	return br.ctx.Err()
 		}
 	}
 }
