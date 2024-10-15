@@ -2802,7 +2802,7 @@ func LoadBalancerIP(
 func Deploy(
 	ctx context.Context,
 	l *logger.Logger,
-	clusterName, applicationName, version string,
+	clusterName, applicationName, version, pathToBinary string,
 	pauseDuration time.Duration,
 	sig int,
 	wait bool,
@@ -2811,7 +2811,7 @@ func Deploy(
 ) error {
 	// Stage supports `workload` as well, so it needs to be excluded here. This
 	// list contains a subset that only pulls the cockroach binary.
-	supportedApplicationNames := []string{"cockroach", "release", "customized"}
+	supportedApplicationNames := []string{"cockroach", "release", "customized", "local"}
 	if !slices.Contains(supportedApplicationNames, applicationName) {
 		return errors.Errorf("unsupported application name %s, supported names are %v", applicationName, supportedApplicationNames)
 	}
@@ -2826,7 +2826,16 @@ func Deploy(
 	if err != nil {
 		return err
 	}
-	err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+
+	if applicationName == "local" {
+		if pathToBinary == "" {
+			return errors.Errorf("%s application requires a path to the binary", applicationName)
+		}
+		err = c.Put(ctx, l, c.TargetNodes(), pathToBinary, filepath.Join(stageDir, "cockroach"))
+	} else {
+		err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+	}
+
 	if err != nil {
 		return err
 	}
