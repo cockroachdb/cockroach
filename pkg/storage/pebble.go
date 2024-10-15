@@ -102,6 +102,15 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// columnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
+var columnarBlocksEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"storage.columnar_blocks.enabled",
+	"set to true to enable columnar-blocks to store KVs in a columnar format",
+	false, // TODO(jackson): Metamorphicize this.
+	settings.WithPublic,
+)
+
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
 // of flushables (eg, memtables, large batches and now lazily-ingested
@@ -405,6 +414,30 @@ func EngineSuffixCompare(a, b []byte) int {
 		panic(errors.AssertionFailedf("malformed suffix: %x", b))
 	}
 	return bytes.Compare(b[:len(b)-1], a[:len(a)-1])
+}
+
+// EnginePointSuffixCompare compares suffixes of Cockroach point keys (which are
+// composed of the version and a trailing version-length byte); the version can
+// be an MVCC timestamp or a lock key. EnginePointSuffixCompare differs from
+// EngineSuffixCompare, because EnginePointSuffixCompare normalizes the
+// suffixes. Ideally we'd have one function that implemented the semantics of
+// EnginePointSuffixCompare, but due to historical reasons, range key suffix
+// comparisons must not perform normalization.
+//
+// See https://github.com/cockroachdb/cockroach/issues/130533
+func EnginePointSuffixCompare(a, b []byte) int {
+	// NB: For performance, this routine manually splits the key into the
+	// user-key and version components rather than using DecodeEngineKey. In
+	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
+	// SplitMVCCKey instead of doing this.
+	if len(a) == 0 || len(b) == 0 {
+		// Empty suffixes sort before non-empty suffixes.
+		return cmp.Compare(len(a), len(b))
+	}
+	return bytes.Compare(
+		normalizeEngineSuffixForCompare(b),
+		normalizeEngineSuffixForCompare(a),
+	)
 }
 
 func checkEngineKey(k []byte) {
@@ -792,8 +825,9 @@ const MinimumSupportedFormatVersion = pebble.FormatSyntheticPrefixSuffix
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
-		Comparer: EngineComparer,
-		FS:       vfs.Default,
+		Comparer:  EngineComparer,
+		FS:        vfs.Default,
+		KeySchema: keySchema,
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
@@ -1189,6 +1223,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
+	}
+	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
+		return columnarBlocksEnabled.Get(&cfg.settings.SV)
 	}
 
 	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
@@ -2512,7 +2549,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V24_1: pebble.FormatSyntheticPrefixSuffix,
-	clusterversion.V24_3: pebble.FormatFlushableIngestExcises,
+	clusterversion.V24_3: pebble.FormatColumnarBlocks,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
