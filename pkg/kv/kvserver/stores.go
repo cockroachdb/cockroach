@@ -204,12 +204,13 @@ func (ls *Stores) SendWithWriteBytes(
 // RangeFeed registers a rangefeed over the specified span. It sends
 // updates to the provided stream and returns a future with an optional error
 // when the rangefeed is complete.
-func (ls *Stores) RangeFeed(args *kvpb.RangeFeedRequest, stream rangefeed.Stream) error {
-	ctx := stream.Context()
+func (ls *Stores) RangeFeed(
+	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream,
+) error {
 	if args.RangeID == 0 {
-		log.Fatal(ctx, "rangefeed request missing range ID")
+		log.Fatal(streamCtx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {
-		log.Fatal(ctx, "rangefeed request missing store ID")
+		log.Fatal(streamCtx, "rangefeed request missing store ID")
 	}
 
 	store, err := ls.GetStore(args.Replica.StoreID)
@@ -217,7 +218,7 @@ func (ls *Stores) RangeFeed(args *kvpb.RangeFeedRequest, stream rangefeed.Stream
 		return err
 	}
 
-	return store.RangeFeed(args, stream)
+	return store.RangeFeed(streamCtx, args, stream)
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read

@@ -233,16 +233,16 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
+	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
 ) error {
-	ctx := r.AnnotateCtx(stream.Context())
+	streamCtx = r.AnnotateCtx(streamCtx)
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
 		return err
 	}
 
-	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
+	if err := r.ensureClosedTimestampStarted(streamCtx); err != nil {
 		return err.GoError()
 	}
 
@@ -274,7 +274,7 @@ func (r *Replica) RangeFeed(
 	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
 		usingCatchUpIter = true
-		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
+		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
 		if err != nil {
 			return err
 		}
@@ -298,7 +298,7 @@ func (r *Replica) RangeFeed(
 	// critical-section as the registration is established. This ensures that
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
-	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
+	if err := r.checkExecutionCanProceedForRangeFeed(streamCtx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		iterSemRelease()
 		return err
@@ -323,7 +323,7 @@ func (r *Replica) RangeFeed(
 	}
 
 	p, err := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
 	)
 	r.raftMu.Unlock()
 

@@ -2093,6 +2093,11 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 
 			if req.CloseStream {
+				// For client close stream requests, we now shut down at a later time. Check if that is okay.
+				// Note that we will call DisconnectStreamWithError again when
+				// registration.disconnect happens, but DisconnectStreamWithError will
+				// ignore subsequent errors.
+			    // TODO(ssd,wenyi): check if ^ is still true 
 				sm.Disconnect(makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID,
 					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
 				continue
@@ -2104,9 +2109,9 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 			var streamSink rangefeed.Stream
 			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
-				streamSink = rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, ubs)
+				streamSink = rangefeed.NewPerRangeEventSink(req.RangeID, req.StreamID, ubs)
 			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
-				streamSink = rangefeed.NewBufferedPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, bs)
+				streamSink = rangefeed.NewBufferedPerRangeEventSink(req.RangeID, req.StreamID, bs)
 			} else {
 				log.Fatalf(streamCtx, "unknown sender type %T", sm)
 			}

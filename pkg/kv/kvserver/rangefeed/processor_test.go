@@ -1355,10 +1355,6 @@ func (c *consumer) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
-func (c *consumer) Context() context.Context {
-	return c.ctx
-}
-
 func (c *consumer) Cancel() {
 	c.ctxDone()
 }
