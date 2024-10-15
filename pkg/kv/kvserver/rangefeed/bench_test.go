@@ -192,10 +192,6 @@ type noopStream struct {
 	done   chan *kvpb.Error
 }
 
-func (s *noopStream) Context() context.Context {
-	return s.ctx
-}
-
 func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil

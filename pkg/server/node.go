@@ -2118,6 +2118,8 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 				// Note that we will call DisconnectStreamWithError again when
 				// registration.disconnect happens, but DisconnectStreamWithError will
 				// ignore subsequent errors.
+				// TODO(ssd): to follow up in next pr cancelling streamCtx no longer
+				// works from here now
 				sm.SendBufferedError(makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID,
 					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
 				continue
@@ -2130,9 +2132,9 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 			var streamSink rangefeed.Stream
 			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
-				streamSink = rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, ubs)
+				streamSink = rangefeed.NewPerRangeEventSink(req.RangeID, req.StreamID, ubs)
 			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
-				streamSink = rangefeed.NewBufferedPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, bs)
+				streamSink = rangefeed.NewBufferedPerRangeEventSink(req.RangeID, req.StreamID, bs)
 			} else {
 				log.Fatalf(streamCtx, "unknown sender type %T", sm)
 			}
@@ -2143,7 +2145,10 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			// nil without blocking on rangefeed completion. Events are then sent to
 			// the provided streamSink. If the rangefeed disconnects after being
 			// successfully registered, it calls streamSink.Disconnect with the error.
-			if err := n.stores.RangeFeed(req, streamSink); err != nil {
+			if err := n.stores.RangeFeed(streamCtx, req, streamSink); err != nil {
+				// TODO(ssd): to follow up in next pr cancelling streamCtx no longer
+				// works from here now; but it should be fine since r.disconnect should
+				// be happening down below? ssd can double check my thoughts
 				sm.SendBufferedError(
 					makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID, kvpb.NewError(err)))
 			}
