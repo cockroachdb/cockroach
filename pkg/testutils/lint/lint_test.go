@@ -209,16 +209,6 @@ func TestLint(t *testing.T) {
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 `)
-
-		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed under the Apache License, Version 2.0 \(the "License"\);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-`)
-
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
 			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
@@ -248,9 +238,6 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`/embedded.go`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
-			// The opentelemetry-proto files are copied from otel with their own
-			// license.
-			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
 			// Generated files for plpgsql.
@@ -269,16 +256,8 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			isApache := strings.HasPrefix(filename, "pkg/obsservice")
-			switch {
-			case isApache:
-				if apacheHeader.Find(data) == nil {
-					t.Errorf("did not find expected Apache license header in %s", filename)
-				}
-			default:
-				if cslHeader.Find(data) == nil {
-					t.Errorf("did not find expected CSL license header in %s", filename)
-				}
+			if cslHeader.Find(data) == nil {
+				t.Errorf("did not find expected CSL license header in %s", filename)
 			}
 		}); err != nil {
 			t.Fatal(err)
@@ -1022,8 +1001,6 @@ func TestLint(t *testing.T) {
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
-			":!obsservice/cmd/obsservice/main.go",
-			":!obsservice/obslib/ingest/ingest_test.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {

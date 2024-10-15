@@ -8,7 +8,7 @@ which cc
 export CC=
 export CXX=
 bazel run --config=test //build/bazelutil:lint -- -test.v
-bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/obsservice/cmd/obsservice //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag
 
 exec
 dev lint --short --timeout=5m
@@ -26,7 +26,7 @@ export CC=
 export CXX=
 export PKG=./pkg/cmd/dev
 bazel run --config=test //build/bazelutil:lint -- -test.v
-bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/obsservice/cmd/obsservice //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag
 
 exec
 dev lint -f TestLowercaseFunctionNames --cpus 4
@@ -49,7 +49,7 @@ which cc
 export CC=
 export CXX=
 bazel run --config=test //build/bazelutil:lint --local_cpu_resources=4 -- -test.v
-bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/obsservice/cmd/obsservice //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag --local_cpu_resources=4
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag --local_cpu_resources=4
 
 exec
 dev lint pkg/cmd/dev pkg/spanconfig
