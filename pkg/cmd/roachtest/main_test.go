@@ -184,8 +184,6 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 		defer func() {
 			roachtestflags.SuccessfulTestsSelectPct = oldSuccessfulTestsSelectPct
 		}()
-		dbs := make([]*gosql.DB, totalIterations)
-		mocks := make([]sqlmock.Sqlmock, totalIterations)
 		// each iteration is run in a go routine
 		wg := sync.WaitGroup{}
 		// we need to ensure that "SqlConnectorFunc" returns the right DB for each iteration. So, this locks
@@ -195,11 +193,11 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				dbs[i], mocks[i], err = sqlmock.New()
+				dbs, mocks, err := sqlmock.New()
 				require.Nil(t, err)
 				specs, data, rows, toBeSelectedTestsMap := getRandomisedTests(t, totalTestCount)
-				mocks[i].ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery))
-				mocks[i].ExpectQuery(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnRows(rows)
+				mocks.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery))
+				mocks.ExpectQuery(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnRows(rows)
 				specsLengthBefore := len(specs)
 				// we need to keep a count of all already skipped tests. This is to assert that the skip is not overwritten.
 				countOfSpecSkippedTests := 0
@@ -212,7 +210,7 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 				mu.Lock()
 				testselector.SqlConnectorFunc = func(_, _ string) (*gosql.DB, error) {
 					defer mu.Unlock()
-					return dbs[i], err
+					return dbs, err
 				}
 				updateSpecForSelectiveTests(ctx, specs)
 				require.Equal(t, specsLengthBefore, len(specs))
