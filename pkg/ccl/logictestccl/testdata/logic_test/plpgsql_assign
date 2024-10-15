@@ -1,0 +1,124 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+subtest assign_elem
+
+# It is possible to assign to an element of a composite-typed variable.
+statement ok
+CREATE FUNCTION f(val xy) RETURNS xy AS $$
+  BEGIN
+    val.x := (val).x + 100;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query TTT
+SELECT f(ROW(1, 2)), f(ROW(NULL, -1)), f(NULL::xy);
+----
+(101,2)  (,-1)  (,)
+
+query T rowsort
+SELECT f(ROW(x, y)) FROM xy;
+----
+(101,2)
+(103,4)
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo xy; -- Starts off as NULL.
+  BEGIN
+    foo.x := 1;
+    RAISE NOTICE '%', foo;
+    foo.y := 2;
+    RAISE NOTICE '%', foo;
+    foo.x := (foo).x + (foo).y;
+    RAISE NOTICE '%', foo;
+    foo.x = NULL;
+    RAISE NOTICE '%', foo;
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: (1,)
+NOTICE: (1,2)
+NOTICE: (3,2)
+NOTICE: (,2)
+
+statement ok
+DROP PROCEDURE p;
+
+# The assigned value will be coerced to the type of the tuple element.
+# The coercion may fail at execution time if the type is wrong.
+statement ok
+CREATE FUNCTION f(val xy) RETURNS xy AS $$
+  BEGIN
+    val.x := ROW(100, 200);
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse "\(100,200\)" as type int: strconv.ParseInt: parsing "\(100,200\)": invalid syntax
+SELECT f(ROW(1, 2));
+
+statement ok
+DROP FUNCTION f;
+
+# Qualifying variable names with a block label is still not supported (#122322).
+statement error pgcode 42601 pq: "b" is not a known variable
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  <<b>>
+  DECLARE
+    x INT;
+  BEGIN
+    b.x := 5;
+  END
+$$;
+
+# Prefer to resolve as a variable with an indirection over a block-qualified
+# variable reference.
+statement ok
+CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
+  <<b>>
+  DECLARE
+    b xy;
+  BEGIN
+    b.x := 5;
+    RAISE NOTICE '%', b;
+  END
+$$;
+
+query T noticetrace
+CALL p();
+----
+NOTICE: (5,)
+
+statement ok
+DROP PROCEDURE p;
+
+# The type of the variable must be a tuple. NOTE: this is the same error as the
+# one Postgres gives.
+statement error pgcode 42601 pq: "val.x" is not a known variable
+CREATE FUNCTION f(val INT) RETURNS INT AS $$
+  BEGIN
+    val.x := 5;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The referenced element must be a field of the tuple.
+statement error pgcode 42703 pq: record "val" has no field "z"
+CREATE FUNCTION f(val xy) RETURNS xy AS $$
+  BEGIN
+    val.z := 5;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
+
+subtest end

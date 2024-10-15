@@ -131,6 +131,13 @@ func TestCCLLogic_pgcrypto_builtins(
 	runCCLLogicTest(t, "pgcrypto_builtins")
 }
 
+func TestCCLLogic_plpgsql_assign(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_assign")
+}
+
 func TestCCLLogic_plpgsql_block(
 	t *testing.T,
 ) {
