@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -88,17 +90,32 @@ type RaftTracer struct {
 	m             syncutil.Map[kvpb.RaftIndex, traceValue]
 	numRegistered atomic.Int64
 	ctx           context.Context
+	st            *cluster.Settings
 }
 
 // NewRaftTracer creates a new RaftTracer with the given context.
-func NewRaftTracer(ctx context.Context) *RaftTracer {
-	return &RaftTracer{ctx: ctx}
+func NewRaftTracer(ctx context.Context, st *cluster.Settings) *RaftTracer {
+	return &RaftTracer{ctx: ctx, st: st}
 }
+
+// MaxConcurrentRaftTraces is the maximum number of traces that can be active at
+// any time. Additional traces will be ignored until the number of traces drops.
+// Having too many active traces will negatively impact performance as we
+// iterate over all of them for each message. 10 is a reasonable default that
+// balances usefulness with performance impact. It isn't expected that this
+// limit will normally be hit.
+var MaxConcurrentRaftTraces = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"kv.raft.max_concurrent_traces",
+	"the maximum number of tracked raft traces",
+	10,
+	settings.PositiveInt,
+)
 
 // maybeRegister is a helper function to check if we should register a new
 // trace. If there are too many registered traces it will return false.
 func (r *RaftTracer) maybeRegister() bool {
-	if r.numRegistered.Load() >= 10 {
+	if r.numRegistered.Load() >= MaxConcurrentRaftTraces.Get(&r.st.SV) {
 		return false
 	}
 	r.numRegistered.Add(1)

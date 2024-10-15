@@ -10,6 +10,8 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
