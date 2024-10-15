@@ -14,12 +14,12 @@ log-level none
 ok
 
 # Add one node that will become the leader and set its CRDB version to be old.
-add-nodes 1 voters=(1, 2, 3) index=10 crdb-version=1000024.2
+add-nodes 1 voters=(1, 2, 3) index=10 crdb-version=24.2
 ----
 ok
 
 # Add two nodes with the new CRDB version.
-add-nodes 2 voters=(1, 2, 3) index=10 crdb-version=1000024.3
+add-nodes 2 voters=(1, 2, 3) index=10 crdb-version=24.3
 ----
 ok
 

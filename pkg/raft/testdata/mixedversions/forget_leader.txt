@@ -7,11 +7,11 @@ log-level none
 ok
 
 # Start 4 nodes, three of them has the older version 24.2.
-add-nodes 3 voters=(1,2,3) learners=(4) index=10 crdb-version=1000024.2
+add-nodes 3 voters=(1,2,3) learners=(4) index=10 crdb-version=24.2
 ----
 ok
 
-add-nodes 1 voters=(1,2,3) learners=(4) index=10 crdb-version=1000024.3
+add-nodes 1 voters=(1,2,3) learners=(4) index=10 crdb-version=24.3
 ----
 ok
 
