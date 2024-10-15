@@ -23,7 +23,7 @@ services:
       timeout: 10s
       retries: 25
   python:
-    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-python:20241011-130452
+    image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-python:20241015-163644
     user: "${UID}:${GID}"
     depends_on:
       cockroach:
