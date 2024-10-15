@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -441,11 +442,12 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 	})
 
 	// Run the range through the replicate queue on n1.
-	trace, processErr, err := store0.Enqueue(
-		ctx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store0.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, err := store0.Enqueue(
+		traceCtx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
 	require.NoError(t, processErr)
-	formattedTrace := trace.String()
+	formattedTrace := rec().String()
 	expectedMessages := []string{
 		`transitioning out of joint configuration`,
 		`leaseholder .* is being removed through an atomic replication change, transferring lease to`,
@@ -550,7 +552,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	atomic.StoreInt64(&scratchRangeID, 0)
 	store := tc.GetFirstStoreFromServer(t, 0)
 	repl := store.LookupReplica(roachpb.RKey(scratchStartKey))
-	_, _, err = store.Enqueue(
+	_, err = store.Enqueue(
 		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 	)
 	require.NoError(t, err)
@@ -1310,7 +1312,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
 			// We don't know who the leaseholder might be, so ignore errors.
-			_, _, _ = tc.GetFirstStoreFromServer(t, i).Enqueue(
+			_, _ = tc.GetFirstStoreFromServer(t, i).Enqueue(
 				ctx, "lease", repl, true /* skipShouldQueue */, false, /* async */
 			)
 		}

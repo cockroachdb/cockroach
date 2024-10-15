@@ -466,9 +466,9 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 	// replica in the replicate queue synchronously. The lease queue processing
 	// should block on the block mutex above, causing the replicate queue to
 	// return a AllocatorTokenErr trying to process the replica.
-	_, _, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, true /* async */)
+	_, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, true /* async */)
 	<-blocked
-	_, processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.ErrorIs(t, processErr, plan.NewErrAllocatorToken("lease"))
 }
 

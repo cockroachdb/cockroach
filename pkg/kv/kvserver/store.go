@@ -8,7 +8,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -3913,7 +3912,7 @@ func (s *Store) AllocatorCheckRange(
 // server.decommissionMonitor and an admin debug endpoint.
 func (s *Store) Enqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool, async bool,
-) (recording tracingpb.Recording, processError error, enqueueError error) {
+) (processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
 	if fn := s.TestingKnobs().EnqueueReplicaInterceptor; fn != nil {
@@ -3924,7 +3923,7 @@ func (s *Store) Enqueue(
 	// normal queue scheduling, but we error here to signal to the user that the
 	// operation was unsuccessful.
 	if !repl.IsInitialized() {
-		return nil, nil, errors.Errorf("not enqueueing uninitialized replica %s", repl)
+		return nil, errors.Errorf("not enqueueing uninitialized replica %s", repl)
 	}
 
 	var queue replicaQueue
@@ -3938,12 +3937,12 @@ func (s *Store) Enqueue(
 		}
 	}
 	if queue == nil {
-		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
+		return nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
 	confReader, err := s.GetConfReader(ctx)
 	if err != nil {
-		return nil, nil, errors.Wrap(err,
+		return nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+
 				"the cluster has been initialized and all nodes connected to it")
 	}
@@ -3952,7 +3951,7 @@ func (s *Store) Enqueue(
 	// take the lease here or bail out early if a different replica has it.
 	if needsLease {
 		if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, nil, errors.Wrapf(pErr.GoError(), "replica %v does not have the range lease", repl)
+			return nil, errors.Wrapf(pErr.GoError(), "replica %v does not have the range lease", repl)
 		}
 	}
 
@@ -3971,26 +3970,22 @@ func (s *Store) Enqueue(
 		} else {
 			queue.MaybeAddAsync(ctx, repl, repl.Clock().NowAsClockTimestamp())
 		}
-		return nil, nil, nil
+		return nil, nil
 	}
-
-	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
-		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
-	defer collectAndFinish()
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
 		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
-			return collectAndFinish(), nil, nil
+			return nil, nil
 		}
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
 	processed, processErr := qImpl.process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
-	return collectAndFinish(), processErr, nil
+	return processErr, nil
 }
 
 // PurgeOutdatedReplicas purges all replicas with a version less than the one
