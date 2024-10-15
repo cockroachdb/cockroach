@@ -200,6 +200,16 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 	settings.WithPublic)
 
+// ProtectTimestampJitter controls the jitter of protected timestamp record updates
+var ProtectTimestampJitter = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"changefeed.protect_timestamp_jitter",
+	"controls the jitter of the protected timestamp update interval (`changefeed.protect_timestamp_interval`)"+
+		" in the range of [0, 1). 0, the default, means no jitter",
+	0,
+	settings.FloatInRangeUpperExclusive(0, 1),
+	settings.WithPublic)
+
 // ProtectTimestampLag controls how much the protected timestamp record should lag behind the high watermark
 var ProtectTimestampLag = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,

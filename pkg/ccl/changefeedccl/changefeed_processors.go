@@ -1389,7 +1389,7 @@ func (cf *changeFrontier) runUsageMetricReporting(ctx context.Context) {
 	defer t.Stop()
 	var lastDuration time.Duration
 	for ctx.Err() == nil {
-		reportingInterval := jitter(changefeedbase.UsageMetricsReportingInterval.Get(&cf.flowCtx.Cfg.Settings.SV))
+		reportingInterval := jitter(changefeedbase.UsageMetricsReportingInterval.Get(&cf.flowCtx.Cfg.Settings.SV), 0.1)
 		var start time.Time
 
 		t.Reset(reportingInterval - lastDuration)
@@ -1771,6 +1771,10 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) error {
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	if ptsUpdateJitter := changefeedbase.ProtectTimestampJitter.Get(&cf.flowCtx.Cfg.Settings.SV); ptsUpdateJitter > 0 {
+		ptsUpdateInterval = jitter(ptsUpdateInterval, ptsUpdateJitter)
+	}
+
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
 		return nil
@@ -2105,12 +2109,14 @@ func (f *schemaChangeFrontier) hasLaggingSpans(
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTs)
 }
 
-// jitter returns a new duration with +-10% jitter applied to the given duration.
-func jitter(d time.Duration) time.Duration {
+// jitter returns a new duration with +-(j*100)% jitter applied to the given duration. j must be
+// between 0 and 1.
+func jitter(d time.Duration, j float64) time.Duration {
 	if d == 0 {
 		return 0
 	}
-	start, end := int64(d-d/10), int64(d+d/10)
+	fd := float64(d)
+	start, end := int64(fd-fd*j), int64(fd+fd*j)
 	return time.Duration(start + rand.Int63n(end-start))
 }
 
