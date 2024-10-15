@@ -183,6 +183,11 @@ func TestSchemaChangeComparator_bytes(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/bytes"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_cancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cancel"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_cascade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cascade"

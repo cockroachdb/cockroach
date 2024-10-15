@@ -1,0 +1,82 @@
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+# insert a row so the following transactions can request x-lock on it, no
+# matter the transaction isolation level
+statement ok
+INSERT INTO t VALUES (1)
+
+subtest cancel
+
+# start a transaction and hold a x-lock on the row
+statement ok
+BEGIN; SELECT * FROM t WHERE a = 1 FOR UPDATE
+
+# issue the CANCEL QUERY with a 1-second delay
+statement async cancelstmt
+CANCEL QUERY (
+  WITH delay AS (
+    SELECT pg_sleep(1)
+  ),
+  stmts AS (
+    SHOW CLUSTER STATEMENTS
+  )
+  SELECT query_id
+  FROM stmts
+  WHERE query = 'SELECT * FROM t WHERE a = 1 FOR UPDATE'
+)
+
+user testuser
+
+# start a second transaction that blocks on the first transaction that holding the
+# x-lock, then this will be killed by the delayed CANCEL QUERY above
+query error pgcode 57014 query execution canceled
+SELECT * FROM t WHERE a = 1 FOR UPDATE
+
+user root
+
+awaitstatement cancelstmt
+
+statement ok
+COMMIT
+
+subtest end
+
+subtest cancel-with-message
+
+# start a transaction and hold a x-lock on the row
+statement ok
+BEGIN; SELECT * FROM t WHERE a = 1 FOR UPDATE
+
+# issue the CANCEL QUERY with a 1-second delay
+statement async cancelstmt
+CANCEL QUERY (
+  WITH delay AS (
+    SELECT pg_sleep(1)
+  ),
+  stmts AS (
+    SHOW CLUSTER STATEMENTS
+  )
+  SELECT query_id
+  FROM stmts
+  WHERE query = 'SELECT * FROM t WHERE a = 1 FOR UPDATE'
+) WITH MESSAGE 'cancel due to cluster maintenance'
+
+user testuser
+
+# start a second transaction that blocks on the first transaction that holding the
+# x-lock, then this will be killed by the delayed CANCEL QUERY above
+query error pgcode 57014 query execution canceled, message from the canceler: "cancel due to cluster maintenance"
+SELECT * FROM t WHERE a = 1 FOR UPDATE
+
+user root
+
+awaitstatement cancelstmt
+
+statement ok
+COMMIT
+
+subtest end

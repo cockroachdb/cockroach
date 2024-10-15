@@ -383,7 +383,7 @@ func (b *Builder) buildCancelQueries(
 		return execPlan{}, colOrdMap{}, err
 	}
 	var ep execPlan
-	ep.root, err = b.factory.ConstructCancelQueries(input.root, cancel.IfExists)
+	ep.root, err = b.factory.ConstructCancelQueries(input.root, cancel.IfExists, cancel.Message)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}

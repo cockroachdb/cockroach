@@ -991,7 +991,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGICAL LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MODE MONTH MOVE
+%token <str> MATCH MATERIALIZED MERGE MESSAGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -1362,6 +1362,9 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 
 %type <str> session_var
 %type <*string> comment_text
+
+%type <str> cancel_message
+%type <str> opt_cancel_message
 
 %type <tree.Statement> transaction_stmt legacy_transaction_stmt legacy_begin_stmt legacy_end_stmt
 %type <tree.Statement> truncate_stmt
@@ -4466,38 +4469,53 @@ cancel_jobs_stmt:
 // %Help: CANCEL QUERIES - cancel running queries
 // %Category: Misc
 // %Text:
-// CANCEL QUERIES [IF EXISTS] <selectclause>
-// CANCEL QUERY [IF EXISTS] <expr>
+// CANCEL QUERIES [IF EXISTS] <selectclause> [WITH MESSAGE <cancel_message>]
+// CANCEL QUERY [IF EXISTS] <expr> [WITH MESSAGE <cancel_message>]
 // %SeeAlso: SHOW STATEMENTS
 cancel_queries_stmt:
-  CANCEL QUERY a_expr
+  CANCEL QUERY a_expr opt_cancel_message
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       IfExists: false,
+      Message: $4,
     }
   }
-| CANCEL QUERY IF EXISTS a_expr
+| CANCEL QUERY IF EXISTS a_expr opt_cancel_message
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
+      Message: $6,
     }
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERIES
-| CANCEL QUERIES select_stmt
+| CANCEL QUERIES select_stmt opt_cancel_message
   {
-    $$.val = &tree.CancelQueries{Queries: $3.slct(), IfExists: false}
+    $$.val = &tree.CancelQueries{Queries: $3.slct(), IfExists: false, Message: $4}
   }
-| CANCEL QUERIES IF EXISTS select_stmt
+| CANCEL QUERIES IF EXISTS select_stmt opt_cancel_message
   {
-    $$.val = &tree.CancelQueries{Queries: $5.slct(), IfExists: true}
+    $$.val = &tree.CancelQueries{Queries: $5.slct(), IfExists: true, Message: $6}
   }
 | CANCEL QUERIES error // SHOW HELP: CANCEL QUERIES
+
+cancel_message:
+  SCONST
+
+opt_cancel_message:
+  WITH MESSAGE cancel_message
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 // %Help: CANCEL SESSIONS - cancel open sessions
 // %Category: Misc
@@ -17690,6 +17708,7 @@ unreserved_keyword:
 | MATERIALIZED
 | MAXVALUE
 | MERGE
+| MESSAGE
 | METHOD
 | MINUTE
 | MINVALUE
@@ -18246,6 +18265,7 @@ bare_label_keywords:
 | MATERIALIZED
 | MAXVALUE
 | MERGE
+| MESSAGE
 | METHOD
 | MINVALUE
 | MODE

@@ -369,6 +369,10 @@ type Server struct {
 		syncutil.Mutex
 		connectionCount     int64
 		rootConnectionCount int64
+
+		// The key is the ID of the query that is being canceled, and the value is
+		// the cancel message sent from the canceler.
+		cancels map[clusterunique.ID]string
 	}
 }
 
@@ -462,6 +466,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
+
+	s.mu.cancels = make(map[clusterunique.ID]string)
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
@@ -4168,12 +4174,15 @@ func (ex *connExecutor) hasQuery(queryID clusterunique.ID) bool {
 }
 
 // CancelQuery is part of the RegistrySession interface.
-func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
+func (ex *connExecutor) CancelQuery(queryID clusterunique.ID, message string) bool {
 	// RLock can be used because map deletion happens in
 	// connExecutor.removeActiveQuery.
 	ex.mu.RLock()
 	defer ex.mu.RUnlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {
+		if message != "" {
+			ex.server.mu.cancels[queryID] = message
+		}
 		queryMeta.cancelQuery()
 		return true
 	}

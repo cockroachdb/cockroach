@@ -311,6 +311,13 @@ func TestLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
+func TestLogic_cancel(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cancel")
+}
+
 func TestLogic_cascade(
 	t *testing.T,
 ) {

@@ -20,6 +20,7 @@ import (
 type cancelQueriesNode struct {
 	rows     planNode
 	ifExists bool
+	message  string
 }
 
 func (n *cancelQueriesNode) startExec(runParams) error {
@@ -57,6 +58,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 		NodeId:   fmt.Sprintf("%d", nodeID),
 		QueryID:  string(queryIDString),
 		Username: params.SessionData().User().Normalized(),
+		Message:  n.message,
 	}
 
 	response, err := params.extendedEvalCtx.SQLStatusServer.CancelQuery(params.ctx, request)
@@ -75,4 +77,18 @@ func (*cancelQueriesNode) Values() tree.Datums { return nil }
 
 func (n *cancelQueriesNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
+}
+
+// get the cancel message for the given query ID. If no message is found, return
+// an empty string.
+func getCancelMessage(s *Server, queryID clusterunique.ID) (message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	message, ok := s.mu.cancels[queryID]
+	if ok && message != "" {
+		delete(s.mu.cancels, queryID)
+		return message
+	}
+	return ""
 }
