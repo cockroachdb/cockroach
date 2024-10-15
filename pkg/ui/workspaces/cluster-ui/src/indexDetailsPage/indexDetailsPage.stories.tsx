@@ -20,6 +20,7 @@ const withData: IndexDetailsPageProps = {
   nodeRegions: {},
   timeScale: null,
   details: {
+    databaseID: 1,
     loading: false,
     loaded: true,
     createStatement: `
