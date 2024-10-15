@@ -1325,10 +1325,6 @@ func (c *consumer) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
-func (c *consumer) Context() context.Context {
-	return c.ctx
-}
-
 func (c *consumer) Cancel() {
 	c.ctxDone()
 }
@@ -1405,7 +1401,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 	// Add a registration.
 	stream := newTestStream()
-	ok, _ := p.Register(span, hlc.MinTimestamp, nil, /* catchUpIter */
+	ok, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil)
 	require.True(t, ok)
 

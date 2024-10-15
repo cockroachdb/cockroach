@@ -63,10 +63,6 @@ func (s *testStream) SetHeader(metadata.MD) error  { panic("unimplemented") }
 func (s *testStream) SendHeader(metadata.MD) error { panic("unimplemented") }
 func (s *testStream) SetTrailer(metadata.MD)       { panic("unimplemented") }
 
-func (s *testStream) Context() context.Context {
-	return s.ctx
-}
-
 func (s *testStream) Cancel() {
 	s.cancel()
 }
@@ -108,7 +104,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 func waitRangeFeed(
 	t *testing.T, store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
 ) error {
-	if err := store.RangeFeed(req, stream); err != nil {
+	if err := store.RangeFeed(stream.ctx, req, stream); err != nil {
 		return err
 	}
 	return stream.WaitForError(t)

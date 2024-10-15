@@ -183,6 +183,7 @@ type Processor interface {
 	//
 	// NB: startTS is exclusive; the first possible event will be at startTS.Next().
 	Register(
+		streamCtx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
 		catchUpIter *CatchUpIterator,
