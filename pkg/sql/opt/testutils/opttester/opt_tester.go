@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,6 +70,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/dustin/go-humanize"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -265,6 +267,10 @@ type Flags struct {
 
 	// TxnIsoLevel is the isolation level to plan for.
 	TxnIsoLevel isolation.Level
+
+	// MaxStackBytes specifies the number of bytes to limit the stack size to.
+	// If it is zero, the stack size has the default Go limit.
+	MaxStackBytes int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -555,6 +561,9 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     full path or a relative path to testdata.
 //
 //   - isolation: sets the isolation level to plan for.
+//
+//   - max-stack: sets the maximum stack size for the goroutine that optimizes
+//     the query. See debug.SetMaxStack.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -577,6 +586,11 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.OriginalLocality = ot.Flags.Locality
 	ot.evalCtx.Placeholders = nil
 	ot.evalCtx.TxnIsoLevel = ot.Flags.TxnIsoLevel
+
+	if ot.Flags.MaxStackBytes > 0 {
+		originalMaxStack := debug.SetMaxStack(ot.Flags.MaxStackBytes)
+		defer debug.SetMaxStack(originalMaxStack)
+	}
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -1163,6 +1177,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			)
 		}
 		f.TxnIsoLevel = isolation.Level(level)
+
+	case "max-stack":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("max-stack requires one argument")
+		}
+		bytes, err := humanize.ParseBytes(arg.Vals[0])
+		if err != nil {
+			return err
+		}
+		f.MaxStackBytes = int(bytes)
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
