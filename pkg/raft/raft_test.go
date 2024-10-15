@@ -2858,23 +2858,57 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	// Begin to remove the second node.
-	cc := pb.ConfChange{
-		Type:   pb.ConfChangeRemoveNode,
-		NodeID: 2,
+	// Begin to demote the second node by entering a joint config.
+	cc := pb.ConfChangeV2{
+		Changes: []pb.ConfChangeSingle{
+			{Type: pb.ConfChangeRemoveNode, NodeID: 2},
+			{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
+		},
 	}
 	ccData, err := cc.Marshal()
 	require.NoError(t, err)
 	r.Step(pb.Message{
 		Type: pb.MsgProp,
 		Entries: []pb.Entry{
-			{Type: pb.EntryConfChange, Data: ccData},
+			{Type: pb.EntryConfChangeV2, Data: ccData},
 		},
 	})
 
 	// Stabilize the log and make sure nothing is committed yet.
 	require.Empty(t, nextEnts(r, s))
 	ccIndex := r.raftLog.lastIndex()
+
+	// Node 2 acknowledges the config change, committing it.
+	r.Step(pb.Message{
+		Type:  pb.MsgAppResp,
+		From:  2,
+		Index: ccIndex,
+	})
+	ents := nextEnts(r, s)
+	require.Len(t, ents, 2)
+	require.Equal(t, pb.EntryNormal, ents[0].Type)
+	require.Nil(t, ents[0].Data)
+	require.Equal(t, pb.EntryConfChangeV2, ents[1].Type)
+
+	// Apply the config changes. This enters a joint config. At this point the
+	// quorum requirement is 2, because node 2 remains a voter on the outgoing
+	// side of the joint config.
+	r.applyConfChange(cc.AsV2())
+
+	// Immediately exit the joint config.
+	cc = pb.ConfChangeV2{}
+	ccData, err = cc.Marshal()
+	require.NoError(t, err)
+	r.Step(pb.Message{
+		Type: pb.MsgProp,
+		Entries: []pb.Entry{
+			{Type: pb.EntryConfChangeV2, Data: ccData},
+		},
+	})
+
+	// Stabilize the log and make sure nothing is committed yet.
+	require.Empty(t, nextEnts(r, s))
+	ccIndex = r.raftLog.lastIndex()
 
 	// While the config change is pending, make another proposal.
 	r.Step(pb.Message{
@@ -2890,14 +2924,12 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 		From:  2,
 		Index: ccIndex,
 	})
-	ents := nextEnts(r, s)
-	require.Len(t, ents, 2)
-	require.Equal(t, pb.EntryNormal, ents[0].Type)
-	require.Nil(t, ents[0].Data)
-	require.Equal(t, pb.EntryConfChange, ents[1].Type)
+	ents = nextEnts(r, s)
+	require.Len(t, ents, 1)
+	require.Equal(t, pb.EntryConfChangeV2, ents[0].Type)
 
-	// Apply the config change. This reduces quorum requirements so the
-	// pending command can now commit.
+	// Apply the config changes to exit the joint config. This reduces quorum
+	// requirements so the pending command can now commit.
 	r.applyConfChange(cc.AsV2())
 	ents = nextEnts(r, s)
 	require.Len(t, ents, 1)
@@ -3745,10 +3777,10 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	assert.Equal(t, pb.StateLeader, n1.state)
 
-	// Begin to remove the third node.
+	// Begin to add a fourth node.
 	cc := pb.ConfChange{
-		Type:   pb.ConfChangeRemoveNode,
-		NodeID: 2,
+		Type:   pb.ConfChangeAddNode,
+		NodeID: 4,
 	}
 	var ccData []byte
 	var err error
