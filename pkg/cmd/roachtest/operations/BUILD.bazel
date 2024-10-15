@@ -9,6 +9,7 @@ go_library(
         "backup_restore.go",
         "cluster_settings.go",
         "disk_stall.go",
+        "license_throttle.go",
         "manual_compaction.go",
         "network_partition.go",
         "node_kill.go",
@@ -20,6 +21,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/option",
