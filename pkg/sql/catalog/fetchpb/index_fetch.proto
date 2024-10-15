@@ -36,6 +36,8 @@ message IndexFetchSpec {
     // encounter a NULL value for this column (i.e. the column is non-nullable
     // and not a mutation column).
     optional bool is_non_nullable = 4 [(gogoproto.nullable) = false];
+
+    optional string default_expr = 5 [(gogoproto.nullable) = false];
   }
 
   // KeyColumn describes a column that is encoded using the key encoding.

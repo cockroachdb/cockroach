@@ -2379,18 +2379,19 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 ) error {
 	log.Infof(ctx, "clearing and backfilling columns")
 
-	if err := sc.distColumnBackfill(
-		ctx,
-		version,
-		columnBackfillBatchSize.Get(&sc.settings.SV),
-		uint64(columnBackfillUpdateChunkSizeThresholdBytes.Get(&sc.settings.SV)),
-		backfill.ColumnMutationFilter,
-	); err != nil {
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
-			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
-		}
-		return err
-	}
+	// if err := sc.distColumnBackfill(
+	// 	ctx,
+	// 	version,
+	// 	columnBackfillBatchSize.Get(&sc.settings.SV),
+	// 	uint64(columnBackfillUpdateChunkSizeThresholdBytes.Get(&sc.settings.SV)),
+	// 	backfill.ColumnMutationFilter,
+	// ); err != nil {
+	// 	if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+	// 		return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+	// 	}
+	// 	return err
+	// }
+
 	log.Info(ctx, "finished clearing and backfilling columns")
 	return nil
 }

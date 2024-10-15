@@ -1,0 +1,20 @@
+statement ok
+SET use_declarative_schema_changer='off';
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY, b STRING);
+
+statement ok
+INSERT INTO foo VALUES (1, 'abc');
+
+statement ok
+ALTER TABLE foo ADD COLUMN c STRING DEFAULT 'xiaochen_default';
+
+statement ok
+INSERT INTO foo VALUES (2, 'xyz', NULL);
+
+query ITT rowsort
+SELECT * FROM foo;
+----
+1  abc  xiaochen_default
+2  xyz  NULL

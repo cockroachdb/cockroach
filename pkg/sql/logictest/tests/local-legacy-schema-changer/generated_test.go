@@ -73,6 +73,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_add_column_with_default_value(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "add_column_with_default_value")
+}
+
 func TestLogic_aggregate(
 	t *testing.T,
 ) {
