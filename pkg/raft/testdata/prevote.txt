@@ -277,11 +277,15 @@ stabilize
   CommittedEntries:
   2/13 EntryNormal ""
   Messages:
+  2->1 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/13 Commit:13
+  2->3 MsgApp Term:2 Log:1/12 Commit:13 Entries:[2/13 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/13 Commit:13
 > 1 receiving messages
+  2->1 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/13 Commit:13
 > 3 receiving messages
+  2->3 MsgApp Term:2 Log:1/12 Commit:13 Entries:[2/13 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/13 Commit:13
 > 1 handling Ready
   Ready MustSync=true:
@@ -289,6 +293,7 @@ stabilize
   CommittedEntries:
   2/13 EntryNormal ""
   Messages:
+  1->2 MsgAppResp Term:2 Log:0/13 Commit:12
   1->2 MsgAppResp Term:2 Log:0/13 Commit:13
 > 3 handling Ready
   Ready MustSync=true:
@@ -297,6 +302,9 @@ stabilize
   2/13 EntryNormal ""
   Messages:
   3->2 MsgAppResp Term:2 Log:0/13 Commit:13
+  3->2 MsgAppResp Term:2 Log:0/13 Commit:13
 > 2 receiving messages
+  1->2 MsgAppResp Term:2 Log:0/13 Commit:12
   1->2 MsgAppResp Term:2 Log:0/13 Commit:13
+  3->2 MsgAppResp Term:2 Log:0/13 Commit:13
   3->2 MsgAppResp Term:2 Log:0/13 Commit:13

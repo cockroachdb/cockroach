@@ -205,6 +205,7 @@ stabilize
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->2 MsgApp Term:1 Log:1/3 Commit:3
   1->3 MsgApp Term:1 Log:1/3 Commit:3
   1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1 LeadEpoch:3
@@ -212,6 +213,7 @@ stabilize
     ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/3 EntryNormal ""]
   ]
 > 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->2 MsgApp Term:1 Log:1/3 Commit:3
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/3 Commit:3
@@ -231,6 +233,7 @@ stabilize
   1/3 EntryNormal ""
   Messages:
   2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1 LeadEpoch:3 Responses:[
+    2->1 MsgAppResp Term:1 Log:0/3 Commit:2
     2->1 MsgAppResp Term:1 Log:0/3 Commit:3
   ]
   2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/3 EntryNormal ""] Responses:[
@@ -254,6 +257,7 @@ stabilize
   Processing:
   2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1 LeadEpoch:3
   Responses:
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 3 processing append thread
   Processing:
@@ -271,6 +275,7 @@ stabilize
   Responses:
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/3 EntryNormal ""]
 > 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 2 receiving messages
@@ -530,15 +535,19 @@ stabilize
   CommittedEntries:
   2/4 EntryNormal ""
   Messages:
+  2->1 MsgApp Term:2 Log:1/3 Commit:3 Entries:[2/4 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/4 Commit:4
+  2->3 MsgApp Term:2 Log:1/3 Commit:4 Entries:[2/4 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/4 Commit:4
   2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
   2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[2/4 EntryNormal ""] Responses:[
     ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[2/4 EntryNormal ""]
   ]
 > 1 receiving messages
+  2->1 MsgApp Term:2 Log:1/3 Commit:3 Entries:[2/4 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/4 Commit:4
 > 3 receiving messages
+  2->3 MsgApp Term:2 Log:1/3 Commit:4 Entries:[2/4 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/4 Commit:4
 > 2 processing append thread
   Processing:
@@ -556,6 +565,7 @@ stabilize
   2/4 EntryNormal ""
   Messages:
   1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1 Responses:[
+    1->2 MsgAppResp Term:2 Log:0/4 Commit:3
     1->2 MsgAppResp Term:2 Log:0/4 Commit:4
   ]
   1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[2/4 EntryNormal ""] Responses:[
@@ -569,6 +579,7 @@ stabilize
   Messages:
   3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1 Responses:[
     3->2 MsgAppResp Term:2 Log:0/4 Commit:4
+    3->2 MsgAppResp Term:2 Log:0/4 Commit:4
   ]
   3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[2/4 EntryNormal ""] Responses:[
     ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[2/4 EntryNormal ""]
@@ -579,11 +590,13 @@ stabilize
   Processing:
   1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
   Responses:
+  1->2 MsgAppResp Term:2 Log:0/4 Commit:3
   1->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
   Responses:
+  3->2 MsgAppResp Term:2 Log:0/4 Commit:4
   3->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 1 processing apply thread
   Processing:
@@ -598,7 +611,9 @@ stabilize
 > 1 receiving messages
   ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[2/4 EntryNormal ""]
 > 2 receiving messages
+  1->2 MsgAppResp Term:2 Log:0/4 Commit:3
   1->2 MsgAppResp Term:2 Log:0/4 Commit:4
+  3->2 MsgAppResp Term:2 Log:0/4 Commit:4
   3->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 3 receiving messages
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[2/4 EntryNormal ""]
@@ -854,15 +869,19 @@ stabilize
   CommittedEntries:
   4/5 EntryNormal ""
   Messages:
+  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
   3->1 MsgApp Term:4 Log:4/5 Commit:5
+  3->2 MsgApp Term:4 Log:2/4 Commit:5 Entries:[4/5 EntryNormal ""]
   3->2 MsgApp Term:4 Log:4/5 Commit:5
   3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
   3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
     ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
   ]
 > 1 receiving messages
+  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
   3->1 MsgApp Term:4 Log:4/5 Commit:5
 > 2 receiving messages
+  3->2 MsgApp Term:4 Log:2/4 Commit:5 Entries:[4/5 EntryNormal ""]
   3->2 MsgApp Term:4 Log:4/5 Commit:5
 > 3 processing append thread
   Processing:
@@ -880,6 +899,7 @@ stabilize
   4/5 EntryNormal ""
   Messages:
   1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1 Responses:[
+    1->3 MsgAppResp Term:4 Log:0/5 Commit:4
     1->3 MsgAppResp Term:4 Log:0/5 Commit:5
   ]
   1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
@@ -893,6 +913,7 @@ stabilize
   Messages:
   2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Lead:3 LeadEpoch:1 Responses:[
     2->3 MsgAppResp Term:4 Log:0/5 Commit:5
+    2->3 MsgAppResp Term:4 Log:0/5 Commit:5
   ]
   2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
     ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
@@ -903,11 +924,13 @@ stabilize
   Processing:
   1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
   Responses:
+  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
   1->3 MsgAppResp Term:4 Log:0/5 Commit:5
 > 2 processing append thread
   Processing:
   2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Lead:3 LeadEpoch:1
   Responses:
+  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
   2->3 MsgAppResp Term:4 Log:0/5 Commit:5
 > 1 processing apply thread
   Processing:
@@ -924,7 +947,9 @@ stabilize
 > 2 receiving messages
   ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
 > 3 receiving messages
+  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
   1->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
   2->3 MsgAppResp Term:4 Log:0/5 Commit:5
 
 raft-state
@@ -1128,15 +1153,19 @@ stabilize
   CommittedEntries:
   5/6 EntryNormal ""
   Messages:
+  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
   2->1 MsgApp Term:5 Log:5/6 Commit:6
+  2->3 MsgApp Term:5 Log:4/5 Commit:6 Entries:[5/6 EntryNormal ""]
   2->3 MsgApp Term:5 Log:5/6 Commit:6
   2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
     ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
   ]
 > 1 receiving messages
+  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
   2->1 MsgApp Term:5 Log:5/6 Commit:6
 > 3 receiving messages
+  2->3 MsgApp Term:5 Log:4/5 Commit:6 Entries:[5/6 EntryNormal ""]
   2->3 MsgApp Term:5 Log:5/6 Commit:6
 > 2 processing append thread
   Processing:
@@ -1154,6 +1183,7 @@ stabilize
   5/6 EntryNormal ""
   Messages:
   1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
+    1->2 MsgAppResp Term:5 Log:0/6 Commit:5
     1->2 MsgAppResp Term:5 Log:0/6 Commit:6
   ]
   1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
@@ -1167,6 +1197,7 @@ stabilize
   Messages:
   3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
     3->2 MsgAppResp Term:5 Log:0/6 Commit:6
+    3->2 MsgAppResp Term:5 Log:0/6 Commit:6
   ]
   3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
     ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
@@ -1177,11 +1208,13 @@ stabilize
   Processing:
   1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   Responses:
+  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
   1->2 MsgAppResp Term:5 Log:0/6 Commit:6
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   Responses:
+  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
   3->2 MsgAppResp Term:5 Log:0/6 Commit:6
 > 1 processing apply thread
   Processing:
@@ -1196,7 +1229,9 @@ stabilize
 > 1 receiving messages
   ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
 > 2 receiving messages
+  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
   1->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
   3->2 MsgAppResp Term:5 Log:0/6 Commit:6
 > 3 receiving messages
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
@@ -1388,6 +1423,7 @@ stabilize
   CommittedEntries:
   6/7 EntryNormal ""
   Messages:
+  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
   1->2 MsgApp Term:6 Log:6/7 Commit:7
   1->3 MsgApp Term:6 Log:6/7 Commit:7
   1->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
@@ -1395,6 +1431,7 @@ stabilize
     ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
   ]
 > 2 receiving messages
+  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
   1->2 MsgApp Term:6 Log:6/7 Commit:7
 > 3 receiving messages
   1->3 MsgApp Term:6 Log:6/7 Commit:7
@@ -1414,6 +1451,7 @@ stabilize
   6/7 EntryNormal ""
   Messages:
   2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3 Responses:[
+    2->1 MsgAppResp Term:6 Log:0/7 Commit:6
     2->1 MsgAppResp Term:6 Log:0/7 Commit:7
   ]
   2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""] Responses:[
@@ -1437,6 +1475,7 @@ stabilize
   Processing:
   2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
   Responses:
+  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
   2->1 MsgAppResp Term:6 Log:0/7 Commit:7
 > 3 processing append thread
   Processing:
@@ -1454,6 +1493,7 @@ stabilize
   Responses:
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
 > 1 receiving messages
+  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
   2->1 MsgAppResp Term:6 Log:0/7 Commit:7
   3->1 MsgAppResp Term:6 Log:0/7 Commit:7
 > 2 receiving messages
