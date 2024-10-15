@@ -256,6 +256,7 @@ func newTestRegistration(
 ) *testRegistration {
 	s := newTestStream()
 	r := newBufferedRegistration(
+		s.ctx,
 		span,
 		ts,
 		makeCatchUpIterator(catchup, span, ts),
