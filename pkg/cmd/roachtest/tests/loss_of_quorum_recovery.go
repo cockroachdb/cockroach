@@ -65,7 +65,7 @@ func registerLOQRecovery(r registry.Registry) {
 		testSpec := s
 		r.Add(registry.TestSpec{
 			Name:             s.testName(""),
-			Owner:            registry.OwnerReplication,
+			Owner:            registry.OwnerKV,
 			Benchmark:        true,
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
@@ -80,7 +80,7 @@ func registerLOQRecovery(r registry.Registry) {
 		})
 		r.Add(registry.TestSpec{
 			Name:             s.testName("half-online"),
-			Owner:            registry.OwnerReplication,
+			Owner:            registry.OwnerKV,
 			Benchmark:        true,
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),

@@ -437,7 +437,7 @@ func registerKVContention(r registry.Registry) {
 func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "kv/quiescence/nodes=3",
-		Owner:               registry.OwnerReplication,
+		Owner:               registry.OwnerKV,
 		Cluster:             r.MakeClusterSpec(4),
 		CompatibleClouds:    registry.AllExceptAWS,
 		Suites:              registry.Suites(registry.Nightly),
