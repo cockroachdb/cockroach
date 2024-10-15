@@ -2166,8 +2166,6 @@ GO_TARGETS = [
     "//pkg/sql/schemachanger/screl:screl_test",
     "//pkg/sql/schemachanger/scrun:scrun",
     "//pkg/sql/schemachanger/scrun:scrun_test",
-    "//pkg/sql/schemachanger/sctest/sccomparatortestgen:sccomparatortestgen",
-    "//pkg/sql/schemachanger/sctest/sccomparatortestgen:sccomparatortestgen_lib",
     "//pkg/sql/schemachanger/sctest/sctestgen:sctestgen",
     "//pkg/sql/schemachanger/sctest/sctestgen:sctestgen_lib",
     "//pkg/sql/schemachanger/sctest:sctest",
