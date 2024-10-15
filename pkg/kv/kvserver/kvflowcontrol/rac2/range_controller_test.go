@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,13 +88,12 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 func sortReplicas(r *testingRCRange) []roachpb.ReplicaDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return sortReplicasLocked(r)
+	return sortReplicaSet(r.mu.r.replicaSet)
 }
 
-func sortReplicasLocked(r *testingRCRange) []roachpb.ReplicaDescriptor {
-	r.mu.AssertHeld()
-	sorted := make([]roachpb.ReplicaDescriptor, 0, len(r.mu.r.replicaSet))
-	for _, replica := range r.mu.r.replicaSet {
+func sortReplicaSet(replicas map[roachpb.ReplicaID]testingReplica) []roachpb.ReplicaDescriptor {
+	sorted := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
+	for _, replica := range replicas {
 		sorted = append(sorted, replica.desc)
 	}
 	sort.Slice(sorted, func(i, j int) bool {
@@ -191,17 +191,29 @@ func (s *testingRCState) evalStateString() string {
 func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 	var b strings.Builder
 
-	// NB: r.mu is locked before rss.mu and rc.scheduledMu.
 	r := s.ranges[rangeID]
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	var tr testingRange
+	var sendMsgAppCalls []sendMsgAppCall
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		tr = r.mu.r
+		sendMsgAppCalls, r.mu.sendMsgAppCalls = r.mu.sendMsgAppCalls, sendMsgAppCalls
+	}()
 	rc := r.rc
-	rc.scheduledMu.Lock()
-	defer rc.scheduledMu.Unlock()
 
-	for _, desc := range sortReplicasLocked(r) {
-		testRepl := r.mu.r.replicaSet[desc.ReplicaID]
-		rs := r.rc.replicaMap[desc.ReplicaID]
+	var scheduledReplicas []roachpb.ReplicaID
+	func() {
+		rc.scheduledMu.Lock()
+		defer rc.scheduledMu.Unlock()
+		for replica := range rc.scheduledMu.replicas {
+			scheduledReplicas = append(scheduledReplicas, replica)
+		}
+	}()
+
+	for _, desc := range sortReplicaSet(tr.replicaSet) {
+		testRepl := tr.replicaSet[desc.ReplicaID]
+		rs := rc.replicaMap[desc.ReplicaID]
 		fmt.Fprintf(&b, "%v: ", desc)
 		rss := rs.sendStream
 		if rss == nil {
@@ -238,12 +250,12 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		b.WriteString("++++\n")
 	}
 
-	if len(r.mu.sendMsgAppCalls) != 0 {
+	if len(sendMsgAppCalls) != 0 {
 		fmt.Fprintf(&b, "MsgApps sent in pull mode:\n")
-		slices.SortStableFunc(r.mu.sendMsgAppCalls, func(a, b sendMsgAppCall) int {
+		slices.SortStableFunc(sendMsgAppCalls, func(a, b sendMsgAppCall) int {
 			return cmp.Compare(a.msg.To, b.msg.To)
 		})
-		for _, e := range r.mu.sendMsgAppCalls {
+		for _, e := range sendMsgAppCalls {
 			fmt.Fprintf(&b, " to: %d, lowPri: %t entries: [", e.msg.To, e.lowPriorityOverride)
 			for j := range e.msg.Entries {
 				var prefix string
@@ -255,17 +267,12 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 			fmt.Fprintf(&b, "]\n")
 		}
 		b.WriteString("++++\n")
-		r.mu.sendMsgAppCalls = r.mu.sendMsgAppCalls[:0]
 	}
-	if r.mu.scheduleControllerEventCount > 0 {
-		fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", r.mu.scheduleControllerEventCount)
+	if events := r.scheduleControllerEventCount.Load(); events > 0 {
+		fmt.Fprintf(&b, "schedule-controller-event-count: %d\n", events)
 	}
 
 	if len(rc.scheduledMu.replicas) != 0 {
-		var scheduledReplicas []roachpb.ReplicaID
-		for r := range rc.scheduledMu.replicas {
-			scheduledReplicas = append(scheduledReplicas, r)
-		}
 		slices.Sort(scheduledReplicas)
 		fmt.Fprintf(&b, "scheduled-replicas:")
 		for _, r := range scheduledReplicas {
@@ -373,10 +380,10 @@ type testingRCRange struct {
 		// requires determinism on a smaller timescale than calling WaitForEval via
 		// multiple goroutines would allow. See testingNonBlockingAdmit to see how
 		// WaitForEval is done in simulation tests.
-		evals                        map[string]*testingRCEval
-		scheduleControllerEventCount int
-		sendMsgAppCalls              []sendMsgAppCall
+		evals           map[string]*testingRCEval
+		sendMsgAppCalls []sendMsgAppCall
 	}
+	scheduleControllerEventCount atomic.Uint64
 }
 
 type sendMsgAppCall struct {
@@ -418,9 +425,7 @@ func (r *testingRCRange) SendMsgApp(
 }
 
 func (r *testingRCRange) ScheduleControllerEvent(rangeID roachpb.RangeID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.scheduleControllerEventCount++
+	r.scheduleControllerEventCount.Add(1)
 }
 
 func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error) {
