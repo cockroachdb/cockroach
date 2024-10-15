@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,30 +39,23 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 
-	for i, tc := range []struct {
-		lic       string
-		checkTime time.Time
-		err       string
+	for _, tc := range []struct {
+		lic string
 	}{
 		// NB: we're observing the update manifest as changed behavior -- detailed
 		// testing of that behavior is left to licenseccl's own tests.
-		{"", t0, "requires an enterprise license"},
+		{""},
 		// adding a valid lic.
-		{licA, t0, ""},
+		{licA},
 		// clearing an existing lic.
-		{"", t0, "requires an enterprise license"},
-		// clearing an existing, invalid lic.
-		{"", t0, "requires an enterprise license"},
+		{""},
 	} {
 		updater := st.MakeUpdater()
 		if err := setLicense(ctx, updater, tc.lic); err != nil {
 			t.Fatal(err)
 		}
-		err := checkEnterpriseEnabledAt(st, tc.checkTime, "", true)
-		if !testutils.IsError(err, tc.err) {
-			l, _ := decode(tc.lic)
-			t.Fatalf("%d: lic %v, update by %T, checked at %s, got %q", i, l, updater, tc.checkTime, err)
-		}
+		err := CheckEnterpriseEnabled(st, "")
+		require.NoError(t, err)
 	}
 }
 
@@ -219,48 +211,6 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 			require.Equal(t, tc.ttlSeconds, actual)
 		})
 	}
-}
-
-func TestApplyTenantLicenseWithLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	license, _ := (&licenseccl.License{
-		Type: licenseccl.License_Enterprise,
-	}).Encode()
-
-	defer TestingDisableEnterprise()()
-	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
-
-	settings := cluster.MakeClusterSettings()
-
-	require.Error(t, CheckEnterpriseEnabled(settings, ""))
-	require.False(t, IsEnterpriseEnabled(settings, ""))
-	require.NoError(t, ApplyTenantLicense())
-	require.NoError(t, CheckEnterpriseEnabled(settings, ""))
-	require.True(t, IsEnterpriseEnabled(settings, ""))
-}
-
-func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	defer TestingDisableEnterprise()()
-
-	settings := cluster.MakeClusterSettings()
-	_, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
-	envutil.ClearEnvCache()
-	require.False(t, ok)
-
-	require.Error(t, CheckEnterpriseEnabled(settings, ""))
-	require.False(t, IsEnterpriseEnabled(settings, ""))
-	require.NoError(t, ApplyTenantLicense())
-	require.Error(t, CheckEnterpriseEnabled(settings, ""))
-	require.False(t, IsEnterpriseEnabled(settings, ""))
-}
-
-func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", "THIS IS NOT A VALID LICENSE")()
-	require.Error(t, ApplyTenantLicense())
 }
 
 func setLicense(ctx context.Context, updater settings.Updater, val string) error {
