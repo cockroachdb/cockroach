@@ -386,7 +386,7 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
 	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
-	false,
+	true,
 	settings.WithPublic)
 
 // optUseHistogramsClusterMode controls the cluster default for whether
