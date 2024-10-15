@@ -296,6 +296,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 //
 // NB: startTS is exclusive; the first possible event will be at startTS.Next().
 func (p *ScheduledProcessor) Register(
+	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -317,6 +318,7 @@ func (p *ScheduledProcessor) Register(
 			"unimplemented: unbuffered registrations for rangefeed, see #126560")
 	} else {
 		r = newBufferedRegistration(
+			streamCtx,
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)

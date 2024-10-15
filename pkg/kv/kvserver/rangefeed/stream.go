@@ -6,8 +6,6 @@
 package rangefeed
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -26,17 +24,15 @@ type Stream interface {
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *UnbufferedSender
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
@@ -45,10 +41,6 @@ func NewPerRangeEventSink(
 
 var _ kvpb.RangeFeedEventSink = (*PerRangeEventSink)(nil)
 var _ Stream = (*PerRangeEventSink)(nil)
-
-func (s *PerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that

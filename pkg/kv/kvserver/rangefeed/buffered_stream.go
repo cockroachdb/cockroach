@@ -6,8 +6,6 @@
 package rangefeed
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -27,17 +25,15 @@ type BufferedStream interface {
 // similar to PerRangeEventSink but buffers events in BufferedSender before
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *BufferedSender
 }
 
 func NewBufferedPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
 ) *BufferedPerRangeEventSink {
 	return &BufferedPerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
@@ -47,10 +43,6 @@ func NewBufferedPerRangeEventSink(
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
 var _ Stream = (*BufferedPerRangeEventSink)(nil)
 var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
-
-func (s *BufferedPerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
