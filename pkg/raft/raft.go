@@ -2244,6 +2244,15 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 		return
 	}
 	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
+
+	// We do the same as we do when receiving a MsgHeartbeatResp.
+	// NB: We ignore self-addressed messages as don't send MsgApp to ourselves.
+	if m.From != r.id {
+		pr := r.trk.Progress(m.From)
+		pr.RecentActive = true
+		pr.MsgAppProbesPaused = false
+		r.maybeSendAppend(m.From)
+	}
 }
 
 func (r *raft) handleDeFortify(m pb.Message) {
