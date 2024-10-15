@@ -216,7 +216,7 @@ func NewStopper(options ...Option) *Stopper {
 	return s
 }
 
-// recover reports the current panic, if any, any panics again.
+// recover reports the current panic, if any, and panics again.
 //
 // Note: this function _must_ be called with `defer s.recover()`, otherwise
 // the panic recovery won't work.
