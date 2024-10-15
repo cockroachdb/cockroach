@@ -303,6 +303,10 @@ onlyif config local-legacy-schema-changer
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
+# TODO(annie): remove this override once CONFIGURE ZONE is enabled by default in the DSC
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements = "+CONFIGURE ZONE"
+
 skipif config local-mixed-24.1
 skipif config local-legacy-schema-changer
 statement error pq: pg_type is a system catalog
@@ -312,6 +316,9 @@ skipif config local-mixed-24.1
 skipif config local-legacy-schema-changer
 statement error pq: columns is a virtual object and cannot be modified
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement ok
+RESET CLUSTER SETTING sql.schema.force_declarative_statements
 
 statement ok
 CREATE TABLE roachie(i int)
