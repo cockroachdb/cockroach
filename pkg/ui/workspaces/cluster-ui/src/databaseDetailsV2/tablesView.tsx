@@ -48,7 +48,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
     title: (
       <Tooltip title={"The name of the table."}>{TableColName.NAME}</Tooltip>
     ),
-    width: "15%",
     sorter: (a, b) => a.tableName.localeCompare(b.tableName),
     render: (t: TableRow) => {
       return (
@@ -67,7 +66,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
         {TableColName.REPLICATION_SIZE}
       </Tooltip>
     ),
-    width: "fit-content",
     sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
     render: (t: TableRow) => {
       return Bytes(t.replicationSizeBytes);
@@ -80,7 +78,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
         {TableColName.RANGE_COUNT}
       </Tooltip>
     ),
-    width: "fit-content",
     sorter: true,
     render: (t: TableRow) => {
       return t.rangeCount;
@@ -89,7 +86,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
   },
   {
     title: TableColName.COLUMN_COUNT,
-    width: "fit-content",
     sorter: true,
     render: (t: TableRow) => {
       return t.columnCount;
@@ -98,7 +94,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
   },
   {
     title: TableColName.INDEX_COUNT,
-    width: "fit-content",
     sorter: true,
     render: (t: TableRow) => {
       // We always include the primary index.
@@ -113,7 +108,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     hideIfTenant: true,
-    width: "20%",
     render: (t: TableRow) => (
       <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
     ),
@@ -129,7 +123,6 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     sorter: true,
-    width: "fit-content",
     sortKey: TableSortOption.LIVE_DATA,
     render: (t: TableRow) => {
       return (
