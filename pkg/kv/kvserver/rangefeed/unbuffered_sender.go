@@ -170,6 +170,16 @@ func (ubs *UnbufferedSender) AddRegistration(streamID int64, r registration, cle
 	})
 }
 
+func (ubs *UnbufferedSender) Disconnect(streamID int64, err *kvpb.Error) {
+	if err == nil {
+		log.Fatalf(context.Background(), "unexpected: Disconnect called with non-error event")
+	}
+	if r, ok := ubs.registrations.Load(streamID); ok {
+		r.reg.disconnect(err)
+		//bs.sendBufferedError(ev)
+	}
+}
+
 // SendBufferedError 1. Sends a mux rangefeed completion error to the
 // client without blocking. It does so by delegating the responsibility of
 // sending mux error to UnbufferedSender.run 2. Disconnects the stream with
@@ -186,14 +196,13 @@ func (ubs *UnbufferedSender) AddRegistration(streamID int64, r registration, cle
 // raftMu, so it is important that this function doesn't block on IO. Caller
 // needs to make sure this is called only with non-nil error events. Important
 // to be thread-safe.
-func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+func (ubs *UnbufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
 
-	if r, ok := ubs.registrations.LoadAndDelete(ev.StreamID); ok {
+	if _, ok := ubs.registrations.LoadAndDelete(ev.StreamID); ok {
 		// Fine to skip nil checking here since that would be a programming error.
-		r.reg.cancel()
 		ubs.metrics.UpdateMetricsOnRangefeedDisconnect()
 		ubs.appendMuxError(ev)
 	}

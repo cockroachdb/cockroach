@@ -556,7 +556,7 @@ func (p *LegacyProcessor) run(
 
 // Stop implements Processor interface.
 func (p *LegacyProcessor) Stop() {
-	p.StopWithErr(nil)
+	p.StopWithErr(kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 }
 
 // StopWithErr implements Processor interface.

@@ -63,15 +63,17 @@ type registration interface {
 	// be called when being unregistered from processor.
 	getUnreg() func()
 	//stop()
+	// Something from the node level to shut things down. If things are coming
+	// from the registration level, it would invoke the disconnect method.
 	close(context.Context)
-	cancel()
+	//cancel()
 }
 
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	ctx              context.Context
-	cancelFunc       context.CancelFunc
+	//ctx              context.Context
+	//cancelFunc       context.CancelFunc
 	span             roachpb.Span
 	withDiff         bool
 	withFiltering    bool
@@ -104,9 +106,9 @@ func (r *baseRegistration) setSpanAsKeys() {
 	r.keys = r.span.AsRange()
 }
 
-func (r *baseRegistration) cancel() {
-	r.cancelFunc()
-}
+//func (r *baseRegistration) cancel() {
+//	r.cancelFunc()
+//}
 
 func (r *baseRegistration) getSpan() roachpb.Span {
 	return r.span
