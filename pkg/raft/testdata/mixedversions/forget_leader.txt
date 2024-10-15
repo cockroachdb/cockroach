@@ -6,15 +6,10 @@ log-level none
 ----
 ok
 
-# Start 4 nodes, two of them has the older version 24.2.
-add-nodes 2 voters=(1,2,3) learners=(4) index=10 crdb-version=24.2
+# Start 4 nodes that have the older version 24.2.
+add-nodes 4 voters=(1,2,3) learners=(4) index=10 crdb-version=24.2
 ----
 ok
-
-add-nodes 2 voters=(1,2,3) learners=(4) index=10 crdb-version=24.3
-----
-ok
-
 
 campaign 1
 ----
