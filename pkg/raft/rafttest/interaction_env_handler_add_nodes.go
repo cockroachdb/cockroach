@@ -77,8 +77,7 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 					return err
 				}
 				settings := cluster.MakeTestingClusterSettingsWithVersions(version,
-					clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version()),
-					true /* initializeVersion */)
+					clusterversion.MinSupported.Version(), true /* initializeVersion */)
 				cfg.CRDBVersion = settings.Version
 			}
 		}

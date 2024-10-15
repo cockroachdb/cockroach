@@ -16,7 +16,7 @@ log-level none
 ok
 
 # Start with two nodes with version 24.2, but the config already has a third.
-add-nodes 2 voters=(1,2,3) index=10 crdb-version=24.2
+add-nodes 2 voters=(1,2,3) index=10 crdb-version=1000024.2
 ----
 ok
 
