@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -212,9 +213,19 @@ func TestShowTransferState(t *testing.T) {
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
 			testutils.SucceedsSoon(t, func() error {
 				// Waiting for the cluster setting to propagate to the tenant.
-				return tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).
-					Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
+				var enabled bool
+				if err := tenantDB.QueryRow(
+					`SHOW CLUSTER SETTING server.user_login.session_revival_token.enabled`,
+				).Scan(&enabled); err != nil {
+					return err
+				}
+				if !enabled {
+					return errors.New("cluster setting not yet propagated")
+				}
+				return nil
 			})
+			err := tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
+			require.NoError(t, err)
 			require.True(t, errVal.Valid)
 			require.Equal(t, "cannot create token for root user", errVal.String)
 			require.False(t, sessionState.Valid)
