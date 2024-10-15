@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,12 +25,6 @@ import (
 func (s *Server) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
-	if s.cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-		if err := s.startEmbeddedObsService(ctx); err != nil {
-			return err
-		}
-	}
-
 	newCluster := s.InitialStart() && s.NodeID() == kvstorage.FirstNodeID
 	if !newCluster {
 		// The initial SQL code only runs the first time the cluster is initialized.

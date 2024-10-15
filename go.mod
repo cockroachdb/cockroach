@@ -15,7 +15,7 @@ require (
 	github.com/golang/snappy v0.0.4
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.0 // indirect
 	golang.org/x/crypto v0.10.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
@@ -74,7 +74,6 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.16.1
-	github.com/jackc/puddle v1.2.1 // indirect
 )
 
 require (
@@ -194,7 +193,6 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/pressly/goose/v3 v3.5.3
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.1-0.20210607210712-147c58e9608a
 	github.com/prometheus/common v0.32.1
@@ -271,6 +269,7 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
+	github.com/dnaeon/go-vcr v1.2.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230111030713-bf00bc1b83b6 // indirect
