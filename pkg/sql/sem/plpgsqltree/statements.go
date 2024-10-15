@@ -220,6 +220,10 @@ type Assignment struct {
 	StatementImpl
 	Var   Variable
 	Value Expr
+
+	// Indirection is the optional name of a field in a composite variable. For
+	// example, in the assignment "foo.bar := 1", Indirection would be "bar".
+	Indirection tree.Name
 }
 
 func (s *Assignment) CopyNode() *Assignment {
@@ -233,6 +237,10 @@ func (s *Assignment) PlpgSQLStatementTag() string {
 
 func (s *Assignment) Format(ctx *tree.FmtCtx) {
 	ctx.FormatNode(&s.Var)
+	if s.Indirection != "" {
+		ctx.WriteByte('.')
+		ctx.FormatNode(&s.Indirection)
+	}
 	ctx.WriteString(" := ")
 	ctx.FormatNode(s.Value)
 	ctx.WriteString(";\n")
