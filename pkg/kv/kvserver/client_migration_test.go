@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -178,7 +179,8 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		trace, processErr, err := store.Enqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */, false /* async */)
+		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+		processErr, err := store.Enqueue(traceCtx, "raftsnapshot", repl, true /* skipShouldQueue */, false /* async */)
 		if err != nil {
 			return err
 		}
@@ -186,7 +188,7 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 			return processErr
 		}
 		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
-		formattedTrace := trace.String()
+		formattedTrace := rec().String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
 		}
