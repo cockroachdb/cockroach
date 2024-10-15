@@ -27,11 +27,11 @@ import (
 )
 
 type mockTelemetryStatusReporter struct {
-	lastPingTime time.Time
+	lastPingTime *time.Time
 }
 
 func (m mockTelemetryStatusReporter) GetLastSuccessfulTelemetryPing() time.Time {
-	return m.lastPingTime
+	return *m.lastPingTime
 }
 
 func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
@@ -68,7 +68,7 @@ func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	err := enforcer.Start(ctx, srv.ClusterSettings(),
 		license.WithDB(srv.SystemLayer().InternalDB().(descs.DB)),
 		license.WithSystemTenant(true),
-		license.WithTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: ts1}),
+		license.WithTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: &ts1}),
 	)
 	require.NoError(t, err)
 	require.Equal(t, ts1_30d, enforcer.GetClusterInitGracePeriodEndTS())
@@ -191,16 +191,20 @@ func TestClusterInitGracePeriod_DelayedTenantConnector(t *testing.T) {
 	// We will be throttled because the check time is 9-days after start,
 	// which is beyond the grace period.
 	const beyondThreshold = 10
-	_, err = enforcer.MaybeFailIfThrottled(ctx, beyondThreshold)
+	_, err = enforcer.TestingMaybeFailIfThrottled(ctx, beyondThreshold)
 	require.Error(t, err)
 
 	// Now mock receiving the timestamp from the system tenant. It should now
 	// be 30-days after the start time of the system tenant.
 	connectTS = ts30d.Unix()
 	// The check for throttling will refresh the value.
-	_, err = enforcer.MaybeFailIfThrottled(ctx, beyondThreshold)
+	_, err = enforcer.TestingMaybeFailIfThrottled(ctx, beyondThreshold)
 	require.NoError(t, err)
 	require.Equal(t, ts30d, enforcer.GetClusterInitGracePeriodEndTS())
+	// Run the throttle again (from a different goroutine) to help flush
+	// out data races. It should be the same response as before.
+	_, err = enforcer.TestingMaybeFailIfThrottled(ctx, beyondThreshold)
+	require.NoError(t, err)
 }
 
 func TestThrottle(t *testing.T) {
@@ -275,11 +279,14 @@ func TestThrottle(t *testing.T) {
 					OverrideStartTime:         &tc.gracePeriodInit,
 					OverrideThrottleCheckTime: &tc.checkTs,
 				})
-			e.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{
-				lastPingTime: tc.lastTelemetryPingTime,
-			})
+			gracePeriodEnd := tc.gracePeriodInit.Add(7 * 24 * time.Hour).Unix()
+			err := e.Start(ctx, nil,
+				license.WithMetadataAccessor(&mockMetadataAccessor{ts: &gracePeriodEnd}),
+				license.WithTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: &tc.lastTelemetryPingTime}),
+			)
+			require.NoError(t, err)
 			e.RefreshForLicenseChange(ctx, tc.licType, tc.licExpiry)
-			notice, err := e.MaybeFailIfThrottled(ctx, tc.openTxnsCount)
+			notice, err := e.TestingMaybeFailIfThrottled(ctx, tc.openTxnsCount)
 			if tc.expectedErrRegex == "" {
 				require.NoError(t, err)
 			} else {
@@ -325,6 +332,9 @@ func TestThrottleErrorMsg(t *testing.T) {
 	// Pointer to the timestamp that we'll use for the throttle check. This is
 	// modified for every test unit.
 	throttleCheckTS := &time.Time{}
+	// And a pointer to the timestamp that we'll use for the last ping time in
+	// the telemetry server. We modify this for each test unit.
+	telemetryTS := &time.Time{}
 
 	// Controls the maximum number of open transactions to simulate concurrency.
 	// This value can be modified by individual tests through testing knobs based
@@ -344,6 +354,10 @@ func TestThrottleErrorMsg(t *testing.T) {
 				// We are going to modify the throttle check timestamp in each test
 				// unit.
 				OverrideThrottleCheckTime: throttleCheckTS,
+				// Allow for setting the last ping time in each test unit.
+				OverrideTelemetryStatusReporter: &mockTelemetryStatusReporter{
+					lastPingTime: telemetryTS,
+				},
 				// And we will modify what is the max open transactions to force us
 				// over the limit.
 				OverrideMaxOpenTransactions: &maxOpenTransactions,
@@ -382,12 +396,9 @@ func TestThrottleErrorMsg(t *testing.T) {
 			"SET CLUSTER SETTING cluster.label = ''", ""},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			// Adjust the throttle check time for this test unit
+			// Adjust the time stamps for this test unit
 			*throttleCheckTS = tc.throttleCheckTS
-
-			// Override the telemetry server so we have control of what the last ping
-			// time was.
-			licenseEnforcer.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: tc.telemetryTS})
+			*telemetryTS = tc.telemetryTS
 
 			// Override the max open transactions based on whether we are above or
 			// below the open transaction limit.

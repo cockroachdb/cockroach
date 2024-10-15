@@ -574,14 +574,15 @@
 /pkg/ts/catalog/             @cockroachdb/obs-prs
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/addr/              @cockroachdb/obs-prs
+/pkg/util/admission/         @cockroachdb/admission-control
+/pkg/util/goschedstats       @cockroachdb/admission-control
+/pkg/util/grunning/          @cockroachdb/admission-control
 /pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/stop/              @cockroachdb/kv-prs
-/pkg/util/grunning/          @cockroachdb/admission-control
-/pkg/util/admission/         @cockroachdb/admission-control
-/pkg/util/schedulerlatency/  @cockroachdb/admission-control
 /pkg/util/mon                @cockroachdb/sql-queries-prs
+/pkg/util/schedulerlatency/  @cockroachdb/admission-control
+/pkg/util/stop/              @cockroachdb/kv-prs
+/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
