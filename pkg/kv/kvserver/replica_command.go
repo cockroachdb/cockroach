@@ -3210,7 +3210,7 @@ func (r *Replica) followerSendSnapshot(
 	if sendThreshold > 0 {
 		var sp *tracing.Span
 		ctx, sp = tracing.EnsureChildSpan(ctx, r.store.cfg.Tracer(),
-			"follower snapshot send", tracing.WithRecording(tracingpb.RecordingVerbose))
+			"follower snapshot send", tracing.WithRecording(tracingpb.RecordingStructured))
 		sendStart := timeutil.Now()
 		defer func() {
 			sendDur := timeutil.Since(sendStart)
