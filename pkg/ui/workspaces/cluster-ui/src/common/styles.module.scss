@@ -7,11 +7,11 @@
 
 .cockroach--tabs {
   overflow: visible !important;
-  :global(.ant-tabs-bar) {
+  :global(.crl-ant-tabs-bar) {
     border-bottom: 1px solid $grey2;
   }
 
-  :global(.ant-tabs-tab) {
+  :global(.crl-ant-tabs-tab) {
     font-family: $font-family--base;
     font-size: 16px;
     line-height: 1.5;
@@ -19,15 +19,15 @@
     color: $colors--neutral-7;
   }
 
-  :global(.ant-tabs-nav .ant-tabs-tab-active) {
+  :global(.crl-ant-tabs-nav .crl-ant-tabs-tab-active) {
     color: $colors--link;
   }
 
-  :global(.ant-tabs-nav .ant-tabs-tab:hover) {
+  :global(.crl-ant-tabs-nav .crl-ant-tabs-tab:hover) {
     color: $colors--link;
   }
 
-  :global(.ant-tabs-ink-bar) {
+  :global(.crl-ant-tabs-ink-bar) {
     height: 3px;
     border-radius: 40px;
     background-color: $blue;

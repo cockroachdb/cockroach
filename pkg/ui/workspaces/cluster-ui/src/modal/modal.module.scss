@@ -8,24 +8,24 @@
 .crl-modal {
   @include base;
   :global {
-    .ant-modal-footer {
+    .crl-ant-modal-footer {
       border-top: none;
       padding: 0;
       margin-top: $spacing-large;
     }
 
-    .ant-modal-header {
+    .crl-ant-modal-header {
       margin-bottom: $spacing-medium-small;
     }
 
-    .ant-modal-content {
+    .crl-ant-modal-content {
       padding: $spacing-large;
       box-shadow: 0px 0px 1px rgba(71, 88, 114, 0.47);
       border-radius: 5px;
       min-width: 560px;
     }
 
-    .ant-modal-close {
+    .crl-ant-modal-close {
       top: $spacing-large;
     }
   }
