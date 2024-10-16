@@ -429,8 +429,10 @@ const (
 	WaitSuccess WaitEndState = iota
 	// ContextCanceled indicates that the context was canceled.
 	ContextCanceled
-	// RefreshWaitSignaled indicates that the refresh channel was signaled.
-	RefreshWaitSignaled
+	// RefreshWait1Signaled indicates that refresh channel 1 was signaled.
+	RefreshWait1Signaled
+	// RefreshWait2Signaled indicates that refresh channel 2 was signaled.
+	RefreshWait2Signaled
 )
 
 func (s WaitEndState) String() string {
@@ -444,21 +446,24 @@ func (s WaitEndState) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.Print("wait_success")
 	case ContextCanceled:
 		w.Print("context_cancelled")
-	case RefreshWaitSignaled:
-		w.Print("refresh_wait_signaled")
+	case RefreshWait1Signaled:
+		w.Print("refresh_wait1_signaled")
+	case RefreshWait2Signaled:
+		w.Print("refresh_wait2_signaled")
 	default:
 		panic(fmt.Sprintf("unknown wait_end_state(%d)", int(s)))
 	}
 }
 
 // WaitForEval waits for a quorum of handles to be signaled and have tokens
-// available, including all the required wait handles. The caller can provide a
-// refresh channel, which when signaled will cause the function to return
-// RefreshWaitSignaled, allowing the caller to retry waiting with updated
+// available, including all the required wait handles. The caller provides two
+// refresh channels, which when signaled will cause the function to return
+// RefreshWait{1,2}Signaled, allowing the caller to retry waiting with updated
 // handles.
 func WaitForEval(
 	ctx context.Context,
-	refreshWaitCh <-chan struct{},
+	refreshWaitCh1 <-chan struct{},
+	refreshWaitCh2 <-chan struct{},
 	handles []tokenWaitingHandleInfo,
 	requiredQuorum int,
 	traceIndividualWaits bool,
@@ -474,7 +479,9 @@ func WaitForEval(
 	scratch = append(scratch,
 		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
 	scratch = append(scratch,
-		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh)})
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh1)})
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh2)})
 
 	requiredWaitCount := 0
 	for _, h := range handles {
@@ -510,11 +517,16 @@ func WaitForEval(
 			return ContextCanceled, scratch
 		case 1:
 			if traceIndividualWaits {
-				log.Eventf(ctx, "wait-for-eval: waited until channel refreshed")
+				log.Eventf(ctx, "wait-for-eval: waited until channel1 refreshed")
 			}
-			return RefreshWaitSignaled, scratch
+			return RefreshWait1Signaled, scratch
+		case 2:
+			if traceIndividualWaits {
+				log.Eventf(ctx, "wait-for-eval: waited until channel2 refreshed")
+			}
+			return RefreshWait2Signaled, scratch
 		default:
-			handleInfo := handles[chosen-2]
+			handleInfo := handles[chosen-3]
 			if available := handleInfo.handle.ConfirmHaveTokensAndUnblockNextWaiter(); !available {
 				// The handle was signaled but does not currently have tokens
 				// available. Continue waiting on this handle.
@@ -534,7 +546,7 @@ func WaitForEval(
 			m--
 			scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
 			scratch = scratch[:m]
-			handles[chosen-2], handles[m-2] = handles[m-2], handles[chosen-2]
+			handles[chosen-3], handles[m-3] = handles[m-3], handles[chosen-3]
 		}
 	}
 

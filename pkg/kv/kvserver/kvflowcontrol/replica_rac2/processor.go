@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -154,7 +153,6 @@ type ProcessorOptions struct {
 	ACWorkQueue            ACWorkQueue
 	MsgAppSender           rac2.MsgAppSender
 	RangeControllerFactory RangeControllerFactory
-	Settings               *cluster.Settings
 	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
 	EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel
@@ -1104,14 +1102,6 @@ func (p *processorImpl) HoldsSendTokensRaftMuLocked() bool {
 func (p *processorImpl) AdmitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
 ) (admitted bool, err error) {
-	workClass := admissionpb.WorkClassFromPri(pri)
-	mode := kvflowcontrol.Mode.Get(&p.opts.Settings.SV)
-	bypass := mode == kvflowcontrol.ApplyToElastic && workClass == admissionpb.RegularWorkClass
-	if bypass {
-		p.opts.EvalWaitMetrics.OnWaiting(workClass)
-		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
-		return false, nil
-	}
 	var rc rac2.RangeController
 	func() {
 		p.leader.rcReferenceUpdateMu.RLock()
@@ -1119,6 +1109,11 @@ func (p *processorImpl) AdmitForEval(
 		rc = p.leader.rc
 	}()
 	if rc == nil {
+		workClass := admissionpb.WorkClassFromPri(pri)
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "r%v/%v bypassed request as no RC (pri=%v)",
+				p.opts.RangeID, p.opts.ReplicaID, pri)
+		}
 		p.opts.EvalWaitMetrics.OnWaiting(workClass)
 		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
@@ -1173,6 +1168,7 @@ type RangeControllerFactoryImpl struct {
 	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 	scheduler                  rac2.Scheduler
 	sendTokenWatcher           *rac2.SendTokenWatcher
+	waitForEvalConfig          *rac2.WaitForEvalConfig
 	knobs                      *kvflowcontrol.TestingKnobs
 }
 
@@ -1184,6 +1180,7 @@ func NewRangeControllerFactoryImpl(
 	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
 	scheduler rac2.Scheduler,
 	sendTokenWatcher *rac2.SendTokenWatcher,
+	waitForEvalConfig *rac2.WaitForEvalConfig,
 	knobs *kvflowcontrol.TestingKnobs,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
@@ -1194,6 +1191,7 @@ func NewRangeControllerFactoryImpl(
 		closeTimerScheduler:        closeTimerScheduler,
 		scheduler:                  scheduler,
 		sendTokenWatcher:           sendTokenWatcher,
+		waitForEvalConfig:          waitForEvalConfig,
 		knobs:                      knobs,
 	}
 }
@@ -1217,6 +1215,7 @@ func (f RangeControllerFactoryImpl) New(
 			SendTokenWatcher:       f.sendTokenWatcher,
 			EvalWaitMetrics:        f.evalWaitMetrics,
 			RangeControllerMetrics: f.rangeControllerMetrics,
+			WaitForEvalConfig:      f.waitForEvalConfig,
 			Knobs:                  f.knobs,
 		},
 		rac2.RangeControllerInitState{

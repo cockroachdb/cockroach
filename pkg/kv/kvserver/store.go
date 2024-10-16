@@ -1283,6 +1283,9 @@ type StoreConfig struct {
 	// KVFlowSendTokenWatcher is used for replication AC (flow control) v2 to
 	// watch for elastic send tokens.
 	KVFlowSendTokenWatcher *rac2.SendTokenWatcher
+	// KVFlowWaitForEvalConfig is used for configuring WaitForEval for
+	// replication AC (flow control) v2.
+	KVFlowWaitForEvalConfig *rac2.WaitForEvalConfig
 	// KVFlowEvalWaitMetrics is used for replication AC (flow control) v2 to
 	// track requests waiting for evaluation.
 	KVFlowEvalWaitMetrics *rac2.EvalWaitMetrics
@@ -1559,6 +1562,7 @@ func NewStore(
 			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
 		(*racV2Scheduler)(s.scheduler),
 		s.cfg.KVFlowSendTokenWatcher,
+		s.cfg.KVFlowWaitForEvalConfig,
 		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 

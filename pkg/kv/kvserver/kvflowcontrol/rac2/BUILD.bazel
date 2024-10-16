@@ -11,6 +11,7 @@ go_library(
         "store_stream.go",
         "token_counter.go",
         "token_tracker.go",
+        "wait_for_eval_config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2",
     visibility = ["//visibility:public"],
