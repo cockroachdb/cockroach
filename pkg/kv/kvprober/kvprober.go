@@ -367,7 +367,8 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	var finishAndGetRecording func() tracingpb.Recording
 	var probeCtx = ctx
 
-	if tracingEnabled.Get(&p.settings.SV) {
+	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "read probe")
 	}
 
@@ -425,7 +426,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 
 	d := timeutil.Since(start)
 	// Extract leaseholder information from the trace recording if enabled.
-	if tracingEnabled.Get(&p.settings.SV) {
+	if isTracingEnabled {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
 		log.Health.Infof(ctx, "kv.Get(%s), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
@@ -451,7 +452,8 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	var finishAndGetRecording func() tracingpb.Recording
 	var probeCtx = ctx
 
-	if tracingEnabled.Get(&p.settings.SV) {
+	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "write probe")
 	}
 
@@ -506,7 +508,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 
 	d := timeutil.Since(start)
 	// Extract leaseholder information from the trace recording if enabled.
-	if tracingEnabled.Get(&p.settings.SV) {
+	if isTracingEnabled {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
 		log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
