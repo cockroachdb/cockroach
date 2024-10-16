@@ -20,13 +20,12 @@ import (
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
+	Disconnector
+
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
-	// disconnect disconnects the registration with the provided error. Safe to
-	// run multiple times, but subsequent errors would be discarded.
-	disconnect(pErr *kvpb.Error)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
@@ -57,6 +56,18 @@ type registration interface {
 	// getUnreg returns the unregisterFn call back of the registration. It should
 	// be called when being unregistered from processor.
 	getUnreg() func()
+}
+
+// Disconnector defines an interface for disconnecting a registration. It is
+// returned to node.MuxRangefeed to allow node level stream manager to
+// disconnect a registration.
+type Disconnector interface {
+	// Disconnect disconnects the registration with the provided error. Safe to
+	// run multiple times, but subsequent errors would be discarded.
+	Disconnect(pErr *kvpb.Error)
+	// IsDisconnected returns whether the registration has been disconnected. Once
+	// disconnected, cannot unset.
+	IsDisconnected() bool
 }
 
 // baseRegistration is a common base for all registration types. It is intended
@@ -380,7 +391,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.disconnect(pErr)
+			r.Disconnect(pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false
