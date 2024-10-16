@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { Row } from "antd";
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -13,11 +14,13 @@ import {
   useTableMetadata,
 } from "src/api/databases/getTableMetadataApi";
 import { Badge } from "src/badge";
+import { LiveDataPercent } from "src/components/liveDataPercent/liveDataPercent";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
-import { AUTO_STATS_COLLECTION_HELP } from "src/constants/tooltipMessages";
+import { AUTO_STATS_COLLECTION_HELP } from "src/components/tooltipMessages";
+import { ClusterDetailsContext } from "src/contexts";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -33,8 +36,6 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { Timestamp } from "src/timestamp";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
-
-import { ClusterDetailsContext } from "../contexts";
 
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
@@ -67,6 +68,7 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
+    align: "right",
     render: (t: TableRow) => {
       return Bytes(t.replicationSizeBytes);
     },
@@ -74,27 +76,38 @@ const COLUMNS: (TableColumnProps<TableRow> & {
   },
   {
     title: (
-      <Tooltip title={"The number of ranges the table."}>
+      <Tooltip title={"The number of ranges in the table."}>
         {TableColName.RANGE_COUNT}
       </Tooltip>
     ),
     sorter: true,
+    align: "right",
     render: (t: TableRow) => {
       return t.rangeCount;
     },
     sortKey: TableSortOption.RANGES,
   },
   {
-    title: TableColName.COLUMN_COUNT,
+    title: (
+      <Tooltip title={"The number of columns the table."}>
+        {TableColName.COLUMN_COUNT}
+      </Tooltip>
+    ),
     sorter: true,
+    align: "right",
     render: (t: TableRow) => {
       return t.columnCount;
     },
     sortKey: TableSortOption.COLUMNS,
   },
   {
-    title: TableColName.INDEX_COUNT,
+    title: (
+      <Tooltip title={"The number of indexes in the table."}>
+        {TableColName.INDEX_COUNT}
+      </Tooltip>
+    ),
     sorter: true,
+    align: "right",
     render: (t: TableRow) => {
       // We always include the primary index.
       return t.indexCount;
@@ -108,6 +121,7 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     hideIfTenant: true,
+    width: "fit-content",
     render: (t: TableRow) => (
       <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
     ),
@@ -123,15 +137,14 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     sorter: true,
+    align: "right",
     sortKey: TableSortOption.LIVE_DATA,
     render: (t: TableRow) => {
       return (
-        <div>
-          <div>{(t.percentLiveData * 100).toFixed(2)}%</div>
-          <div>
-            {Bytes(t.totalLiveDataBytes)} / {Bytes(t.totalDataBytes)}
-          </div>
-        </div>
+        <LiveDataPercent
+          liveBytes={t.totalLiveDataBytes}
+          totalBytes={t.totalDataBytes}
+        />
       );
     },
   },
@@ -142,6 +155,7 @@ const COLUMNS: (TableColumnProps<TableRow> & {
       </Tooltip>
     ),
     sorter: false,
+    align: "center",
     render: (t: TableRow) => {
       const type = t.autoStatsEnabled ? "success" : "default";
       const text = t.autoStatsEnabled ? "ENABLED" : "DISABLED";
@@ -294,18 +308,18 @@ export const TablesPageV2 = () => {
         </PageConfig>
       </PageSection>
       <PageSection>
-        <PageCount
-          page={params.pagination.page}
-          pageSize={params.pagination.pageSize}
-          total={data?.pagination.totalResults ?? 0}
-          entity="tables"
-        />
+        <Row align={"middle"} justify={"space-between"}>
+          <PageCount
+            page={params.pagination.page}
+            pageSize={params.pagination.pageSize}
+            total={data?.pagination.totalResults ?? 0}
+            entity="tables"
+          />
+          <TableMetadataJobControl onJobComplete={refreshTables} />
+        </Row>
         <Table
           loading={isLoading}
           error={error}
-          actionButton={
-            <TableMetadataJobControl onJobComplete={refreshTables} />
-          }
           columns={colsWithSort}
           dataSource={tableData}
           pagination={{
