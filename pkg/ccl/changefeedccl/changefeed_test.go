@@ -9529,7 +9529,10 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	verifyFunc := func() {}
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer verifyFunc()
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		// Checkpoint and trigger potential protected timestamp updates frequently.
 		// Make the protected timestamp lag long enough that it shouldn't be
@@ -9594,5 +9597,13 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		require.Less(t, ts, ts2)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
+		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		}
+		verifyFunc = vf
+	})
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }

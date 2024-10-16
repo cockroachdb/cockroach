@@ -29,10 +29,6 @@ targets:
           username: drt
           lifetime: 8760h
           gce-image: "ubuntu-2204-jammy-v20240319"
-        on_rollback:
-          - command: destroy
-            args:
-              - $CLUSTER
       - command: sync
         flags:
           clouds: gce
@@ -90,6 +86,10 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
       - command: get
         args:
           - $CLUSTER:1
