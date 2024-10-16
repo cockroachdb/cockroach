@@ -1,0 +1,54 @@
+# Test that release-blocker label doesn't exist when the issue is an SSH flake.
+# Also ensure that in the event of a failed cluster creation, nil `vmOptions` and
+# `clusterImpl` are not dereferenced
+
+add-failure name=(gcloud error) type=(ssh-flake)
+----
+ok
+
+set-cluster-create-failed
+----
+ok
+
+post
+----
+----
+roachtest.ssh_problem [failed]() on test_branch @ [test_SHA](). A Side-Eye cluster snapshot was captured on timeout: [https://app.side-eye.io/snapshots/1](https://app.side-eye.io/snapshots/1).
+
+
+```
+test github_test failed: TRANSIENT_ERROR(ssh_problem): gcloud error
+```
+
+Parameters:
+ - <code>ROACHTEST_cloud=gce</code>
+ - <code>ROACHTEST_coverageBuild=false</code>
+ - <code>ROACHTEST_cpu=4</code>
+ - <code>ROACHTEST_runtimeAssertionsBuild=false</code>
+ - <code>ROACHTEST_ssd=0</code>
+<details><summary>Help</summary>
+<p>
+
+
+See: [roachtest README](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md)
+
+
+
+See: [How To Investigate \(internal\)](https://cockroachlabs.atlassian.net/l/c/SSSBr8c7)
+
+</p>
+</details>
+/cc @cockroachdb/test-eng
+<sub>
+
+[This test on roachdash](https://roachdash.crdb.dev/?filter=status:open%20t:.*ssh_problem.*&sort=title+created&display=lastcommented+project) | [Improve this report!](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/bazci/githubpost/issues)
+
+</sub>
+
+------
+Labels:
+- <code>O-roachtest</code>
+- <code>X-infra-flake</code>
+- <code>T-testeng</code>
+----
+----
