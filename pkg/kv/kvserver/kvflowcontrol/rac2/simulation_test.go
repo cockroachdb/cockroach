@@ -929,7 +929,7 @@ func (rot *rcOpTicker) tick(ctx context.Context, t time.Time) {
 		rid := rot.handle.testingFindReplStreamOrFatal(ctx, rot.stream)
 		rs := rot.handle.rc.replicaMap[rid]
 		if rs.sendStream != nil {
-			data = rs.sendStream.mu.tracker.testingString()
+			data = rs.sendStream.raftMu.tracker.testingString()
 		}
 		rot.handle.snapshots = append(rot.handle.snapshots, testingTrackerSnapshot{
 			time:   t,
@@ -1136,9 +1136,9 @@ func (r *testingRCRange) testingReturnTokens(
 	raftPri := AdmissionToRaftPriority(pri)
 	returnIndex := uint64(0)
 	r.mu.outstandingReturns[rid] += tokens
-	n := rs.sendStream.mu.tracker.tracked[raftPri].Length()
+	n := rs.sendStream.raftMu.tracker.tracked[raftPri].Length()
 	for i := 0; i < n; i++ {
-		deduction := rs.sendStream.mu.tracker.tracked[raftPri].At(i)
+		deduction := rs.sendStream.raftMu.tracker.tracked[raftPri].At(i)
 		if r.mu.outstandingReturns[rid]-deduction.tokens >= 0 {
 			r.mu.outstandingReturns[rid] -= deduction.tokens
 			returnIndex = deduction.id.index
