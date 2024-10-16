@@ -246,7 +246,7 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		fmt.Fprintf(&b, "eval original in send-q: reg=%v ela=%v\n",
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass],
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.ElasticWorkClass])
-		b.WriteString(formatTrackerState(&rss.mu.tracker))
+		b.WriteString(formatTrackerState(&rss.raftMu.tracker))
 		b.WriteString("++++\n")
 	}
 

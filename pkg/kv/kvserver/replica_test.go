@@ -9913,7 +9913,7 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) hasSendTokensRaftMuLocked() bool {
+func (q *testQuiescer) hasSendTokensRaftMuLockedReplicaMuLocked() bool {
 	return q.sendTokens
 }
 
