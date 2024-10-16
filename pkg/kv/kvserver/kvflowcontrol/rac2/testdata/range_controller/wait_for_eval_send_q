@@ -194,7 +194,7 @@ NormalPri:
   term=1 index=4  tokens=1048576
 ++++
 
-# Since there is a quorum with no send-queue (replicas 1 and 2), the evalution
+# Since there is a quorum with no send-queue (replicas 1 and 2), the evaluation
 # of c completes.
 check_state
 ----
