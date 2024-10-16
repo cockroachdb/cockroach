@@ -1451,7 +1451,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	require.NoError(t, s3.RangeFeed(sink.ctx, &req, sink)) // check if we've errored yet
+	_, rErr := s3.RangeFeed(sink.ctx, &req, sink)
+	require.NoError(t, rErr) // check if we've errored yet
 	require.NoError(t, sink.Error())
 	t.Logf("started rangefeed on %s", repl3)
 
@@ -1645,9 +1646,8 @@ func (c *channelSink) Error() error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *channelSink) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *channelSink) SendError(err *kvpb.Error) {
 	c.done <- err
 }
 

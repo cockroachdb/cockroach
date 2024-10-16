@@ -192,7 +192,8 @@ type Processor interface {
 		withOmitRemote bool,
 		stream Stream,
 		disconnectFn func(),
-	) (bool, *Filter)
+	) (bool, Disconnector, *Filter)
+
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
 	DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error)
