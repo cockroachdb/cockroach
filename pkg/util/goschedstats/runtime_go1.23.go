@@ -167,6 +167,8 @@ type schedt struct {
 	// The rest of the fields aren't important.
 }
 
+type m struct{}
+
 //go:linkname allp runtime.allp
 var allp []*p
 
@@ -179,7 +181,15 @@ func lock(l *mutex)
 //go:linkname unlock runtime.unlock
 func unlock(l *mutex)
 
+//go:linkname acquirem runtime.acquirem
+func acquirem() *m
+
+//go:linkname releasem runtime.releasem
+func releasem(*m)
+
 func numRunnableGoroutines() (numRunnable int, numProcs int) {
+	// Disable preemption.
+	mp := acquirem()
 	lock(&sched.lock)
 	numRunnable = int(sched.runqsize)
 	numProcs = len(allp)
@@ -205,5 +215,6 @@ func numRunnableGoroutines() (numRunnable int, numProcs int) {
 		}
 	}
 	unlock(&sched.lock)
+	releasem(mp)
 	return numRunnable, numProcs
 }
