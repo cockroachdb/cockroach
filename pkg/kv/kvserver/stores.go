@@ -204,7 +204,9 @@ func (ls *Stores) SendWithWriteBytes(
 // RangeFeed registers a rangefeed over the specified span. It sends
 // updates to the provided stream and returns a future with an optional error
 // when the rangefeed is complete.
-func (ls *Stores) RangeFeed(streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream) error {
+func (ls *Stores) RangeFeed(
+	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream,
+) error {
 	if args.RangeID == 0 {
 		log.Fatal(streamCtx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {

@@ -3232,7 +3232,9 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
-func (s *Store) RangeFeed(streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream) error {
+func (s *Store) RangeFeed(
+	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream,
+) error {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
 			return pErr.GoError()
