@@ -53,16 +53,16 @@
   transform: scaleY(0);
 }
 
-:global(.ant-radio) {
+:global(.crl-ant-radio) {
   top: 0;
 }
 
-:global(.ant-radio-checked .ant-radio-inner) {
+:global(.crl-ant-radio-checked .crl-ant-radio-inner) {
   background-color: $colors--link;
   border-color: $colors--link;
 }
 
-:global(.ant-radio-checked .ant-radio-inner::after) {
+:global(.crl-ant-radio-checked .crl-ant-radio-inner::after) {
   background-color: white;
   height: 6px;
   width: 6px;
