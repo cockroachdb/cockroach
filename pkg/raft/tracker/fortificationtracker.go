@@ -35,6 +35,12 @@ type FortificationTracker struct {
 	// a leader at since it was restarted.
 	term uint64
 
+	// fortificationEnabledForTerm tracks whether fortification was enabled or not
+	// at any point for the leadership term being tracked in the
+	// FortificationTracker. If it was, we must conservatively assume that the
+	// raft leader attempted to fortify its term, and save this state.
+	fortificationEnabledForTerm bool
+
 	// fortification contains a map of nodes which have fortified the leader
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
@@ -76,10 +82,18 @@ func NewFortificationTracker(
 	return &st
 }
 
-// FortificationEnabled returns whether the raft fortification protocol is
-// enabled or not.
-func (ft *FortificationTracker) FortificationEnabled() bool {
-	return ft.storeLiveness.SupportFromEnabled()
+// FortificationEnabledForTerm returns whether the raft fortification should be
+// enabled for the term being tracked in the FortificationTracker.
+//
+// NB: Fortification may be enabled while a leadership term is in progress.
+// However, once fortification has been enabled for a term, it will never flip
+// back.
+func (ft *FortificationTracker) FortificationEnabledForTerm() bool {
+	if !ft.fortificationEnabledForTerm {
+		// Check whether fortification has been enabled.
+		ft.fortificationEnabledForTerm = ft.storeLiveness.SupportFromEnabled()
+	}
+	return ft.fortificationEnabledForTerm
 }
 
 // RecordFortification records fortification of the given peer for the supplied
@@ -94,6 +108,7 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 // fortification tracker to be used by a newly elected leader.
 func (ft *FortificationTracker) Reset(term uint64) {
 	ft.term = term
+	ft.fortificationEnabledForTerm = false
 	clear(ft.fortification)
 	ft.leaderMaxSupported.Reset()
 }
