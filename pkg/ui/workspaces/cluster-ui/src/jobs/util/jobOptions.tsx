@@ -22,13 +22,13 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
-  if (
-    job.type === "REPLICATION STREAM PRODUCER" ||
-    job.type === "LOGICAL REPLICATION INGESTION"
-  ) {
+  if (job.type === "REPLICATION STREAM PRODUCER") {
     return JobStatusVisual.BadgeOnly;
   }
-  if (job.type === "REPLICATION STREAM INGESTION") {
+  if (
+    job.type === "REPLICATION STREAM INGESTION" ||
+    job.type === "LOGICAL REPLICATION"
+  ) {
     return jobToVisualForReplicationIngestion(job);
   }
   switch (job.status) {
