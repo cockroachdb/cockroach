@@ -29,6 +29,9 @@ import (
 // Replica abstracts kvserver.Replica. It exposes internal implementation
 // details of Replica, specifically the locking behavior, since it is
 // essential to reason about correctness.
+//
+// TODO(sumeer): because the mutex assertions are hidden behind an interface,
+// they are not free for production builds. Fix, and then add more assertions.
 type Replica interface {
 	// RaftMuAssertHeld asserts that Replica.raftMu is held.
 	RaftMuAssertHeld()
@@ -204,9 +207,9 @@ type SideChannelInfoUsingRaftMessageRequest struct {
 // We *strongly* prefer methods to be called without holding Replica.mu, since
 // then the callee (implementation of Processor) does not need to worry about
 // (a) deadlocks, since it sometimes needs to lock Replica.mu itself, (b) the
-// amount of work it is doing under this critical section. There are two
+// amount of work it is doing under this critical section. There are three
 // exceptions to this, due to difficulty in changing the calling code:
-// InitRaftLocked, OnDescChangedLocked.
+// InitRaftLocked, OnDescChangedLocked, HoldsSendTokensLocked.
 type Processor interface {
 	// InitRaftLocked is called when raft.RawNode is initialized for the
 	// Replica. NB: can be called twice before the Replica is fully initialized.
@@ -329,11 +332,11 @@ type Processor interface {
 	//
 	// raftMu is held.
 	MaybeSendPingsRaftMuLocked()
-	// HoldsSendTokensRaftMuLocked returns true if the replica is the leader using
+	// HoldsSendTokensLocked returns true if the replica is the leader using
 	// RACv2, and holds any send tokens. Used to prevent replica quiescence.
 	//
-	// raftMu is held.
-	HoldsSendTokensRaftMuLocked() bool
+	// Both Replica.raftMu and Replica.mu are held.
+	HoldsSendTokensLocked() bool
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -1091,11 +1094,12 @@ func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
 	}
 }
 
-// HoldsSendTokensRaftMuLocked implements Processor.
-func (p *processorImpl) HoldsSendTokensRaftMuLocked() bool {
+// HoldsSendTokensLocked implements Processor.
+func (p *processorImpl) HoldsSendTokensLocked() bool {
 	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.Replica.MuAssertHeld()
 	if rc := p.leader.rc; rc != nil {
-		return rc.HoldsSendTokensRaftMuLocked()
+		return rc.HoldsSendTokensLocked()
 	}
 	return false
 }
