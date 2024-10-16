@@ -128,6 +128,7 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.7
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
+	github.com/cockroachdb/crlib v0.0.0-20241015224233-894974b3ad94
 	github.com/cockroachdb/datadriven v1.0.3-0.20240530155848-7682d40af056
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce
@@ -303,7 +304,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/crlib v0.0.0-20241015224233-894974b3ad94 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect

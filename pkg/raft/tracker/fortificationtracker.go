@@ -148,6 +148,23 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 		return ft.leaderMaxSupported.Load()
 	}
 
+	// Compute the lead support using the current configuration and forward the
+	// leaderMaxSupported to avoid regressions when the configuration changes.
+	leadSupportUntil := ft.computeLeadSupportUntil(state)
+	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+}
+
+// computeLeadSupportUntil computes the timestamp until which the leader is
+// guaranteed fortification using the current quorum configuration.
+//
+// Unlike LeadSupportUntil, this computation does not provide a guarantee of
+// monotonicity. Specifically, its result may regress after a configuration
+// change.
+func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.Timestamp {
+	if state != pb.StateLeader {
+		panic("computeLeadSupportUntil should only be called by the leader")
+	}
+
 	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
@@ -162,9 +179,7 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 			supportExpMap[id] = curExp
 		}
 	}
-
-	leadSupportUntil := ft.config.Voters.LeadSupportExpiration(supportExpMap)
-	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
 // CanDefortify returns whether the caller can safely[1] de-fortify the term
@@ -174,6 +189,9 @@ func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timesta
 // the layers above. Or, more simply, without risking regression of leader
 // leases.
 func (ft *FortificationTracker) CanDefortify() bool {
+	if ft.term == 0 {
+		return false // nothing is being tracked
+	}
 	leaderMaxSupported := ft.leaderMaxSupported.Load()
 	if leaderMaxSupported.IsEmpty() {
 		// If leaderMaxSupported is empty, it means that we've never returned any
@@ -182,6 +200,61 @@ func (ft *FortificationTracker) CanDefortify() bool {
 		ft.logger.Debugf("leaderMaxSupported is empty when computing whether we can de-fortify or not")
 	}
 	return ft.storeLiveness.SupportExpired(leaderMaxSupported)
+}
+
+// ConfigChangeSafe returns whether it is safe to propose a configuration change
+// or not, given the current state of lead support.
+//
+// If the lead support has not caught up from the previous configuration, we
+// must not propose another configuration change. Doing so would compromise the
+// lead support promise made by the previous configuration and used as an
+// expiration of a leader lease. Instead, we wait for the lead support under the
+// current configuration to catch up to the maximum lead support reached under
+// the previous config. If the lead support is never able to catch up, the
+// leader will eventually step down due to CheckQuorum.
+//
+// The following timeline illustrates the hazard that this check is guarding
+// against:
+//
+// 1. configuration A=(r1, r2, r3), leader=r1
+//   - lead_support=20 (r1=30, r2=20, r3=10)
+//
+// 2. config change #1 adds r4 to the group
+//   - configuration B=(r1, r2, r3, r4)
+//
+// 3. lead support appears to regress to 10
+//   - lead_support=10 (r1=30, r2=20, r3=10, r4=0)
+//
+// 4. any majority quorum for leader election involves r1 or r2
+//   - therefore, max lead support of 20 is “safe”
+//   - this is analogous to how the raft Leader Completeness invariant works
+//     even across config changes, using either (1) single addition/removal
+//     at-a-time changes, or (2) joint consensus. Either way, consecutive
+//     configs share overlapping majorities.
+//
+// 5. config change #2 adds r5 to the group
+//   - configuration C=(r1, r2, r3, r4, r5)
+//
+// 6. lead_support still at 10
+//   - lead_support=10 (r1=30, r2=20, r3=10, r4=0, r5=0)
+//   - however, max lead support of 20 no longer “safe”
+//
+// 7. r3 can win election with support from r4 and r5 before time 20
+//   - neither r1 nor r2 need to be involved
+//   - HAZARD! this could violate the original lead support promise
+//
+// To avoid this hazard, we must wait for the lead support under configuration B
+// to catch up to the maximum lead support reached under configuration A before
+// allowing the proposal of configuration C. This ensures that the overlapping
+// majorities between subsequent configurations preserve the safety of lead
+// support.
+func (ft *FortificationTracker) ConfigChangeSafe() bool {
+	// A configuration change is only safe if the current configuration's lead
+	// support has caught up to the maximum lead support reached under the
+	// previous configuration, which is reflected in leaderMaxSupported.
+	//
+	// NB: Only run by the leader.
+	return ft.leaderMaxSupported.Load().LessEq(ft.computeLeadSupportUntil(pb.StateLeader))
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or

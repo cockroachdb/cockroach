@@ -473,6 +473,12 @@ func TestCanDefortify(t *testing.T) {
 			// we should be able to de-fortify.
 			expCanDefortify: true,
 		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.term = 0 // empty term; nothing is being tracked in the fortification tracker
+			},
+			expCanDefortify: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -484,11 +490,142 @@ func TestCanDefortify(t *testing.T) {
 		}
 		ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
 
+		ft.Reset(10) // set non-zero term
 		tc.setup(ft)
 		if !tc.expLeadSupportUntil.IsEmpty() {
 			require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
 		}
 		require.Equal(t, tc.expCanDefortify, ft.CanDefortify())
+	}
+}
+
+// TestConfigChangeSafe tests whether a leader can safely propose a config
+// change.
+func TestConfigChangeSafe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+
+	testCases := []struct {
+		afterConfigChange   func(sl *mockStoreLiveness, tracker *FortificationTracker)
+		expConfigChangeSafe bool
+		expLeadSupportUntil hlc.Timestamp
+	}{
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// Nothing. r4 not providing store liveness support or fortified.
+			},
+			expConfigChangeSafe: false,
+			expLeadSupportUntil: ts(15), // clamped at 15
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 providing store liveness support but not fortified.
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(5))
+			},
+			expConfigChangeSafe: false,
+			expLeadSupportUntil: ts(15), // clamped at 15
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 fortified at earlier epoch.
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(5))
+				ft.RecordFortification(4, 39)
+			},
+			expConfigChangeSafe: false,
+			expLeadSupportUntil: ts(15), // clamped at 15
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 fortified, but support still lagging.
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(5))
+				ft.RecordFortification(4, 40)
+			},
+			expConfigChangeSafe: false,
+			expLeadSupportUntil: ts(15), // clamped at 15
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 fortified, support caught up.
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(15))
+				ft.RecordFortification(4, 40)
+			},
+			expConfigChangeSafe: true,
+			expLeadSupportUntil: ts(15),
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 fortified, support caught up.
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(25))
+				ft.RecordFortification(4, 40)
+			},
+			expConfigChangeSafe: true,
+			expLeadSupportUntil: ts(15),
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 fortified, support beyond previous config.
+				sl.liveness[2] = makeMockLivenessEntry(20, ts(25))
+				sl.liveness[4] = makeMockLivenessEntry(40, ts(25))
+				ft.RecordFortification(4, 40)
+			},
+			expConfigChangeSafe: true,
+			expLeadSupportUntil: ts(20),
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 not providing store liveness support or fortified. However,
+				// support from other peers caught up.
+				sl.liveness[1] = makeMockLivenessEntry(10, ts(15))
+			},
+			expConfigChangeSafe: true,
+			expLeadSupportUntil: ts(15),
+		},
+		{
+			afterConfigChange: func(sl *mockStoreLiveness, ft *FortificationTracker) {
+				// r4 not providing store liveness support or fortified. However,
+				// support from other peers beyond previous config.
+				sl.liveness[1] = makeMockLivenessEntry(10, ts(20))
+				sl.liveness[2] = makeMockLivenessEntry(20, ts(20))
+			},
+			expConfigChangeSafe: true,
+			expLeadSupportUntil: ts(20),
+		},
+	}
+
+	for _, tc := range testCases {
+		mockLiveness := makeMockStoreLiveness(
+			map[pb.PeerID]mockLivenessEntry{
+				1: makeMockLivenessEntry(10, ts(10)),
+				2: makeMockLivenessEntry(20, ts(15)),
+				3: makeMockLivenessEntry(30, ts(20)),
+			},
+		)
+
+		cfg := quorum.MakeEmptyConfig()
+		for _, id := range []pb.PeerID{1, 2, 3} {
+			cfg.Voters[0][id] = struct{}{}
+		}
+		ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
+
+		// Fortify the leader before the configuration change.
+		ft.RecordFortification(1, 10)
+		ft.RecordFortification(2, 20)
+		ft.RecordFortification(3, 30)
+		require.Equal(t, ts(15), ft.LeadSupportUntil(pb.StateLeader))
+
+		// Perform a configuration change that adds r4 to the voter set.
+		cfg.Voters[0][4] = struct{}{}
+
+		tc.afterConfigChange(&mockLiveness, ft)
+
+		require.Equal(t, tc.expConfigChangeSafe, ft.ConfigChangeSafe())
+		require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))
 	}
 }
 
