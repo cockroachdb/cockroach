@@ -6,6 +6,6 @@
 export enum DatabaseColName {
   NAME = "Name",
   SIZE = "Size",
-  TABLE_COUNT = "Table Count",
+  TABLE_COUNT = "Tables",
   NODE_REGIONS = "Regions / Nodes",
 }

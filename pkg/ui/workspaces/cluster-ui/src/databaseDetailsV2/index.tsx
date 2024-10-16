@@ -57,25 +57,23 @@ export const DatabaseDetailsPageV2 = () => {
     },
   ];
 
-  const dbName =
-    error?.status === 404 || !data
-      ? "Database Not Found"
-      : data.metadata.dbName;
+  const dbName = isLoading ? (
+    <Skeleton paragraph={false} title={{ width: 100 }} />
+  ) : (
+    data?.metadata.dbName ?? "Database Not Found"
+  );
 
   const breadCrumbItems = [
     { name: "Databases", link: DB_PAGE_PATH },
     {
-      name: dbName,
-      link: null,
+      name: <>Database: {dbName}</>,
+      link: "",
     },
   ];
 
   return (
     <PageLayout>
-      <PageHeader
-        breadcrumbItems={breadCrumbItems}
-        title={<Skeleton loading={isLoading}>{dbName}</Skeleton>}
-      />
+      <PageHeader breadcrumbItems={breadCrumbItems} title={dbName} />
       <Tabs
         defaultActiveKey={TabKeys.TABLES}
         className={commonStyles("cockroach--tabs")}

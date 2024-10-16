@@ -131,34 +131,33 @@ export const TableIndexesView: React.FC<Props> = ({
     return refreshIndexStats();
   };
 
-  const lastResetAction = (
-    <Row align={"middle"}>
-      <Tooltip
-        title={`Index stats accumulate from the time the index was created or had its stats reset. 
+  return (
+    <div>
+      <Row align={"middle"} justify={"end"}>
+        <Tooltip
+          title={`Index stats accumulate from the time the index was created or had its stats reset. 
           Clicking ‘Reset all index stats’ will reset index stats for the entire cluster. Last 
           reset is the timestamp at which the last reset started.`}
-      >
-        Last reset:{" "}
-        <Timestamp
-          format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-          time={indexStats.lastReset}
-          fallback={"Never"}
+        >
+          Last reset:{" "}
+          <Timestamp
+            format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+            time={indexStats.lastReset}
+            fallback={"Never"}
+          />
+        </Tooltip>
+        <Button
+          category={"tertiary"}
+          onClick={resetAllIndexStats}
+          text={"Reset all index stats"}
         />
-      </Tooltip>
-      <Button
-        category={"tertiary"}
-        onClick={resetAllIndexStats}
-        text={"Reset all index stats"}
-      />
-    </Row>
-  );
+      </Row>
 
-  return (
-    <Table
-      actionButton={lastResetAction}
-      loading={isLoading}
-      columns={COLUMNS}
-      dataSource={tableIndexRows}
-    />
+      <Table
+        loading={isLoading}
+        columns={COLUMNS}
+        dataSource={tableIndexRows}
+      />
+    </div>
   );
 };
