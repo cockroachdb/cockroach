@@ -8,7 +8,7 @@
 // using a version of Go prior to 1.23, or are using our fork that has more
 // permissive logic for go:linkname.
 //
-//go:build bazel || (gc && !go1.23)
+//go:build bazel || (gc && !go1.23) || untested_go_version
 
 package goschedstats
 
