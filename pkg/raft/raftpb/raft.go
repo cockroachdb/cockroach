@@ -24,6 +24,12 @@ type Epoch int64
 // SafeValue implements the redact.SafeValue interface.
 func (e Epoch) SafeValue() {}
 
+// The enums in raft are all safe for redaction.
+func (MessageType) SafeValue()          {}
+func (EntryType) SafeValue()            {}
+func (ConfChangeType) SafeValue()       {}
+func (ConfChangeTransition) SafeValue() {}
+
 // Priority specifies per-entry priorities, that are local to the interaction
 // between a leader-replica pair, i.e., they are not an invariant of a
 // particular entry in the raft log (the replica could be the leader itself or
