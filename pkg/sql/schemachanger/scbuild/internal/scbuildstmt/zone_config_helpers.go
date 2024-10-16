@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -652,10 +651,6 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 func generateSubzoneSpans(
 	b BuildCtx, tableID catid.DescID, subzones []zonepb.Subzone,
 ) ([]zonepb.SubzoneSpan, error) {
-	if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
-		"replication zones on indexes or partitions"); err != nil {
-		return nil, err
-	}
 	// We already completely avoid creating subzone spans for dropped indexes.
 	// Whether this was intentional is a different story, but it turns out to be
 	// pretty sane. Dropped elements may refer to dropped types and we aren't
