@@ -66,7 +66,7 @@ func NewBufferedSender(
 
 // SendBuffered buffers the event before sending them to the underlying
 // ServerStreamSender.
-func (bs *BufferedSender) SendBuffered(
+func (bs *BufferedSender) sendBuffered(
 	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
 	panic("unimplemented: buffered sender for rangefeed #126560")
@@ -75,14 +75,22 @@ func (bs *BufferedSender) SendBuffered(
 // SendUnbuffered bypasses the buffer and sends the event to the underlying
 // ServerStreamSender directly. Note that this can cause event re-ordering.
 // Caller is responsible for ensuring that events are sent in order.
-func (bs *BufferedSender) SendUnbuffered(
-	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+func (bs *BufferedSender) sendUnbuffered(
+	event *kvpb.MuxRangeFeedEvent,
 ) error {
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }
 
+// Left here to implement but to be removed and replaced with a Disconnect
+// interface.
 func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
-	// Disconnect stream and cancel context. Then call SendBuffered with the error
+	// Disconnect stream and cancel context. Then call sendBuffered with the error
+	// event.
+	panic("unimplemented: buffered sender for rangefeed #126560")
+}
+
+func (bs *BufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+	// Disconnect stream and cancel context. Then call sendBuffered with the error
 	// event.
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }

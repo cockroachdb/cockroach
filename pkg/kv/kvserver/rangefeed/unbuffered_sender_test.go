@@ -59,7 +59,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		ubs.AddStream(streamID, cancel)
 		// Note that kvpb.NewError(nil) == nil.
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
-		ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
+		ubs.sendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
 			kvpb.NewError(nil)))
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 		require.Equal(t, context.Canceled, streamCtx.Err())
@@ -75,7 +75,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		require.True(t, testServerStream.hasEvent(expectedErrEvent))
 
 		// Repeat closing the stream does nothing.
-		ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
+		ubs.sendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
 			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
 		time.Sleep(10 * time.Millisecond)
 		require.Equalf(t, 1, testServerStream.totalEventsSent(), testServerStream.String())
@@ -105,7 +105,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			wg.Add(1)
 			go func(streamID int64, rangeID roachpb.RangeID, err error) {
 				defer wg.Done()
-				ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)))
+				ubs.sendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)))
 			}(muxError.streamID, muxError.rangeID, muxError.Error)
 		}
 		wg.Wait()
@@ -168,7 +168,7 @@ func TestUnbufferedSenderOnBlockingIO(t *testing.T) {
 
 	// Although stream is blocked, we should be able to disconnect the stream
 	// without blocking.
-	ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
+	ubs.sendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
 		kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER))))
 	require.Equal(t, streamCtx.Err(), context.Canceled)
 	unblock()
@@ -213,7 +213,7 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 			val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 			ev1 := new(kvpb.RangeFeedEvent)
 			ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
-			require.NoError(t, ubs.SendUnbuffered(&kvpb.MuxRangeFeedEvent{
+			require.NoError(t, ubs.sendUnbuffered(&kvpb.MuxRangeFeedEvent{
 				StreamID:       1,
 				RangeID:        1,
 				RangeFeedEvent: *ev1,

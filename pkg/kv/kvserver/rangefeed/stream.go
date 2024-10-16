@@ -23,17 +23,26 @@ type Stream interface {
 	Disconnect(err *kvpb.Error)
 }
 
+type unbufferedSender interface {
+	sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
+	sendBufferedError(ev *kvpb.MuxRangeFeedEvent)
+}
+
+type bufferedSender interface {
+	sendBuffered(event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error
+}
+
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *UnbufferedSender
+	wrapped  unbufferedSender
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped unbufferedSender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		ctx:      ctx,
@@ -61,7 +70,7 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendUnbuffered(response)
+	return s.wrapped.sendUnbuffered(response)
 }
 
 // Disconnect implements the Stream interface. It requests the UnbufferedSender
@@ -76,7 +85,7 @@ func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	s.wrapped.SendBufferedError(ev)
+	s.wrapped.sendBufferedError(ev)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client
