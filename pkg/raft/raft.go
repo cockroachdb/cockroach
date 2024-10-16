@@ -1653,8 +1653,6 @@ func stepLeader(r *raft, m pb.Message) error {
 
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
-	case pb.MsgFortifyLeaderResp:
-		r.handleFortifyResp(m)
 	}
 
 	// All other message types require a progress for m.From (pr).
@@ -1848,6 +1846,18 @@ func stepLeader(r *raft, m pb.Message) error {
 				}
 			}
 		}
+
+	case pb.MsgFortifyLeaderResp:
+		r.handleFortifyResp(m)
+		// We do the same as we do when receiving a MsgHeartbeatResp.
+		// NB: We ignore self-addressed messages as we don't send MsgApp to
+		// ourselves.
+		if m.From != r.id {
+			pr.RecentActive = true
+			pr.MsgAppProbesPaused = false
+			r.maybeSendAppend(m.From)
+		}
+
 	case pb.MsgHeartbeatResp:
 		pr.RecentActive = true
 		pr.MsgAppProbesPaused = false
