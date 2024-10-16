@@ -355,13 +355,7 @@ func (p *planner) dropIndexByName(
 
 	for _, s := range zone.Subzones {
 		if s.IndexID != uint32(idx.GetID()) {
-			_, err = GenerateSubzoneSpans(
-				p.ExecCfg().Settings,
-				p.ExecCfg().Codec,
-				tableDesc,
-				zone.Subzones,
-				false, /* newSubzones */
-			)
+			_, err = GenerateSubzoneSpans(p.ExecCfg().Codec, tableDesc, zone.Subzones)
 			if sqlerrors.IsCCLRequiredError(err) {
 				return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
 					"because table %q has at least one remaining index or partition with a zone config",
