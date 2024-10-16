@@ -260,7 +260,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 				continue
 			}
 
-			if len(dependent.ColumnIDs) > 0 {
+			if dependent.ColumnIDs != nil && len(dependent.ColumnIDs) > 0 {
 				// If we reach here, it means this sequence is depended on by a column in `t`
 				// in its default expression. Remove that column's default expression.
 				err = dropDefaultExprInDepColsOnSeq(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)

@@ -15,14 +15,7 @@
 //
 // The untested_go_version flag enables building on any go version, intended to
 // ease testing against Go at tip.
-//
-// This code will not build with the upstream Go version as we need to use `go:linkname`
-// on internal runtime symbols, which as of Go 1.23 is forbidden [2].
-// We use build tags to only use this logic if we are using our forked Go runtime.
-//
-// [2] https://tip.golang.org/doc/go1.23#linker
-//
-//go:build (bazel && gc && go1.23 && !go1.24) || untested_go_version
+//go:build (gc && go1.23 && !go1.24) || untested_go_version
 
 package goschedstats
 

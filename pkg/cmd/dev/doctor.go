@@ -291,15 +291,14 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 	{
 		name: "nogo_configured",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			configured := d.checkUsingConfig(cfg.workspace, "lintonbuild") ||
-				d.checkUsingConfig(cfg.workspace, "nolintonbuild")
-			if !configured {
+			err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
+			if err != nil {
 				return "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
 This may be because you haven't configured whether to run lints during builds.
 Put EXACTLY ONE of the following lines in your .bazelrc.user:
-    build --config=lintonbuild
+    build --config lintonbuild
         OR
-    build --config=nolintonbuild
+    build --config nolintonbuild
 The former will run lint checks while you build. This will make incremental builds
 slightly slower and introduce a noticeable delay in first-time build setup.`
 			}

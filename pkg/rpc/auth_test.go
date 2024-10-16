@@ -60,7 +60,7 @@ func (s *mockServerStream) RecvMsg(m interface{}) error {
 func TestWrappedServerStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ss := mockServerStream{1, 2, 3}
-	ctx := context.WithValue(context.Background(), &contextKeyPtr, "v")
+	ctx := context.WithValue(context.Background(), struct{}{}, "v")
 
 	var recv int
 	wrappedI := rpc.TestingNewWrappedServerStream(ctx, &ss, func(m interface{}) error {
@@ -1162,7 +1162,3 @@ func (m mockAuthorizer) HasNodelocalStorageCapability(
 func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
 	return m.hasExemptFromRateLimiterCapability
 }
-
-type contextKey struct{}
-
-var contextKeyPtr contextKey

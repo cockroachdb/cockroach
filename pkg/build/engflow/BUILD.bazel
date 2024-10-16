@@ -11,7 +11,7 @@ go_library(
         "//pkg/build/util",
         "//pkg/cmd/bazci/githubpost",
         "//pkg/cmd/bazci/githubpost/issues",
-        "@com_github_golang_protobuf//proto",
+        "@com_github_golang_protobuf//proto:go_default_library",
         "@org_golang_x_net//http2",
     ],
 )
