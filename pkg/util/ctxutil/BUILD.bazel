@@ -6,7 +6,6 @@ go_library(
         "canceler_1_20.go",
         "canceler_1_21_bazel.go",
         "context.go",
-        "context_linkname.go",
         "doc.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
@@ -20,10 +19,7 @@ go_library(
 
 go_test(
     name = "ctxutil_test",
-    srcs = [
-        "context_linkname_test.go",
-        "context_test.go",
-    ],
+    srcs = ["context_test.go"],
     embed = [":ctxutil"],
     deps = [
         "//pkg/util/leaktest",

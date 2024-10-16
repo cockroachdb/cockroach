@@ -102,7 +102,6 @@ Alternatives:
 
 func isEOFError(e ast.Expr) bool {
 	if s, ok := e.(*ast.SelectorExpr); ok {
-		//lint:ignore SA1019 Need to replace use of ast.Object (#132181)
 		if io, ok := s.X.(*ast.Ident); ok && io.Name == "io" && io.Obj == (*ast.Object)(nil) {
 			if s.Sel.Name == "EOF" || s.Sel.Name == "ErrUnexpectedEOF" {
 				return true

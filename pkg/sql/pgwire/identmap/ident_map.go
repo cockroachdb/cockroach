@@ -120,7 +120,7 @@ func From(r io.Reader) (*Conf, error) {
 
 // Empty returns true if no mappings have been defined.
 func (c *Conf) Empty() bool {
-	return len(c.data) == 0
+	return c.data == nil || len(c.data) == 0
 }
 
 // Map returns the database usernames that a system identity maps to

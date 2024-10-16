@@ -317,7 +317,7 @@ func TestProcessorBaseContext(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Use a custom context to distinguish it from the background one.
-	ctx := context.WithValue(context.Background(), &contextKeyPtr, struct{}{})
+	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
@@ -933,7 +933,3 @@ func testReaderProcessorDrain(
 		}
 	})
 }
-
-type contextKey struct{}
-
-var contextKeyPtr contextKey

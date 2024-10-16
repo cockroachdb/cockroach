@@ -65,7 +65,7 @@ func (mt mutationTest) checkTableSize(e int) {
 // and write the updated table descriptor to the DB.
 func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	// Remove mutation to check real values in DB using SQL
-	if len(mt.tableDesc.Mutations) == 0 {
+	if mt.tableDesc.Mutations == nil || len(mt.tableDesc.Mutations) == 0 {
 		mt.Fatal("No mutations to make active")
 	}
 	for _, m := range mt.tableDesc.Mutations {

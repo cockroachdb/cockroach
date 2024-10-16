@@ -2,13 +2,6 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-//
-// This file contains the proper logic of the public functions in the
-// goschedstats package. We only have access to the internal logic if we are
-// using a version of Go prior to 1.23, or are using our fork that has more
-// permissive logic for go:linkname.
-//
-//go:build bazel || (gc && !go1.23)
 
 package goschedstats
 
@@ -33,6 +26,20 @@ import (
 // calculated and accumulated once per second.
 func CumulativeNormalizedRunnableGoroutines() float64 {
 	return float64(atomic.LoadUint64(&total)) * fromFixedPoint
+}
+
+// RecentNormalizedRunnableGoroutines returns a recent average of the number of
+// runnable goroutines per GOMAXPROC.
+//
+// Runnable goroutines are goroutines which are ready to run but are waiting for
+// an available process. Sustained high numbers of waiting goroutines are a
+// potential indicator of high CPU saturation (overload).
+//
+// The number of runnable goroutines is sampled frequently, and an average is
+// calculated once per second. This function returns an exponentially weighted
+// moving average of these values.
+func RecentNormalizedRunnableGoroutines() float64 {
+	return float64(atomic.LoadUint64(&ewma)) * fromFixedPoint
 }
 
 // If you get a compilation error here, the Go version you are using is not
@@ -86,6 +93,10 @@ var total uint64
 // The EWMA coefficient is 0.5.
 var ewma uint64
 
+// RunnableCountCallback is provided the current value of runnable goroutines,
+// GOMAXPROCS, and the current sampling period.
+type RunnableCountCallback func(numRunnable int, numProcs int, samplePeriod time.Duration)
+
 type callbackWithID struct {
 	RunnableCountCallback
 	id int64
@@ -111,12 +122,6 @@ var callbackInfo struct {
 // quickly to large drops in runnable due to blocking on IO, so that we don't
 // waste cpu -- a workload that fluctuates rapidly between being IO bound and
 // cpu bound could stress the usage of a smoothed signal).
-//
-// This function returns a unique ID for this callback which can be un-registered
-// by passing the ID to UnregisterRunnableCountCallback. Notably, this function
-// may return a negative number if we have no access to the internal Goroutine
-// machinery (i.e. if we running a recent upstream version of Go; *not* our
-// internal fork). In this case, the callback has not been registered.
 func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64) {
 	callbackInfo.mu.Lock()
 	defer callbackInfo.mu.Unlock()
@@ -237,3 +242,5 @@ func (s *schedStatsTicker) getStatsOnTick(
 	s.sum += uint64(runnable) * toFixedPoint / uint64(numProcs)
 	s.numSamples++
 }
+
+var _ = RecentNormalizedRunnableGoroutines
