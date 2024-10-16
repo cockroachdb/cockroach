@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Tabs } from "antd";
+import { Skeleton, Tabs } from "antd";
 import React, { useState } from "react";
 
 import { useTableDetails } from "src/api/databases/getTableMetadataApi";
@@ -29,20 +29,20 @@ export const TableDetailsPageV2 = () => {
   const { data, error, isLoading } = useTableDetails({
     tableId: parseInt(tableID, 10),
   });
-  // The table name is undefined if the table does not exist.
-  const tableNotFound = error?.status === 404;
 
-  const partiallyQualifiedTableName = !tableNotFound
-    ? data
-      ? data.metadata.schemaName + "." + data.metadata.tableName
-      : ""
-    : "Table not found";
+  const partiallyQualifiedTableName = isLoading ? (
+    <Skeleton loading={true} paragraph={false} title={{ width: 100 }} />
+  ) : data ? (
+    data.metadata.schemaName + "." + data.metadata.tableName
+  ) : (
+    "Table not found"
+  );
 
   const breadCrumbItems = [
     { link: `/databases`, name: "Databases" },
     {
-      link: `/databases/${data?.metadata.dbId}`,
-      name: data?.metadata.dbName,
+      link: data ? `/databases/${data?.metadata.dbId}` : "",
+      name: `Database: ${data?.metadata?.dbName ?? ""}`,
     },
     {
       link: null,

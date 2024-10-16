@@ -2,10 +2,11 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+
 import Link from "antd/es/typography/Link";
 import React from "react";
 
-import { tableStatsClusterSetting } from "src/util";
+import { tableStatsClusterSetting } from "../../util";
 
 export const AUTO_STATS_COLLECTION_HELP = (
   <span>
@@ -17,5 +18,4 @@ export const AUTO_STATS_COLLECTION_HELP = (
   </span>
 );
 
-export const TABLE_METADATA_LAST_UPDATED_HELP =
-  "Data is last refreshed automatically (per cluster setting) or manually.";
+export * from "./tableMetadataLastUpdatedTooltip";
