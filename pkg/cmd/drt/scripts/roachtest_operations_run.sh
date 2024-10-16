@@ -7,7 +7,7 @@
 
 cd /home/ubuntu
 
-export GCE_PROJECT=cockroach-drt
+export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
 ./roachprod sync
 sleep 20
