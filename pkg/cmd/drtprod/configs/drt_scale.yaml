@@ -125,3 +125,4 @@ targets:
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         flags:
           warehouses: 100000
+          db: cct_tpcc
