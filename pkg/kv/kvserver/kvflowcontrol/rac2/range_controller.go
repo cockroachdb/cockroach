@@ -34,8 +34,10 @@ import (
 // range at the leader. It must be created for a particular leader term, and
 // closed if the term changes.
 //
-// None of the methods are called with Replica.mu held. The caller and callee
-// should order their mutexes before Replica.mu.
+// Almost none of the methods are called with Replica.mu held. The caller and
+// callee should order their mutexes before Replica.mu. The one exception is
+// HoldsSendTokensLocked, which holds both raftMu and Replica.mu. The callee
+// must not acquire its own mutex.
 //
 // RangeController dynamically switches between push and pull mode based on
 // RaftEvent handling. In general, the code here is oblivious to the fact that
@@ -80,11 +82,11 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	MaybeSendPingsRaftMuLocked()
-	// HoldsSendTokensRaftMuLocked returns true if the replica holds any send
-	// tokens. Used to prevent replica quiescence.
+	// HoldsSendTokensLocked returns true if the replica holds any send tokens.
+	// Used to prevent replica quiescence.
 	//
-	// Requires replica.raftMu to be held.
-	HoldsSendTokensRaftMuLocked() bool
+	// Requires replica.raftMu and replica.mu to be held.
+	HoldsSendTokensLocked() bool
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -477,7 +479,7 @@ type ProbeToCloseTimerScheduler interface {
 	//
 	//   HandleRaftEventRaftMuLocked(ctx, RaftEvent{})
 	//
-	// Which will trigger handleReadyState to close the send stream if it hasn't
+	// Which will trigger handleReadyStateRaftMuLocked to close the send stream if it hasn't
 	// transitioned to StateReplicate.
 	//
 	// Requires replica.raftMu to be held.
@@ -999,18 +1001,18 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 				// Leader is always in push mode.
 				mode = MsgAppPush
 			}
-			existingSSState := rs.getExistingSendStreamState()
+			existingSSState := rs.getExistingSendStreamStateRaftMuLocked()
 			rs.scratchEvent, rs.scratchSendingEntries = constructRaftEventForReplica(
 				ctx, mode, appendState, info, existingSSState, msgApps, e.LogSnapshot, rs.scratchSendingEntries)
 			info = rs.scratchEvent.replicaStateInfo
 		}
-		shouldWaitChange = rs.handleReadyState(
+		shouldWaitChange = rs.handleReadyStateRaftMuLocked(
 			ctx, mode, info, rs.scratchEvent.nextRaftIndex, rs.scratchEvent.recreateSendStream) || shouldWaitChange
 
 		if e.MsgAppMode == MsgAppPull && rs.desc.IsAnyVoter() {
 			// Compute state and first-pass decision on force-flushing and sending
 			// the new entries.
-			rs.scratchVoterStreamState = rs.computeReplicaStreamState(ctx, needsTokens)
+			rs.scratchVoterStreamState = rs.computeReplicaStreamStateRaftMuLocked(ctx, needsTokens)
 			if (rs.scratchVoterStreamState.noSendQ && rs.scratchVoterStreamState.hasSendTokens) ||
 				rs.scratchVoterStreamState.forceFlushing {
 				if rs.desc.IsVoterOldConfig() {
@@ -1070,7 +1072,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 			} else {
 				// Only need to do first-pass computation for non-voters, since
 				// there is no adjustment needed to ensure quorum.
-				ss = rs.computeReplicaStreamState(ctx, needsTokens)
+				ss = rs.computeReplicaStreamStateRaftMuLocked(ctx, needsTokens)
 			}
 			rd = replicaDirective{
 				forceFlush:               ss.forceFlushing,
@@ -1078,7 +1080,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 				preventSendQNoForceFlush: ss.preventSendQNoForceFlush,
 			}
 		}
-		shouldWaitChange = rs.handleReadyEntries(ctx, rs.scratchEvent, rd) || shouldWaitChange
+		shouldWaitChange = rs.handleReadyEntriesRaftMuLocked(ctx, rs.scratchEvent, rd) || shouldWaitChange
 	}
 
 	// If there was a quorum change, update the voter sets, triggering the
@@ -1313,7 +1315,7 @@ func (rc *rangeController) AdmitRaftMuLocked(
 	ctx context.Context, replicaID roachpb.ReplicaID, av AdmittedVector,
 ) {
 	if rs, ok := rc.replicaMap[replicaID]; ok {
-		rs.admit(ctx, av)
+		rs.admitRaftMuLocked(ctx, av)
 	}
 }
 
@@ -1323,19 +1325,19 @@ func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
-		if s := state.sendStream; s != nil && s.holdsTokens() {
+		if s := state.sendStream; s != nil && s.holdsTokensRaftMuLocked() {
 			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
 		}
 	}
 }
 
-// HoldsSendTokensRaftMuLocked implements RangeController.
-func (rc *rangeController) HoldsSendTokensRaftMuLocked() bool {
+// HoldsSendTokensLocked implements RangeController.
+func (rc *rangeController) HoldsSendTokensLocked() bool {
 	// TODO(pav-kv): we are doing the same checks in MaybeSendPingsRaftMuLocked
 	// here, and both are called from Replica.tick. We can optimize this, and do
 	// both in one method.
 	for _, state := range rc.replicaMap {
-		if s := state.sendStream; s != nil && s.holdsTokens() {
+		if s := state.sendStream; s != nil && s.holdsTokensRaftMuLocked() {
 			return true
 		}
 	}
@@ -1388,7 +1390,7 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	// AdmittedVector updates.
 	for _, rs := range rc.replicaMap {
 		if rs.sendStream != nil {
-			rs.closeSendStream(ctx)
+			rs.closeSendStreamRaftMuLocked(ctx)
 		}
 	}
 	rc.opts.RangeControllerMetrics.Count.Dec(1)
@@ -1410,7 +1412,7 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 			defer rs.sendStream.mu.Unlock()
 			streams = append(streams, kvflowinspectpb.ConnectedStream{
 				Stream:            rc.opts.SSTokenCounter.InspectStream(rs.stream),
-				TrackedDeductions: rs.sendStream.mu.tracker.Inspect(),
+				TrackedDeductions: rs.sendStream.tracker.Inspect(),
 			})
 		}()
 	}
@@ -1493,8 +1495,8 @@ func (rc *rangeController) updateSendQueueStatsRaftMuLocked(now time.Time) {
 			func() {
 				rs.sendStream.mu.Lock()
 				defer rs.sendStream.mu.Unlock()
-				stats.SendQueueBytes = int64(rs.sendStream.approxQueueSizeLocked())
-				stats.SendQueueCount = rs.sendStream.queueLengthLocked()
+				stats.SendQueueBytes = int64(rs.sendStream.approxQueueSizeStreamLocked())
+				stats.SendQueueCount = rs.sendStream.queueLengthRaftMuAndStreamLocked()
 			}()
 		}
 		rc.lastSendQueueStatsScratch.Set(stats)
@@ -1517,7 +1519,7 @@ func (rc *rangeController) updateReplicaSetRaftMuLocked(ctx context.Context, new
 			if rs := rc.replicaMap[r]; rs.sendStream != nil {
 				// The replica is no longer part of the range, so we don't expect any
 				// tracked token deductions to be returned. Return them now.
-				rs.closeSendStream(ctx)
+				rs.closeSendStreamRaftMuLocked(ctx)
 			}
 			delete(rc.replicaMap, r)
 			remove = append(remove, r)
@@ -1580,7 +1582,7 @@ func (rc *rangeController) updateWaiterSetsRaftMuLocked() {
 		isNew := r.IsVoterNewConfig()
 
 		rs := rc.replicaMap[r.ReplicaID]
-		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQ()
+		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQRaftMuLocked()
 		waiterState := stateForWaiters{
 			replicaID:        r.ReplicaID,
 			isStateReplicate: isStateReplicate,
@@ -1664,7 +1666,7 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 		if !ok {
 			panic(errors.AssertionFailedf("replica %s not in replicaMap", state.replicaID))
 		}
-		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQ()
+		isStateReplicate, hasSendQ := rs.isStateReplicateAndSendQRaftMuLocked()
 		if state.isStateReplicate != isStateReplicate {
 			panic(errors.AssertionFailedf("inconsistent isStateReplicate: %t, %t",
 				state.isStateReplicate, isStateReplicate))
@@ -1692,6 +1694,10 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 	}
 }
 
+// replicaState holds state for each replica. All methods are called with
+// raftMu held, hence it does not have its own mutex.
+//
+// TODO(sumeer): add mutex held assertions.
 type replicaState struct {
 	parent *rangeController
 	// stream aggregates across the streams for the same (tenant, store). This
@@ -1768,10 +1774,22 @@ func NewReplicaState(
 	return rs
 }
 
+// replicaSendStream maintains state for a replica to which we (typically) are
+// actively replicating.
+//
+// TODO(sumeer): assert that raftMu is held on the various methods that say it
+// must be held.
 type replicaSendStream struct {
 	parent *replicaState
 
-	// Mutex is ordered before Replica.mu.
+	// Mutex is ordered before Replica.mu. IO is done while holding the mutex.
+	//
+	// TODO(sumeer): there are a number of fields inside mu, that don't need to
+	// be protected by mu. Consider lifting them out after we have raftMu
+	// assertions in this file. Note that lifting them out will likely not
+	// reduce the size of a critical section or avoid needind
+	// replicaSendStream.mu where we currently need it. So we could potentially
+	// keep them under mu as a defensive mechanism.
 	mu struct {
 		syncutil.Mutex
 		// connectedStateStart is the time when the connectedState was last
@@ -1782,12 +1800,6 @@ type replicaSendStream struct {
 		// nextRaftIndexInitial is the value of nextRaftIndex when this
 		// replicaSendStream was created, or transitioned into replicate.
 		nextRaftIndexInitial uint64
-		// tracker contains entries that have been sent, and have had send-tokens
-		// deducted (and will have had eval-tokens deducted iff index >=
-		// nextRaftIndexInitial).
-		//
-		// Contains no entries in probeRecentlyNoSendQ.
-		tracker Tracker
 		// Eval state.
 		//
 		// Contains no tokens in probeRecentlyNoSendQ.
@@ -1886,20 +1898,27 @@ type replicaSendStream struct {
 		}
 		closed bool
 	}
+	// tracker contains entries that have been sent, and have had send-tokens
+	// deducted (and will have had eval-tokens deducted iff index >=
+	// nextRaftIndexInitial).
+	//
+	// Contains no entries in probeRecentlyNoSendQ.
+	tracker Tracker
 }
 
-func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, now time.Time) {
+func (rss *replicaSendStream) changeConnectedStateRaftMuAndStreamLocked(
+	state connectedState, now time.Time,
+) {
+	rss.mu.AssertHeld()
 	rss.mu.connectedState = state
 	rss.mu.connectedStateStart = now
 }
 
-func (rss *replicaSendStream) holdsTokens() bool {
-	rss.mu.Lock() // TODO(pav-kv): should we make it RWMutex.RLock()?
-	defer rss.mu.Unlock()
-	return !rss.mu.tracker.Empty()
+func (rss *replicaSendStream) holdsTokensRaftMuLocked() bool {
+	return !rss.tracker.Empty()
 }
 
-func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
+func (rss *replicaSendStream) admitRaftMuLocked(ctx context.Context, av AdmittedVector) {
 	if log.V(2) {
 		log.VInfof(ctx, 2, "r%v:%v stream %v admit %v",
 			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
@@ -1907,13 +1926,13 @@ func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
-	returnedSend, returnedEval := rss.mu.tracker.Untrack(av,
+	returnedSend, returnedEval := rss.tracker.Untrack(av,
 		rss.mu.nextRaftIndexInitial)
-	rss.returnSendTokens(ctx, returnedSend, false /* disconnect */)
-	rss.returnEvalTokensLocked(ctx, returnedEval)
+	rss.returnSendTokensRaftMuAndStreamLocked(ctx, returnedSend, false /* disconnect */)
+	rss.returnEvalTokensRaftMuAndStreamLocked(ctx, returnedEval)
 }
 
-func (rs *replicaState) getExistingSendStreamState() existingSendStreamState {
+func (rs *replicaState) getExistingSendStreamStateRaftMuLocked() existingSendStreamState {
 	if rs.sendStream == nil {
 		return existingSendStreamState{
 			existsAndInStateReplicate: false,
@@ -1932,7 +1951,7 @@ func (rs *replicaState) getExistingSendStreamState() existingSendStreamState {
 	}
 }
 
-func (rs *replicaState) createReplicaSendStream(
+func (rs *replicaState) createReplicaSendStreamRaftMuLocked(
 	ctx context.Context, mode RaftMsgAppMode, indexToSend uint64, nextRaftIndex uint64,
 ) {
 	// Must be in StateReplicate on creation.
@@ -1943,24 +1962,25 @@ func (rs *replicaState) createReplicaSendStream(
 		parent: rs,
 	}
 	rss := rs.sendStream
-	rss.mu.tracker.Init(rs.parent.term, rs.stream)
+	// NB: need to lock rss.mu due to (a) assertions in some of the methods
+	// called below, and (b) since
+	// startAttemptingToEmptySendQueueViaWatcherStreamLocked can hand a reference to
+	// rss to a different goroutine, which can start running immediately.
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	rss.tracker.Init(rs.parent.term, rs.stream)
 	rss.mu.closed = false
-	rss.changeConnectedStateLocked(replicate, rs.parent.opts.Clock.PhysicalTime())
+	rss.changeConnectedStateRaftMuAndStreamLocked(replicate, rs.parent.opts.Clock.PhysicalTime())
 	rss.mu.mode = mode
 	rss.mu.nextRaftIndexInitial = nextRaftIndex
 	rss.mu.sendQueue.indexToSend = indexToSend
 	rss.mu.sendQueue.nextRaftIndex = nextRaftIndex
-	if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueLocked() {
-		// NB: need to lock rss.mu since
-		// startAttemptingToEmptySendQueueViaWatcherLocked can hand a reference to
-		// rss to a different goroutine, which can start running immediately.
-		rss.mu.Lock()
-		defer rss.mu.Unlock()
-		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+	if mode == MsgAppPull && !rs.sendStream.isEmptySendQueueRaftMuAndStreamLocked() {
+		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 	}
 }
 
-func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ bool) {
+func (rs *replicaState) isStateReplicateAndSendQRaftMuLocked() (isStateReplicate, hasSendQ bool) {
 	if rs.sendStream == nil {
 		return false, true
 	}
@@ -1968,7 +1988,7 @@ func (rs *replicaState) isStateReplicateAndSendQ() (isStateReplicate, hasSendQ b
 	defer rs.sendStream.mu.Unlock()
 	isStateReplicate = rs.sendStream.mu.connectedState == replicate
 	if isStateReplicate {
-		hasSendQ = !rs.sendStream.isEmptySendQueueLocked()
+		hasSendQ = !rs.sendStream.isEmptySendQueueRaftMuAndStreamLocked()
 	} else {
 		// For WaitForEval, we treat probeRecentlyNoSendQ as having a send-queue
 		// and not part of the quorum. We don't want to keep evaluating and pile
@@ -2011,10 +2031,10 @@ func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCStat
 	}
 }
 
-// computeReplicaStreamState computes the current state of the stream and a
-// first-pass decision on what the stream should do. Called for all replicas
-// when in pull mode.
-func (rs *replicaState) computeReplicaStreamState(
+// computeReplicaStreamStateRaftMuLocked computes the current state of the
+// stream and a first-pass decision on what the stream should do. Called for
+// all replicas when in pull mode.
+func (rs *replicaState) computeReplicaStreamStateRaftMuLocked(
 	ctx context.Context, needsTokens [admissionpb.NumWorkClasses]bool,
 ) replicaStreamState {
 	if rs.sendStream == nil {
@@ -2051,7 +2071,7 @@ func (rs *replicaState) computeReplicaStreamState(
 	}
 	vss := replicaStreamState{
 		isReplicate:              true,
-		noSendQ:                  rss.isEmptySendQueueLocked(),
+		noSendQ:                  rss.isEmptySendQueueRaftMuAndStreamLocked(),
 		forceFlushing:            rss.mu.sendQueue.forceFlushScheduled,
 		preventSendQNoForceFlush: false,
 	}
@@ -2107,7 +2127,7 @@ func (rs *replicaState) computeReplicaStreamState(
 	return vss
 }
 
-func (rs *replicaState) handleReadyEntries(
+func (rs *replicaState) handleReadyEntriesRaftMuLocked(
 	ctx context.Context, eventForReplica raftEventForReplica, directive replicaDirective,
 ) (transitionedSendQState bool) {
 	if rs.sendStream == nil {
@@ -2120,24 +2140,24 @@ func (rs *replicaState) handleReadyEntries(
 		return false
 	}
 	transitionedSendQState, err :=
-		rs.sendStream.handleReadyEntriesLocked(ctx, eventForReplica, directive)
+		rs.sendStream.handleReadyEntriesRaftMuAndStreamLocked(ctx, eventForReplica, directive)
 	if err != nil {
 		// Transitioned to StateSnapshot, or some other error that Raft needs to
 		// deal with.
-		rs.sendStream.closeLocked(ctx)
+		rs.sendStream.closeRaftMuAndStreamLocked(ctx)
 		rs.sendStream = nil
 		transitionedSendQState = true
 	}
 	return transitionedSendQState
 }
 
-// handleReadyState handles state management for the replica based on the
-// provided follower state information. If the state changes in a way that
-// affects requests waiting for evaluation, returns true. mode, nextRaftIndex
-// and recreateSendStream are only relevant when info.State is StateReplicate.
-// mode, info.Next, nextRaftIndex are only used when recreateSendStream is
-// true.
-func (rs *replicaState) handleReadyState(
+// handleReadyStateRaftMuLocked handles state management for the replica based
+// on the provided follower state information. If the state changes in a way
+// that affects requests waiting for evaluation, returns true. mode,
+// nextRaftIndex and recreateSendStream are only relevant when info.State is
+// StateReplicate. mode, info.Next, nextRaftIndex are only used when
+// recreateSendStream is true.
+func (rs *replicaState) handleReadyStateRaftMuLocked(
 	ctx context.Context,
 	mode RaftMsgAppMode,
 	info ReplicaStateInfo,
@@ -2161,11 +2181,11 @@ func (rs *replicaState) handleReadyState(
 				// probeRecentlyNoSendQDuration, so close the stream.
 				shouldClose = true
 			} else if state != probeRecentlyNoSendQ {
-				if rs.sendStream.isEmptySendQueueLocked() {
+				if rs.sendStream.isEmptySendQueueRaftMuAndStreamLocked() {
 					// Empty send-queue. We will transition to probeRecentlyNoSendQ,
 					// which trades off not doing a force-flush with allowing for higher
 					// latency to achieve quorum.
-					rs.sendStream.changeToProbeLocked(ctx, now)
+					rs.sendStream.changeToProbeRaftMuAndStreamLocked(ctx, now)
 				} else {
 					// Had a send-queue.
 					shouldClose = true
@@ -2176,7 +2196,7 @@ func (rs *replicaState) handleReadyState(
 			}
 			return shouldClose
 		}(); shouldClose {
-			rs.closeSendStream(ctx)
+			rs.closeSendStreamRaftMuLocked(ctx)
 		}
 
 	case tracker.StateReplicate:
@@ -2188,17 +2208,17 @@ func (rs *replicaState) handleReadyState(
 		if rs.sendStream != nil && recreateSendStream {
 			// This includes both (a) inconsistencies, and (b) transition from
 			// probeRecentlyNoSendQ => replicate.
-			rs.closeSendStream(ctx)
+			rs.closeSendStreamRaftMuLocked(ctx)
 		}
 		if rs.sendStream == nil {
-			rs.createReplicaSendStream(ctx, mode, info.Next, nextRaftIndex)
+			rs.createReplicaSendStreamRaftMuLocked(ctx, mode, info.Next, nextRaftIndex)
 			// Have stale send-queue state.
 			shouldWaitChange = true
 		}
 
 	case tracker.StateSnapshot:
 		if rs.sendStream != nil {
-			rs.closeSendStream(ctx)
+			rs.closeSendStreamRaftMuLocked(ctx)
 			shouldWaitChange = true
 		}
 	}
@@ -2223,7 +2243,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 		// RaftEvent.
 		return false, false
 	}
-	if rss.isEmptySendQueueLocked() {
+	if rss.isEmptySendQueueRaftMuAndStreamLocked() {
 		panic(errors.AssertionFailedf("scheduled with empty send-queue"))
 	}
 	if rss.mu.mode != MsgAppPull {
@@ -2231,7 +2251,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	}
 	if mode != rss.mu.mode {
 		// Must be switching from MsgAppPull => MsgAppPush.
-		rss.tryHandleModeChangeLocked(ctx, mode, false, false)
+		rss.tryHandleModeChangeRaftMuAndStreamLocked(ctx, mode, false, false)
 		return false, false
 	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
@@ -2265,54 +2285,56 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	if err != nil {
 		// Transitioned to StateSnapshot, or some other error that Raft needs to
 		// deal with.
-		rs.sendStream.closeLocked(ctx)
+		rs.sendStream.closeRaftMuAndStreamLocked(ctx)
 		rs.sendStream = nil
 		return false, true
 	}
-	rss.dequeueFromQueueAndSendLocked(ctx, msg)
-	isEmpty := rss.isEmptySendQueueLocked()
+	rss.dequeueFromQueueAndSendRaftMuAndStreamLocked(ctx, msg)
+	isEmpty := rss.isEmptySendQueueRaftMuAndStreamLocked()
 	if isEmpty {
-		rss.stopAttemptingToEmptySendQueueLocked(ctx, false)
+		rss.stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(ctx, false)
 		return false, true
 	}
 	// Still have a send-queue.
 	watchForTokens :=
 		!rss.mu.sendQueue.forceFlushScheduled && rss.mu.sendQueue.deductedForSchedulerTokens == 0
 	if watchForTokens {
-		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 	}
 	return !watchForTokens, false
 }
 
-func (rs *replicaState) closeSendStream(ctx context.Context) {
+func (rs *replicaState) closeSendStreamRaftMuLocked(ctx context.Context) {
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.VEventf(ctx, 1, "closing send stream %v for replica %v", rs.stream, rs.desc)
 	}
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
 
-	rs.sendStream.closeLocked(ctx)
+	rs.sendStream.closeRaftMuAndStreamLocked(ctx)
 	rs.sendStream = nil
 }
 
-func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
+func (rs *replicaState) admitRaftMuLocked(ctx context.Context, av AdmittedVector) {
 	if rss := rs.sendStream; rss != nil {
-		rss.admit(ctx, av)
+		rss.admitRaftMuLocked(ctx, av)
 	}
 }
 
-func (rss *replicaSendStream) closeLocked(ctx context.Context) {
-	rss.returnSendTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
-	rss.returnAllEvalTokensLocked(ctx)
-	rss.stopAttemptingToEmptySendQueueLocked(ctx, true)
+func (rss *replicaSendStream) closeRaftMuAndStreamLocked(ctx context.Context) {
+	rss.mu.AssertHeld()
+	rss.returnSendTokensRaftMuAndStreamLocked(ctx, rss.tracker.UntrackAll(), true /* disconnect */)
+	rss.returnAllEvalTokensRaftMuAndStreamLocked(ctx)
+	rss.stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(ctx, true)
 	rss.mu.closed = true
 }
 
-func (rss *replicaSendStream) handleReadyEntriesLocked(
+func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 	ctx context.Context, event raftEventForReplica, directive replicaDirective,
 ) (transitionedSendQState bool, err error) {
-	wasEmptySendQ := rss.isEmptySendQueueLocked()
-	rss.tryHandleModeChangeLocked(ctx, event.mode, wasEmptySendQ, directive.forceFlush)
+	rss.mu.AssertHeld()
+	wasEmptySendQ := rss.isEmptySendQueueRaftMuAndStreamLocked()
+	rss.tryHandleModeChangeRaftMuAndStreamLocked(ctx, event.mode, wasEmptySendQ, directive.forceFlush)
 	if event.mode == MsgAppPull {
 		// MsgAppPull mode (i.e., followers). Populate sendingEntries.
 		n := len(event.sendingEntries)
@@ -2323,7 +2345,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 			if !rss.mu.sendQueue.forceFlushScheduled {
 				// Must have a send-queue, so sendingEntries should stay empty
 				// (these will be queued).
-				rss.startForceFlushLocked(ctx)
+				rss.startForceFlushRaftMuAndStreamLocked(ctx)
 			}
 		} else {
 			// INVARIANT: !directive.forceFlush.
@@ -2332,7 +2354,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				// will be queued).
 				rss.mu.sendQueue.forceFlushScheduled = false
 				rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
-				rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+				rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 				if directive.hasSendTokens {
 					panic(errors.AssertionFailedf("hasSendTokens true despite send-queue"))
 				}
@@ -2380,7 +2402,7 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] -= tokens
 				rss.mu.sendQueue.preciseSizeSum -= tokens
 			}
-			rss.mu.tracker.Track(ctx, entry.id, pri, tokens)
+			rss.tracker.Track(ctx, entry.id, pri, tokens)
 			sendTokensToDeduct[WorkClassFromRaftPriority(pri)] += tokens
 		}
 		flag := AdjNormal
@@ -2465,9 +2487,9 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
 	}
 
-	hasEmptySendQ := rss.isEmptySendQueueLocked()
+	hasEmptySendQ := rss.isEmptySendQueueRaftMuAndStreamLocked()
 	if event.mode == MsgAppPull && wasEmptySendQ && !hasEmptySendQ && !rss.mu.sendQueue.forceFlushScheduled {
-		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 	}
 	// NB: we don't special case to an empty send-queue in push mode, where Raft
 	// is responsible for causing this send-queue. Raft does not keep track of
@@ -2480,9 +2502,10 @@ func (rss *replicaSendStream) handleReadyEntriesLocked(
 	return transitionedSendQState, nil
 }
 
-func (rss *replicaSendStream) tryHandleModeChangeLocked(
+func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 	ctx context.Context, mode RaftMsgAppMode, isEmptySendQ bool, toldToForceFlush bool,
 ) {
+	rss.mu.AssertHeld()
 	if mode == rss.mu.mode {
 		// Common case
 		return
@@ -2501,7 +2524,7 @@ func (rss *replicaSendStream) tryHandleModeChangeLocked(
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
-		rss.stopAttemptingToEmptySendQueueLocked(ctx, false)
+		rss.stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(ctx, false)
 	} else {
 		// Switching from push to pull. Regular needs to be counted as elastic, so
 		// return to regular and deduct from elastic.
@@ -2514,21 +2537,22 @@ func (rss *replicaSendStream) tryHandleModeChangeLocked(
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
 		if !isEmptySendQ && !toldToForceFlush {
-			rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+			rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 		}
 	}
 }
 
-func (rss *replicaSendStream) startForceFlushLocked(ctx context.Context) {
+func (rss *replicaSendStream) startForceFlushRaftMuAndStreamLocked(ctx context.Context) {
+	rss.mu.AssertHeld()
 	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Inc(1)
 	rss.mu.sendQueue.forceFlushScheduled = true
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
-	rss.stopAttemptingToEmptySendQueueViaWatcherLocked(ctx, false)
+	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, false)
 }
 
 // Only called in MsgAppPull mode. Either when force-flushing or when
 // rss.mu.sendQueue.deductedFromSchedulerTokens > 0.
-func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
+func (rss *replicaSendStream) dequeueFromQueueAndSendRaftMuAndStreamLocked(
 	ctx context.Context, msg raftpb.Message,
 ) {
 	rss.mu.AssertHeld()
@@ -2560,7 +2584,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 					entryState.tokens
 			}
 			tokensNeeded += entryState.tokens
-			rss.mu.tracker.Track(ctx, entryState.id, raftpb.LowPri, entryState.tokens)
+			rss.tracker.Track(ctx, entryState.id, raftpb.LowPri, entryState.tokens)
 		}
 	}
 	if approximatedNumEntries > 0 {
@@ -2599,12 +2623,16 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
 
-func (rss *replicaSendStream) isEmptySendQueueLocked() bool {
+func (rss *replicaSendStream) isEmptySendQueueRaftMuAndStreamLocked() bool {
+	rss.mu.AssertHeld()
 	return rss.mu.sendQueue.indexToSend == rss.mu.sendQueue.nextRaftIndex
 }
 
 // INVARIANT: no send-queue, and therefore not force-flushing.
-func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.Time) {
+func (rss *replicaSendStream) changeToProbeRaftMuAndStreamLocked(
+	ctx context.Context, now time.Time,
+) {
+	rss.mu.AssertHeld()
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
 			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
@@ -2615,15 +2643,15 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 	// stream. Also schedule an event, so that even if there are no
 	// entries, we will still reliably close the stream if still in
 	// StateProbe.
-	rss.changeConnectedStateLocked(probeRecentlyNoSendQ, now)
+	rss.changeConnectedStateRaftMuAndStreamLocked(probeRecentlyNoSendQ, now)
 	rss.parent.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
 		ctx, rss.parent.parent.opts.RangeID, probeRecentlyNoSendQDuration())
 	// Return all tokens since other ranges may need them, and it may be some
 	// time before this replica transitions back to StateReplicate.
-	rss.returnSendTokens(ctx, rss.mu.tracker.UntrackAll(), true /* disconnect */)
-	rss.returnAllEvalTokensLocked(ctx)
+	rss.returnSendTokensRaftMuAndStreamLocked(ctx, rss.tracker.UntrackAll(), true /* disconnect */)
+	rss.returnAllEvalTokensRaftMuAndStreamLocked(ctx)
 	rss.mu.sendQueue.originalEvalTokens = [admissionpb.NumWorkClasses]kvflowcontrol.Tokens{}
-	if !rss.isEmptySendQueueLocked() {
+	if !rss.isEmptySendQueueRaftMuAndStreamLocked() {
 		panic(errors.AssertionFailedf("transitioning to probeRecentlyNoSendQ when have a send-queue"))
 	}
 	if rss.mu.sendQueue.forceFlushScheduled {
@@ -2635,19 +2663,21 @@ func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.
 	}
 }
 
-func (rss *replicaSendStream) stopAttemptingToEmptySendQueueLocked(
+func (rss *replicaSendStream) stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(
 	ctx context.Context, disconnect bool,
 ) {
+	rss.mu.AssertHeld()
 	if rss.mu.sendQueue.forceFlushScheduled {
 		rss.mu.sendQueue.forceFlushScheduled = false
 		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
 	}
-	rss.stopAttemptingToEmptySendQueueViaWatcherLocked(ctx, disconnect)
+	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, disconnect)
 }
 
-func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherLocked(
+func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(
 	ctx context.Context, disconnect bool,
 ) {
+	rss.mu.AssertHeld()
 	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
 		// Update metrics.
 		flag := AdjNormal
@@ -2668,7 +2698,12 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherLocked(
 	}
 }
 
-func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcherLocked(ctx context.Context) {
+// NB: raftMu may or may not be held. Specifically, when called from Notify,
+// raftMu is not held.
+func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcherStreamLocked(
+	ctx context.Context,
+) {
+	rss.mu.AssertHeld()
 	if rss.mu.sendQueue.forceFlushScheduled {
 		panic(errors.AssertionFailedf("already trying to empty send-queue using force-flush"))
 	}
@@ -2684,6 +2719,9 @@ func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcherLocked(ct
 func (rss *replicaSendStream) Notify(ctx context.Context) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
+	if rss.mu.closed {
+		return
+	}
 	if rss.mu.sendQueue.tokenWatcherHandle == (SendTokenWatcherHandle{}) {
 		return
 	}
@@ -2691,7 +2729,7 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
 		panic(errors.AssertionFailedf("watcher was registered when already had tokens"))
 	}
-	queueSize := rss.approxQueueSizeLocked()
+	queueSize := rss.approxQueueSizeStreamLocked()
 	if queueSize == 0 {
 		panic(errors.AssertionFailedf("watcher was registered with empty send-queue"))
 	}
@@ -2710,7 +2748,7 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize, flag)
 	if tokens == 0 {
 		// Rare case: no tokens available despite notification. Register again.
-		rss.startAttemptingToEmptySendQueueViaWatcherLocked(ctx)
+		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 		return
 	}
 	rss.mu.sendQueue.deductedForSchedulerTokens = tokens
@@ -2718,7 +2756,10 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 }
 
-func (rss *replicaSendStream) approxQueueSizeLocked() kvflowcontrol.Tokens {
+// NB: raftMu may or may not be held. Specifically, when called from Notify,
+// raftMu is not held.
+func (rss *replicaSendStream) approxQueueSizeStreamLocked() kvflowcontrol.Tokens {
+	rss.mu.AssertHeld()
 	var size kvflowcontrol.Tokens
 	countWithApproxStats := int64(rss.mu.nextRaftIndexInitial) - int64(rss.mu.sendQueue.indexToSend)
 	if countWithApproxStats > 0 {
@@ -2729,16 +2770,18 @@ func (rss *replicaSendStream) approxQueueSizeLocked() kvflowcontrol.Tokens {
 	return size
 }
 
-func (rss *replicaSendStream) queueLengthLocked() int64 {
+func (rss *replicaSendStream) queueLengthRaftMuAndStreamLocked() int64 {
+	rss.mu.AssertHeld()
 	// NB: INVARIANT nextRaftIndex >= indexToSend, no underflow possible.
 	return int64(rss.mu.sendQueue.nextRaftIndex - rss.mu.sendQueue.indexToSend)
 }
 
-// returnSendTokens takes the tokens untracked by the tracker and returns them
-// to the send token counters.
-func (rss *replicaSendStream) returnSendTokens(
+// returnSendTokensRaftMuAndStreamLocked takes the tokens untracked by the
+// tracker and returns them to the send token counters.
+func (rss *replicaSendStream) returnSendTokensRaftMuAndStreamLocked(
 	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens, disconnect bool,
 ) {
+	rss.mu.AssertHeld()
 	flag := AdjNormal
 	if disconnect {
 		flag = AdjDisconnect
@@ -2751,10 +2794,12 @@ func (rss *replicaSendStream) returnSendTokens(
 	}
 }
 
-// returnEvalTokensLocked returns tokens to the eval token counters.
-func (rss *replicaSendStream) returnEvalTokensLocked(
+// returnEvalTokensRaftMuAndStreamLocked returns tokens to the eval token
+// counters.
+func (rss *replicaSendStream) returnEvalTokensRaftMuAndStreamLocked(
 	ctx context.Context, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens,
 ) {
+	rss.mu.AssertHeld()
 	for pri, tokens := range returnedEval {
 		rpri := raftpb.Priority(pri)
 		wc := WorkClassFromRaftPriority(rpri)
@@ -2774,7 +2819,8 @@ func (rss *replicaSendStream) returnEvalTokensLocked(
 	}
 }
 
-func (rss *replicaSendStream) returnAllEvalTokensLocked(ctx context.Context) {
+func (rss *replicaSendStream) returnAllEvalTokensRaftMuAndStreamLocked(ctx context.Context) {
+	rss.mu.AssertHeld()
 	for wc, tokens := range rss.mu.eval.tokensDeducted {
 		if tokens > 0 {
 			// NB: This is only called for disconnects.
