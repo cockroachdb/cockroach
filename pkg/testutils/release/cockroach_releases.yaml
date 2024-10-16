@@ -14,7 +14,7 @@
   - 22.2.8
   predecessor: "22.1"
 "23.1":
-  latest: 23.1.27
+  latest: 23.1.28
   withdrawn:
   - 23.1.0
   predecessor: "22.2"
