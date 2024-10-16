@@ -473,6 +473,12 @@ func TestCanDefortify(t *testing.T) {
 			// we should be able to de-fortify.
 			expCanDefortify: true,
 		},
+		{
+			setup: func(ft *FortificationTracker) {
+				ft.term = 0 // empty term; nothing is being tracked in the fortification tracker
+			},
+			expCanDefortify: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -484,6 +490,7 @@ func TestCanDefortify(t *testing.T) {
 		}
 		ft := NewFortificationTracker(&cfg, mockLiveness, raftlogger.DiscardLogger)
 
+		ft.Reset(10) // set non-zero term
 		tc.setup(ft)
 		if !tc.expLeadSupportUntil.IsEmpty() {
 			require.Equal(t, tc.expLeadSupportUntil, ft.LeadSupportUntil(pb.StateLeader))

@@ -497,7 +497,7 @@ stabilize 1
   AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
   INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable log; ignoring 
   AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
-        
+
 raft-log 1
 ----
 1/11 EntryNormal ""
