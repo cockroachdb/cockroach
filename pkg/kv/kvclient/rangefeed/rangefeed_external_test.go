@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	kvrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1650,11 +1651,12 @@ func (c *channelSink) Error() error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *channelSink) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *channelSink) SendError(err *kvpb.Error) {
 	c.done <- err
 }
+
+func (c *channelSink) AddRegistration(r kvrangefeed.Disconnector) {}
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a
 // metadata event which indicates if it spawned to due a manual split. The

@@ -322,6 +322,7 @@ func (p *ScheduledProcessor) Register(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)
+
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -332,6 +333,7 @@ func (p *ScheduledProcessor) Register(
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
+		stream.AddRegistration(r)
 		// Add the new registration to the registry.
 		p.reg.Register(ctx, r)
 
@@ -361,7 +363,7 @@ func (p *ScheduledProcessor) Register(
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
-			r.disconnect(kvpb.NewError(err))
+			r.Disconnect(kvpb.NewError(err))
 			p.reg.Unregister(ctx, r)
 		}
 		return f

@@ -202,10 +202,13 @@ func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 // thread-safety.
 func (s *noopStream) SendUnbufferedIsThreadSafe() {}
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *noopStream) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *noopStream) SendError(error *kvpb.Error) {
 	s.done <- error
+}
+
+func (s *noopStream) AddRegistration(r Disconnector) {
+
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

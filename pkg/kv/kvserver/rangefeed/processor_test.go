@@ -1377,10 +1377,13 @@ func (c *consumer) WaitBlock() {
 	<-c.blocked
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *consumer) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
+}
+
+func (c *consumer) AddRegistration(r Disconnector) {
+
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

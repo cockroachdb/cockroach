@@ -201,7 +201,7 @@ func (s *testStream) BlockSend() func() {
 
 // Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *testStream) Disconnect(err *kvpb.Error) {
+func (s *testStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 
@@ -332,6 +332,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 	}
 
 	return newBufferedRegistration(
+		s.ctx,
 		cfg.span,
 		cfg.ts,
 		makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
