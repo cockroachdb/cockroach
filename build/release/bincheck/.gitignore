@@ -1,6 +1,7 @@
 # files created by running cockroach
 cockroach-pid
 cockroach-data/
+cockroach-url
 
 # files created running bincheck
 cockroach.tar.gz
