@@ -750,6 +750,11 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
 			t.Fatal(err)
 		}
+		// Enable raft tracing. Remove this once raft tracing is the default.
+		if _, err := db.ExecContext(ctx,
+			`SET CLUSTER SETTING kv.raft.max_concurrent_traces = '10'`); err != nil {
+			t.Fatal(err)
+		}
 		// This isn't strictly necessary, but it would be nice if this test passed at 10s (or lower).
 		if _, err := db.ExecContext(ctx,
 			`SET CLUSTER SETTING server.time_after_store_suspect = '10s'`); err != nil {
