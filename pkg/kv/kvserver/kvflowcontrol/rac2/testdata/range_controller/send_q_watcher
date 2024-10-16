@@ -13,7 +13,6 @@ t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 
-
 # Append three entries. Replica 2 has a send-queue.
 raft_event pull-mode
 range_id=1
@@ -178,8 +177,8 @@ NormalPri:
 schedule-controller-event-count: 2
 scheduled-replicas: 2
 
-# Scheduler event. Both entries in the send-queue are sent, and an extra
-# 512KiB needed to be deducted.
+# Scheduler event. Only the first entry in the send-queue is sent, because the
+# second entry would exceed the max size limit.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
@@ -211,6 +210,39 @@ MsgApps sent in pull mode:
 schedule-controller-event-count: 3
 scheduled-replicas: 2
 
+# The second entry is sent, and empties the send-queue. Extra 512KiB needed to
+# be deducted.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[3,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [3]
+++++
+schedule-controller-event-count: 3
+
 # s2 has -512KiB of elastic send tokens.
 adjust_tokens send
   store_id=2 pri=HighPri tokens=0
@@ -218,7 +250,7 @@ adjust_tokens send
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
-       send reg=+2.5 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+2.5 MiB/+16 MiB ela=-512 KiB/+8.0 MiB
 t1/s3: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
 
@@ -242,15 +274,18 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+0 B watching-for-tokens
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
 schedule-controller-event-count: 3
-scheduled-replicas: 2
 
 # Noop. Note that s3 has 0 send tokens.
 adjust_tokens send
@@ -258,8 +293,8 @@ adjust_tokens send
 ----
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+2.5 MiB/+16 MiB ela=+2.5 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+2.5 MiB/+16 MiB ela=-512 KiB/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 
@@ -271,8 +306,8 @@ adjust_tokens send
 ----
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+2.5 MiB/+16 MiB ela=+2.5 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+2.5 MiB/+16 MiB ela=-512 KiB/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+10 KiB/+16 MiB ela=+6.0 KiB/+8.0 MiB
 
@@ -288,15 +323,19 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+0 B deducted=+4.0 KiB
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-schedule-controller-event-count: 3
-scheduled-replicas: 2 3
+schedule-controller-event-count: 4
+scheduled-replicas: 3
 
 # Scheduler event. Replica 3 deducts 1MiB-4KiB without waiting since the entry
 # was actually 1MiB.
@@ -311,8 +350,12 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+0 B watching-for-tokens
 eval deducted: reg=+0 B ela=+0 B
@@ -323,7 +366,7 @@ LowPri:
 MsgApps sent in pull mode:
  to: 3, lowPri: true entries: [2]
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 4
 
 # Add 3MiB of elastic send tokens, to return to 2MiB+10KiB of tokens. The
 # send-stream now has an estimate of 1MiB needed per entry, and deduct 1.1 x
@@ -333,8 +376,8 @@ adjust_tokens send
 ----
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+2.5 MiB/+16 MiB ela=+2.5 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+2.5 MiB/+16 MiB ela=-512 KiB/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+3.0 MiB/+16 MiB ela=+932 KiB/+8.0 MiB
 
@@ -351,8 +394,12 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+0 B deducted=+1.1 MiB
 eval deducted: reg=+0 B ela=+0 B
@@ -360,7 +407,7 @@ eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
   term=1 index=2  tokens=1048576
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 5
 scheduled-replicas: 3
 
 # Scheduler event. Replica 3 returns 0.1MiB since the entry was actually 1MiB.
@@ -376,8 +423,12 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+0 B
+eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[3,4) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+0 B
@@ -389,7 +440,7 @@ LowPri:
 MsgApps sent in pull mode:
  to: 3, lowPri: true entries: [3]
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 5
 
 # Noop, to see current token values.
 adjust_tokens send
@@ -397,7 +448,7 @@ adjust_tokens send
 ----
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
        send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+2.5 MiB/+16 MiB ela=+2.5 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+2.5 MiB/+16 MiB ela=-512 KiB/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+3.0 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
