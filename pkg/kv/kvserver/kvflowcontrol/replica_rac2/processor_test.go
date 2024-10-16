@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -263,7 +262,6 @@ func TestProcessorBasic(t *testing.T) {
 	var piggybacker testAdmittedPiggybacker
 	var q testACWorkQueue
 	var rcFactory testRangeControllerFactory
-	var st *cluster.Settings
 	var p *processorImpl
 	tenantID := roachpb.MustMakeTenantID(4)
 	reset := func(enabled kvflowcontrol.V2EnabledWhenLeaderLevel) {
@@ -273,8 +271,6 @@ func TestProcessorBasic(t *testing.T) {
 		piggybacker = testAdmittedPiggybacker{b: &b}
 		q = testACWorkQueue{b: &b}
 		rcFactory = testRangeControllerFactory{b: &b}
-		st = cluster.MakeTestingClusterSettings()
-		kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToElastic)
 		p = NewProcessor(ProcessorOptions{
 			NodeID:                 1,
 			StoreID:                2,
@@ -286,7 +282,6 @@ func TestProcessorBasic(t *testing.T) {
 			ACWorkQueue:            &q,
 			MsgAppSender:           testMsgAppSender{},
 			RangeControllerFactory: &rcFactory,
-			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
 			EvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		}).(*processorImpl)
@@ -481,21 +476,6 @@ func TestProcessorBasic(t *testing.T) {
 				cb.Priority = raftpb.Priority(pri)
 				p.AdmittedLogEntry(ctx, cb)
 				printLogTracker()
-				return builderStr()
-
-			case "set-flow-control-mode":
-				var mode string
-				d.ScanArgs(t, "mode", &mode)
-				var modeVal kvflowcontrol.ModeT
-				switch mode {
-				case "apply-to-all":
-					modeVal = kvflowcontrol.ApplyToAll
-				case "apply-to-elastic":
-					modeVal = kvflowcontrol.ApplyToElastic
-				default:
-					t.Fatalf("unknown mode: %s", mode)
-				}
-				kvflowcontrol.Mode.Override(ctx, &st.SV, modeVal)
 				return builderStr()
 
 			case "admit-for-eval":
