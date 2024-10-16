@@ -425,7 +425,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 
 	d := timeutil.Since(start)
 	// Extract leaseholder information from the trace recording if enabled.
-	if tracingEnabled.Get(&p.settings.SV) {
+	if tracingEnabled.Get(&p.settings.SV) && finishAndGetRecording != nil {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
 		log.Health.Infof(ctx, "kv.Get(%s), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
