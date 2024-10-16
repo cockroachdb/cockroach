@@ -156,16 +156,22 @@ type RaftLogSnapshot interface {
 	// only be called in MsgAppPull mode for followers. The maxSize is required
 	// to be > 0.
 	//
-	// If the sum of all entries in [start,end) are <= maxSize, all will be
-	// returned. Else, entries will be returned until, and including, the first
-	// entry that causes maxSize to be equaled or exceeded. This implies at
-	// least one entry will be returned in the slice on success.
+	// Returns the longest prefix of entries in the [start, end) interval such
+	// that the total size of the entries does not exceed maxSize. The limit can
+	// only be exceeded if the first entry is larger than maxSize, in which case
+	// only this first entry is returned.
 	//
-	// Returns an error if the log is truncated, or there is some other
-	// transient problem.
+	// Returns an error if the log is truncated beyond the start index, or there
+	// is some other transient problem.
 	//
 	// NB: the [start, end) interval is different from RawNode.LogSlice which
 	// accepts an open-closed interval.
+	//
+	// TODO(#132789): change the semantics so that maxSize can be exceeded not
+	// only if the first entry is large. It should be ok to exceed maxSize if the
+	// last entry makes it so. In the underlying storage implementation, we have
+	// paid the cost of fetching this entry anyway, so there is no need to drop it
+	// from the result.
 	LogSlice(start, end uint64, maxSize uint64) (raft.LogSlice, error)
 }
 
