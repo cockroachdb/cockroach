@@ -299,7 +299,7 @@ func TestProcessorBasic(t *testing.T) {
 		// r2Stream should not see the event.
 
 		// Cancel the first registration.
-		r1Stream.Cancel()
+		r1Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
 		require.NotNil(t, r1Stream.WaitForError(t))
 
 		// Stop the processor with an error.
@@ -1367,10 +1367,13 @@ func (c *consumer) WaitBlock() {
 	<-c.blocked
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *consumer) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
+}
+
+func (c *consumer) AddRegistration(r Disconnector) {
+
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

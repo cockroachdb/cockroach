@@ -507,7 +507,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 		scanner, err := rangefeed.NewSeparatedIntentScanner(ctx, r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
-			stream.Disconnect(kvpb.NewError(err))
+			stream.SendError(kvpb.NewError(err))
 			return nil
 		}
 		return scanner
