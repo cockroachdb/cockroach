@@ -158,15 +158,15 @@ d: waiting
 e: context_cancelled
 f: waiting
 
-# Send a refresh signal before any tokens are available
-refresh name=f
+# Send a refresh signal before any tokens are available.
+refresh name=f kind=replica
 ----
 a: wait_success
 b: wait_success
 c: wait_success
 d: waiting
 e: context_cancelled
-f: refresh_wait_signaled
+f: replica_refresh_wait_signaled
 
 # Lastly, test out a WaitForEval operation with 3 handles overlapping the next
 # WaitForEval operation.
@@ -180,7 +180,7 @@ b: wait_success
 c: wait_success
 d: waiting
 e: context_cancelled
-f: refresh_wait_signaled
+f: replica_refresh_wait_signaled
 g: waiting
 
 wait_for_eval name=h quorum=2
@@ -193,7 +193,7 @@ b: wait_success
 c: wait_success
 d: waiting
 e: context_cancelled
-f: refresh_wait_signaled
+f: replica_refresh_wait_signaled
 g: waiting
 h: waiting
 
@@ -225,7 +225,7 @@ b: wait_success
 c: wait_success
 d: waiting
 e: context_cancelled
-f: refresh_wait_signaled
+f: replica_refresh_wait_signaled
 g: waiting
 h: wait_success
 
@@ -257,6 +257,35 @@ b: wait_success
 c: wait_success
 d: wait_success
 e: context_cancelled
-f: refresh_wait_signaled
+f: replica_refresh_wait_signaled
 g: wait_success
 h: wait_success
+
+# Test out another refresh signal on i.
+wait_for_eval name=i quorum=2
+handle: stream=s1 required=true
+handle: stream=s10 required=true
+handle: stream=s13 required=false
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: wait_success
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: wait_success
+h: wait_success
+i: waiting
+
+# Send a refresh signal before any tokens are available.
+refresh name=i kind=config
+----
+a: wait_success
+b: wait_success
+c: wait_success
+d: wait_success
+e: context_cancelled
+f: replica_refresh_wait_signaled
+g: wait_success
+h: wait_success
+i: config_refresh_wait_signaled

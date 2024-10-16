@@ -341,18 +341,7 @@ admit-for-eval pri=low-pri
  RangeController.WaitForEval(pri=low-pri) = (waited=true err=<nil>)
 admitted: true err: <nil>
 
-# AdmitForEval returns false despite there being a RangeController since
-# normal-pri is not subject to replication AC. RangeController.WaitForEval was
-# not called.
-admit-for-eval pri=normal-pri
-----
-admitted: false err: <nil>
-
-# Subject normal-pri to replication AC.
-set-flow-control-mode mode=apply-to-all
-----
-
-# AdmitForEval for normal-pri returns true.
+# Same for normal-pri.
 admit-for-eval pri=normal-pri
 ----
  RangeController.WaitForEval(pri=normal-pri) = (waited=true err=<nil>)

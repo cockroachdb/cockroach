@@ -24,6 +24,10 @@ import (
 )
 
 // Enabled determines whether we use flow control for replication traffic in KV.
+//
+// TODO(sumeer): changing this to false does not affect requests that are
+// already waiting for tokens for eval in RACv1. Consider fixing and
+// back-porting.
 var Enabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.enabled",

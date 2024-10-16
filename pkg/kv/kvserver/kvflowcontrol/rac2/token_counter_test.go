@@ -436,11 +436,12 @@ type evalTestState struct {
 }
 
 type testEval struct {
-	state     WaitEndState
-	handles   []tokenWaitingHandleInfo
-	quorum    int
-	cancel    context.CancelFunc
-	refreshCh chan struct{}
+	state            WaitEndState
+	handles          []tokenWaitingHandleInfo
+	quorum           int
+	cancel           context.CancelFunc
+	configRefreshCh  chan struct{}
+	replicaRefreshCh chan struct{}
 }
 
 func newTestState() *evalTestState {
@@ -490,17 +491,20 @@ func (ts *evalTestState) startWaitForEval(
 	defer ts.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	refreshCh := make(chan struct{})
+	configRefreshCh := make(chan struct{})
+	replicaRefreshCh := make(chan struct{})
 	ts.mu.evals[name] = &testEval{
-		state:     -1,
-		handles:   handles,
-		quorum:    quorum,
-		cancel:    cancel,
-		refreshCh: refreshCh,
+		state:            -1,
+		handles:          handles,
+		quorum:           quorum,
+		cancel:           cancel,
+		configRefreshCh:  configRefreshCh,
+		replicaRefreshCh: replicaRefreshCh,
 	}
 
 	go func() {
-		state, _ := WaitForEval(ctx, refreshCh, handles, quorum, false, nil)
+		state, _ := WaitForEval(
+			ctx, configRefreshCh, replicaRefreshCh, handles, quorum, false, nil)
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
 
@@ -657,11 +661,20 @@ func TestWaitForEval(t *testing.T) {
 		case "refresh":
 			var name string
 			d.ScanArgs(t, "name", &name)
+			var kind string
+			d.ScanArgs(t, "kind", &kind)
 			func() {
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 				if op, exists := ts.mu.evals[name]; exists {
-					op.refreshCh <- struct{}{}
+					switch kind {
+					case "config":
+						op.configRefreshCh <- struct{}{}
+					case "replica":
+						op.replicaRefreshCh <- struct{}{}
+					default:
+						panic(fmt.Sprintf("unknown channel kind %s", kind))
+					}
 				} else {
 					panic(fmt.Sprintf("no WaitForEval operation with name: %s", name))
 				}
