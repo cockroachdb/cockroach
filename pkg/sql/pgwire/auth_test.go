@@ -562,7 +562,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						defer dbSQL.Close()
 					}
 					if err != nil {
-						return "", err
+						if !errors.Is(err, pq.ErrSSLNotSupported) {
+							return "", err
+						}
+						// Retry: server might fail to respond for upgrade conn under stress
+						dbSQL, err = gosql.Open("postgres", dsn)
+						if dbSQL != nil {
+							defer dbSQL.Close()
+						}
+						if err != nil {
+							return "", err
+						}
 					}
 					row := dbSQL.QueryRow("SELECT current_catalog")
 					var result string
