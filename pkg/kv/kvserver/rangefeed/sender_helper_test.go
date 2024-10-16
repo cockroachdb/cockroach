@@ -11,9 +11,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // testRangefeedCounter mocks rangefeed metrics for testing.
@@ -58,6 +61,15 @@ func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent
+}
+
+func (s *testServerStream) waitForEvent(t *testing.T, ev *kvpb.MuxRangeFeedEvent) {
+	testutils.SucceedsSoon(t, func() error {
+		if s.hasEvent(ev) {
+			return nil
+		}
+		return errors.Newf("expected error %v not found in %s", *ev, s.String())
+	})
 }
 
 // hasEvent returns true if the event is found in the streamEvents map. Note
@@ -105,4 +117,16 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 	return func() {
 		once.Do(s.Unlock) //nolint:deferunlockcheck
 	}
+}
+
+type cancelCtxDisconnector struct {
+	cancel func()
+}
+
+func (c *cancelCtxDisconnector) Disconnect(_ *kvpb.Error) {
+	c.cancel()
+}
+
+func (c *cancelCtxDisconnector) IsDisconnected() bool {
+	return false
 }
