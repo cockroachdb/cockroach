@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { Tag } from "antd";
-import React, { useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
@@ -34,142 +34,147 @@ import { Timestamp } from "src/timestamp";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ, tabAttr } from "src/util";
 
+import { ClusterDetailsContext } from "../contexts";
+
 import { TableColName } from "./constants";
 import { TableRow } from "./types";
 import { tableMetadataToRows } from "./utils";
 
-const COLUMNS: (TableColumnProps<TableRow> & { sortKey?: TableSortOption })[] =
-  [
-    {
-      title: (
-        <Tooltip title={"The name of the table."}>{TableColName.NAME}</Tooltip>
-      ),
-      width: "15%",
-      sorter: (a, b) => a.tableName.localeCompare(b.tableName),
-      render: (t: TableRow) => {
-        return (
-          <Link to={`/table/${t.tableId}`}>{t.qualifiedNameWithSchema}</Link>
-        );
-      },
-      sortKey: TableSortOption.NAME,
+const COLUMNS: (TableColumnProps<TableRow> & {
+  sortKey?: TableSortOption;
+  hideIfTenant?: boolean;
+})[] = [
+  {
+    title: (
+      <Tooltip title={"The name of the table."}>{TableColName.NAME}</Tooltip>
+    ),
+    width: "15%",
+    sorter: (a, b) => a.tableName.localeCompare(b.tableName),
+    render: (t: TableRow) => {
+      return (
+        <Link to={`/table/${t.tableId}`}>{t.qualifiedNameWithSchema}</Link>
+      );
     },
-    {
-      title: (
-        <Tooltip
-          title={
-            "The approximate compressed total disk size across all replicas of the table."
-          }
-        >
-          {TableColName.REPLICATION_SIZE}
-        </Tooltip>
-      ),
-      width: "fit-content",
-      sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
-      render: (t: TableRow) => {
-        return Bytes(t.replicationSizeBytes);
-      },
-      sortKey: TableSortOption.REPLICATION_SIZE,
+    sortKey: TableSortOption.NAME,
+  },
+  {
+    title: (
+      <Tooltip
+        title={
+          "The approximate compressed total disk size across all replicas of the table."
+        }
+      >
+        {TableColName.REPLICATION_SIZE}
+      </Tooltip>
+    ),
+    width: "fit-content",
+    sorter: (a, b) => a.replicationSizeBytes - b.replicationSizeBytes,
+    render: (t: TableRow) => {
+      return Bytes(t.replicationSizeBytes);
     },
-    {
-      title: (
-        <Tooltip title={"The number of ranges the table."}>
-          {TableColName.RANGE_COUNT}
-        </Tooltip>
-      ),
-      width: "fit-content",
-      sorter: true,
-      render: (t: TableRow) => {
-        return t.rangeCount;
-      },
-      sortKey: TableSortOption.RANGES,
+    sortKey: TableSortOption.REPLICATION_SIZE,
+  },
+  {
+    title: (
+      <Tooltip title={"The number of ranges the table."}>
+        {TableColName.RANGE_COUNT}
+      </Tooltip>
+    ),
+    width: "fit-content",
+    sorter: true,
+    render: (t: TableRow) => {
+      return t.rangeCount;
     },
-    {
-      title: TableColName.COLUMN_COUNT,
-      width: "fit-content",
-      sorter: true,
-      render: (t: TableRow) => {
-        return t.columnCount;
-      },
-      sortKey: TableSortOption.COLUMNS,
+    sortKey: TableSortOption.RANGES,
+  },
+  {
+    title: TableColName.COLUMN_COUNT,
+    width: "fit-content",
+    sorter: true,
+    render: (t: TableRow) => {
+      return t.columnCount;
     },
-    {
-      title: TableColName.INDEX_COUNT,
-      width: "fit-content",
-      sorter: true,
-      render: (t: TableRow) => {
-        // We always include the primary index.
-        return t.indexCount;
-      },
-      sortKey: TableSortOption.INDEXES,
+    sortKey: TableSortOption.COLUMNS,
+  },
+  {
+    title: TableColName.INDEX_COUNT,
+    width: "fit-content",
+    sorter: true,
+    render: (t: TableRow) => {
+      // We always include the primary index.
+      return t.indexCount;
     },
-    {
-      title: (
-        <Tooltip title={"Regions/Nodes on which the table's data is stored."}>
-          {TableColName.NODE_REGIONS}
-        </Tooltip>
-      ),
-      width: "20%",
-      render: (t: TableRow) => (
-        <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
-      ),
-    },
-    {
-      title: (
-        <Tooltip
-          title={
-            "The percentage of total uncompressed logical data that has not been modified (updated or deleted)."
-          }
-        >
-          {TableColName.LIVE_DATA_PERCENTAGE}
-        </Tooltip>
-      ),
-      sorter: true,
-      width: "fit-content",
-      sortKey: TableSortOption.LIVE_DATA,
-      render: (t: TableRow) => {
-        return (
+    sortKey: TableSortOption.INDEXES,
+  },
+  {
+    title: (
+      <Tooltip title={"Regions/Nodes on which the table's data is stored."}>
+        {TableColName.NODE_REGIONS}
+      </Tooltip>
+    ),
+    hideIfTenant: true,
+    width: "20%",
+    render: (t: TableRow) => (
+      <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
+    ),
+  },
+  {
+    title: (
+      <Tooltip
+        title={
+          "The percentage of total uncompressed logical data that has not been modified (updated or deleted)."
+        }
+      >
+        {TableColName.LIVE_DATA_PERCENTAGE}
+      </Tooltip>
+    ),
+    sorter: true,
+    width: "fit-content",
+    sortKey: TableSortOption.LIVE_DATA,
+    render: (t: TableRow) => {
+      return (
+        <div>
+          <div>{(t.percentLiveData * 100).toFixed(2)}%</div>
           <div>
-            <div>{(t.percentLiveData * 100).toFixed(2)}%</div>
-            <div>
-              {Bytes(t.totalLiveDataBytes)} / {Bytes(t.totalDataBytes)}
-            </div>
+            {Bytes(t.totalLiveDataBytes)} / {Bytes(t.totalDataBytes)}
           </div>
-        );
-      },
+        </div>
+      );
     },
-    {
-      title: (
-        <Tooltip title={AUTO_STATS_COLLECTION_HELP}>
-          {TableColName.AUTO_STATS_ENABLED}
-        </Tooltip>
-      ),
-      sorter: false,
-      render: (t: TableRow) => {
-        const type = t.autoStatsEnabled ? "success" : "error";
-        const text = t.autoStatsEnabled ? "ENABLED" : "DISABLED";
-        return <Tag color={type}>{text}</Tag>;
-      },
+  },
+  {
+    title: (
+      <Tooltip title={AUTO_STATS_COLLECTION_HELP}>
+        {TableColName.AUTO_STATS_ENABLED}
+      </Tooltip>
+    ),
+    sorter: false,
+    render: (t: TableRow) => {
+      const type = t.autoStatsEnabled ? "success" : "error";
+      const text = t.autoStatsEnabled ? "ENABLED" : "DISABLED";
+      return <Tag color={type}>{text}</Tag>;
     },
-    {
-      title: (
-        <Tooltip
-          title={
-            "The last time table statistics used by the SQL optimizer were updated."
-          }
-        >
-          {TableColName.STATS_LAST_UPDATED}
-        </Tooltip>
-      ),
-      sorter: false,
-      render: (t: TableRow) => (
-        <Timestamp
-          time={t.statsLastUpdated}
-          format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-          fallback={"Never"}
-        />
-      ),
-    },
-  ];
+  },
+  {
+    title: (
+      <Tooltip
+        title={
+          "The last time table statistics used by the SQL optimizer were updated."
+        }
+      >
+        {TableColName.STATS_LAST_UPDATED}
+      </Tooltip>
+    ),
+    sorter: false,
+    render: (t: TableRow) => (
+      <Timestamp
+        time={t.statsLastUpdated}
+        format={DATE_WITH_SECONDS_FORMAT_24_TZ}
+        fallback={"Never"}
+      />
+    ),
+  },
+];
 
 const createTableMetadataRequestFromParams = (
   dbID: string,
@@ -204,6 +209,8 @@ const initialParams: TableParams = {
 const ignoreParams = [tabAttr];
 
 export const TablesPageV2 = () => {
+  const clusterDetails = useContext(ClusterDetailsContext);
+  const isTenant = clusterDetails.isTenant;
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
     paramsToIgnore: ignoreParams,
@@ -260,7 +267,7 @@ export const TablesPageV2 = () => {
   const sort = params.sort;
   const colsWithSort = useMemo(
     () =>
-      COLUMNS.map((col, i) => {
+      COLUMNS.filter(c => !isTenant || !c.hideIfTenant).map((col, i) => {
         const colInd = COLUMNS.findIndex(c => c.sortKey === sort.field);
         const sortOrder: SortDirection =
           sort?.order === "desc" ? "descend" : "ascend";
@@ -269,7 +276,7 @@ export const TablesPageV2 = () => {
           sortOrder: colInd === i && col.sorter ? sortOrder : null,
         };
       }),
-    [sort],
+    [sort, isTenant],
   );
 
   return (
@@ -283,12 +290,14 @@ export const TablesPageV2 = () => {
               onSubmit={setSearch}
             />
           </PageConfigItem>
-          <PageConfigItem minWidth={"200px"}>
-            <NodeRegionsSelector
-              value={nodeRegionsValue}
-              onChange={onNodeRegionsChange}
-            />
-          </PageConfigItem>
+          {!isTenant && (
+            <PageConfigItem minWidth={"200px"}>
+              <NodeRegionsSelector
+                value={nodeRegionsValue}
+                onChange={onNodeRegionsChange}
+              />
+            </PageConfigItem>
+          )}
         </PageConfig>
       </PageSection>
       <PageSection>
