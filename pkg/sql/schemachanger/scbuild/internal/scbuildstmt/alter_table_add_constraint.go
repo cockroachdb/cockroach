@@ -391,7 +391,25 @@ func alterTableAddForeignKey(
 		))
 	}
 
-	// 12. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to
+	// 12. Adding a foreign key dependency on a table with row-level TTL enabled can
+	// cause a slowdown in the TTL deletion job as the number of rows to be updated per
+	// deletion can go up. In such a case, flag a notice to the user advising them to
+	// update the ttl_delete_batch_size to avoid generating TTL deletion jobs with a high
+	// cardinality of rows being deleted.
+	// See https://github.com/cockroachdb/cockroach/issues/125103 for more details.
+	if b.QueryByID(referencedTableID).FilterRowLevelTTL() != nil {
+		// Use foreign key actions to determine upstream impact and flag a notice if the
+		// actions for delete involve cascading deletes.
+		if fkDef.Actions.Delete != tree.NoAction && fkDef.Actions.Delete != tree.Restrict {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+				b,
+				pgnotice.Newf("Table %s has row level TTL enabled. This will make TTL deletion jobs"+
+					" more expensive as dependent rows will need to be updated as well."+
+					" To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.",
+					referencedTableNamespaceElem.Name))
+		}
+	}
+	// 13. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to
 	// builder state.
 	constraintID := b.NextTableConstraintID(tbl.TableID)
 	if t.ValidationBehavior == tree.ValidationDefault {
