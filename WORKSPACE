@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "2443be6856928dab6f92f5e8581bb410159b4ea20033c4fb3432ee282b26efb4",
-    strip_prefix = "cockroachdb-rules_go-7c2d69e",
+    sha256 = "ada68324bc20ffd1b557bab4cf8dba9b742570a46a505b0bc99c1fde5132cce5",
+    strip_prefix = "cockroachdb-rules_go-734c37d",
     urls = [
-        # cockroachdb/rules_go as of 7c2d69efcb8b6fd548629dfa31463989e58fff2a
-        # (upstream release-0.50 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-530-g7c2d69e.tar.gz",
+        # cockroachdb/rules_go as of 734c37d6e2e6570f420d27fd97424b2fe2b402af
+        # (upstream release-0.46 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-459-g734c37d.tar.gz",
     ],
 )
 
@@ -44,9 +44,10 @@ http_archive(
 # repo.
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "b760f7fe75173886007f7c2e616a21241208f3d90e8657dc65d36a771e916b6a",
+    sha256 = "22140e6a7a28df5ec7477f12b286f24dedf8dbef0a12ffbbac10ae80441aa093",
+    strip_prefix = "bazelbuild-bazel-gazelle-061cc37",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-gazelle-v0.39.1.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.33.0-0-g061cc37.zip",
     ],
 )
 
@@ -90,9 +91,9 @@ go_deps()
 
 http_archive(
     name = "platforms",
-    sha256 = "218efe8ee736d26a3572663b374a253c012b716d8af0c07e842e82f238a0a7ee",
+    sha256 = "079945598e4b6cc075846f7fd6a9d0857c33a7afc0de868c2ccb96405225135d",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.10.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.4.tar.gz",
     ],
 )
 
@@ -107,7 +108,6 @@ http_archive(
 
 # org_golang_x_sys handled in DEPS.bzl.
 # org_golang_x_tools handled in DEPS.bzl.
-# org_golang_x_tools_go_vcs handled in DEPS.bzl.
 # org_golang_x_xerrors handled in DEPS.bzl.
 
 http_archive(
@@ -119,12 +119,11 @@ http_archive(
     ],
 )
 
+# org_golang_google_protobuf handled in DEPS.bzl.
 # com_github_golang_protobuf handled in DEPS.bzl.
 # com_github_mwitkow_go_proto_validators handled in DEPS.bzl.
 # com_github_gogo_protobuf handled in DEPS.bzl.
 # org_golang_google_genproto handled in DEPS.bzl.
-# org_golang_google_grpc_cmd_protoc_gen_go_grpc handled in DEPS.bzl.
-# org_golang_google_protobuf handled in DEPS.bzl.
 
 http_archive(
     name = "go_googleapis",
@@ -157,7 +156,6 @@ load(
     "go_download_sdk",
     "go_host_sdk",
     "go_local_sdk",
-    "go_register_nogo",
     "go_register_toolchains",
     "go_rules_dependencies",
 )
@@ -167,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.23.2.darwin-amd64.tar.gz", "51e8aaf8055cef63982dc02fa153544e4238f57d12ac0592f8270136b1838522"),
-        "darwin_arm64": ("go1.23.2.darwin-arm64.tar.gz", "c58858973397585303b24830247257116cd7087a4dcf223f389e6294f36cf6bd"),
-        "linux_amd64": ("go1.23.2.linux-amd64.tar.gz", "5a80932e83b683188495096be732260bbbf5a9b41ac7410d8d330783a19d084d"),
-        "linux_arm64": ("go1.23.2.linux-arm64.tar.gz", "b222875b75adb05f04dca09d3ff5f92919bd17c3b52c4124988fc6a769592922"),
-        "windows_amd64": ("go1.23.2.windows-amd64.tar.gz", "55cc36160f61a9662f95752fae9d80c9a3bd013861fad46f1fa0c8f0d3598c5a"),
+        "darwin_amd64": ("go1.22.5.darwin-amd64.tar.gz", "0eca73b33e9fc3b8eae28c4873b979f5ebd4b7dc8771b9b13ba2d70517309a4d"),
+        "darwin_arm64": ("go1.22.5.darwin-arm64.tar.gz", "2d72a9301bf73f5429cbc40ba08b6602b1af91a5d5eed302fef2b92ae53b0b56"),
+        "linux_amd64": ("go1.22.5.linux-amd64.tar.gz", "477ec7b6f76e6c38d83fbd808af0729299b40a8e99796ac3b2fec50d62e20938"),
+        "linux_arm64": ("go1.22.5.linux-arm64.tar.gz", "fbaf48b411d434aad694fddc8a036ce7374f2d8459518a25fec4f58f3bca0c20"),
+        "windows_amd64": ("go1.22.5.windows-amd64.tar.gz", "8fc3ccf439e93521faa0411702ef4e598c80ded514bada5fedc11846c284d3d2"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20241014-231526/{}"],
-    version = "1.23.2",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240708-162411/{}"],
+    version = "1.22.5",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -194,8 +192,7 @@ go_download_sdk(
 
 go_rules_dependencies()
 
-go_register_toolchains()
-go_register_nogo(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
+go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 
 ###############################
 # end rules_go dependencies #
@@ -325,14 +322,7 @@ load(
 # Ref: https://github.com/bazelbuild/bazel-gazelle/blob/master/deps.bzl
 
 # bazel_skylib handled above.
-
-http_archive(
-    name = "rules_license",
-    urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-1.0.0.tar.gz",
-    ],
-    sha256 = "26d4021f6898e23b82ef953078389dd49ac2b5618ac564ade4ef87cced147b38",
-)
+# co_honnef_go_tools handled in DEPS.bzl.
 
 # keep
 go_repository(
@@ -358,13 +348,27 @@ go_repository(
     ],
 )
 
+# com_github_burntsushi_toml handled in DEPS.bzl.
+# com_github_census_instrumentation_opencensus_proto handled in DEPS.bzl.
+# com_github_chzyer_logex handled in DEPS.bzl.
+# com_github_chzyer_readline handled in DEPS.bzl.
+# com_github_chzyer_test handled in DEPS.bzl.
+# com_github_client9_misspell handled in DEPS.bzl.
+# com_github_davecgh_go_spew handled in DEPS.bzl.
+# com_github_envoyproxy_go_control_plane handled in DEPS.bzl.
+# com_github_envoyproxy_protoc_gen_validate handled in DEPS.bzl.
 # com_github_fsnotify_fsnotify handled in DEPS.bzl.
-# com_github_gogo_protobuf handled in DEPS.bzl.
+# com_github_golang_glog handled in DEPS.bzl.
 # com_github_golang_mock handled in DEPS.bzl.
 # com_github_golang_protobuf handled in DEPS.bzl.
 # com_github_google_go_cmp handled in DEPS.bzl.
 # com_github_pelletier_go_toml handled in DEPS.bzl.
 # com_github_pmezard_go_difflib handled in DEPS.bzl.
+# com_github_prometheus_client_model handled in DEPS.bzl.
+# com_github_yuin_goldmark handled in DEPS.bzl.
+# com_google_cloud_go handled in DEPS.bzl.
+# in_gopkg_check_v1 handled in DEPS.bzl.
+# in_gopkg_yaml_v2 handled in DEPS.bzl.
 
 # keep
 go_repository(
@@ -379,15 +383,18 @@ go_repository(
 
 # org_golang_google_genproto handled in DEPS.bzl.
 # org_golang_google_grpc handled in DEPS.bzl.
-# org_golang_google_grpc_cmd_protoc_gen_go_grpc handled in DEPS.bzl.
 # org_golang_google_protobuf handled in DEPS.bzl.
+# org_golang_x_crypto handled in DEPS.bzl.
+# org_golang_x_exp handled in DEPS.bzl.
+# org_golang_x_lint handled in DEPS.bzl.
 # org_golang_x_mod handled in DEPS.bzl.
 # org_golang_x_net handled in DEPS.bzl.
+# org_golang_x_oauth2 handled in DEPS.bzl.
 # org_golang_x_sync handled in DEPS.bzl.
 # org_golang_x_sys handled in DEPS.bzl.
 # org_golang_x_text handled in DEPS.bzl.
 # org_golang_x_tools handled in DEPS.bzl.
-# org_golang_x_tools_go_vcs handled in DEPS.bzl.
+# org_golang_x_xerrors handled in DEPS.bzl.
 
 gazelle_dependencies()
 
@@ -450,9 +457,11 @@ http_archive(
 
 http_archive(
     name = "rules_proto",
-    sha256 = "6fb6767d1bef535310547e03247f7518b03487740c11b6c6adb7952033fe1295",
-    strip_prefix = "rules_proto-6.0.2",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_proto-6.0.2.tar.gz",
+    sha256 = "88b0a90433866b44bb4450d4c30bc5738b8c4f9c9ba14e9661deb123f56a833d",
+    strip_prefix = "rules_proto-b0cc14be5da05168b01db282fe93bdf17aa2b9f4",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_proto-b0cc14be5da05168b01db282fe93bdf17aa2b9f4.tar.gz",
+    ],
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
@@ -525,7 +534,13 @@ http_archive(
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_python-0.1.0.tar.gz"],
 )
 
-# rules_license handled above.
+http_archive(
+    name = "rules_license",
+    sha256 = "4865059254da674e3d18ab242e21c17f7e3e8c6b1f1421fffa4c5070f82e98b5",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-0.0.1.tar.gz",
+    ],
+)
 
 load("@rules_pkg//pkg:deps.bzl", "rules_pkg_dependencies")
 
@@ -654,8 +669,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.23.2fips.linux-amd64.tar.gz", "523271b256d5ae315600653968b83af1f4a321f3cf54995b115232d4f1911750"),
+        "linux_amd64": ("go1.22.5fips.linux-amd64.tar.gz", "d2a40c2e78e2cf1560cafa304593e194e094c3e4dbd404666dda9cf5cc12b7f1"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20241014-231526/{}"],
-    version = "1.23.2fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240708-162411/{}"],
+    version = "1.22.5fips",
 )

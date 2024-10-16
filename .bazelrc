@@ -26,16 +26,18 @@ build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
 build --flag_alias=heavy=//build/toolchains:heavy_flag
+build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
+build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
 
 build:crdb_test_off --crdb_test_off
 build:cross --cross
 build:dev --dev
 build:force_build_cdeps --force_build_cdeps
 build:heavy --heavy
-build:lintonbuild --run_validations
-build:nolintonbuild --norun_validations
+build:lintonbuild --lintonbuild
+build:nolintonbuild --nolintonbuild
 # Note: nonogo is classically the name of the nolintonbuild configuration.
-build:nonogo --config nolintonbuild
+build:nonogo --nolintonbuild
 build:test --crdb_test
 
 # Basic settings.
@@ -63,7 +65,7 @@ test:race --heavy
 # CI uses a custom timeout for enormous targets.
 test:use_ci_timeouts --test_timeout=60,300,900,900
 # CI should always run with `--config=ci`.
-build:cibase --config=lintonbuild
+build:cibase --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test:cibase --test_env=GO_TEST_WRAP_TESTV=1
@@ -89,7 +91,7 @@ build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
-build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.23.2fips
+build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.22.5fips
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows
