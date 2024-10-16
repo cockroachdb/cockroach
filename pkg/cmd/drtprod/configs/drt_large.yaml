@@ -131,4 +131,4 @@ targets:
           - './certs/*'
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         flags:
-          warehouses: 15000
+          warehouses: 150000
