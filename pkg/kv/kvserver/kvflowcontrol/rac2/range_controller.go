@@ -47,16 +47,18 @@ import (
 // WaitForEval for regular work.
 type RangeController interface {
 	// WaitForEval seeks admission to evaluate a request at the given priority.
-	// This blocks until there are positive tokens available for the request to
-	// be admitted for evaluation, or the context is canceled (which returns an
-	// error). Note the number of tokens required by the request is not
-	// considered, only the priority of the request, as the number of tokens is
-	// not known until eval.
+	// If the priority is subject to replication admission control, it blocks
+	// until there are positive tokens available for the request to be admitted
+	// for evaluation, or the context is canceled (which returns an error). Note
+	// the number of tokens required by the request is not considered, only the
+	// priority of the request, as the number of tokens is not known until eval.
 	//
-	// In the non-error case, the waited return value is true if the
-	// RangeController was not closed during the execution of WaitForEval. If
-	// closed, a (false, nil) will be returned -- this is important for the
-	// caller to fall back to waiting on the local store.
+	// In the non-error case, the waited return value is true if the priority
+	// was subject to replication admission control, and the RangeController was
+	// not closed during the execution of WaitForEval. If closed, or the
+	// priority is not subject to replication admission control, a (false, nil)
+	// will be returned -- this is important for the caller to fall back to
+	// waiting on the local store.
 	//
 	// No mutexes should be held.
 	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) (waited bool, err error)
@@ -504,6 +506,7 @@ type RangeControllerOptions struct {
 	SendTokenWatcher       *SendTokenWatcher
 	EvalWaitMetrics        *EvalWaitMetrics
 	RangeControllerMetrics *RangeControllerMetrics
+	WaitForEvalConfig      *WaitForEvalConfig
 	Knobs                  *kvflowcontrol.TestingKnobs
 }
 
@@ -635,25 +638,32 @@ func NewRangeController(
 	return rc
 }
 
-// WaitForEval blocks until there are positive tokens available for the
-// request to be admitted for evaluation. Note the number of tokens required
-// by the request is not considered, only the priority of the request, as the
-// number of tokens is not known until eval.
-//
-// No mutexes should be held.
+// WaitForEval implements RangeController.WaitForEval.
 func (rc *rangeController) WaitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority,
 ) (waited bool, err error) {
+	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	wc := admissionpb.WorkClassFromPri(pri)
+	rc.opts.EvalWaitMetrics.OnWaiting(wc)
+	waitCategory, waitCategoryChangeCh := rc.opts.WaitForEvalConfig.Current()
+	bypass := waitCategory.Bypass(wc)
+	if bypass {
+		if expensiveLoggingEnabled {
+			log.VEventf(ctx, 2, "r%v/%v bypassed request (pri=%v)",
+				rc.opts.RangeID, rc.opts.LocalReplicaID, pri)
+		}
+		rc.opts.EvalWaitMetrics.OnBypassed(wc, 0 /* duration */)
+		return false, nil
+	}
 	waitForAllReplicateHandles := false
 	if wc == admissionpb.ElasticWorkClass {
 		waitForAllReplicateHandles = true
 	}
 	var handlesScratch [5]tokenWaitingHandleInfo
 	handles := handlesScratch[:]
-	var scratch []reflect.SelectCase
+	var scratch [7]reflect.SelectCase
+	selectCasesScratch := scratch[:0:cap(scratch)]
 
-	rc.opts.EvalWaitMetrics.OnWaiting(wc)
 	start := rc.opts.Clock.PhysicalTime()
 retry:
 	// Snapshot the waiter sets and the refresh channel.
@@ -665,10 +675,15 @@ retry:
 
 	if refreshCh == nil {
 		// RangeControllerImpl is closed.
-		rc.opts.EvalWaitMetrics.OnBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+		waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+		if expensiveLoggingEnabled {
+			log.VEventf(ctx, 2,
+				"r%v/%v bypassed request as RC closed (pri=%v wait-duration=%v)",
+				rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration)
+		}
+		rc.opts.EvalWaitMetrics.OnBypassed(wc, waitDuration)
 		return false, nil
 	}
-	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	for _, vs := range vss {
 		quorumCount := (len(vs) + 2) / 2
 		votersHaveEvalTokensCount := 0
@@ -738,22 +753,41 @@ retry:
 			// parameter, to output trace statements, since expensiveLoggingEnabled
 			// is a superset of when tracing is enabled (and in a production setting
 			// is likely to be identical, so there isn't much waste).
-			state, scratch = WaitForEval(
-				ctx, refreshCh, handles, remainingForQuorum, expensiveLoggingEnabled, scratch)
+			state, selectCasesScratch = WaitForEval(ctx, waitCategoryChangeCh, refreshCh, handles,
+				remainingForQuorum, expensiveLoggingEnabled, selectCasesScratch)
 			switch state {
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
-				rc.opts.EvalWaitMetrics.OnErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+				waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+				if expensiveLoggingEnabled {
+					log.VEventf(ctx, 2, "r%v/%v canceled request (pri=%v wait-duration=%v)",
+						rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration)
+				}
+				rc.opts.EvalWaitMetrics.OnErrored(wc, waitDuration)
 				return false, ctx.Err()
-			case RefreshWaitSignaled:
+			case ConfigRefreshWaitSignaled:
+				waitCategory, waitCategoryChangeCh = rc.opts.WaitForEvalConfig.Current()
+				bypass = waitCategory.Bypass(wc)
+				if bypass {
+					waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+					if expensiveLoggingEnabled {
+						log.VEventf(ctx, 2,
+							"r%v/%v bypassed request as settings changed (pri=%v wait-duration=%v)",
+							rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration)
+					}
+					rc.opts.EvalWaitMetrics.OnBypassed(wc, waitDuration)
+					return false, nil
+				}
+				goto retry
+			case ReplicaRefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
 	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
 	if expensiveLoggingEnabled {
-		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%s wait-for-all=%v)",
+		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%v wait-for-all=%v)",
 			rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
 	}
 	rc.opts.EvalWaitMetrics.OnAdmitted(wc, waitDuration)
@@ -1927,7 +1961,7 @@ type replicaSendStream struct {
 	// Fields that are read/written while holding raftMu.
 	raftMu struct {
 		// tracker contains entries that have been sent, and have had send-tokens
-		// deducted (and will have had eval-tokens deducted iff index >=
+		// deducted (and have had eval-tokens deducted iff index >=
 		// nextRaftIndexInitial).
 		//
 		// Contains no entries in probeRecentlyNoSendQ.

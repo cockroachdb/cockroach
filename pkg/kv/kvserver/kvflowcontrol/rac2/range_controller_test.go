@@ -55,6 +55,7 @@ type testingRCState struct {
 	ssTokenCounter        *StreamTokenCounterProvider
 	sendTokenWatcher      *SendTokenWatcher
 	probeToCloseScheduler ProbeToCloseTimerScheduler
+	waitForEvalConfig     *WaitForEvalConfig
 	evalMetrics           *EvalWaitMetrics
 	rcMetrics             *RangeControllerMetrics
 	// ranges contains the controllers for each range. It is the main state being
@@ -71,12 +72,15 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.t = t
 	s.testCtx = ctx
 	s.settings = cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &s.settings.SV, true)
+	kvflowcontrol.Mode.Override(ctx, &s.settings.SV, kvflowcontrol.ApplyToAll)
 	s.stopper = stop.NewStopper()
 	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.clock = hlc.NewClockForTesting(s.ts)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
 	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
+	s.waitForEvalConfig = NewWaitForEvalConfig(s.settings)
 	s.evalMetrics = NewEvalWaitMetrics()
 	s.rcMetrics = NewRangeControllerMetrics()
 	s.ranges = make(map[roachpb.RangeID]*testingRCRange)
@@ -330,6 +334,7 @@ func (s *testingRCState) getOrInitRange(
 			SendTokenWatcher:       s.sendTokenWatcher,
 			EvalWaitMetrics:        s.evalMetrics,
 			RangeControllerMetrics: s.rcMetrics,
+			WaitForEvalConfig:      s.waitForEvalConfig,
 			Knobs:                  &kvflowcontrol.TestingKnobs{},
 		}
 
@@ -1396,6 +1401,32 @@ func TestRangeController(t *testing.T) {
 					))
 				}
 				return buf.String()
+
+			case "set-flow-control-config":
+				if d.HasArg("enabled") {
+					var enabled bool
+					d.ScanArgs(t, "enabled", &enabled)
+					kvflowcontrol.Enabled.Override(ctx, &state.settings.SV, enabled)
+				}
+				if d.HasArg("mode") {
+					var mode string
+					d.ScanArgs(t, "mode", &mode)
+					var m kvflowcontrol.ModeT
+					switch mode {
+					case "apply_to_all":
+						m = kvflowcontrol.ApplyToAll
+					case "apply_to_elastic":
+						m = kvflowcontrol.ApplyToElastic
+					default:
+						panic(fmt.Sprintf("unknown mode %s", mode))
+					}
+					kvflowcontrol.Mode.Override(ctx, &state.settings.SV, m)
+				}
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
+				return fmt.Sprintf("enabled: %t mode: %v",
+					kvflowcontrol.Enabled.Get(&state.settings.SV),
+					kvflowcontrol.Mode.Get(&state.settings.SV))
 
 			default:
 				panic(fmt.Sprintf("unknown command: %s", d.Cmd))
