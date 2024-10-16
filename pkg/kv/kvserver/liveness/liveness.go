@@ -36,11 +36,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
-	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
-)
-
 // Setting this to less than the interval for gossiping stores is a big
 // no-no, since this value is compared to the age of the most recent gossip
 // from each store to determine whether that store is live. Put a buffer of
@@ -50,7 +45,7 @@ const minTimeUntilNodeDead = gossip.StoresInterval + 15*time.Second
 // TimeUntilNodeDead wraps "server.time_until_store_dead".
 var TimeUntilNodeDead = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
-	timeUntilNodeDeadSettingName,
+	"server.time_until_store_dead",
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute,
 	settings.DurationWithMinimum(minTimeUntilNodeDead),
@@ -71,7 +66,7 @@ const maxTimeAfterNodeSuspect = 5 * time.Minute
 // it's last failure.
 var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	timeAfterNodeSuspectSettingName,
+	"server.time_after_store_suspect",
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
 	30*time.Second,
