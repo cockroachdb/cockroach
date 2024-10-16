@@ -283,7 +283,6 @@ func TestProcessorBasic(t *testing.T) {
 			ACWorkQueue:            &q,
 			MsgAppSender:           testMsgAppSender{},
 			RangeControllerFactory: &rcFactory,
-			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
 			EvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		}).(*processorImpl)
