@@ -435,12 +435,17 @@ func (r *testingRCRange) LogSlice(start, end uint64, maxSize uint64) (raft.LogSl
 	var size uint64
 	var entries []raftpb.Entry
 	for _, entry := range r.entries {
-		if entry.Index >= start && entry.Index < end {
-			entries = append(entries, entry)
-			size += uint64(len(entry.Data))
-			if size > maxSize {
-				break
-			}
+		if entry.Index < start || entry.Index >= end {
+			continue
+		}
+		size += uint64(entry.Size())
+		// Allow exceeding the size limit only if this is the first entry.
+		if size > maxSize && len(entries) != 0 {
+			break
+		}
+		entries = append(entries, entry)
+		if size >= maxSize {
+			break
 		}
 	}
 	// TODO(pav-kv): use a real LogSnapshot and construct a correct LogSlice.

@@ -247,20 +247,19 @@ NormalPri:
   term=1 index=5  tokens=3145728
   term=1 index=6  tokens=3145728
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,6) send_queue=[6,7) precise_q_size=+3.0 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[4,5) send_queue=[5,7) precise_q_size=+6.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+12 MiB
-eval original in send-q: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
   term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
 ++++
 (n3,s3):3: closed
 ++++
 MsgApps sent in pull mode:
- to: 2, lowPri: true entries: [4 5]
+ to: 2, lowPri: true entries: [4]
 ++++
 schedule-controller-event-count: 3
 scheduled-replicas: 2
@@ -279,20 +278,20 @@ NormalPri:
   term=1 index=5  tokens=3145728
   term=1 index=6  tokens=3145728
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[6,7) send_queue=[7,7) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[5,6) send_queue=[6,7) precise_q_size=+3.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+12 MiB
-eval original in send-q: reg=+0 B ela=+0 B
+eval original in send-q: reg=+3.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
   term=1 index=4  tokens=3145728
   term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
 ++++
 (n3,s3):3: closed
 ++++
 MsgApps sent in pull mode:
- to: 2, lowPri: true entries: [6]
+ to: 2, lowPri: true entries: [5]
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 4
+scheduled-replicas: 2
