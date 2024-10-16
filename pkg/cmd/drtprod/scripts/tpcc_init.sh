@@ -20,12 +20,14 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
 fi
 
 # script is responsible for importing the tpcc database for workload
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init.sh > /dev/null << EOF
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init.sh > /dev/null << 'EOF'
+TPCC_DB=cct_tpcc
 export ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT}
 export ROACHPROD_DNS=${ROACHPROD_DNS}
 ./roachprod sync
 sleep 20
-nohup ./workload fixtures import tpcc $(roachprod pgurl "${CLUSTER}":1) --db=cct_tpcc --checks=false $@ &
+PGURLS=\$(./roachprod pgurl ${CLUSTER} | sed s/\'//g)
+nohup ./cockroach workload init tpcc $@ --db=\$TPCC_DB --secure --families \$PGURLS &
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}" -- chmod +x ./tpcc_init.sh
-roachprod ssh "${WORKLOAD_CLUSTER}" -- ./tpcc_init.sh
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- chmod +x tpcc_init.sh
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- ./tpcc_init.sh
