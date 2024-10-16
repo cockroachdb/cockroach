@@ -2,7 +2,6 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-//
 
 package operations
 
@@ -75,15 +74,12 @@ func setClusterSetting(
 }
 
 func registerClusterSettings(r registry.Registry) {
-	timeSupplier := func() time.Time {
-		return timeutil.Now()
-	}
 	ops := []clusterSettingOp{
 		// Converts all leases to expiration. Tradeoff between lower throughput and higher availability.
 		// Weekly cycle.
 		{
 			Name:      "kv.expiration_leases_only.enabled",
-			Generator: timeBasedValues(timeSupplier, []string{"true", "false"}, 24*7*time.Minute),
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*7*time.Hour),
 			Owner:     registry.OwnerKV,
 		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
@@ -91,7 +87,7 @@ func registerClusterSettings(r registry.Registry) {
 		// 20-minute cycle.
 		{
 			Name: "storage.wal_failover.unhealthy_op_threshold",
-			Generator: timeBasedRandomValue(timeSupplier, 20*time.Minute, func(rng *rand.Rand) string {
+			Generator: timeBasedRandomValue(timeutil.Now, 20*time.Minute, func(rng *rand.Rand) string {
 				return fmt.Sprintf("%d", rng.Intn(246)+5)
 			}),
 			Owner: registry.OwnerStorage,

@@ -16,6 +16,7 @@ go_library(
         "pause_job.go",
         "register.go",
         "resize.go",
+        "session_vars.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations",
