@@ -1,0 +1,161 @@
+log-level none
+----
+ok
+
+add-nodes 3 voters=(1,2,3) index=10 checkquorum=true prevote=true
+----
+ok
+
+campaign 1
+----
+ok
+
+stabilize
+----
+ok
+
+log-level debug
+----
+ok
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+
+# Set the randomized election timeout to be worth 1 tick-electon. This makes the
+# test deterministic. We then have to tick-election twice as the leader heard
+# from followers when it stabilized above. This should then trip the heartbeat
+# lease check quorum condition.
+set-randomized-election-timeout 1 timeout=3
+----
+ok
+
+withdraw-support 2 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 1 1 1
+
+withdraw-support 3 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 x 1 1
+
+
+tick-election 1
+----
+ok
+
+# Ticking the election a second time should trip the heartbeat lease check
+# quorum condition. However, the leader won't step down yet -- even though it
+# has lost store liveness support, its LeadSupportUntil hasn't expired yet.
+tick-election 1
+----
+DEBUG 1 has not received messages from a quorum of peers in the last election timeout
+
+support-expired 1
+----
+ok
+
+# Now that we've expired LeadSupportUntil for the leader, it should step down.
+tick-election 1
+----
+INFO 1 leader at term 1 does not support itself in the liveness fabric
+INFO 1 leader at term 1 does not support itself in the liveness fabric
+DEBUG 1 has not received messages from a quorum of peers in the last election timeout
+DEBUG 1 does not have store liveness support from a quorum of peers
+WARN 1 stepped down to follower since quorum is not active
+INFO 1 became follower at term 1
+
+# Needs resetting post step-down.
+set-randomized-election-timeout 1 timeout=3
+----
+ok
+
+# Even though the leader doesn't have store liveness support, it'll still call
+# a pre-vote election until we start checking store liveness before doing so.
+# However, on this ticker, it'll also broadcast a de-fortify to all peers --
+# which is what we're interested in for this test.
+tick-election 1
+----
+INFO 1 is starting a new election at term 1
+INFO 1 became pre-candidate at term 1
+INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
+INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 1
+
+raft-state 1
+----
+1: StatePreCandidate (Voter) Term:1 Lead:0 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+
+# Note the MsgDeFortifyLeaders.
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StatePreCandidate
+  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  1->2 MsgPreVote Term:2 Log:1/11
+  1->3 MsgPreVote Term:2 Log:1/11
+  INFO 1 received MsgPreVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
+> 2 receiving messages
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 is not fortifying 1; de-fortification is a no-op
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 is not fortifying 1; de-fortification is a no-op
+  1->2 MsgPreVote Term:2 Log:1/11
+  INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: recently received communication from leader (remaining ticks: 3)
+> 3 receiving messages
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 3 is not fortifying 1; de-fortification is a no-op
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 3 is not fortifying 1; de-fortification is a no-op
+  1->3 MsgPreVote Term:2 Log:1/11
+  INFO 3 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: recently received communication from leader (remaining ticks: 3)
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+
+# All peers have been de-fortified successfully.
+raft-state
+----
+1: StatePreCandidate (Voter) Term:1 Lead:0 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+
+# And as a result, 2 is able to win the election.
+campaign 2
+----
+INFO 2 is starting a new election at term 1
+INFO 2 became pre-candidate at term 1
+INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
+INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 1
+
+stabilize log-level=none
+----
+ok
+
+raft-state
+----
+1: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
+2: StateLeader (Voter) Term:2 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
