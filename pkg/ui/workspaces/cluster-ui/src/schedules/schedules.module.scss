@@ -154,7 +154,7 @@
     font-size: $font-size--medium;
     display: flex;
     align-items: center;
-    .ant-divider {
+    .crl-ant-divider {
       height: 20px;
     }
   }
@@ -174,7 +174,7 @@
   .schedule-status__line--percentage {
     display: flex;
     align-items: center;
-    .ant-divider {
+    .crl-ant-divider {
       height: 20px;
     }
     span {
@@ -186,7 +186,7 @@
       margin: 0;
     }
   }
-  .ant-divider {
+  .crl-ant-divider {
     margin-left: 15px;
     margin-right: 15px;
   }
