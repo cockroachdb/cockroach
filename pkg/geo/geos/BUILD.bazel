@@ -42,13 +42,7 @@ go_library(
         "@io_bazel_rules_go//go/platform:openbsd": [
             "-ldl -lm",
         ],
-        "@io_bazel_rules_go//go/platform:osx": [
-            "-ldl -lm",
-        ],
         "@io_bazel_rules_go//go/platform:plan9": [
-            "-ldl -lm",
-        ],
-        "@io_bazel_rules_go//go/platform:qnx": [
             "-ldl -lm",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [

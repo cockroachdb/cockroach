@@ -67,15 +67,7 @@ go_test(
             "//pkg/util/log",
             "@com_github_stretchr_testify//require",
         ],
-        "@io_bazel_rules_go//go/platform:osx": [
-            "//pkg/util/log",
-            "@com_github_stretchr_testify//require",
-        ],
         "@io_bazel_rules_go//go/platform:plan9": [
-            "//pkg/util/log",
-            "@com_github_stretchr_testify//require",
-        ],
-        "@io_bazel_rules_go//go/platform:qnx": [
             "//pkg/util/log",
             "@com_github_stretchr_testify//require",
         ],
