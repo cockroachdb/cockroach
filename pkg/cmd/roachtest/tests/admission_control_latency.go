@@ -154,7 +154,11 @@ func setupMetamorphic(p perturbation) variations {
 func setupFull(p perturbation) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.ExpirationLeases
+	v.leaseType = registry.EpochLeases
+	// TODO(baptist): Inject this in a better way.
+	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
+		v.leaseType = registry.ExpirationLeases
+	}
 	v.maxBlockBytes = 4096
 	v.splits = 10000
 	v.numNodes = 12
@@ -174,7 +178,11 @@ func setupFull(p perturbation) variations {
 func setupDev(p perturbation) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.ExpirationLeases
+	v.leaseType = registry.EpochLeases
+	// TODO(baptist): Inject this in a better way.
+	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
+		v.leaseType = registry.ExpirationLeases
+	}
 	v.maxBlockBytes = 1024
 	v.splits = 1
 	v.numNodes = 4
