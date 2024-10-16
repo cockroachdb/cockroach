@@ -1054,6 +1054,25 @@ func ResolveFK(
 		}
 	}
 
+	// Adding a foreign key dependency on a table with row-level TTL enabled can
+	// cause a slowdown in the TTL deletion job as the number of rows to be updated per
+	// deletion can go up. In such a case, flag a notice to the user advising them to
+	// update the ttl_delete_batch_size to avoid generating TTL deletion jobs with a high
+	// cardinality of rows being deleted.
+	// See https://github.com/cockroachdb/cockroach/issues/125103 for more details.
+	if target.HasRowLevelTTL() {
+		// Use foreign key actions to determine upstream impact and flag a notice if the
+		// actions for delete involve cascading deletes.
+		if d.Actions.Delete != tree.NoAction && d.Actions.Delete != tree.Restrict {
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("Table %s has row level TTL enabled. This will make TTL deletion jobs"+
+					" more expensive as dependent rows will need to be updated as well. To improve performance"+
+					" of the TTL job, consider reducing the value of ttl_delete_batch_size.",
+					target.GetName()))
+		}
+	}
+
 	ref := descpb.ForeignKeyConstraint{
 		OriginTableID:       tbl.ID,
 		OriginColumnIDs:     originColumnIDs,
