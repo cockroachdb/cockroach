@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // BufferedStream is a Stream that can buffer events before sending them to the
@@ -28,16 +27,7 @@ type BufferedStream interface {
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
 	*PerRangeEventSink
-	wrapped bufferedSender
-}
-
-func NewBufferedPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
-) *BufferedPerRangeEventSink {
-	return &BufferedPerRangeEventSink{
-		PerRangeEventSink: NewPerRangeEventSink(ctx, rangeID, streamID, wrapped),
-		wrapped:           wrapped,
-	}
+	sendBuffered SendBufferedFn
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
@@ -47,6 +37,7 @@ var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
 func (s *BufferedPerRangeEventSink) Context() context.Context {
 	return s.ctx
 }
+
 // SendBuffered buffers the event in BufferedSender and transfers the ownership
 // of SharedBudgetAllocation to BufferedSender. BufferedSender is responsible
 // for properly using and releasing it when an error occurs or when the event is
@@ -63,5 +54,5 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.sendBuffered(response, alloc)
+	return s.sendBuffered(response, alloc)
 }

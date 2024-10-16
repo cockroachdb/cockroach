@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -147,7 +148,30 @@ func NewUnbufferedSender(
 	}
 }
 
-func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+func (ubs *UnbufferedSender) NewStream(
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64,
+) Stream {
+	return &PerRangeEventSink{
+		ctx:      ctx,
+		rangeID:  rangeID,
+		streamID: streamID,
+		send:     ubs.sendUnbuffered,
+	}
+}
+
+func (ubs *UnbufferedSender) Disconnect(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
+	if err == nil {
+		log.Fatalf(context.Background(), "unexpected: Disconnect called with non-error event")
+		return
+	}
+	ev := &kvpb.MuxRangeFeedEvent{
+		StreamID: streamID,
+		RangeID:  rangeID,
+	}
+	ev.MustSetValue(&kvpb.RangeFeedError{
+		Error: *err,
+	})
+	ubs.sendBufferedError(ev)
 }
 
 // SendBufferedError 1. Sends a mux rangefeed completion error to the
@@ -187,7 +211,8 @@ func (ubs *UnbufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // Important to be thread-safe.
 func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
-		log.Fatalf(context.Background(), "unexpected: sendUnbuffered called with error event")
+		ubs.sendBufferedError(event)
+		return nil
 	}
 	return ubs.sender.Send(event)
 }

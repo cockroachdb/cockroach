@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -51,7 +52,7 @@ type BufferedSender struct {
 	// thread safety.
 	sender ServerStreamSender
 
-	// metrics is used to record rangefeed metrics for the node.
+	// metrics is used to recod rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
 }
 
@@ -61,6 +62,15 @@ func NewBufferedSender(
 	return &BufferedSender{
 		sender:  sender,
 		metrics: metrics,
+	}
+}
+
+func (bs *BufferedSender) NewStream(
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64,
+) Stream {
+	return &BufferedPerRangeEventSink{
+		PerRangeEventSink: NewPerRangeEventSink(ctx, rangeID, streamID, bs.sendUnbuffered),
+		sendBuffered:      bs.sendBuffered,
 	}
 }
 
@@ -83,7 +93,7 @@ func (bs *BufferedSender) sendUnbuffered(
 
 // Left here to implement but to be removed and replaced with a Disconnect
 // interface.
-func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+func (bs *BufferedSender) Disconnect(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
 	// Disconnect stream and cancel context. Then call sendBuffered with the error
 	// event.
 	panic("unimplemented: buffered sender for rangefeed #126560")
