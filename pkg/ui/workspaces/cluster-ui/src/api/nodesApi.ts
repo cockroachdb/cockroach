@@ -4,12 +4,13 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import useSWR from "swr";
 
 import { fetchData } from "src/api";
 import { getRegionFromLocality } from "src/store/nodes";
 
+import { ClusterDetailsContext } from "../contexts";
 import { NodeID, StoreID } from "../types/clusterTypes";
 
 const NODES_PATH = "_status/nodes_ui";
@@ -20,10 +21,16 @@ export const getNodes =
   };
 
 export const useNodeStatuses = () => {
-  const { data, isLoading, error } = useSWR(NODES_PATH, getNodes, {
-    revalidateOnFocus: false,
-    dedupingInterval: 10000, // 10 seconds.
-  });
+  const clusterDetails = useContext(ClusterDetailsContext);
+  const isTenant = clusterDetails.isTenant;
+  const { data, isLoading, error } = useSWR(
+    NODES_PATH,
+    !isTenant ? getNodes : null,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 10000, // 10 seconds.
+    },
+  );
 
   const { storeIDToNodeID, nodeIDToRegion } = useMemo(() => {
     const nodeIDToRegion: Record<NodeID, string> = {};

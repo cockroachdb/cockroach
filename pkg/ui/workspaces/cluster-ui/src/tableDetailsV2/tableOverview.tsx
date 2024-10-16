@@ -4,12 +4,14 @@
 // included in the /LICENSE file.
 
 import { Icon } from "@cockroachlabs/ui-components";
-import { Col, Row, Skeleton, Tooltip } from "antd";
+import { Col, Row, Skeleton } from "antd";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useContext } from "react";
 
 import { useNodeStatuses } from "src/api";
 import { TableDetails } from "src/api/databases/getTableMetadataApi";
+import { Tooltip } from "src/components/tooltip";
+import { ClusterDetailsContext } from "src/contexts";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
@@ -24,6 +26,8 @@ type TableOverviewProps = {
 export const TableOverview: React.FC<TableOverviewProps> = ({
   tableDetails,
 }) => {
+  const clusterDetails = useContext(ClusterDetailsContext);
+  const isTenant = clusterDetails.isTenant;
   const { metadata } = tableDetails;
   const {
     nodeIDToRegion,
@@ -96,14 +100,16 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
               />
               <SummaryCardItem label="Ranges" value={metadata.rangeCount} />
               <SummaryCardItem label="Replicas" value={metadata.replicaCount} />
-              <SummaryCardItem
-                label="Regions / Nodes"
-                value={
-                  <Skeleton loading={nodesLoading}>
-                    {getNodesByRegionDisplayStr()}
-                  </Skeleton>
-                }
-              />
+              {!isTenant && (
+                <SummaryCardItem
+                  label="Regions / Nodes"
+                  value={
+                    <Skeleton loading={nodesLoading}>
+                      {getNodesByRegionDisplayStr()}
+                    </Skeleton>
+                  }
+                />
+              )}
             </SummaryCard>
           </Col>
           <Col span={12}>
