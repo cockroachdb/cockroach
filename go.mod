@@ -233,7 +233,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
-	github.com/twmb/franz-go v1.17.1
+	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
 	github.com/twpayne/go-geom v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
@@ -426,7 +426,7 @@ require (
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.8.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect

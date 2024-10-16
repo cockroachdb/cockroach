@@ -8699,10 +8699,10 @@ def go_deps():
         name = "com_github_twmb_franz_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twmb/franz-go",
-        sha256 = "7b571a6c5b188750c22ff7a28e94cac97f15539a1a5209ac335c7bc7c2401e82",
-        strip_prefix = "github.com/twmb/franz-go@v1.17.1",
+        sha256 = "343bdc5d5f8e5536678caa0753a325ab281f72a7a72da97d8a9485f70a2e1322",
+        strip_prefix = "github.com/twmb/franz-go@v1.18.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/com_github_twmb_franz_go-v1.17.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/com_github_twmb_franz_go-v1.18.0.zip",
         ],
     )
     go_repository(
@@ -8719,10 +8719,10 @@ def go_deps():
         name = "com_github_twmb_franz_go_pkg_kmsg",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twmb/franz-go/pkg/kmsg",
-        sha256 = "36c7bd41ee59195ec636fbdbe636328ed0700a6eef29a6d2e010ba85b46aa90c",
-        strip_prefix = "github.com/twmb/franz-go/pkg/kmsg@v1.8.0",
+        sha256 = "ab70bc73e6f7167da6ec1af42399fee83971bcd8f31b03d063a201944845e229",
+        strip_prefix = "github.com/twmb/franz-go/pkg/kmsg@v1.9.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kmsg/com_github_twmb_franz_go_pkg_kmsg-v1.8.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kmsg/com_github_twmb_franz_go_pkg_kmsg-v1.9.0.zip",
         ],
     )
     go_repository(
