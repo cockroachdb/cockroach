@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -247,7 +248,16 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		})
 
 		for _, node := range nodes {
-			if r.Float64() < 0.5 {
+			// No patch release of v22.2 and earlier has #114365, so they have the
+			// potential to be flaky when evacuating nodes using zone configs. Don't
+			// use zone config movement for these versions.
+			bv, err := clusterupgrade.BinaryVersion(ctx, h.Connect(node))
+			if err != nil {
+				return errors.Wrapf(err, "failed to get binary version for node %d", node)
+			}
+			evacuateNodeUsingZoneConfigFlaky := bv.Less(roachpb.Version{Major: 23})
+
+			if r.Float64() < 0.5 && !evacuateNodeUsingZoneConfigFlaky {
 				if err := evacuateNodeUsingZoneConfig(ctx, l, r, h, node); err != nil {
 					return err
 				}
