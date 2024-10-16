@@ -1009,9 +1009,7 @@ func prepareZoneConfigWrites(
 	hasNewSubzones bool,
 ) (_ *zoneConfigUpdate, err error) {
 	if len(z.Subzones) > 0 {
-		st := execCfg.Settings
-		z.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.Codec, table, z.Subzones, hasNewSubzones)
+		z.SubzoneSpans, err = GenerateSubzoneSpans(execCfg.Codec, table, z.Subzones)
 		if err != nil {
 			return nil, err
 		}

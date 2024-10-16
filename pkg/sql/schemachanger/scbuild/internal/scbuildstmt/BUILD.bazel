@@ -44,7 +44,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
-        "//pkg/base",
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
