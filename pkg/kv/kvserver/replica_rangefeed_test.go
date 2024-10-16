@@ -84,11 +84,12 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	return s.mu.events
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *testStream) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *testStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
+
+func (s *testStream) AddRegistration(rangefeed.Disconnector) {}
 
 // WaitForError waits for the rangefeed to complete and returns the error sent
 // to the done channel. It fails the test if rangefeed cannot complete within 30

@@ -304,7 +304,7 @@ func TestProcessorBasic(t *testing.T) {
 		// its own context and we don't have that registration any more. Maybe this
 		// is a hint that we should return registration from p.Register? Or maybe we
 		// should adjust our testing framework for this
-		r1Stream.Disconnect(kvpb.NewError(fmt.Errorf("disconnection error")))
+		r1Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
 		require.NotNil(t, r1Stream.WaitForError(t))
 
 		// Stop the processor with an error.
@@ -1368,10 +1368,13 @@ func (c *consumer) WaitBlock() {
 	<-c.blocked
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *consumer) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
+}
+
+func (c *consumer) AddRegistration(r Disconnector) {
+
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

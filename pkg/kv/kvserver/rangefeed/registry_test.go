@@ -91,9 +91,8 @@ func (s *testStream) BlockSend() func() {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *testStream) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *testStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 
@@ -106,6 +105,10 @@ func (s *testStream) Error() error {
 	default:
 		return nil
 	}
+}
+
+func (s *testStream) AddRegistration(r Disconnector) {
+
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent
@@ -185,7 +188,7 @@ func TestRegistrationBasic(t *testing.T) {
 	go noCatchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.Events())
-	noCatchupReg.disconnect(nil)
+	noCatchupReg.Disconnect(nil)
 
 	// Registration with catchup scan.
 	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
@@ -203,7 +206,7 @@ func TestRegistrationBasic(t *testing.T) {
 	events := catchupReg.Events()
 	require.Equal(t, 5, len(events))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
-	catchupReg.disconnect(nil)
+	catchupReg.Disconnect(nil)
 
 	// EXIT CONDITIONS
 	// External Disconnect.
@@ -214,7 +217,7 @@ func TestRegistrationBasic(t *testing.T) {
 	go disconnectReg.runOutputLoop(ctx, 0)
 	require.NoError(t, disconnectReg.waitForCaughtUp(ctx))
 	discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
-	disconnectReg.disconnect(discErr)
+	disconnectReg.Disconnect(discErr)
 	require.Equal(t, discErr.GoError(), disconnectReg.WaitForError(t))
 	require.Equal(t, 2, len(disconnectReg.Events()))
 
@@ -223,7 +226,7 @@ func TestRegistrationBasic(t *testing.T) {
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	disconnectEarlyReg.publish(ctx, ev1, nil /* alloc */)
 	disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
-	disconnectEarlyReg.disconnect(discErr)
+	disconnectEarlyReg.Disconnect(discErr)
 	go disconnectEarlyReg.runOutputLoop(ctx, 0)
 	require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForError(t))
 	require.Equal(t, 0, len(disconnectEarlyReg.Events()))
@@ -403,8 +406,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	go rAC.runOutputLoop(ctx, 0)
 	go originFiltering.runOutputLoop(ctx, 0)
 
-	defer rAC.disconnect(nil)
-	defer originFiltering.disconnect(nil)
+	defer rAC.Disconnect(nil)
+	defer originFiltering.Disconnect(nil)
 
 	reg.Register(ctx, rAC.bufferedRegistration)
 	reg.Register(ctx, originFiltering.bufferedRegistration)
@@ -455,11 +458,11 @@ func TestRegistryBasic(t *testing.T) {
 	go rCD.runOutputLoop(ctx, 0)
 	go rAC.runOutputLoop(ctx, 0)
 	go rACFiltering.runOutputLoop(ctx, 0)
-	defer rAB.disconnect(nil)
-	defer rBC.disconnect(nil)
-	defer rCD.disconnect(nil)
-	defer rAC.disconnect(nil)
-	defer rACFiltering.disconnect(nil)
+	defer rAB.Disconnect(nil)
+	defer rBC.Disconnect(nil)
+	defer rCD.Disconnect(nil)
+	defer rAC.Disconnect(nil)
+	defer rACFiltering.Disconnect(nil)
 
 	// Register 6 registrations.
 	reg.Register(ctx, rAB.bufferedRegistration)
@@ -602,7 +605,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, r.Events())
 
-	r.disconnect(nil)
+	r.Disconnect(nil)
 }
 
 func TestRegistrationString(t *testing.T) {

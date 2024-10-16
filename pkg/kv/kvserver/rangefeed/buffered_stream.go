@@ -28,6 +28,7 @@ type BufferedPerRangeEventSink struct {
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *BufferedSender
+	manager  StreamManager
 }
 
 func NewBufferedPerRangeEventSink(
@@ -37,6 +38,7 @@ func NewBufferedPerRangeEventSink(
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
+		manager:  wrapped,
 	}
 }
 
@@ -80,12 +82,8 @@ func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) e
 	return s.wrapped.SendUnbuffered(response, nil)
 }
 
-// Disconnect implements the Stream interface. BufferedSender is then
-// responsible for canceling the context of the stream. The actual rangefeed
-// disconnection from processor happens late when the error event popped from
-// the queue and about to be sent to the grpc stream. So caller should not rely
-// on immediate disconnection as cleanup takes place async.
-func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: s.streamID,
 		RangeID:  s.rangeID,
@@ -94,4 +92,8 @@ func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
 		Error: *transformRangefeedErrToClientError(err),
 	})
 	s.wrapped.SendBufferedError(ev)
+}
+
+func (s *BufferedPerRangeEventSink) AddRegistration(r Disconnector) {
+	s.manager.AddStream(s.streamID, r)
 }

@@ -87,7 +87,11 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }
 
-func (bs *BufferedSender) AddStream(streamID int64, cancel context.CancelFunc) {
+func (bs *BufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
+	panic("unimplemented: buffered sender for rangefeed #126560")
+}
+
+func (bs *BufferedSender) AddStream(streamID int64, r Disconnector) {
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }
 
