@@ -6,7 +6,7 @@ set -euo pipefail
 # clusters that ensures consistent use of the correct project-assignment vars
 # and done some additional sanity check enforcement on some flags.
 
-export GCE_PROJECT=cockroach-drt
+export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
 
 if [ "$#" -lt 1 ]; then

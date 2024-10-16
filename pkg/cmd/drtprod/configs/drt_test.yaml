@@ -1,6 +1,6 @@
 # Yaml to create a test-cluster. Please make sure that you change the cluster names to avoid conflicts.
 environment:
-  GCE_PROJECT: cockroach-ephemeral
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-ephemeral
   CLUSTER: drt-test
   WORKLOAD_CLUSTER: workload-test
 
