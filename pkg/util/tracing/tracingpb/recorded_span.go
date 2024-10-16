@@ -22,8 +22,12 @@ const (
 // TraceID is a probabilistically-unique id, shared by all spans in a trace.
 type TraceID uint64
 
+func (TraceID) SafeValue() {}
+
 // SpanID is a probabilistically-unique span id.
 type SpanID uint64
+
+func (SpanID) SafeValue() {}
 
 // Recording represents a group of RecordedSpans rooted at a fixed root span, as
 // returned by GetRecording. Spans are sorted by StartTime.

@@ -225,6 +225,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"WorkKind":  {},
 						"QueueKind": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb": {
+						"TraceID": {},
+						"SpanID":  {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
