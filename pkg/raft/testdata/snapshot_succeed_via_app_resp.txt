@@ -91,7 +91,7 @@ stabilize 1
   Messages:
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  
+
 status 1
 ----
 1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
