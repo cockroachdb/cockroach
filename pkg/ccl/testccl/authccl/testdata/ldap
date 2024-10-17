@@ -72,12 +72,12 @@ host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 "ldapbas
 ERROR: LDAP option "ldapbinddn" is set to invalid value: "bindDN": failed to parse distinguished name bindDN: DN ended with incomplete type, value pair
 
 set_hba
-host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" "ldapbindpasswd=" ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd="" ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
 ----
 ERROR: LDAP option "ldapbindpasswd" is set to invalid value: "": "ldapbindpasswd" is set to empty
 
 set_hba
-host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd "ldapsearchattribute=" "ldapsearchfilter=(memberOf=*)"
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute="" "ldapsearchfilter=(memberOf=*)"
 ----
 ERROR: LDAP option "ldapsearchattribute" is set to invalid value: "": "ldapsearchattribute" is set to empty
 
