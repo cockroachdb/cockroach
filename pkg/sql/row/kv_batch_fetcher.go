@@ -298,7 +298,6 @@ func makeExternalSpanSendFunc(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64,
 ) sendFunc {
 	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
-		ba.Timestamp = ext.AsOf
 		for _, req := range ba.Requests {
 			// We only allow external row data for a few known types of request.
 			switch r := req.GetInner().(type) {
@@ -310,12 +309,34 @@ func makeExternalSpanSendFunc(
 			}
 		}
 		log.VEventf(ctx, 2, "kv external fetcher: sending a batch with %d requests", len(ba.Requests))
-		res, err := db.NonTransactionalSender().Send(ctx, ba)
+
+		// Open a new transaction with fixed timestamp set to the external
+		// timestamp. We must do this with txn.Send rather than using
+		// db.NonTransactionalSender to get the 1-to-1 request-response guarantee
+		// required by txnKVFetcher.
+		// TODO(michae2): Explore whether we should keep this transaction open for
+		// the duration of the surrounding transaction.
+		var res *kvpb.BatchResponse
+		err := db.TxnWithAdmissionControl(
+			ctx, ba.AdmissionHeader.Source, admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+			kv.SteppingDisabled,
+			func(ctx context.Context, txn *kv.Txn) error {
+				if err := txn.SetFixedTimestamp(ctx, ext.AsOf); err != nil {
+					return err
+				}
+				var err *kvpb.Error
+				res, err = txn.Send(ctx, ba)
+				if err != nil {
+					return err.GoError()
+				}
+				return nil
+			})
+
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
 		atomic.AddInt64(batchRequestsIssued, 1)
-		return res, err.GoError()
+		return res, err
 	}
 }
 
