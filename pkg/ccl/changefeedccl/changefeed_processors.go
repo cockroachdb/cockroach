@@ -1696,6 +1696,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	return false, nil
 }
 
+const changefeedJobProgressTxnName = "changefeed job progress"
+
 func (cf *changeFrontier) checkpointJobProgress(
 	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
 ) (bool, error) {
@@ -1714,10 +1716,12 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
-		if err := cf.js.job.NoTxn().Update(cf.Ctx(), func(
+		var ptsUpdated bool
+		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
-			if err := md.CheckRunningOrReverting(); err != nil {
+			var err error
+			if err = md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
 
@@ -1730,7 +1734,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
 
-			if err := cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
+			if ptsUpdated, err = cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
 				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
 				return err
 			}
@@ -1753,6 +1757,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}); err != nil {
 			return false, err
 		}
+		if ptsUpdated {
+			cf.lastProtectedTimestampUpdate = timeutil.Now()
+		}
 		if log.V(2) {
 			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s", frontier, checkpoint)
 		}
@@ -1767,13 +1774,16 @@ func (cf *changeFrontier) checkpointJobProgress(
 // manageProtectedTimestamps periodically advances the protected timestamp for
 // the changefeed's targets to the current highwater mark.  The record is
 // cleared during changefeedResumer.OnFailOrCancel
+//
+// NOTE: this method may be retried by `txn`, so don't mutate any state that
+// would interfere with that.
 func (cf *changeFrontier) manageProtectedTimestamps(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
-) error {
-	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+) (updated bool, err error) {
+	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
-		return nil
+		return false, nil
 	}
 
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
@@ -1790,13 +1800,12 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
-		cf.lastProtectedTimestampUpdate = timeutil.Now()
-		return pts.Protect(ctx, ptr)
+		return true, pts.Protect(ctx, ptr)
 	} else {
 
 		rec, err := pts.GetRecord(ctx, progress.ProtectedTimestampRecord)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		// Only update the PTS timestamp if it is lagging behind the high
@@ -1804,12 +1813,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		// changefeed restarts, which can cause contention and second order effects
 		// on system tables.
 		if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
-			return nil
+			return false, nil
 		}
 
 		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		cf.lastProtectedTimestampUpdate = timeutil.Now()
-		return pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
+		return true, pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
 	}
 }
 
