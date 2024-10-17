@@ -460,8 +460,8 @@ func (s WaitEndState) SafeFormat(w redact.SafePrinter, _ rune) {
 // WaitForEval waits for a quorum of handles to be signaled and have tokens
 // available, including all the required wait handles. The caller provides two
 // refresh channels, which when signaled will cause the function to return
-// RefreshWait{1,2}Signaled, allowing the caller to retry waiting with updated
-// handles.
+// {Config,Replica}RefreshWaitSignaled, allowing the caller to retry waiting
+// with updated handles, or abandon waiting.
 func WaitForEval(
 	ctx context.Context,
 	configRefreshWaitCh <-chan struct{},
