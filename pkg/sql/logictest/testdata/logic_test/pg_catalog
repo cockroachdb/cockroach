@@ -2598,6 +2598,14 @@ WHERE proname IN (
 339  json_each                true  2283
 345  json_populate_recordset  true  2283
 
+# json_populate_record is not a set-returning function.
+query OTBT
+SELECT oid, proname, proretset, prorettype FROM pg_catalog.pg_proc
+WHERE proname = 'json_populate_record'
+ORDER BY 1
+----
+343  json_populate_record  false  2283
+
 query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
 FROM pg_catalog.pg_proc

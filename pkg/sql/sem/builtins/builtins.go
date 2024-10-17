@@ -4189,6 +4189,9 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"json_populate_record":  makeBuiltin(jsonPopulateProps, jsonPopulateRecordImpl),
+	"jsonb_populate_record": makeBuiltin(jsonPopulateProps, jsonPopulateRecordImpl),
+
 	"oidvectortypes": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategoryCompatibility,
@@ -9946,6 +9949,51 @@ var jsonArrayLengthImpl = tree.Overload{
 	},
 	Info:       "Returns the number of elements in the outermost JSON or JSONB array.",
 	Volatility: volatility.Immutable,
+}
+
+var jsonPopulateRecordImpl = tree.Overload{
+	// The json{,b}_populate_record{,set} builtins all have a 2 argument
+	// structure. The first argument is an arbitrary tuple type, which is used
+	// to set the columns of the output when the builtin is used as a FROM
+	// source, or used as-is when it's used as an ordinary projection. To match
+	// PostgreSQL, the argument actually is types.Any, and its tuple-ness is
+	// checked at execution time.
+	// The second argument is a JSON object or array of objects. The builtin
+	// transforms the JSON in the second argument into the tuple in the first
+	// argument, field by field, casting fields in key "k" to the type in the
+	// tuple slot "k". Any tuple fields that were missing in the JSON will be
+	// left as they are in the input argument.
+	// The first argument can be of the form NULL::<tupletype>, in which case
+	// the default values of each field will be NULL.
+	// The second argument can also be null, in which case the first argument
+	// is returned as-is.
+	Types:      tree.ParamTypes{{Name: "base", Typ: types.Any}, {Name: "from_json", Typ: types.Jsonb}},
+	ReturnType: tree.IdentityReturnType(0),
+	// The typical way to call json_populate_record is to send NULL::atype
+	// as the first argument, so we have to call the function with NULL
+	// inputs.
+	CalledOnNullInput: true,
+	FnWithExprs: eval.FnWithExprsOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Exprs) (tree.Datum, error) {
+		tuple, j, err := jsonPopulateRecordEvalArgs(ctx, evalCtx, args)
+		if err != nil {
+			return nil, err
+		}
+		if j != nil {
+			if j.Type() != json.ObjectJSONType {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_record must be an object")
+			}
+		} else {
+			j = json.NewObjectBuilder(0).Build()
+		}
+		output := tree.NewDTupleWithLen(tuple.ResolvedType(), tuple.D.Len())
+		copy(output.D, tuple.D)
+		if err := eval.PopulateRecordWithJSON(ctx, evalCtx, j, tuple.ResolvedType(), output); err != nil {
+			return nil, err
+		}
+		return output, nil
+	}),
+	Info:       "Expands the object in from_json to a row whose columns match the record type defined by base.",
+	Volatility: volatility.Stable,
 }
 
 func similarOverloads(calledOnNullInput bool) []tree.Overload {

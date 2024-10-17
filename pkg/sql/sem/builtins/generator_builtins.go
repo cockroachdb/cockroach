@@ -413,12 +413,6 @@ var generators = map[string]builtinDefinition{
 	"jsonb_each":                makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
 	"json_each_text":            makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
 	"jsonb_each_text":           makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"json_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
-		"Expands the object in from_json to a row whose columns match the record type defined by base.",
-	)),
-	"jsonb_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
-		"Expands the object in from_json to a row whose columns match the record type defined by base.",
-	)),
 	"json_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
 		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
 	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
@@ -1786,28 +1780,6 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		// inputs.
 		CalledOnNullInput: true,
 	}
-}
-
-func makeJSONPopulateRecordGenerator(
-	ctx context.Context, evalCtx *eval.Context, args tree.Exprs,
-) (eval.ValueGenerator, error) {
-	tuple, j, err := jsonPopulateRecordEvalArgs(ctx, evalCtx, args)
-	if err != nil {
-		return nil, err
-	}
-
-	if j != nil {
-		if j.Type() != json.ObjectJSONType {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "argument of json_populate_record must be an object")
-		}
-	} else {
-		j = json.NewObjectBuilder(0).Build()
-	}
-	return &jsonPopulateRecordGenerator{
-		evalCtx: evalCtx,
-		input:   tuple,
-		target:  j,
-	}, nil
 }
 
 // jsonPopulateRecordEvalArgs evaluates the first 2 expression arguments to
