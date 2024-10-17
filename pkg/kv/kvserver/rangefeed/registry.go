@@ -78,7 +78,7 @@ type baseRegistration struct {
 	// TODO(ssd): This unreg can be removed when the LegacyProcess
 	// is removed.
 	unreg   func()
-	cleanup func(context.Context, registration)
+	cleanup func(registration)
 
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal

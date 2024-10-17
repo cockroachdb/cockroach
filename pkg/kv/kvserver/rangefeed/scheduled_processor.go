@@ -336,9 +336,7 @@ func (p *ScheduledProcessor) Register(
 			streamCtx,
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-			func(ctx context.Context, r registration) {
-				p.unregisterClientAsync(r)
-			},
+			func(r registration) { p.unregisterClientAsync(r) },
 		)
 	}
 
@@ -364,7 +362,9 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) { r.runOutputLoop(ctx, p.RangeID) }
+		runOutputLoop := func(ctx context.Context) {
+			r.runOutputLoop(ctx, p.RangeID)
+		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor

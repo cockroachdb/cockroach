@@ -82,7 +82,7 @@ func newBufferedRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	cleanup func(context.Context, registration),
+	cleanup func(registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -166,7 +166,7 @@ func (br *bufferedRegistration) disconnect(ctx context.Context, pErr *kvpb.Error
 		}
 		br.mu.disconnected = true
 		br.stream.Disconnect(pErr)
-		br.cleanup(ctx, br)
+		br.cleanup(br)
 	}
 }
 
