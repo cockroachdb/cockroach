@@ -4,20 +4,7 @@
 gen_cluster nodes=5
 ----
 
-# TODO(kvoli): Update gen_cluster to take in localities for this purpose.
-set_locality node=1 locality=region=a
-----
-
-set_locality node=2 locality=region=a
-----
-
-set_locality node=3 locality=region=b
-----
-
-set_locality node=4 locality=region=b
-----
-
-set_locality node=5 locality=region=b
+gen_cluster_with_locality regions=(a, b) nodes_per_region=(2,3)
 ----
 
 # Generate 10 ranges, one replica will be placed on each node initially.
@@ -32,12 +19,42 @@ set_span_config
 [0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':2,'+region=b':2} voter_constraints={'+region=a':1,'+region=b':2}
 ----
 
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 1 voter, 1 non_voter
+		b: 2 voters
+	3.cluster: 3 voters, 1 non_voter
+constraint:
+replicas=4
+voters=3
+constraints=[+region=a:2 +region=b:2]
+voter_constraints=[+region=a:1 +region=b:2]
+
 # Switch the span config to require the non-voter be placed in the 'region=b'
 # locality. This will require a swap between one of the voting replicas in b,
 # and the non-voter a.
 set_span_config delay=5m
 [0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':2,'+region=b':2} voter_constraints={'+region=a':2,'+region=b':1}
 ----
+
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 2 voters
+		b: 1 voter, 1 non_voter
+	3.cluster: 3 voters, 1 non_voter
+constraint:
+replicas=4
+voters=3
+constraints=[+region=a:2 +region=b:2]
+voter_constraints=[+region=a:2 +region=b:1]
 
 assertion type=conformance under=0 over=0 unavailable=0 violating=0
 ----
@@ -49,8 +66,10 @@ OK
 topology
 ----
 a
-  └── [1 2]
+  a1
+  │ └── [1 2]
 b
-  └── [3 4 5]
+  b1
+    └── [3 4 5]
 
 # vim:ft=sh
