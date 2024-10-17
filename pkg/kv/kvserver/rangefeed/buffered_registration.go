@@ -81,17 +81,17 @@ func newBufferedRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
-	unregisterFn func(),
+	removeRegFromProcessor func(registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
-			streamCtx:        streamCtx,
-			span:             span,
-			catchUpTimestamp: startTS,
-			withDiff:         withDiff,
-			withFiltering:    withFiltering,
-			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
+			streamCtx:              streamCtx,
+			span:                   span,
+			catchUpTimestamp:       startTS,
+			withDiff:               withDiff,
+			withFiltering:          withFiltering,
+			withOmitRemote:         withOmitRemote,
+			removeRegFromProcessor: removeRegFromProcessor,
 		},
 		metrics:       metrics,
 		stream:        stream,
@@ -172,6 +172,7 @@ func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 		}
 		br.mu.disconnected = true
 		br.stream.SendError(pErr)
+		br.removeRegFromProcessor(br)
 	}
 }
 

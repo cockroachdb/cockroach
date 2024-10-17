@@ -104,6 +104,11 @@ type Config struct {
 	// for low-volume system ranges, since the worker pool is small (default 2).
 	// Only has an effect when Scheduler is used.
 	Priority bool
+
+	// UnregisterFromReplica is a callback provided from the
+	// replica that this processor can call when shutting down to
+	// remove itself from the replica.
+	UnregisterFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -191,7 +196,6 @@ type Processor interface {
 		withFiltering bool,
 		withOmitRemote bool,
 		stream Stream,
-		disconnectFn func(),
 	) (bool, Disconnector, *Filter)
 
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
