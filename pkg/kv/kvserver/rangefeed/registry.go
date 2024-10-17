@@ -62,6 +62,7 @@ type registration interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
+	streamCtx        context.Context
 	span             roachpb.Span
 	withDiff         bool
 	withFiltering    bool
@@ -347,7 +348,10 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
 	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
-	reg.DisconnectWithErr(ctx, all, pErr)
+	reg.forOverlappingRegs(ctx, all, func(r registration) (bool, *kvpb.Error) {
+		r.drainAllocations(ctx)
+		return true /* disconned */, pErr
+	})
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with

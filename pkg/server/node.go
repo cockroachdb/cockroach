@@ -2076,7 +2076,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	var sm streamManager
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
 		sm = rangefeed.NewBufferedSender(lockedMuxStream, n.metrics)
-		log.Fatalf(ctx, "unimplemented: buffered sender for rangefeed #126560")
+		log.Infof(ctx, "using buffered sender for rangefeed")
 	} else {
 		sm = rangefeed.NewUnbufferedSender(lockedMuxStream, n.metrics)
 	}
@@ -2130,9 +2130,9 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 			var streamSink rangefeed.Stream
 			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
-				streamSink = rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, ubs)
+				streamSink = rangefeed.NewPerRangeEventSink(req.RangeID, req.StreamID, ubs)
 			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
-				streamSink = rangefeed.NewBufferedPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, bs)
+				streamSink = rangefeed.NewBufferedPerRangeEventSink(req.RangeID, req.StreamID, bs)
 			} else {
 				log.Fatalf(streamCtx, "unknown sender type %T", sm)
 			}
@@ -2143,7 +2143,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			// nil without blocking on rangefeed completion. Events are then sent to
 			// the provided streamSink. If the rangefeed disconnects after being
 			// successfully registered, it calls streamSink.Disconnect with the error.
-			if err := n.stores.RangeFeed(req, streamSink); err != nil {
+			if err := n.stores.RangeFeed(streamCtx, req, streamSink); err != nil {
 				sm.SendBufferedError(
 					makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID, kvpb.NewError(err)))
 			}
