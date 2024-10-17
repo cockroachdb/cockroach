@@ -253,7 +253,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.override_multi_region_zone_config.enabled	boolean	false	"default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.prefer_lookup_joins_for_fks.enabled	boolean	false	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible
+sql.defaults.prefer_lookup_joins_for_fks.enabled	boolean	true	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.primary_region	string		"if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION
