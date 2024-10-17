@@ -460,7 +460,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
+				r.Disconnect(kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 
@@ -578,7 +578,7 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	}
 }
 
-// Register  implements Processor interface.
+// Register implements Processor interface.
 func (p *LegacyProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
@@ -602,7 +602,9 @@ func (p *LegacyProcessor) Register(
 	select {
 	case p.regC <- r:
 		// Wait for response.
-		return true, <-p.filterResC
+		f := <-p.filterResC
+		stream.AddRegistration(r)
+		return true, f
 	case <-p.stoppedC:
 		return false, nil
 	}

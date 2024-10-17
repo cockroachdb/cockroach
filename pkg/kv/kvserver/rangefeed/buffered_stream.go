@@ -6,8 +6,6 @@
 package rangefeed
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -27,30 +25,26 @@ type BufferedStream interface {
 // similar to PerRangeEventSink but buffers events in BufferedSender before
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *BufferedSender
+	manager  StreamManager
 }
 
 func NewBufferedPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
 ) *BufferedPerRangeEventSink {
 	return &BufferedPerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
+		manager:  wrapped,
 	}
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
 var _ Stream = (*BufferedPerRangeEventSink)(nil)
 var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
-
-func (s *BufferedPerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -88,12 +82,8 @@ func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) e
 	return s.wrapped.SendUnbuffered(response, nil)
 }
 
-// Disconnect implements the Stream interface. BufferedSender is then
-// responsible for canceling the context of the stream. The actual rangefeed
-// disconnection from processor happens late when the error event popped from
-// the queue and about to be sent to the grpc stream. So caller should not rely
-// on immediate disconnection as cleanup takes place async.
-func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: s.streamID,
 		RangeID:  s.rangeID,
@@ -102,4 +92,8 @@ func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
 		Error: *transformRangefeedErrToClientError(err),
 	})
 	s.wrapped.SendBufferedError(ev)
+}
+
+func (s *BufferedPerRangeEventSink) AddRegistration(r Disconnector) {
+	s.manager.AddStream(s.streamID, r)
 }
