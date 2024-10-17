@@ -147,6 +147,7 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
+				log.Eventf(ctx, "transforming into optimistic eval error: %s", pErr)
 				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		}
@@ -165,7 +166,9 @@ func (r *Replica) executeReadOnlyBatch(
 			}
 			defer latchSpansRead.Release()
 			defer lockSpansRead.Release()
-			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
+			if ok := g.CheckOptimisticNoConflictsCtx(ctx, latchSpansRead, lockSpansRead); !ok {
+				log.Eventf(ctx, "conflicts detected on latches %s and locks %s; transforming into optimistic eval error",
+					latchSpansRead, lockSpansRead)
 				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
@@ -173,6 +176,7 @@ func (r *Replica) executeReadOnlyBatch(
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
+			log.Eventf(ctx, "transforming into optimistic eval error: %s", pErr)
 			return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 		}
 	}
