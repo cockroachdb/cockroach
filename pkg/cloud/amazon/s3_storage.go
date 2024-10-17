@@ -103,12 +103,13 @@ var NightlyEnvVarKMSParams = map[string]string{
 }
 
 type s3Storage struct {
-	bucket   *string
-	conf     *cloudpb.ExternalStorage_S3
-	ioConf   base.ExternalIODirConfig
-	settings *cluster.Settings
-	prefix   string
-	metrics  *cloud.Metrics
+	bucket         *string
+	conf           *cloudpb.ExternalStorage_S3
+	ioConf         base.ExternalIODirConfig
+	settings       *cluster.Settings
+	prefix         string
+	metrics        *cloud.Metrics
+	storageOptions cloud.ExternalStorageOptions
 
 	opts   s3ClientConfig
 	cached *s3Client
@@ -446,13 +447,14 @@ func MakeS3Storage(
 	}
 
 	s := &s3Storage{
-		bucket:   aws.String(conf.Bucket),
-		conf:     conf,
-		ioConf:   args.IOConf,
-		prefix:   conf.Prefix,
-		metrics:  args.MetricsRecorder,
-		settings: args.Settings,
-		opts:     clientConfig(conf),
+		bucket:         aws.String(conf.Bucket),
+		conf:           conf,
+		ioConf:         args.IOConf,
+		prefix:         conf.Prefix,
+		metrics:        args.MetricsRecorder,
+		settings:       args.Settings,
+		opts:           clientConfig(conf),
+		storageOptions: args.ExternalStorageOptions(),
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -472,7 +474,7 @@ func MakeS3Storage(
 	// other callers from making clients in the meantime, not just to avoid making
 	// duplicate clients in a race but also because making clients concurrently
 	// can fail if the AWS metadata server hits its rate limit.
-	client, _, err := newClient(ctx, args.MetricsRecorder, s.opts, s.settings)
+	client, _, err := s.newClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -521,11 +523,10 @@ func constructEndpointURI(endpoint string) (string, error) {
 // config's region is empty, used the passed bucket to determine a region and
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
-func newClient(
-	ctx context.Context, metrics *cloud.Metrics, conf s3ClientConfig, settings *cluster.Settings,
-) (s3Client, string, error) {
+func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
+
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
-	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
+	if s.opts.region == "" || s.opts.auth == cloud.AuthParamImplicit {
 		var sp *tracing.Span
 		ctx, sp = tracing.ChildSpan(ctx, "s3.newClient")
 		defer sp.Finish()
@@ -536,7 +537,7 @@ func newClient(
 		loadOptions = append(loadOptions, option)
 	}
 
-	client, err := cloud.MakeHTTPClient(settings, metrics, "aws", conf.bucket)
+	client, err := cloud.MakeHTTPClient(s.settings, s.metrics, "aws", s.opts.bucket, s.storageOptions.ClientName)
 	if err != nil {
 		return s3Client{}, "", err
 	}
@@ -547,7 +548,7 @@ func newClient(
 	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
 
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if conf.verbose {
+	if s.opts.verbose {
 		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
 	}
 
@@ -558,10 +559,10 @@ func newClient(
 		})
 	})
 
-	switch conf.auth {
+	switch s.opts.auth {
 	case "", cloud.AuthParamSpecified:
 		addLoadOption(config.WithCredentialsProvider(
-			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.accessKey, conf.secret, conf.tempToken))))
+			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(s.opts.accessKey, s.opts.secret, s.opts.tempToken))))
 	case cloud.AuthParamImplicit:
 	}
 
@@ -571,16 +572,16 @@ func newClient(
 	}
 
 	var endpointURI string
-	if conf.endpoint != "" {
+	if s.opts.endpoint != "" {
 		var err error
-		endpointURI, err = constructEndpointURI(conf.endpoint)
+		endpointURI, err = constructEndpointURI(s.opts.endpoint)
 		if err != nil {
 			return s3Client{}, "", err
 		}
 	}
 
-	if conf.assumeRoleProvider.roleARN != "" {
-		for _, delegateProvider := range conf.delegateRoleProviders {
+	if s.opts.assumeRoleProvider.roleARN != "" {
+		for _, delegateProvider := range s.opts.delegateRoleProviders {
 			client := sts.NewFromConfig(cfg, func(options *sts.Options) {
 				if endpointURI != "" {
 					options.BaseEndpoint = aws.String(endpointURI)
@@ -596,11 +597,11 @@ func newClient(
 			}
 		})
 
-		creds := stscreds.NewAssumeRoleProvider(client, conf.assumeRoleProvider.roleARN, withExternalID(conf.assumeRoleProvider.externalID))
+		creds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
 		cfg.Credentials = creds
 	}
 
-	region := conf.region
+	region := s.opts.region
 	if region == "" {
 		// Set a hint because we have no region specified, we will override this
 		// below once we get the actual bucket region.
@@ -610,7 +611,7 @@ func newClient(
 				if endpointURI != "" {
 					options.BaseEndpoint = aws.String(endpointURI)
 				}
-			}), conf.bucket)
+			}), s.opts.bucket)
 			return err
 		}); err != nil {
 			return s3Client{}, "", errors.Wrap(err, "could not find s3 bucket's region")
@@ -624,7 +625,7 @@ func newClient(
 		}
 	})
 	u := manager.NewUploader(c, func(uploader *manager.Uploader) {
-		uploader.PartSize = cloud.WriteChunkSize.Get(&settings.SV)
+		uploader.PartSize = cloud.WriteChunkSize.Get(&s.settings.SV)
 	})
 	return s3Client{client: c, uploader: u}, region, nil
 }
@@ -633,7 +634,7 @@ func (s *s3Storage) getClient(ctx context.Context) (*s3.Client, error) {
 	if s.cached != nil {
 		return s.cached.client, nil
 	}
-	client, region, err := newClient(ctx, s.metrics, s.opts, s.settings)
+	client, region, err := s.newClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +648,7 @@ func (s *s3Storage) getUploader(ctx context.Context) (*manager.Uploader, error) 
 	if s.cached != nil {
 		return s.cached.uploader, nil
 	}
-	client, region, err := newClient(ctx, s.metrics, s.opts, s.settings)
+	client, region, err := s.newClient(ctx)
 	if err != nil {
 		return nil, err
 	}

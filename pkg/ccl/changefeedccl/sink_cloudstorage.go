@@ -487,7 +487,8 @@ func makeCloudStorageSink(
 
 	// We make the external storage with a nil IOAccountingInterceptor since we
 	// record usage metrics via s.metrics.
-	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
+	s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil), cloud.WithClientName("cdc"))
+	if err != nil {
 		return nil, err
 	}
 	if mb != nil && s.es != nil {
