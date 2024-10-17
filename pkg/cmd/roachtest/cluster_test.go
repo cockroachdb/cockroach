@@ -62,6 +62,10 @@ type testWrapper struct {
 	l *logger.Logger
 }
 
+func (t testWrapper) ExportOpenmetrics() bool {
+	return false
+}
+
 func (t testWrapper) SnapshotPrefix() string {
 	return ""
 }
