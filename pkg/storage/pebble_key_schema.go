@@ -39,6 +39,7 @@ const (
 )
 
 var keySchema = colblk.KeySchema{
+	Name: "crdb1",
 	ColumnTypes: []colblk.DataType{
 		cockroachColRoachKey:       colblk.DataTypePrefixBytes,
 		cockroachColMVCCWallTime:   colblk.DataTypeUint,
