@@ -6,6 +6,7 @@ go_library(
         "clusters_cache.go",
         "multitenant.go",
         "roachprod.go",
+        "roachprod_pprof.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
     visibility = ["//visibility:public"],
@@ -43,11 +44,16 @@ go_library(
 
 go_test(
     name = "roachprod_test",
-    srcs = ["roachprod_test.go"],
+    srcs = [
+        "getpprof_test.go",
+        "roachprod_test.go",
+    ],
     embed = [":roachprod"],
     deps = [
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
