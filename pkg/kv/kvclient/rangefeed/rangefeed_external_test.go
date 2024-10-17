@@ -1656,7 +1656,7 @@ func (c *channelSink) SendError(err *kvpb.Error) {
 	c.done <- err
 }
 
-func (c *channelSink) AddRegistration(r kvrangefeed.Disconnector) {}
+func (c *channelSink) AddRegistration(r kvrangefeed.disconnector) {}
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a
 // metadata event which indicates if it spawned to due a manual split. The

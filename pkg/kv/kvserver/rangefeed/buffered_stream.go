@@ -94,6 +94,6 @@ func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
 	s.wrapped.SendBufferedError(ev)
 }
 
-func (s *BufferedPerRangeEventSink) AddRegistration(r Disconnector) {
+func (s *BufferedPerRangeEventSink) AddRegistration(r disconnector) {
 	s.manager.AddStream(s.streamID, r)
 }

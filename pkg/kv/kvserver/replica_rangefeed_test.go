@@ -89,7 +89,7 @@ func (s *testStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
 
-func (s *testStream) AddRegistration(rangefeed.Disconnector) {}
+func (s *testStream) AddRegistration(rangefeed.disconnector) {}
 
 // WaitForError waits for the rangefeed to complete and returns the error sent
 // to the done channel. It fails the test if rangefeed cannot complete within 30

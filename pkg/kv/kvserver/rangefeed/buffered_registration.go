@@ -149,7 +149,7 @@ func (br *bufferedRegistration) publish(
 // Disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
+func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
@@ -226,7 +226,7 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	br.mu.Unlock()
 	err := br.outputLoop(ctx)
-	br.Disconnect(kvpb.NewError(err))
+	br.disconnect(kvpb.NewError(err))
 }
 
 // drainAllocations should be done after registration is disconnected from

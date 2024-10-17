@@ -28,7 +28,7 @@ type StreamManager interface {
 	Disconnect(ev *kvpb.MuxRangeFeedEvent) bool
 
 	// AddStream adds a new per-range stream for the streamManager to manage.
-	AddStream(streamID int64, r Disconnector)
+	AddStream(streamID int64, r disconnector)
 
 	// Start starts the streamManager background job to manage all active streams.
 	// It continues until it errors or Stop is called. It is not valid to call
@@ -53,7 +53,7 @@ type Stream interface {
 	// IO or try acquiring locks that could lead to deadlocks.
 	SendError(err *kvpb.Error)
 
-	AddRegistration(Disconnector)
+	AddRegistration(disconnector)
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -106,7 +106,7 @@ func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	s.wrapped.SendBufferedError(ev)
 }
 
-func (s *PerRangeEventSink) AddRegistration(r Disconnector) {
+func (s *PerRangeEventSink) AddRegistration(r disconnector) {
 	s.manager.AddStream(s.streamID, r)
 }
 

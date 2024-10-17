@@ -465,7 +465,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.Disconnect(kvpb.NewError(err))
+				r.disconnect(kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 

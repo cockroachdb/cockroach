@@ -124,7 +124,7 @@ type UnbufferedSender struct {
 
 	// activeStreams are the streams known to this sender with registrations that
 	// have been started.
-	activeStreams syncutil.Map[int64, Disconnector]
+	activeStreams syncutil.Map[int64, disconnector]
 
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
@@ -179,7 +179,7 @@ func (ubs *UnbufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
 	if r, ok := ubs.activeStreams.LoadAndDelete(ev.StreamID); ok {
 		// Fine to skip nil checking here since that would be a programming error.
 		log.Infof(context.Background(), "disconnect(%v)", &ev.Error.Error)
-		(*r).Disconnect(&ev.Error.Error)
+		(*r).disconnect(&ev.Error.Error)
 		ubs.metrics.UpdateMetricsOnRangefeedDisconnect()
 		return true
 	}
@@ -314,7 +314,7 @@ func (ubs *UnbufferedSender) Stop() {
 // active until SendBufferedError is called with the same streamID.
 // Caller must ensure no duplicate stream IDs are added without disconnecting
 // the old one first.
-func (ubs *UnbufferedSender) AddStream(streamID int64, r Disconnector) {
+func (ubs *UnbufferedSender) AddStream(streamID int64, r disconnector) {
 	if _, loaded := ubs.activeStreams.LoadOrStore(streamID, &r); loaded {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}

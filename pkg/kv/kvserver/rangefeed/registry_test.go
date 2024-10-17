@@ -107,7 +107,7 @@ func (s *testStream) Error() error {
 	}
 }
 
-func (s *testStream) AddRegistration(r Disconnector) {
+func (s *testStream) AddRegistration(r disconnector) {
 
 }
 

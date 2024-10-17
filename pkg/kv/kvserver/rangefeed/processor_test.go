@@ -1368,7 +1368,7 @@ func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
 }
 
-func (c *consumer) AddRegistration(r Disconnector) {
+func (c *consumer) AddRegistration(r disconnector) {
 
 }
 

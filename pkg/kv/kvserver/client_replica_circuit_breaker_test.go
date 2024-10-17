@@ -478,7 +478,7 @@ func (s *dummyStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 
-func (s *dummyStream) AddRegistration(d rangefeed.Disconnector) {}
+func (s *dummyStream) AddRegistration(d rangefeed.disconnector) {}
 
 func waitReplicaRangeFeed(
 	ctx context.Context, r *kvserver.Replica, req *kvpb.RangeFeedRequest, stream *dummyStream,

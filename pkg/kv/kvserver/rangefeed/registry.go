@@ -20,7 +20,7 @@ import (
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
-	Disconnector
+	disconnector
 
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
@@ -58,10 +58,10 @@ type registration interface {
 	getUnreg() func()
 }
 
-type Disconnector interface {
-	// Disconnect disconnects the registration with the provided error. Safe to
+type disconnector interface {
+	// disconnect disconnects the registration with the provided error. Safe to
 	// run multiple times, but subsequent errors would be discarded.
-	Disconnect(pErr *kvpb.Error)
+	disconnect(pErr *kvpb.Error)
 }
 
 // baseRegistration is a common base for all registration types. It is intended
@@ -384,7 +384,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.Disconnect(pErr)
+			r.disconnect(pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false

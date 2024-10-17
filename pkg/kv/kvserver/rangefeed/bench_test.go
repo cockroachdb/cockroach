@@ -207,7 +207,7 @@ func (s *noopStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
 
-func (s *noopStream) AddRegistration(r Disconnector) {
+func (s *noopStream) AddRegistration(r disconnector) {
 
 }
 
