@@ -2577,6 +2577,27 @@ substring  true         false      i            NULL
 substring  true         false      i            NULL
 substring  true         false      i            NULL
 
+# Verify that proretset is true for set-returning functions.
+query OTBT
+SELECT oid, proname, proretset, prorettype FROM pg_catalog.pg_proc
+WHERE proname IN (
+  'jsonb_object_keys', 'generate_series', 'generate_subscripts',
+  'json_populate_recordset', 'unnest', 'json_each'
+) ORDER BY 1
+----
+317  generate_series          true  20
+318  generate_series          true  20
+319  generate_series          true  1114
+320  generate_series          true  1184
+326  unnest                   true  2283
+327  unnest                   true  2283
+330  generate_subscripts      true  20
+331  generate_subscripts      true  20
+332  generate_subscripts      true  20
+338  jsonb_object_keys        true  25
+339  json_each                true  2283
+345  json_populate_recordset  true  2283
+
 query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
 FROM pg_catalog.pg_proc
