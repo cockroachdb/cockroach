@@ -316,13 +316,11 @@ func (p *ScheduledProcessor) Register(
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
 		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn, func(r registration) { p.unregisterClient(r) })
 	} else {
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-		)
-
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -334,6 +332,7 @@ func (p *ScheduledProcessor) Register(
 		}
 
 		stream.AddRegistration(r)
+
 		// Add the new registration to the registry.
 		p.reg.Register(ctx, r)
 
@@ -355,13 +354,7 @@ func (p *ScheduledProcessor) Register(
 				// for bufferedRegistration. This is not true for
 				// unbufferedRegistration. Instead, unbufferedRegistration relies on
 				// RegisterRangefeedCleanUp above.
-				if p.unregisterClient(r) {
-					// unreg callback is set by replica to tear down processors that have
-					// zero registrations left and to update event filters.
-					if f := r.getUnreg(); f != nil {
-						f()
-					}
-				}
+				p.unregisterClient(r)
 			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.

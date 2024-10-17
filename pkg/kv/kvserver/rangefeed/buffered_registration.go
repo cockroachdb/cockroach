@@ -80,22 +80,23 @@ func newBufferedRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
-	unregisterFn func(),
+	maybeRemoveEmptyProcessor func(),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
-			span:             span,
-			catchUpTimestamp: startTS,
-			withDiff:         withDiff,
-			withFiltering:    withFiltering,
-			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
+			span:                      span,
+			catchUpTimestamp:          startTS,
+			withDiff:                  withDiff,
+			withFiltering:             withFiltering,
+			withOmitRemote:            withOmitRemote,
+			maybeRemoveEmptyProcessor: maybeRemoveEmptyProcessor,
 		},
 		metrics:       metrics,
 		stream:        stream,
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
 	}
+	br.unreg = func() {}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.caughtUp = true
 	br.mu.catchUpIter = catchUpIter

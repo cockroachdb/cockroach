@@ -136,19 +136,23 @@ func newUnbufferedRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
-	unregisterFn func(),
+	maybeRemoveEmptyProcessor func(),
+	unregisterFn func(registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
-			span:             span,
-			catchUpTimestamp: startTS,
-			withDiff:         withDiff,
-			withFiltering:    withFiltering,
-			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
+			span:                      span,
+			catchUpTimestamp:          startTS,
+			withDiff:                  withDiff,
+			withFiltering:             withFiltering,
+			withOmitRemote:            withOmitRemote,
+			maybeRemoveEmptyProcessor: maybeRemoveEmptyProcessor,
 		},
 		metrics: metrics,
 		stream:  stream,
+	}
+	br.unreg = func() {
+		unregisterFn(br)
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.catchUpIter = catchUpIter
@@ -179,7 +183,7 @@ func (ubr *unbufferedRegistration) publish(
 			// BufferedSender is full or has been stopped. A node level shutdown is
 			// happening, so BufferedSender should disconnect all streams soon. There
 			// is not anything else we can do here. Disconnect again just in case.
-			ubr.disconnect(kvpb.NewError(err))
+			ubr.Disconnect(kvpb.NewError(err))
 		}
 	}
 }
@@ -202,7 +206,7 @@ func (ubr *unbufferedRegistration) publish(
 // - b), c) happen in BufferedSender and a happens via the callback
 //
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (ubr *unbufferedRegistration) disconnect(pErr *kvpb.Error) {
+func (ubr *unbufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	if alreadyDisconnected := ubr.setDisconnectedIfNotWithLock(); !alreadyDisconnected {
@@ -234,7 +238,7 @@ func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks 
 	ubr.mu.Unlock()
 
 	if err := ubr.maybeRunCatchUpScan(ctx); err != nil {
-		ubr.disconnect(kvpb.NewError(errors.Wrap(err, "catch-up scan failed")))
+		ubr.Disconnect(kvpb.NewError(errors.Wrap(err, "catch-up scan failed")))
 		// Important to disconnect before draining to avoid upstream to interpret
 		// nil catch-up buf as sending to underlying stream directly.
 		ubr.discardCatchUpBuffer(ctx)
@@ -242,7 +246,7 @@ func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks 
 	}
 
 	if err := ubr.publishCatchUpBuffer(ctx); err != nil {
-		ubr.disconnect(kvpb.NewError(err))
+		ubr.Disconnect(kvpb.NewError(err))
 		// Important to disconnect before draining to avoid upstream to interpret
 		// nil catch-up buf as sending to underlying stream directly.
 		ubr.discardCatchUpBuffer(ctx)

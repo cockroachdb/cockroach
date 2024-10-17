@@ -76,7 +76,7 @@ type BufferedSender struct {
 	errCh chan error
 
 	// streamID -> cleanup callback
-	activeStreams syncutil.Map[int64, disconnector]
+	activeStreams syncutil.Map[int64, Disconnector]
 
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
@@ -106,7 +106,7 @@ func (bs *BufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
 	if r, ok := bs.activeStreams.Load(ev.StreamID); ok {
 		// Fine to skip nil checking here since that would be a programming error.
 		log.Infof(context.Background(), "disconnect(%v)", &ev.Error.Error)
-		(*r).disconnect(&ev.Error.Error)
+		(*r).Disconnect(&ev.Error.Error)
 		return true
 	}
 	return false
@@ -222,8 +222,8 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // disconnectAll disconnects all active streams and invokes all rangefeed clean
 // up callbacks. It is expected to be called during StreamMuxer.Stop.
 func (bs *BufferedSender) disconnectAll() {
-	bs.activeStreams.Range(func(streamID int64, r *disconnector) bool {
-		(*r).disconnect(nil)
+	bs.activeStreams.Range(func(streamID int64, r *Disconnector) bool {
+		(*r).Disconnect(nil)
 		// Remove the stream from the activeStreams map.
 		bs.activeStreams.Delete(streamID)
 		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
@@ -231,6 +231,7 @@ func (bs *BufferedSender) disconnectAll() {
 	})
 }
 
+// TODO(wenyi, ssd): Double check into how pointers to interface would play here.
 func (bs *BufferedSender) AddStream(streamID int64, r Disconnector) {
 	if _, loaded := bs.activeStreams.LoadOrStore(streamID, &r); loaded {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
@@ -267,7 +268,7 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 							// clean up call is taking
 							// TODO(wenyihu): add to buffered sender memory queue now
 							bs.metrics.UpdateMetricsOnRangefeedDisconnect()
-							(*r).disconnect(&e.ev.Error.Error)
+							(*r).GetUnreg()()
 						}
 					}
 					if err != nil {

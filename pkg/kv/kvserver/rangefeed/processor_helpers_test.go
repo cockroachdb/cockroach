@@ -48,6 +48,10 @@ func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
 	}
 }
 
+func (tb *testBufferedStream) GetUnreg() func() {
+	return func() {}
+}
+
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)

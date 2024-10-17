@@ -363,6 +363,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			cfg.metrics,
 			&testBufferedStream{Stream: s},
 			func() {},
+			func(registration) {},
 		)
 	default:
 		panic("unknown registration type")
