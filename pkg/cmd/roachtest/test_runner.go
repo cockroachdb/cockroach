@@ -262,6 +262,7 @@ type testOpts struct {
 	versionsBinaryOverride map[string]string
 	skipInit               bool
 	goCoverEnabled         bool
+	exportOpenMetrics      bool
 }
 
 // Run runs tests.
@@ -834,6 +835,7 @@ func (r *testRunner) runWorker(
 			skipInit:               topt.skipInit,
 			debug:                  clustersOpt.debugMode.IsDebug(),
 			goCoverEnabled:         topt.goCoverEnabled,
+			exportOpenmetrics:      topt.exportOpenMetrics,
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
