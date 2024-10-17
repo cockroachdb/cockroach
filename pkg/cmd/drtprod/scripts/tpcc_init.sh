@@ -19,15 +19,19 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
+absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./tpcc_init.sh")
+pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+
 # script is responsible for importing the tpcc database for workload
 roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init.sh > /dev/null << 'EOF'
-TPCC_DB=cct_tpcc
+#!/bin/bash
+
 export ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT}
 export ROACHPROD_DNS=${ROACHPROD_DNS}
-./roachprod sync
+${pwd}/roachprod sync
 sleep 20
-PGURLS=\$(./roachprod pgurl ${CLUSTER} | sed s/\'//g)
-nohup ./cockroach workload init tpcc $@ --db=\$TPCC_DB --secure --families \$PGURLS &
+PGURLS=\$(${pwd}/roachprod pgurl ${CLUSTER} | sed s/\'//g)
+${pwd}/cockroach workload init tpcc $@ --secure --families \$PGURLS
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- chmod +x tpcc_init.sh
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- ./tpcc_init.sh
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init.sh"
+roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpccinit --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init.sh"

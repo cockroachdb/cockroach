@@ -8,10 +8,7 @@ if [ -z "${CLUSTER}" ]; then
   exit 1
 fi
 
-# TODO - this command does not work. We need to replace this with the actual dd_api_key for the script to work
-
 dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
-
 
 if [ -z "${dd_api_key}" ]; then
   echo "Missing Datadog API key!"
