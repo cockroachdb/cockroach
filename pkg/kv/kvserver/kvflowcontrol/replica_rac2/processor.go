@@ -1081,8 +1081,8 @@ func (p *processorImpl) AdmittedLogEntry(
 
 // AdmittedState implements Processor.
 func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
-	admitted, _ := p.logTracker.admitted(false /* sched */)
-	return admitted
+	av, _ := p.logTracker.admitted(false /* sched */)
+	return av
 }
 
 // AdmitRaftMuLocked implements Processor.
