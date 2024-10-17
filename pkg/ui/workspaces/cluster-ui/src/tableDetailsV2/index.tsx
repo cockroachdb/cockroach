@@ -55,8 +55,8 @@ export const TableDetailsPageV2 = () => {
       key: TabKeys.OVERVIEW,
       label: "Overview",
       children: (
-        <Loading page="TableDetailsOverview" loading={isLoading}>
-          <TableOverview tableDetails={data} />
+        <Loading error={error} page="TableDetailsOverview" loading={isLoading}>
+          {data && <TableOverview tableDetails={data} />}
         </Loading>
       ),
     },
