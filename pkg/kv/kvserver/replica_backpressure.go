@@ -58,7 +58,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(settings.Sys
 // size where backpressure would kick in by more than this quantity will
 // immediately avoid backpressure. This approach is a bit risky because a
 // command larger than this value would effectively disable backpressure
-// altogether. Another downside of this approach is that if the range size
+// altogether[1]. Another downside of this approach is that if the range size
 // is reduced by roughly exactly the multiplier then we'd potentially have
 // lots of ranges in this state.
 //
@@ -75,13 +75,33 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(settings.Sys
 //  2. We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not
 //     applying backpressure.
+//
+// [1] As such, the default value of this setting is configured to match the
+// default value of MaxCommandSize. This prevents a single raft command from
+// effectively disabling batching in the default case.
 var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.range.backpressure_byte_tolerance",
 	"defines the number of bytes above the product of "+
 		"backpressure_range_size_multiplier and the range_max_size at which "+
 		"backpressure will not apply",
-	32<<20 /* 32 MiB */)
+	64<<20 /* 64 MiB */)
+
+// backpressureBelowLatchingEnabled dictates whether write requests check
+// whether they need to bail evaluating and backpressure instead after acquiring
+// latches or not.
+//
+// Requests always check whether they need to apply backpressure or not above
+// latching. However, this check is susceptible to the determination being
+// incorrect if the range size increases while the request waits on
+// latches/locks. Performing the check below latching guards against this
+// hazard.
+var backpressureBelowLatchingEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.range.backpressure_below_latching.enabled",
+	"dictates whether write requests check if they need to backpressure below latching",
+	true,
+)
 
 // backpressurableSpans contains spans of keys where write backpressuring
 // is permitted. Writes to any keys within these spans may cause a batch
@@ -167,6 +187,16 @@ func (r *Replica) shouldBackpressureWrites() bool {
 		return false
 	}
 	return true
+}
+
+// mustBackpressureBatch returns true if the supplied batch must backpressure
+// writes by returning an error to the client instead of being allowed to
+// evaluate.
+func (r *Replica) mustBackpressureBatch(ba *kvpb.BatchRequest) bool {
+	if !canBackpressureBatch(ba) {
+		return false
+	}
+	return r.shouldBackpressureWrites()
 }
 
 // maybeBackpressureBatch blocks to apply backpressure if the replica deems
