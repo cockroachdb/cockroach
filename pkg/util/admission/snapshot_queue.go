@@ -240,7 +240,7 @@ func releaseSnapshotWorkItem(sw *snapshotWorkItem) {
 	*sw = snapshotWorkItem{
 		admitCh: ch,
 	}
-	waitingWorkPool.Put(sw)
+	snapshotWorkItemPool.Put(sw)
 }
 
 func newSnapshotWorkItem(count int64) *snapshotWorkItem {
