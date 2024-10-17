@@ -771,14 +771,17 @@ func (cfg RaftConfig) StoreLivenessDurations() (livenessInterval, heartbeatInter
 	return
 }
 
-// SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
-// informs a node whether or not it's connected to the primary gossip network
-// and not just a partition. As such it must expire fairly quickly and be
-// continually re-gossiped as a connected gossip network is necessary to
-// propagate liveness. The replica which is the lease holder of the first range
-// gossips it.
+// SentinelGossipTTL is time-to-live for the gossip sentinel, which is gossiped
+// by the leaseholder of the first range. The sentinel informs a node whether or
+// not it is connected to the primary gossip network and not just a partition.
+// As such it must expire fairly quickly and be continually re-gossiped as a
+// connected gossip network is necessary to propagate liveness. Notably, it must
+// expire faster than the liveness records carried by the gossip network so that
+// a gossip partition is detected and healed before that liveness information
+// expires. Failure to do so can result in false positive dead node detection,
+// which can show up as false positive range unavailability in metrics.
 func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
-	return cfg.RangeLeaseDuration
+	return cfg.RangeLeaseDuration / 2
 }
 
 // DefaultRetryOptions should be used for retrying most
