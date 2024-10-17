@@ -572,7 +572,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						defer dbSQL.Close()
 					}
 					if err != nil {
-						return "", err
+						if !strings.Contains(err.Error(), "SSL is not enabled on the server") {
+							return "", err
+						}
+						// Retry: server might fail to respond to upgrade conn under stress
+						dbSQL, err = gosql.Open("postgres", dsn)
+						if dbSQL != nil {
+							defer dbSQL.Close()
+						}
+						if err != nil {
+							return "", err
+						}
 					}
 					row := dbSQL.QueryRow("SELECT current_catalog")
 					var result string
