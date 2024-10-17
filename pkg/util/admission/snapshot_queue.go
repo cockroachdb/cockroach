@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/queue"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,8 +52,9 @@ var DiskBandwidthForSnapshotIngest = settings.RegisterBoolSetting(
 	settings.SystemOnly, "kvadmission.store.snapshot_ingest_bandwidth_control.enabled",
 	"if set to true, snapshot ingests will be subject to disk write control in AC",
 	// TODO(aaditya): Enable by default once enough experimentation is done.
-	false,
-	settings.WithPublic)
+	metamorphic.ConstantWithTestBool("kvadmission.store.snapshot_ingest_bandwidth_control.enabled", false),
+	settings.WithPublic,
+)
 
 var snapshotWaitDur = metric.Metadata{
 	Name:        "admission.wait_durations.snapshot_ingest",
