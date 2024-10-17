@@ -93,9 +93,6 @@ func maybeDropIndex(
 	if sie == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
-	// We don't support handling zone config related properties for tables, so
-	// throw an unsupported error.
-	fallBackIfSubZoneConfigExists(b, nil, sie.TableID)
 	panicIfSchemaChangeIsDisallowed(b.QueryByID(sie.TableID), n)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
