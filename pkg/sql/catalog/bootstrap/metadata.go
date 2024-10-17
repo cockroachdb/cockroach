@@ -321,7 +321,7 @@ func InitialValuesFromString(
 	}
 	// Add back the filtered out tenant end key.
 	if !codec.ForSystemTenant() {
-		splits = append(splits, roachpb.RKey(p.PrefixEnd()))
+		splits = append(splits, roachpb.RKey(codec.TenantEndKey()))
 	}
 	return kvs, splits, nil
 }
