@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -16,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,15 +66,7 @@ type ScheduledProcessor struct {
 	stopper       *stop.Stopper
 	txnPushActive bool
 
-	overflowedUnregRequestQueue struct {
-		syncutil.RWMutex
-		reqs []request
-		// ignoreAdditionalUnregRequests is set at shutdown
-		// when we know we are shutting down. We do this to
-		// avoid allocating a bunch of requests that wil just
-		// be ignore anyway.
-		ignoreAdditionalUnregRequests bool
-	}
+	overflowedUnregRequests atomic.Bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -168,35 +160,13 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 		case e := <-p.requestQueue:
 			e(ctx)
 		default:
-			// TODO(ssd): We don't expect many events, so
-			// hopefully this lock doesn't represent a
-			// problem. Only doing this in the default
-			// case also potentially means we get starved
-			// by other requests and delay our Unreg call
-			// for some time.
-			if needsDrain, toDrain := p.overflowedUnregRequests(); needsDrain {
-				log.Warningf(ctx, "request queue overflowed (len: %d)", len(toDrain))
-				for _, f := range toDrain {
-					f(ctx)
-				}
+			if p.overflowedUnregRequests.Swap(false) {
+				log.Warningf(ctx, "request queue overflowed, scanning all registrations")
+				p.reg.unregisterMarkedRegistrations(ctx)
 			}
 			return
 		}
 	}
-}
-
-func (p *ScheduledProcessor) overflowedUnregRequests() (bool, []request) {
-	p.overflowedUnregRequestQueue.Lock()
-	defer p.overflowedUnregRequestQueue.Unlock()
-
-	if len(p.overflowedUnregRequestQueue.reqs) == 0 {
-		return false, nil
-	}
-
-	toDrain := p.overflowedUnregRequestQueue.reqs
-	p.overflowedUnregRequestQueue.reqs = make([]request, 0, 8)
-	return true, toDrain
-
 }
 
 // Transform and route pending events.
@@ -317,10 +287,6 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 }
 
 func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error) {
-	p.overflowedUnregRequestQueue.Lock()
-	p.overflowedUnregRequestQueue.ignoreAdditionalUnregRequests = true
-	p.overflowedUnregRequestQueue.Unlock()
-
 	p.reg.DisconnectAllOnShutdown(ctx, pErr)
 	// First set stopping flag to ensure that once all registrations are removed
 	// processor should stop.
@@ -413,26 +379,24 @@ func (p *ScheduledProcessor) Register(
 	return false, nil
 }
 
-func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
-	p.enqueueUnregisterRequest(func(ctx context.Context) {
-		p.reg.Unregister(ctx, r)
-		// Assert that we never process requests after stoppedC is closed. This is
-		// necessary to coordinate catchup iter ownership and avoid double-closing.
-		// Note that request/stop processing is always sequential, see process().
-		if buildutil.CrdbTestBuild {
-			select {
-			case <-p.stoppedC:
-				log.Fatalf(ctx, "processing request on stopped processor")
-			default:
-			}
+func (p *ScheduledProcessor) unregisterClientInternal(ctx context.Context, r registration) {
+	p.reg.Unregister(ctx, r)
+	// Assert that we never process requests after stoppedC is closed. This is
+	// necessary to coordinate catchup iter ownership and avoid double-closing.
+	// Note that request/stop processing is always sequential, see process().
+	if buildutil.CrdbTestBuild {
+		select {
+		case <-p.stoppedC:
+			log.Fatalf(ctx, "processing request on stopped processor")
+		default:
 		}
+	}
 
-		// If we have no more registrations, we can stop this
-		// processor.
-		if p.reg.Len() == 0 {
-			p.stopInternal(ctx, nil)
-		}
-	})
+	// If we have no more registrations, we can stop this
+	// processor.
+	if p.reg.Len() == 0 {
+		p.stopInternal(ctx, nil)
+	}
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -691,29 +655,29 @@ func (p *ScheduledProcessor) enqueueRequest(req request) {
 	}
 }
 
-// enqueueUnregisterRequest enqueues an unregister request without
-// blocking. If the request queue is filled, the request will be
-// appended to an overflow buffer.
+// unregisterClientAsync enqueues an unregister request without
+// blocking. If the request queue is filled, the overflow bool is set
+// which will trigger a scan of all registrations on the next
+// process() call.
 //
 // We are OK with these being processed out of order since these
 // requests originate from a registration cleanup, so the registration
 // in question is no longer processing event.
-func (p *ScheduledProcessor) enqueueUnregisterRequest(req request) {
+func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
 	select {
 	case <-p.stoppedC:
 		return
 	default:
 	}
+	req := func(ctx context.Context) {
+		p.unregisterClientInternal(ctx, r)
+	}
 	select {
 	case p.requestQueue <- req:
 		p.scheduler.Enqueue(RequestQueued)
 	default:
-		p.overflowedUnregRequestQueue.Lock()
-		defer p.overflowedUnregRequestQueue.Unlock()
-		if p.overflowedUnregRequestQueue.ignoreAdditionalUnregRequests {
-			return
-		}
-		p.overflowedUnregRequestQueue.reqs = append(p.overflowedUnregRequestQueue.reqs, req)
+		r.setShouldUnregister(true)
+		p.overflowedUnregRequests.Store(true)
 		p.scheduler.Enqueue(RequestQueued)
 	}
 }
