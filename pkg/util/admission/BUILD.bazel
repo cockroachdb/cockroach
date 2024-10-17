@@ -36,6 +36,7 @@ go_library(
         "//pkg/util/grunning",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/queue",
         "//pkg/util/schedulerlatency",
