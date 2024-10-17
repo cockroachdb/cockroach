@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # NOTE: After a new release has been cut, update this to the appropriate
 # Cockroach branch name (i.e. release-23.2, etc.), and corresponding Pebble
 # branch name (e.g. crl-release-23.2, etc.). Also update pebble nightly scripts
