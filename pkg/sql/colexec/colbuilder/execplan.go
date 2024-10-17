@@ -2117,6 +2117,13 @@ func planSelectionOperators(
 		}
 		lTyp := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
+			if !t.Op.CalledOnNullInput && constArg == tree.DNull {
+				// If the RHS is NULL and the operator is not called on NULL,
+				// the result will be NULL and the selection vector will always
+				// be empty. So we can simply plan a zero operator.
+				op = colexecutils.NewZeroOp(input)
+				return op, resultIdx, ct, err
+			}
 			switch cmpOp.Symbol {
 			case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
 				negate, caseInsensitive := examineLikeOp(cmpOp)
