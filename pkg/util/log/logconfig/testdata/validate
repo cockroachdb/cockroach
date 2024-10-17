@@ -868,3 +868,15 @@ file-defaults:
     max-buffer-size: 50MiB
 ----
 ERROR: Unable to use "buffered-writes" in conjunction with a "buffering" configuration. These configuration options are mutually exclusive.
+
+# Check that auditable and buffered-writes are incompatible together.
+yaml
+file-defaults:
+  buffered-writes: false
+  auditable: true
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the "buffering" (buffered-writes) or "auditable" log (auditable) configuration.
