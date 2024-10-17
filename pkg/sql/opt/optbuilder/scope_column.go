@@ -148,7 +148,6 @@ func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
 // clearName sets the empty table and column name. This is used to make the
 // column anonymous so that it cannot be referenced, but will still be
 // projected.
-// TODO(mgartner): Do we still need this?
 func (c *scopeColumn) clearName() {
 	c.name.Anonymize()
 	c.table = tree.TableName{}

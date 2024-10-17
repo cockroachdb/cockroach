@@ -791,3 +791,9 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	}
 	return ordinals
 }
+
+// addBarrier adds an optimization barrier to the given scope, in order to
+// prevent side effects from being duplicated, eliminated, or reordered.
+func (b *Builder) addBarrier(s *scope) {
+	s.expr = b.factory.ConstructBarrier(s.expr)
+}

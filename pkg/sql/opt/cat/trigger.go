@@ -5,7 +5,12 @@
 
 package cat
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
+)
 
 // Trigger is an interface to a trigger on a table or view, which executes a
 // trigger function in response to a pre-defined mutation of the table.
@@ -56,4 +61,150 @@ type Trigger interface {
 
 	// Enabled is true if the trigger is currently enabled.
 	Enabled() bool
+}
+
+// ValidateCreateTrigger checks that the CREATE TRIGGER statement is valid. It
+// performs only validation that can be performed without access to the
+// database schema, and without actually building the component expressions.
+func ValidateCreateTrigger(
+	ct *tree.CreateTrigger, ds DataSource, allEventTypes tree.TriggerEventTypeSet,
+) error {
+	var hasTargetCols bool
+	for i := range ct.Events {
+		if len(ct.Events[i].Columns) > 0 {
+			hasTargetCols = true
+			break
+		}
+	}
+
+	// Check that the target table/view is valid.
+	switch t := ds.(type) {
+	case Table:
+		if t.IsSystemTable() || t.IsVirtualTable() {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"permission denied: \"%s\" is a system catalog", t.Name())
+		}
+		if t.IsMaterializedView() {
+			return errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
+				"relation \"%s\" cannot have triggers", t.Name()),
+				"This operation is not supported for materialized views.")
+		}
+		if ct.ActionTime == tree.TriggerActionTimeInsteadOf {
+			return errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
+				"\"%s\" is a table", t.Name()),
+				"Tables cannot have INSTEAD OF triggers.")
+		}
+		if !ct.Replace {
+			for i := 0; i < t.TriggerCount(); i++ {
+				if t.Trigger(i).Name() == ct.Name {
+					return pgerror.Newf(pgcode.DuplicateObject,
+						"trigger \"%s\" for relation \"%s\" already exists", ct.Name, t.Name())
+				}
+			}
+		}
+	case View:
+		if t.IsSystemView() {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"permission denied: \"%s\" is a system catalog", t.Name())
+		}
+		// Views can only use row-level INSTEAD OF, or statement-level BEFORE or
+		// AFTER timing. The former is checked below.
+		if ct.ActionTime != tree.TriggerActionTimeInsteadOf && ct.ForEach == tree.TriggerForEachRow {
+			return errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
+				"\"%s\" is a view", t.Name()),
+				"Views cannot have row-level BEFORE or AFTER triggers.")
+		}
+		if allEventTypes.Contains(tree.TriggerEventTruncate) {
+			return errors.WithDetail(pgerror.Newf(pgcode.WrongObjectType,
+				"\"%s\" is a view", t.Name()),
+				"Views cannot have TRUNCATE triggers.")
+		}
+		if !ct.Replace {
+			for i := 0; i < t.TriggerCount(); i++ {
+				if t.Trigger(i).Name() == ct.Name {
+					return pgerror.Newf(pgcode.DuplicateObject,
+						"trigger \"%s\" for relation \"%s\" already exists", ct.Name, t.Name())
+				}
+			}
+		}
+	default:
+		return pgerror.Newf(pgcode.WrongObjectType, "relation \"%s\" cannot have triggers", t.Name())
+	}
+
+	// TRUNCATE is not compatible with FOR EACH ROW.
+	if ct.ForEach == tree.TriggerForEachRow && allEventTypes.Contains(tree.TriggerEventTruncate) {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"TRUNCATE FOR EACH ROW triggers are not supported")
+	}
+
+	// Validate usage of INSTEAD OF timing.
+	if ct.ActionTime == tree.TriggerActionTimeInsteadOf {
+		if ct.ForEach != tree.TriggerForEachRow {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"INSTEAD OF triggers must be FOR EACH ROW")
+		}
+		if ct.When != nil {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"INSTEAD OF triggers cannot have WHEN conditions")
+		}
+		if hasTargetCols {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"INSTEAD OF triggers cannot have column lists")
+		}
+	}
+
+	// Validate usage of transition tables.
+	if len(ct.Transitions) > 0 {
+		if ct.ActionTime != tree.TriggerActionTimeAfter {
+			return pgerror.New(pgcode.InvalidObjectDefinition,
+				"transition table name can only be specified for an AFTER trigger")
+		}
+		if allEventTypes.Contains(tree.TriggerEventTruncate) {
+			return pgerror.New(pgcode.InvalidObjectDefinition,
+				"TRUNCATE triggers cannot specify transition tables")
+		}
+		if len(ct.Events) > 1 {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"transition tables cannot be specified for triggers with more than one event")
+		}
+		if hasTargetCols {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"transition tables cannot be specified for triggers with column lists")
+		}
+	}
+	if len(ct.Transitions) == 2 && ct.Transitions[0].Name == ct.Transitions[1].Name {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition,
+			"OLD TABLE name and NEW TABLE name cannot be the same")
+	}
+	var sawOld, sawNew bool
+	for i := range ct.Transitions {
+		if ct.Transitions[i].IsNew {
+			if !allEventTypes.Contains(tree.TriggerEventInsert) &&
+				!allEventTypes.Contains(tree.TriggerEventUpdate) {
+				return pgerror.New(pgcode.InvalidObjectDefinition,
+					"NEW TABLE can only be specified for an INSERT or UPDATE trigger")
+			}
+			if sawNew {
+				return pgerror.Newf(pgcode.Syntax, "cannot specify NEW more than once")
+			}
+			sawNew = true
+		} else {
+			if !allEventTypes.Contains(tree.TriggerEventDelete) &&
+				!allEventTypes.Contains(tree.TriggerEventUpdate) {
+				return pgerror.New(pgcode.InvalidObjectDefinition,
+					"OLD TABLE can only be specified for a DELETE or UPDATE trigger")
+			}
+			if sawOld {
+				return pgerror.Newf(pgcode.Syntax, "cannot specify OLD more than once")
+			}
+			sawOld = true
+		}
+		if ct.Transitions[i].IsRow {
+			// NOTE: Postgres also returns an "unimplemented" error here.
+			return errors.WithHint(pgerror.New(pgcode.FeatureNotSupported,
+				"ROW variable naming in the REFERENCING clause is not supported"),
+				"Use OLD TABLE or NEW TABLE for naming transition tables.")
+		}
+	}
+	return nil
 }

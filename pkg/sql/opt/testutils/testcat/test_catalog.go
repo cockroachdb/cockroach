@@ -52,7 +52,6 @@ type Catalog struct {
 	enumTypes  map[string]*types.T
 
 	udfs           map[string]*tree.ResolvedFunctionDefinition
-	currUDFOid     oid.Oid
 	revokedUDFOids intsets.Fast
 }
 
@@ -565,6 +564,14 @@ func (tc *Catalog) executeDDLStmtWithIndexVersion(
 		}
 		return formatFunction(def), nil
 
+	case *tree.CreateTrigger:
+		tc.CreateTrigger(stmt)
+		return "", nil
+
+	case *tree.DropTrigger:
+		tc.DropTrigger(stmt)
+		return "", nil
+
 	default:
 		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)
 	}
@@ -668,6 +675,7 @@ type View struct {
 	ViewName    cat.DataSourceName
 	QueryText   string
 	ColumnNames tree.NameList
+	Triggers    []Trigger
 
 	// If Revoked is true, then the user has had privileges on the view revoked.
 	Revoked bool
@@ -737,12 +745,12 @@ func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
 
 // TriggerCount is a part of the cat.View interface.
 func (tv *View) TriggerCount() int {
-	return 0
+	return len(tv.Triggers)
 }
 
 // Trigger is a part of the cat.View interface.
 func (tv *View) Trigger(i int) cat.Trigger {
-	panic("not implemented")
+	return &tv.Triggers[i]
 }
 
 // Table implements the cat.Table interface for testing purposes.
@@ -756,6 +764,7 @@ type Table struct {
 	Stats      TableStats
 	Checks     []cat.CheckConstraint
 	Families   []*Family
+	Triggers   []Trigger
 	IsVirtual  bool
 	IsSystem   bool
 	Catalog    *Catalog
@@ -1047,12 +1056,12 @@ func (tt *Table) IsRefreshViewRequired() bool {
 
 // TriggerCount is a part of the cat.Table interface.
 func (tt *Table) TriggerCount() int {
-	return 0
+	return len(tt.Triggers)
 }
 
 // Trigger is a part of the cat.Table interface.
 func (tt *Table) Trigger(i int) cat.Trigger {
-	panic("not implemented")
+	return &tt.Triggers[i]
 }
 
 // Index implements the cat.Index interface for testing purposes.
@@ -1700,4 +1709,74 @@ func (tf *Family) ColumnCount() int {
 // Column is part of the cat.Family interface.
 func (tf *Family) Column(i int) cat.FamilyColumn {
 	return tf.Columns[i]
+}
+
+// Trigger implements the cat.Trigger interface for testing purposes.
+type Trigger struct {
+	TriggerName               tree.Name
+	TriggerActionTime         tree.TriggerActionTime
+	TriggerEvents             []*tree.TriggerEvent
+	TriggerTableID            cat.StableID
+	TriggerNewTransitionAlias tree.Name
+	TriggerOldTransitionAlias tree.Name
+	TriggerForEachRow         bool
+	TriggerWhenExpr           string
+	TriggerFuncID             cat.StableID
+	TriggerFuncArgs           tree.Datums
+	TriggerFuncBody           string
+	TriggerEnabled            bool
+}
+
+var _ cat.Trigger = &Trigger{}
+
+func (t *Trigger) Name() tree.Name {
+	return t.TriggerName
+}
+
+func (t *Trigger) ActionTime() tree.TriggerActionTime {
+	return t.TriggerActionTime
+}
+
+func (t *Trigger) EventCount() int {
+	return len(t.TriggerEvents)
+}
+
+func (t *Trigger) Event(i int) tree.TriggerEvent {
+	return *t.TriggerEvents[i]
+}
+
+func (t *Trigger) TableID() cat.StableID {
+	return t.TriggerTableID
+}
+
+func (t *Trigger) NewTransitionAlias() tree.Name {
+	return t.TriggerNewTransitionAlias
+}
+
+func (t *Trigger) OldTransitionAlias() tree.Name {
+	return t.TriggerOldTransitionAlias
+}
+
+func (t *Trigger) ForEachRow() bool {
+	return t.TriggerForEachRow
+}
+
+func (t *Trigger) WhenExpr() string {
+	return t.TriggerWhenExpr
+}
+
+func (t *Trigger) FuncID() cat.StableID {
+	return t.TriggerFuncID
+}
+
+func (t *Trigger) FuncArgs() tree.Datums {
+	return t.TriggerFuncArgs
+}
+
+func (t *Trigger) FuncBody() string {
+	return t.TriggerFuncBody
+}
+
+func (t *Trigger) Enabled() bool {
+	return t.TriggerEnabled
 }
