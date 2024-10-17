@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"hash"
 	"sync"
 	"time"
@@ -18,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
