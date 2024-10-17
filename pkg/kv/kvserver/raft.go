@@ -267,7 +267,7 @@ func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 	r.mu.RLock()
 	for _, id := range ids {
 		if prop, ok := r.mu.proposals[id]; ok {
-			ctxs = append(ctxs, prop.ctx)
+			ctxs = append(ctxs, prop.Context())
 		}
 	}
 	r.mu.RUnlock()
