@@ -50,9 +50,27 @@ func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
 func (e testNodeVitalityEntry) convert() NodeVitality {
 	now := e.clock.Now()
 	if e.Alive {
-		return e.Liveness.CreateNodeVitality(now, now, hlc.Timestamp{}, true, time.Second, time.Second)
+		return e.Liveness.CreateNodeVitality(
+			now,             /* now */
+			now,             /* descUpdateTime */
+			hlc.Timestamp{}, /* descUnavailableTime */
+			hlc.Timestamp{}, /* descUnavailableTimeBegin */
+			true,            /* connected */
+			time.Second,     /* timeUntilNodeDead */
+			time.Second,     /* timeAfterNodeSuspect */
+			1.0,             /* timeAfterNodeSuspectLongMult */
+		)
 	} else {
-		return e.Liveness.CreateNodeVitality(now, now.AddDuration(-time.Hour), hlc.Timestamp{}, false, time.Second, time.Second)
+		return e.Liveness.CreateNodeVitality(
+			now,                         /* now */
+			now.AddDuration(-time.Hour), /* descUpdateTime */
+			now.AddDuration(-time.Hour), /* descUnavailableTime */
+			hlc.Timestamp{},             /* descUnavailableTimeBegin */
+			false,                       /* connected */
+			time.Second,                 /* timeUntilNodeDead */
+			time.Second,                 /* timeAfterNodeSuspect */
+			1.0,                         /* timeAfterNodeSuspectLongMult */
+		)
 	}
 }
 

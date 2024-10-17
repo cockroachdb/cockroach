@@ -178,12 +178,23 @@ type NodeVitality struct {
 
 	// When the record is created. Records are not held for long, but they should
 	// always give consistent results when asked.
-	now                  hlc.Timestamp
-	timeUntilNodeDead    time.Duration
-	timeAfterNodeSuspect time.Duration
+	now                          hlc.Timestamp
+	timeUntilNodeDead            time.Duration
+	timeAfterNodeSuspect         time.Duration
+	timeAfterNodeSuspectLongMult float64
 
 	// Data that comes from the node/store descriptor cache.
-	descUpdateTime      hlc.Timestamp
+	//
+	// descUpdateTime is the time when the node descriptor was last updated.
+	descUpdateTime hlc.Timestamp
+	// descUnavailableTimeBegin is the time when the node descriptor was first
+	// noticed as unavailable. See liveness.checkForStaleEntries. This is used to
+	// determine if the node was unavailable for a period, or a long period. The
+	// suspect logic below, varies how long it will consider a now live node as
+	// suspect depending on how long it was unavailable.
+	descUnavailableTimeBegin hlc.Timestamp
+	// descUnavailableTime is the time when the node descriptor was last noticed
+	// as unavailable. This is used to determine if the node is suspect.
 	descUnavailableTime hlc.Timestamp
 
 	// Data that comes from the liveness range
@@ -443,6 +454,9 @@ func (nv NodeVitality) LivenessStatus() NodeLivenessStatus {
 		isDead = true
 	}
 
+	// If a store is gone for longer than the suspect duration (sus) then we
+	// apply twice the suspect duration.
+
 	// If it expired longer than timeUntiLNodeDead ago, then treat as DEAD,
 	// otherwise it is UNAVAILABLE. If livenessEpoch is 0, we don't want to assume
 	// its dead since it hasn't had a chance to update its expiration yet.
@@ -459,8 +473,21 @@ func (nv NodeVitality) LivenessStatus() NodeLivenessStatus {
 		isAlive = true
 	}
 
-	// If the descriptor was recently unavailable, treat the node as unavailable (not alive).
+	// If the descriptor was recently unavailable, treat the node as unavailable
+	// (not alive).
 	if nv.descUnavailableTime.IsSet() && nv.descUnavailableTime.AddDuration(nv.timeAfterNodeSuspect).After(nv.now) {
+		isAlive = false
+	}
+
+	// Also, when a descriptor stays unavailable for longer than the suspect
+	// duration, we apply a suspect duration multiplier, so that it will be
+	// considered not alive for extendedUnavailabilitySusMult times the suspect
+	// duration, after the last time it was noticed as unavailable.
+	shortUnavailability := nv.descUnavailableTimeBegin.AddDuration(
+		nv.timeAfterNodeSuspect).After(nv.descUnavailableTime)
+	longSuspectDuration := time.Duration(nv.timeAfterNodeSuspectLongMult * float64(nv.timeAfterNodeSuspect))
+	recentUnavailability := nv.descUnavailableTime.AddDuration(longSuspectDuration).After(nv.now)
+	if nv.descUnavailableTime.IsSet() && !shortUnavailability && recentUnavailability {
 		isAlive = false
 	}
 
@@ -511,24 +538,28 @@ func (l Liveness) CreateNodeVitality(
 	now hlc.Timestamp,
 	descUpdateTime hlc.Timestamp,
 	descUnavailableTime hlc.Timestamp,
+	descUnavailableTimeBegin hlc.Timestamp,
 	connected bool,
 	timeUntilNodeDead time.Duration,
 	timeAfterNodeSuspect time.Duration,
+	timeAfterNodeSuspectLongMult float64,
 ) NodeVitality {
 	// Dead means that there is low chance this node is online.
 	// Alive means that there is a high probability the node is online.
 	// A node can be neither dead nor alive (but not both).
 	return NodeVitality{
-		nodeID:               l.NodeID,
-		draining:             l.Draining,
-		membership:           l.Membership,
-		connected:            connected,
-		now:                  now,
-		descUpdateTime:       descUpdateTime,
-		descUnavailableTime:  descUnavailableTime,
-		timeUntilNodeDead:    timeUntilNodeDead,
-		timeAfterNodeSuspect: timeAfterNodeSuspect,
-		livenessExpiration:   l.Expiration.ToTimestamp(),
-		livenessEpoch:        l.Epoch,
+		nodeID:                       l.NodeID,
+		draining:                     l.Draining,
+		membership:                   l.Membership,
+		connected:                    connected,
+		now:                          now,
+		descUpdateTime:               descUpdateTime,
+		descUnavailableTimeBegin:     descUnavailableTimeBegin,
+		descUnavailableTime:          descUnavailableTime,
+		timeUntilNodeDead:            timeUntilNodeDead,
+		timeAfterNodeSuspect:         timeAfterNodeSuspect,
+		timeAfterNodeSuspectLongMult: timeAfterNodeSuspectLongMult,
+		livenessExpiration:           l.Expiration.ToTimestamp(),
+		livenessEpoch:                l.Epoch,
 	}
 }

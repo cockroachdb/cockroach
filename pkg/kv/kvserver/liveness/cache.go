@@ -8,7 +8,6 @@ package liveness
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -22,7 +21,16 @@ import (
 )
 
 type UpdateInfo struct {
-	lastUpdateTime      hlc.Timestamp
+	// lastUpdateTime stores the timestamp that this node last received another
+	// node's store(s) descriptor update via gossip.
+	lastUpdateTime hlc.Timestamp
+	// firstUnavailableTime stores the timestamp that this node first noticed
+	// that the store(s) descriptor for another node was longer than
+	// gossip.StoreTTL.
+	firstUnavailableTime hlc.Timestamp
+	// lastUnavailableTime stores the timestamp that this node last noticed that
+	// the store(s) descriptor for another node was longer than gossip.StoreTTL
+	// ago.
 	lastUnavailableTime hlc.Timestamp
 }
 
@@ -53,7 +61,7 @@ type Cache struct {
 		syncutil.RWMutex
 		// lastNodeUpdate stores timestamps of StoreDescriptor updates in Gossip.
 		// This is tracking based on NodeID, so any store that is updated on this
-		// node will update teh lastNodeUpdate. We don't have the ability to handle
+		// node will update the lastNodeUpdate. We don't have the ability to handle
 		// "1 stalled store" on a node from a liveness perspective.
 		lastNodeUpdate map[roachpb.NodeID]UpdateInfo
 		// nodes stores liveness records read from Gossip
@@ -251,9 +259,11 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 		c.clock.Now(),
 		lastDescUpdate.lastUpdateTime,
 		lastDescUpdate.lastUnavailableTime,
+		lastDescUpdate.firstUnavailableTime,
 		connected,
 		TimeUntilNodeDead.Get(&c.st.SV),
 		TimeAfterNodeSuspect.Get(&c.st.SV),
+		TimeAfterNodeSuspectLongFailureMult.Get(&c.st.SV),
 	)
 }
 
@@ -323,15 +333,24 @@ func (c *Cache) lastDescriptorUpdate(nodeID roachpb.NodeID) UpdateInfo {
 }
 
 // checkForStaleEntries checks if any of the cached node updates have not been
-// updated for longer than the interval. If they become stale, they remain stale
-// for the suspect interval to prevent flapping nodes from impacting system
-// stability.
-func (c *Cache) checkForStaleEntries(interval time.Duration) {
+// updated for longer than the gossip entry store time to live. If they become
+// stale, they remain stale for the suspect interval to prevent flapping nodes
+// from impacting system stability.
+func (c *Cache) checkForStaleEntries() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	for _, l := range c.mu.lastNodeUpdate {
-		if l.lastUpdateTime.AddDuration(interval).Less(now) {
+		if l.lastUpdateTime.AddDuration(gossip.StoreTTL).Less(now) {
+			// Determine if this is the first time we are marking this entry as stale
+			// (start of a streak, which could just be 1, or continuous). We assess
+			// this by checking if the last unavailable timestamp is not set or
+			// greater than 2 x the gossip ttl ago.
+			//
+			// INVARIANT: firstUnavailableTime <= lastUnavailableTime
+			if prev := l.lastUnavailableTime; !prev.IsSet() || prev.AddDuration(2*gossip.StoreTTL).Less(now) {
+				l.firstUnavailableTime = now
+			}
 			l.lastUnavailableTime = now
 		}
 	}
