@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # The prometheus config is generated based on these constants
 PROJECT="cockroach-drt"
 WORKLOAD_PORT_RANGE=(2112 2120)
