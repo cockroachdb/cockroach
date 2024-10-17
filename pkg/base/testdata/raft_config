@@ -22,4 +22,4 @@ RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s
 NodeLivenessDurations: active=6s renewal=3s
-SentinelGossipTTL: 6s
+SentinelGossipTTL: 3s
