@@ -785,6 +785,19 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
       Value: expr,
     }
   }
+| IDENT '.' IDENT assign_operator expr_until_semi ';'
+  {
+    // TODO(#91779, #122322): allow arbitrary nesting of indirection.
+    expr, err := plpgsqllex.(*lexer).ParseExpr($5)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = &plpgsqltree.Assignment{
+      Var: plpgsqltree.Variable($1),
+      Value: expr,
+      Indirection: tree.Name($3),
+    }
+  }
 ;
 
 stmt_getdiag: GET getdiag_area_opt DIAGNOSTICS getdiag_list ';'

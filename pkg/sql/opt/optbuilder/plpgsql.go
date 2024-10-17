@@ -294,7 +294,9 @@ func (b *plpgsqlBuilder) buildRootBlock(
 		if param.class != tree.RoutineParamOut || param.name == "" {
 			continue
 		}
-		s = b.addPLpgSQLAssign(s, param.name, &tree.CastExpr{Expr: tree.DNull, Type: param.typ})
+		s = b.addPLpgSQLAssign(
+			s, param.name, &tree.CastExpr{Expr: tree.DNull, Type: param.typ}, noIndirection,
+		)
 	}
 	if b.isProcedure {
 		var tc transactionControlVisitor
@@ -372,10 +374,12 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			b.addVariable(dec.Var, typ)
 			if dec.Expr != nil {
 				// Some variable declarations initialize the variable.
-				s = b.addPLpgSQLAssign(s, dec.Var, dec.Expr)
+				s = b.addPLpgSQLAssign(s, dec.Var, dec.Expr, noIndirection)
 			} else {
 				// Uninitialized variables are null.
-				s = b.addPLpgSQLAssign(s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: typ})
+				s = b.addPLpgSQLAssign(
+					s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: typ}, noIndirection,
+				)
 			}
 			if dec.Constant {
 				// Add to the constants map after initializing the variable, since
@@ -385,7 +389,9 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		case *ast.CursorDeclaration:
 			// Declaration of a bound cursor declares a variable of type refcursor.
 			b.addVariable(dec.Name, types.RefCursor)
-			s = b.addPLpgSQLAssign(s, dec.Name, &tree.CastExpr{Expr: tree.DNull, Type: types.RefCursor})
+			s = b.addPLpgSQLAssign(
+				s, dec.Name, &tree.CastExpr{Expr: tree.DNull, Type: types.RefCursor}, noIndirection,
+			)
 			block.cursors[dec.Name] = *dec
 		}
 	}
@@ -495,7 +501,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 		case *ast.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
-			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
+			s = b.addPLpgSQLAssign(s, t.Var, t.Value, t.Indirection)
 			if b.hasExceptionHandler() {
 				// If exception handling is required, we have to start a new
 				// continuation after each variable assignment. This ensures that in the
@@ -1118,7 +1124,13 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 // new column with the variable name that projects the assigned expression.
 // If there is a column with the same name in the previous scope, it will be
 // replaced. This allows the plpgsqlBuilder to model variable mutations.
-func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, val ast.Expr) *scope {
+//
+// indirection is the optional name of a field from the (composite-typed)
+// variable. If it is set, then it is the field that is being assigned to, not
+// the variable itself.
+func (b *plpgsqlBuilder) addPLpgSQLAssign(
+	inScope *scope, ident ast.Variable, val ast.Expr, indirection tree.Name,
+) *scope {
 	typ := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
@@ -1135,12 +1147,73 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 	// volatile, add barriers before and after the projection to prevent optimizer
 	// rules from reordering or removing its side effects.
 	colName := scopeColName(ident)
-	scalar := b.buildSQLExpr(val, typ, inScope)
+	var scalar opt.ScalarExpr
+	if indirection != noIndirection {
+		scalar = b.handleIndirectionForAssign(inScope, typ, ident, indirection, val)
+	} else {
+		scalar = b.buildSQLExpr(val, typ, inScope)
+	}
 	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
+}
+
+const noIndirection = ""
+
+// handleIndirectionForAssign is used to handle an assignment like "a.b := 2",
+// where "a" is a record variable and "b" is a field of that record. The
+// function constructs a new tuple with the field "b" replaced by the new value,
+// and all other fields copied from the original tuple.
+func (b *plpgsqlBuilder) handleIndirectionForAssign(
+	inScope *scope, typ *types.T, ident ast.Variable, indirection tree.Name, val tree.Expr,
+) opt.ScalarExpr {
+	elemName := indirection.Normalize()
+
+	// We do not yet support qualifying a variable with a block label.
+	b.checkBlockLabelReference(elemName)
+	if !b.buildSQL {
+		// For lazy SQL evaluation, replace all expressions with NULL.
+		return memo.NullSingleton
+	}
+	if typ.Family() != types.TupleFamily {
+		// Like Postgres, treat this as a failure to find a matching
+		// block.variable pair.
+		panic(pgerror.Newf(pgcode.Syntax, "\"%s.%s\" is not a known variable", ident, indirection))
+	}
+	var found bool
+	var elemIdx int
+	for i := range typ.TupleLabels() {
+		if typ.TupleLabels()[i] == elemName {
+			found = true
+			elemIdx = i
+			break
+		}
+	}
+	if !found {
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"record \"%s\" has no field \"%s\"", ident, elemName,
+		))
+	}
+	_, source, _, err := inScope.FindSourceProvidingColumn(b.ob.ctx, ident)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to find variable %s", ident))
+	}
+	if !source.(*scopeColumn).typ.Identical(typ) {
+		panic(errors.AssertionFailedf("unexpected type for variable %s", ident))
+	}
+	varCol := b.ob.factory.ConstructVariable(source.(*scopeColumn).id)
+	scalar := b.buildSQLExpr(val, typ.TupleContents()[elemIdx], inScope)
+	newElems := make([]opt.ScalarExpr, len(typ.TupleContents()))
+	for i := range typ.TupleContents() {
+		if i == elemIdx {
+			newElems[i] = scalar
+		} else {
+			newElems[i] = b.ob.factory.ConstructColumnAccess(varCol, memo.TupleOrdinal(i))
+		}
+	}
+	return b.ob.factory.ConstructTuple(newElems, typ)
 }
 
 // buildInto handles the mapping from the columns of a SQL statement to the
@@ -1999,6 +2072,27 @@ func (b *plpgsqlBuilder) checkDuplicateTargets(target []ast.Variable, stmtName s
 				))
 			}
 			seenTargets[name] = struct{}{}
+		}
+	}
+}
+
+// checkBlockLabelReference checks that the given name does not reference a
+// block label, since doing so is not yet supported. This is only necessary for
+// assignment statements, since all other cases currently do not allow the
+// "a.b" syntax.
+func (b *plpgsqlBuilder) checkBlockLabelReference(name string) {
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		for _, blockVarName := range b.blocks[i].vars {
+			if name == string(blockVarName) {
+				// We found the variable. Even if there is a block with the same name,
+				// it is shadowed by the variable.
+				return
+			}
+		}
+		if b.blocks[i].label == name {
+			panic(unimplemented.NewWithIssuef(122322,
+				"qualifying a variable with a block label is not yet supported: %s", name,
+			))
 		}
 	}
 }
