@@ -136,19 +136,23 @@ func newUnbufferedRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
-	unregisterFn func(),
+	maybeRemoveEmptyProcessor func(),
+	unregisterFn func(registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
-			span:             span,
-			catchUpTimestamp: startTS,
-			withDiff:         withDiff,
-			withFiltering:    withFiltering,
-			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
+			span:                      span,
+			catchUpTimestamp:          startTS,
+			withDiff:                  withDiff,
+			withFiltering:             withFiltering,
+			withOmitRemote:            withOmitRemote,
+			maybeRemoveEmptyProcessor: maybeRemoveEmptyProcessor,
 		},
 		metrics: metrics,
 		stream:  stream,
+	}
+	br.unreg = func() {
+		unregisterFn(br)
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.catchUpIter = catchUpIter

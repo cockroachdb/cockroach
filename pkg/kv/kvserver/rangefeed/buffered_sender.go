@@ -231,6 +231,7 @@ func (bs *BufferedSender) disconnectAll() {
 	})
 }
 
+// TODO(wenyi, ssd): Double check into how pointers to interface would play here.
 func (bs *BufferedSender) AddStream(streamID int64, r disconnector) {
 	if _, loaded := bs.activeStreams.LoadOrStore(streamID, &r); loaded {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
@@ -267,7 +268,7 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 							// clean up call is taking
 							// TODO(wenyihu): add to buffered sender memory queue now
 							bs.metrics.UpdateMetricsOnRangefeedDisconnect()
-							(*r).disconnect(&e.ev.Error.Error)
+							(*r).getUnreg()()
 						}
 					}
 					if err != nil {

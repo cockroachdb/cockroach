@@ -20,8 +20,6 @@ import (
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
-	disconnector
-
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
@@ -56,25 +54,22 @@ type registration interface {
 	// getUnreg returns the unregisterFn call back of the registration. It should
 	// be called when being unregistered from processor.
 	getUnreg() func()
-}
-
-type disconnector interface {
-	// disconnect disconnects the registration with the provided error. Safe to
-	// run multiple times, but subsequent errors would be discarded.
-	disconnect(pErr *kvpb.Error)
+	getMaybeRemoveEmptyProcessor() func()
+	disconnect(*kvpb.Error)
 }
 
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	span             roachpb.Span
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	unreg            func()
-	catchUpTimestamp hlc.Timestamp // exclusive
-	id               int64         // internal
-	keys             interval.Range
+	span                      roachpb.Span
+	withDiff                  bool
+	withFiltering             bool
+	withOmitRemote            bool
+	maybeRemoveEmptyProcessor func()
+	unreg                     func()
+	catchUpTimestamp          hlc.Timestamp // exclusive
+	id                        int64         // internal
+	keys                      interval.Range
 }
 
 // ID implements interval.Interface.
@@ -117,6 +112,10 @@ func (r *baseRegistration) getWithOmitRemote() bool {
 
 func (r *baseRegistration) getUnreg() func() {
 	return r.unreg
+}
+
+func (r *baseRegistration) getMaybeRemoveEmptyProcessor() func() {
+	return r.maybeRemoveEmptyProcessor
 }
 
 func (r *baseRegistration) getWithDiff() bool {
@@ -341,6 +340,7 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 		log.Fatalf(ctx, "%v", err)
 	}
 	r.drainAllocations(ctx)
+	r.getMaybeRemoveEmptyProcessor()()
 }
 
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
