@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 set -euxo pipefail
 
 # The first and only parameter is the name of the architecture the image is being built for.

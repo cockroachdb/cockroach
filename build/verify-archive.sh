@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2017 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This script sanity-checks a source tarball, assuming a Debian-based Linux
 # environment with a Go version capable of building CockroachDB. Source tarballs
 # are expected to build, even after `make clean`, and install a functional
