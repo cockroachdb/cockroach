@@ -5,7 +5,7 @@
 
 import { DateTime } from "luxon";
 import { useEffect, useMemo, useReducer } from "react";
-import { useHistory } from "react-router";
+import { useHistory } from "react-router-dom";
 
 import { parseURLParams, updateURLParams } from "./handleURLParams";
 
