@@ -465,7 +465,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
+				r.disconnect(ctx, kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 
@@ -602,7 +602,7 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, func(context.Context, registration) {},
 	)
 	select {
 	case p.regC <- r:
