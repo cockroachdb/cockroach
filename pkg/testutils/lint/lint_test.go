@@ -211,7 +211,7 @@ func TestLint(t *testing.T) {
 `)
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
-			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
+			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.scss", "*.styl", "*.proto", "*.rl",
 		}
 		fullExtensions := make([]string, len(extensions)*2)
 		for i, extension := range extensions {
