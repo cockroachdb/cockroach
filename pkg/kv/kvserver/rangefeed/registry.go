@@ -77,11 +77,15 @@ type Disconnector interface {
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
 	streamCtx        context.Context
-	span             roachpb.Span
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	unreg            func()
+	span           roachpb.Span
+	withDiff       bool
+	withFiltering  bool
+	withOmitRemote bool
+	// TODO(ssd): This unreg can be removed when the LegacyProcess
+	// is removed.
+	unreg   func()
+	cleanup func(context.Context, registration)
+
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
 	keys             interval.Range
