@@ -548,10 +548,10 @@ func (addNode) startTargetNode(ctx context.Context, t test.Test, v variations) {
 func (a addNode) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	v.startNoBackup(ctx, t, v.targetNodes())
-	// Wait out the time until the store is no longer suspect. The 11s is based
-	// on the 10s server.time_after_store_suspect setting which we set below
-	// plus 1 sec for the store to propagate its gossip information.
-	waitDuration(ctx, 11*time.Second)
+	// Wait out the time until the store is no longer suspect. The 30s is based
+	// on the 30s default server.time_after_store_suspect setting plus 1 sec for
+	// the store to propagate its gossip information.
+	waitDuration(ctx, 30*time.Second)
 	v.waitForRebalanceToStop(ctx, t)
 	return timeutil.Since(startTime)
 }
@@ -750,11 +750,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
 			t.Fatal(err)
 		}
-		// This isn't strictly necessary, but it would be nice if this test passed at 10s (or lower).
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING server.time_after_store_suspect = '10s'`); err != nil {
-			t.Fatal(err)
-		}
+		// TODO(kvoli,andrewbaptist): Re-introduce a lower than default suspect
+		// duration once RACv2 pull mode (send queue) is enabled. e.g.,
+		//
+		//   `SET CLUSTER SETTING server.time_after_store_suspect = '10s'` (default 30s)
+		//   `SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'` (default apply_to_elastic)
+
 		// Avoid stores up-replicating away from the target node, reducing the
 		// backlog of work.
 		if _, err := db.ExecContext(
