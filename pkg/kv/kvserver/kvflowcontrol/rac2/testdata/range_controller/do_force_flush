@@ -151,45 +151,45 @@ schedule-controller-event-count: 1
 raft_event pull-mode
 range_id=1
   entries
-    term=1 index=4 pri=NormalPri size=3MiB
-    term=1 index=5 pri=NormalPri size=3MiB
-    term=1 index=6 pri=NormalPri size=3MiB
+    term=1 index=4 pri=NormalPri size=1.5MiB
+    term=1 index=5 pri=NormalPri size=1.5MiB
+    term=1 index=6 pri=NormalPri size=1.5MiB
 ----
-t1/s1: eval reg=-12 MiB/+16 MiB ela=-12 MiB/+8.0 MiB
-       send reg=-12 MiB/+16 MiB ela=-12 MiB/+8.0 MiB
-t1/s2: eval reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB
+t1/s1: eval reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
        send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
-t1/s3: eval reg=-9.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB
-       send reg=-9.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB
+t1/s3: eval reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB
+       send reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+12 MiB ela=+0 B
+eval deducted: reg=+7.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,7) precise_q_size=+9.0 MiB watching-for-tokens
-eval deducted: reg=+0 B ela=+12 MiB
-eval original in send-q: reg=+9.0 MiB ela=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,7) precise_q_size=+4.5 MiB watching-for-tokens
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+4.5 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
 (n3,s3):3: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+9.0 MiB ela=+0 B
+eval deducted: reg=+4.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
 MsgApps sent in pull mode:
  to: 3, lowPri: false entries: [4 5 6]
@@ -208,19 +208,19 @@ r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 stream_state range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+12 MiB ela=+0 B
+eval deducted: reg=+7.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,7) precise_q_size=+9.0 MiB force-flushing
-eval deducted: reg=+0 B ela=+12 MiB
-eval original in send-q: reg=+9.0 MiB ela=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,7) precise_q_size=+4.5 MiB force-flushing
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+4.5 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
@@ -231,31 +231,31 @@ LowPri:
 schedule-controller-event-count: 2
 scheduled-replicas: 2
 
-# Scheduler event. Only two entries are dequeued from the send-queue since 3+3
-# = 6MiB exceeds the 4MiB threshold for sending in one scheduler event.
-# Replica 2 schedules itself again.
+# Scheduler event. Only two entries are dequeued from the send-queue since 1.5 +
+# 1.5 + 1.5 = 4.5 MiB exceeds the 4MiB threshold for sending in one scheduler
+# event. Replica 2 schedules itself again.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+12 MiB ela=+0 B
+eval deducted: reg=+7.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,6) send_queue=[6,7) precise_q_size=+3.0 MiB force-flushing
-eval deducted: reg=+0 B ela=+12 MiB
-eval original in send-q: reg=+3.0 MiB ela=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[4,6) send_queue=[6,7) precise_q_size=+1.5 MiB force-flushing
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+1.5 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
 ++++
 (n3,s3):3: closed
 ++++
@@ -269,26 +269,26 @@ scheduled-replicas: 2
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+12 MiB ela=+0 B
+eval deducted: reg=+7.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
 (n2,s2):2: state=replicate closed=false inflight=[6,7) send_queue=[7,7) precise_q_size=+0 B
-eval deducted: reg=+0 B ela=+12 MiB
+eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
-  term=1 index=4  tokens=3145728
-  term=1 index=5  tokens=3145728
-  term=1 index=6  tokens=3145728
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+  term=1 index=6  tokens=1572864
 ++++
 (n3,s3):3: closed
 ++++
