@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -463,6 +464,14 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 				return false, err
 			}
 		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+				fn()
+			}
+		}
+
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
 		if err := n.run.processSourceRow(params, inputRow); err != nil {
