@@ -83,6 +83,7 @@ func RegisterTests(r registry.Registry) {
 	registerKnex(r)
 	registerLOQRecovery(r)
 	registerLargeRange(r)
+	registerLDAPConnectionLatencyTest(r)
 	registerLeasePreferences(r)
 	registerLedger(r)
 	registerLibPQ(r)
