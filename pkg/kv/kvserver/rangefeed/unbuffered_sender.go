@@ -122,8 +122,9 @@ type UnbufferedSender struct {
 	// so that it's non-blocking.
 	notifyMuxError chan struct{}
 
-	// streamID -> context cancellation
-	streams syncutil.Map[int64, context.CancelFunc]
+	// activeStreams are the streams known to this sender with registrations that
+	// have been started.
+	activeStreams syncutil.Map[int64, Disconnector]
 
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
@@ -167,13 +168,22 @@ func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
+	ubs.appendMuxError(ev)
+}
 
-	if cancel, ok := ubs.streams.LoadAndDelete(ev.StreamID); ok {
-		// Fine to skip nil checking here since that would be a programming error.
-		(*cancel)()
-		ubs.metrics.UpdateMetricsOnRangefeedDisconnect()
-		ubs.appendMuxError(ev)
+func (ubs *UnbufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
+	if ev.Error == nil {
+		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
+
+	if r, ok := ubs.activeStreams.LoadAndDelete(ev.StreamID); ok {
+		// Fine to skip nil checking here since that would be a programming error.
+		log.Infof(context.Background(), "disconnect(%v)", &ev.Error.Error)
+		(*r).Disconnect(&ev.Error.Error)
+		ubs.metrics.UpdateMetricsOnRangefeedDisconnect()
+		return true
+	}
+	return false
 }
 
 // SendUnbuffered blocks until the event is sent to the underlying grpc stream.
@@ -304,8 +314,8 @@ func (ubs *UnbufferedSender) Stop() {
 // active until SendBufferedError is called with the same streamID.
 // Caller must ensure no duplicate stream IDs are added without disconnecting
 // the old one first.
-func (ubs *UnbufferedSender) AddStream(streamID int64, cancel context.CancelFunc) {
-	if _, loaded := ubs.streams.LoadOrStore(streamID, &cancel); loaded {
+func (ubs *UnbufferedSender) AddStream(streamID int64, r Disconnector) {
+	if _, loaded := ubs.activeStreams.LoadOrStore(streamID, &r); loaded {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
 	ubs.metrics.UpdateMetricsOnRangefeedConnect()

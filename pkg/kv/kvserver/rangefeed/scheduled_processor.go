@@ -311,15 +311,16 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn, func(r registration) { p.unregisterClient(r) })
 	} else {
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-		)
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -329,6 +330,8 @@ func (p *ScheduledProcessor) Register(
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
+
+		stream.AddRegistration(r)
 
 		// Add the new registration to the registry.
 		p.reg.Register(ctx, r)
@@ -346,12 +349,12 @@ func (p *ScheduledProcessor) Register(
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if f := r.getUnreg(); f != nil {
-					f()
-				}
+			if _, ok := r.(*bufferedRegistration); ok {
+				// If runOutputLoop ends, it means that the registration is disconnected
+				// for bufferedRegistration. This is not true for
+				// unbufferedRegistration. Instead, unbufferedRegistration relies on
+				// RegisterRangefeedCleanUp above.
+				p.unregisterClient(r)
 			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
@@ -359,7 +362,13 @@ func (p *ScheduledProcessor) Register(
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
-			r.disconnect(kvpb.NewError(err))
+			r.Disconnect(kvpb.NewError(err))
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here. Double check if
+			// runOutputLoop is guaranteed to be invoked if err == nil here.
+			if ubr, ok := r.(*unbufferedRegistration); ok {
+				ubr.discardCatchUpBuffer(ctx)
+			}
 			p.reg.Unregister(ctx, r)
 		}
 		return f

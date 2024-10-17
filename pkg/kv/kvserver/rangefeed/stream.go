@@ -10,45 +10,44 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Stream is an object capable of transmitting RangeFeedEvents from a server
 // rangefeed to a client.
 type Stream interface {
 	kvpb.RangeFeedEventSink
-	// Disconnect disconnects the stream with the provided error. Note that this
-	// function can be called by the processor worker while holding raftMu, so it
-	// is important that this function doesn't block IO or try acquiring locks
-	// that could lead to deadlocks.
-	Disconnect(err *kvpb.Error)
+	// SendError sends an error to the stream. Since this function can be called by
+	// the processor worker while holding raftMu as part of
+	// registration.Disconnect(), it is important that this function doesn't block
+	// IO or try acquiring locks that could lead to deadlocks.
+	SendError(err *kvpb.Error)
+
+	AddRegistration(Disconnector)
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
-	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *UnbufferedSender
+	manager  StreamManager
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
-		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
 		wrapped:  wrapped,
+		manager:  wrapped,
 	}
 }
 
 var _ kvpb.RangeFeedEventSink = (*PerRangeEventSink)(nil)
 var _ Stream = (*PerRangeEventSink)(nil)
-
-func (s *PerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -64,11 +63,8 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.SendUnbuffered(response)
 }
 
-// Disconnect implements the Stream interface. It requests the UnbufferedSender
-// to detach the stream. The UnbufferedSender is then responsible for handling
-// the actual disconnection and additional cleanup. Note that Caller should not
-// rely on immediate disconnection as cleanup takes place async.
-func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
+// Disconnect implements the Stream interface.
+func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		RangeID:  s.rangeID,
 		StreamID: s.streamID,
@@ -76,7 +72,12 @@ func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
+	log.Infof(context.Background(), "s.wrapped.SendBufferedErr(%v)", ev)
 	s.wrapped.SendBufferedError(ev)
+}
+
+func (s *PerRangeEventSink) AddRegistration(r Disconnector) {
+	s.manager.AddStream(s.streamID, r)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client

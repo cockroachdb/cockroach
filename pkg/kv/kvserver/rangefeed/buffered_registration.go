@@ -80,22 +80,23 @@ func newBufferedRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
-	unregisterFn func(),
+	maybeRemoveEmptyProcessor func(),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
-			span:             span,
-			catchUpTimestamp: startTS,
-			withDiff:         withDiff,
-			withFiltering:    withFiltering,
-			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
+			span:                      span,
+			catchUpTimestamp:          startTS,
+			withDiff:                  withDiff,
+			withFiltering:             withFiltering,
+			withOmitRemote:            withOmitRemote,
+			maybeRemoveEmptyProcessor: maybeRemoveEmptyProcessor,
 		},
 		metrics:       metrics,
 		stream:        stream,
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
 	}
+	br.unreg = func() {}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.caughtUp = true
 	br.mu.catchUpIter = catchUpIter
@@ -146,10 +147,10 @@ func (br *bufferedRegistration) publish(
 	}
 }
 
-// disconnect cancels the output loop context for the registration and passes an
+// Disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
+func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
@@ -161,7 +162,7 @@ func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
 			br.mu.outputLoopCancelFn()
 		}
 		br.mu.disconnected = true
-		br.stream.Disconnect(pErr)
+		br.stream.SendError(pErr)
 	}
 }
 
@@ -212,8 +213,6 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.stream.Context().Done():
-			return br.stream.Context().Err()
 		}
 	}
 }
@@ -228,7 +227,7 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	br.mu.Unlock()
 	err := br.outputLoop(ctx)
-	br.disconnect(kvpb.NewError(err))
+	br.Disconnect(kvpb.NewError(err))
 }
 
 // drainAllocations should be done after registration is disconnected from
