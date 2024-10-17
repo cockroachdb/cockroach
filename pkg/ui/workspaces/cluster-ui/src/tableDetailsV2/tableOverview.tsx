@@ -16,8 +16,9 @@ import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Timestamp } from "src/timestamp";
-import { StoreID } from "src/types/clusterTypes";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
+
+import { mapStoreIDsToNodeRegions } from "../util/nodeUtils";
 
 type TableOverviewProps = {
   tableDetails: TableDetails;
@@ -28,7 +29,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
 }) => {
   const clusterDetails = useContext(ClusterDetailsContext);
   const isTenant = clusterDetails.isTenant;
-  const { metadata } = tableDetails;
+  const metadata = tableDetails.metadata;
   const {
     nodeIDToRegion,
     storeIDToNodeID,
@@ -38,19 +39,15 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
   // getNodesByRegionDisplayStr returns a string that displays
   // the regions and nodes that the table is replicated across.
   const getNodesByRegionDisplayStr = (): string => {
-    if (nodesLoading || !tableDetails?.metadata) {
+    if (nodesLoading) {
       return "";
     }
-    const nodesByRegion: Record<string, number[]> = {};
-    metadata.storeIds.forEach(storeID => {
-      const nodeID = storeIDToNodeID[storeID as StoreID];
-      const region = nodeIDToRegion[nodeID];
-      if (!nodesByRegion[region]) {
-        nodesByRegion[region] = [];
-      }
-      nodesByRegion[region].push(nodeID);
-    });
-    return Object.entries(nodesByRegion)
+    const regionsToNodes = mapStoreIDsToNodeRegions(
+      tableDetails.metadata.storeIds,
+      nodeIDToRegion,
+      storeIDToNodeID,
+    );
+    return Object.entries(regionsToNodes)
       .map(
         ([region, nodes]) =>
           `${region} (${nodes.map(nid => "n" + nid).join(",")})`,
