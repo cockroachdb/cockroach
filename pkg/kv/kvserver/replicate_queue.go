@@ -745,25 +745,31 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
-	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
+	startTracing := log.ExpensiveLogEnabled(ctx, 1)
+	var opts []tracing.SpanOption
+	if startTracing {
+		// If we enable expensive logging, we also want to record the traces for
+		// the entire operation. We only log the trace below if we both exceed
+		// the timeout and expensive logging is enabled.
+		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica", opts...)
 	defer sp.Finish()
 
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
 		false /* scatter */, false, /* dryRun */
 	)
+	processDuration := timeutil.Since(processStart)
+	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
+	exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-	// Utilize a new background context (properly annotated) to avoid writing
-	// traces from a child context into its parent.
-	{
-		ctx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
+	var traceOutput redact.RedactableString
+	if startTracing {
+		// Utilize a new background context (properly annotated) to avoid writing
+		// traces from a child context into its parent.
+		ctx = repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
 		var rec tracingpb.Recording
-		processDuration := timeutil.Since(processStart)
-		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
-		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
-
-		var traceOutput redact.RedactableString
-		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
+		traceLoggingNeeded := (err != nil || exceededDuration)
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,
@@ -773,13 +779,12 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 			)
 			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
 		}
-
-		if err != nil {
-			log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
-		} else if exceededDuration {
-			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
-				processDuration, loggingThreshold, traceOutput)
-		}
+	}
+	if err != nil {
+		log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
+	} else if exceededDuration {
+		log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
+			processDuration, loggingThreshold, traceOutput)
 	}
 
 	return requeue, err
