@@ -1288,6 +1288,19 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
 		return
 	}
+
+	// If we are not supported by a quorum of voters, we shouldn't campaign.
+	// NB: We don't want to prevent a PreCampaign from happening because when we
+	// become a pre-candidate, we forget the leader. This allows us to vote to
+	// another candidate even if the electionElapsed is less than electionTimeout.
+	if !r.supportedByQuorum() && t == campaignElection {
+		r.logger.Warningf("%x cannot campaign since there are not enough supported peers", r.id)
+		// TODO(ibrahim): Make sure that this doesn't significantly makes tests take
+		// longer because SupportFrom will return false when it's called the first
+		// time.
+		return
+	}
+
 	// NB: The leader is allowed to bump its term by calling an election. Note that
 	// we must take care to ensure the leader's support expiration doesn't regress.
 	//
@@ -1319,6 +1332,37 @@ func (r *raft) supportingFortifiedLeader() bool {
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
 	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
 	return live && epoch == r.leadEpoch
+}
+
+// getSupportingVoters returns a slice of the voter ids that are providing us
+// store liveness support according to our view.
+func (r *raft) getSupportingVoters() (supportingVoterIDs []pb.PeerID) {
+	voterIDs := maps.Keys(r.config.Voters.IDs())
+	for _, p := range voterIDs {
+		if _, supported := r.fortificationTracker.IsFortifiedBy(p); supported {
+			supportingVoterIDs = append(supportingVoterIDs, p)
+		}
+	}
+	return supportingVoterIDs
+}
+
+// supportedByQuorum returns true if we are supported by a quorum of voters.
+func (r *raft) supportedByQuorum() bool {
+	if !r.fortificationTracker.FortificationEnabledForTerm() {
+		// If fortification is not enabled, this check should be a no-op.
+		return true
+	}
+
+	supportingVoters := r.getSupportingVoters()
+
+	// Mark all supporting voters as if they would vote for us in an election.
+	votes := map[pb.PeerID]bool{}
+	for _, p := range supportingVoters {
+		votes[p] = true
+	}
+
+	// Only return true if we have a quorum of supporting voters.
+	return r.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
