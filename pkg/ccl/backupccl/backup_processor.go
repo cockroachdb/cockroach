@@ -417,7 +417,7 @@ func runBackupProcessor(
 		progCh:   progCh,
 		settings: &flowCtx.Cfg.Settings.SV,
 	}
-	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
+	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest, cloud.WithClientName("backup"))
 	if err != nil {
 		return err
 	}
