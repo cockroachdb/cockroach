@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -607,6 +608,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 				err := check.Fn(db, "" /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
+					// For automated operations running the consistency checker like the DRT team,
+					// there is a need to send an event to Datadog so that a Slack alert can be
+					// configured. Here, we are attempting to emit an error event to Datadog.
+					datadogContext := workload.NewDatadogContext(ctx)
+					title := "Consistency check failed for db tpcc"
+					text := fmt.Sprintf("check failed %s, %v", check.Name, err)
+					workload.EmitDatadogEvent(datadogContext, title, text, datadogV1.EVENTALERTTYPE_ERROR)
+
 					return errors.Wrapf(err, `check failed: %s`, check.Name)
 				}
 			}

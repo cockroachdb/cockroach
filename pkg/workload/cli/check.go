@@ -21,6 +21,9 @@ func init() {
 		var checkCmd = SetCmdDefaults(&cobra.Command{
 			Use:   `check`,
 			Short: `check a running cluster's data for consistency`,
+			Long: `Check the data consistency of a running cluster. 
+If the consistency check fails and you want to emit an error event to Datadog, 
+configure the following environment variables: DD_SITE, DD_API_KEY, and DD_TAGS.`,
 		})
 		for _, meta := range workload.Registered() {
 			gen := meta.New()
