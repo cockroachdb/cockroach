@@ -38,7 +38,7 @@ func TestRegistrationBasic(t *testing.T) {
 	go noCatchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.GetAndClearEvents())
-	noCatchupReg.disconnect(nil)
+	noCatchupReg.disconnect(ctx, nil)
 
 	// Registration with catchup scan.
 	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
@@ -56,7 +56,7 @@ func TestRegistrationBasic(t *testing.T) {
 	events := catchupReg.GetAndClearEvents()
 	require.Equal(t, 5, len(events))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
-	catchupReg.disconnect(nil)
+	catchupReg.disconnect(ctx, nil)
 
 	// EXIT CONDITIONS
 	// External Disconnect.
@@ -67,7 +67,7 @@ func TestRegistrationBasic(t *testing.T) {
 	go disconnectReg.runOutputLoop(ctx, 0)
 	require.NoError(t, disconnectReg.waitForCaughtUp(ctx))
 	discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
-	disconnectReg.disconnect(discErr)
+	disconnectReg.disconnect(ctx, discErr)
 	require.Equal(t, discErr.GoError(), disconnectReg.WaitForError(t))
 	require.Equal(t, 2, len(disconnectReg.GetAndClearEvents()))
 
@@ -76,7 +76,7 @@ func TestRegistrationBasic(t *testing.T) {
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	disconnectEarlyReg.publish(ctx, ev1, nil /* alloc */)
 	disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
-	disconnectEarlyReg.disconnect(discErr)
+	disconnectEarlyReg.disconnect(ctx, discErr)
 	go disconnectEarlyReg.runOutputLoop(ctx, 0)
 	require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForError(t))
 	require.Equal(t, 0, len(disconnectEarlyReg.GetAndClearEvents()))
@@ -156,8 +156,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	go rAC.runOutputLoop(ctx, 0)
 	go originFiltering.runOutputLoop(ctx, 0)
 
-	defer rAC.disconnect(nil)
-	defer originFiltering.disconnect(nil)
+	defer rAC.disconnect(ctx, nil)
+	defer originFiltering.disconnect(ctx, nil)
 
 	reg.Register(ctx, rAC.bufferedRegistration)
 	reg.Register(ctx, originFiltering.bufferedRegistration)
@@ -208,11 +208,11 @@ func TestRegistryBasic(t *testing.T) {
 	go rCD.runOutputLoop(ctx, 0)
 	go rAC.runOutputLoop(ctx, 0)
 	go rACFiltering.runOutputLoop(ctx, 0)
-	defer rAB.disconnect(nil)
-	defer rBC.disconnect(nil)
-	defer rCD.disconnect(nil)
-	defer rAC.disconnect(nil)
-	defer rACFiltering.disconnect(nil)
+	defer rAB.disconnect(ctx, nil)
+	defer rBC.disconnect(ctx, nil)
+	defer rCD.disconnect(ctx, nil)
+	defer rAC.disconnect(ctx, nil)
+	defer rACFiltering.disconnect(ctx, nil)
 
 	// Register 6 registrations.
 	reg.Register(ctx, rAB.bufferedRegistration)
@@ -355,35 +355,35 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, r.GetAndClearEvents())
 
-	r.disconnect(nil)
+	r.disconnect(ctx, nil)
 }
 
 func TestRegistrationString(t *testing.T) {
 	testCases := []struct {
-		r   baseRegistration
+		r   *baseRegistration
 		exp string
 	}{
 		{
-			r: baseRegistration{
+			r: &baseRegistration{
 				span: roachpb.Span{Key: roachpb.Key("a")},
 			},
 			exp: `[a @ 0,0+]`,
 		},
 		{
-			r: baseRegistration{span: roachpb.Span{
+			r: &baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			exp: `[{a-c} @ 0,0+]`,
 		},
 		{
-			r: baseRegistration{
+			r: &baseRegistration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
-			r: baseRegistration{span: roachpb.Span{
+			r: &baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
 			},

@@ -82,6 +82,7 @@ func newBufferedRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
+	cleanup func(context.Context, registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -91,6 +92,7 @@ func newBufferedRegistration(
 			withDiff:         withDiff,
 			withFiltering:    withFiltering,
 			withOmitRemote:   withOmitRemote,
+			cleanup:          cleanup,
 			unreg:            unregisterFn,
 		},
 		metrics:       metrics,
@@ -151,7 +153,7 @@ func (br *bufferedRegistration) publish(
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
+func (br *bufferedRegistration) disconnect(ctx context.Context, pErr *kvpb.Error) {
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
@@ -164,6 +166,7 @@ func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
 		}
 		br.mu.disconnected = true
 		br.stream.Disconnect(pErr)
+		br.cleanup(ctx, br)
 	}
 }
 
@@ -230,7 +233,7 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	br.mu.Unlock()
 	err := br.outputLoop(ctx)
-	br.disconnect(kvpb.NewError(err))
+	br.disconnect(ctx, kvpb.NewError(err))
 }
 
 // drainAllocations should be done after registration is disconnected from

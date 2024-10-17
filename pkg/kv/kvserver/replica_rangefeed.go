@@ -481,20 +481,21 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
-		AmbientContext:   r.AmbientContext,
-		Clock:            r.Clock(),
-		Stopper:          r.store.stopper,
-		Settings:         r.store.ClusterSettings(),
-		RangeID:          r.RangeID,
-		Span:             desc.RSpan(),
-		TxnPusher:        &tp,
-		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
-		EventChanCap:     defaultEventChanCap,
-		EventChanTimeout: defaultEventChanTimeout,
-		Metrics:          r.store.metrics.RangeFeedMetrics,
-		MemBudget:        feedBudget,
-		Scheduler:        r.store.getRangefeedScheduler(),
-		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
+		AmbientContext:        r.AmbientContext,
+		Clock:                 r.Clock(),
+		Stopper:               r.store.stopper,
+		Settings:              r.store.ClusterSettings(),
+		RangeID:               r.RangeID,
+		Span:                  desc.RSpan(),
+		TxnPusher:             &tp,
+		PushTxnsAge:           r.store.TestingKnobs().RangeFeedPushTxnsAge,
+		EventChanCap:          defaultEventChanCap,
+		EventChanTimeout:      defaultEventChanTimeout,
+		Metrics:               r.store.metrics.RangeFeedMetrics,
+		MemBudget:             feedBudget,
+		Scheduler:             r.store.getRangefeedScheduler(),
+		Priority:              isSystemSpan, // only takes effect when Scheduler != nil
+		UnregisterFromReplica: r.unsetRangefeedProcessor,
 	}
 	p = rangefeed.NewProcessor(cfg)
 
