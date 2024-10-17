@@ -27,7 +27,7 @@ type registration interface {
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
 	// disconnect disconnects the registration with the provided error. Safe to
 	// run multiple times, but subsequent errors would be discarded.
-	disconnect(pErr *kvpb.Error)
+	disconnect(ctx context.Context, pErr *kvpb.Error)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
@@ -70,12 +70,16 @@ type registration interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx        context.Context
-	span             roachpb.Span
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	unreg            func()
+	streamCtx      context.Context
+	span           roachpb.Span
+	withDiff       bool
+	withFiltering  bool
+	withOmitRemote bool
+	// TODO(ssd): This unreg can be removed when the LegacyProcess
+	// is removed.
+	unreg   func()
+	cleanup func(context.Context, registration)
+
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
 	keys             interval.Range
@@ -400,7 +404,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.disconnect(pErr)
+			r.disconnect(ctx, pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false
