@@ -54,7 +54,7 @@ func TestMetadataSST(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
 
 	// Check that backup metadata is correct on full cluster backup.
-	sqlDB.Exec(t, `BACKUP TO $1`, userfile)
+	sqlDB.Exec(t, `BACKUP INTO $1`, userfile)
 	checkMetadata(ctx, t, tc, userfile)
 
 	// Check for correct backup metadata on incremental backup with revision
@@ -65,19 +65,19 @@ func TestMetadataSST(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE emptydb.bar(k INT, v INT)`)
 	sqlDB.Exec(t, `DROP DATABASE emptydb`)
 
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, userfile)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, userfile)
 	checkMetadata(ctx, t, tc, userfile)
 
 	//  Check for correct backup metadata on single table backups.
 	userfile1 := "userfile:///1"
-	sqlDB.Exec(t, `BACKUP TABLE data.bank TO $1 WITH revision_history`, userfile1)
+	sqlDB.Exec(t, `BACKUP TABLE data.bank INTO $1 WITH revision_history`, userfile1)
 	checkMetadata(ctx, t, tc, userfile1)
 
 	// Check for correct backup metadata on tenant backups.
 	userfile2 := "userfile:///2"
 	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
-	sqlDB.Exec(t, `BACKUP TENANT 10 TO $1`, userfile2)
+	sqlDB.Exec(t, `BACKUP TENANT 10 INTO $1`, userfile2)
 	checkMetadata(ctx, t, tc, userfile2)
 }
 
