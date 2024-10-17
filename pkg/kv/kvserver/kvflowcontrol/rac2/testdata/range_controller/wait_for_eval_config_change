@@ -23,7 +23,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=a pri=high-pri done=false waited=false err=<nil>
 
 # Disable replication admission control.
-set-flow-control-config enabled=false
+set_flow_control_config enabled=false
 ----
 enabled: false mode: apply_to_all
 
@@ -34,7 +34,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=a pri=high-pri done=true  waited=false err=<nil>
 
 # Enable replication admission control.
-set-flow-control-config enabled=true
+set_flow_control_config enabled=true
 ----
 enabled: true mode: apply_to_all
 
@@ -47,7 +47,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=b pri=normal-pri done=false waited=false err=<nil>
 
 # Change replication admission control to only apply to elastic work.
-set-flow-control-config mode=apply_to_elastic
+set_flow_control_config mode=apply_to_elastic
 ----
 enabled: true mode: apply_to_elastic
 
@@ -59,7 +59,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=b pri=normal-pri done=true  waited=false err=<nil>
 
 # Restore enabled and apply_to_all.
-set-flow-control-config mode=apply_to_all
+set_flow_control_config mode=apply_to_all
 ----
 enabled: true mode: apply_to_all
 
@@ -73,7 +73,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=c pri=low-pri  done=false waited=false err=<nil>
 
 # Change replication admission control to only apply to elastic work.
-set-flow-control-config mode=apply_to_elastic
+set_flow_control_config mode=apply_to_elastic
 ----
 enabled: true mode: apply_to_elastic
 
@@ -86,7 +86,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=c pri=low-pri  done=false waited=false err=<nil>
 
 # Change replication admission control to apply to all work.
-set-flow-control-config mode=apply_to_all
+set_flow_control_config mode=apply_to_all
 ----
 enabled: true mode: apply_to_all
 
@@ -99,7 +99,7 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=c pri=low-pri  done=false waited=false err=<nil>
 
 # Disable replication admission control.
-set-flow-control-config enabled=false
+set_flow_control_config enabled=false
 ----
 enabled: false mode: apply_to_all
 
@@ -112,6 +112,6 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=c pri=low-pri  done=true  waited=false err=<nil>
 
 # Restore settings.
-set-flow-control-config enabled=true
+set_flow_control_config enabled=true
 ----
 enabled: true mode: apply_to_all
