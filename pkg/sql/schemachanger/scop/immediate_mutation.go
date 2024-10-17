@@ -1006,7 +1006,6 @@ type AddTableZoneConfig struct {
 type AddIndexZoneConfig struct {
 	immediateMutationOp
 	TableID      descpb.ID
-	IndexID      descpb.IndexID
 	Subzone      zonepb.Subzone
 	SubzoneSpans []zonepb.SubzoneSpan
 }
