@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { Skeleton } from "antd";
-import React, { useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
@@ -35,6 +35,7 @@ import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
 import { AUTO_STATS_COLLECTION_HELP } from "../constants/tooltipMessages";
+import { ClusterDetailsContext } from "../contexts";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
@@ -44,6 +45,7 @@ const AUTO_STATS_ENABLED_CS = "sql.stats.automatic_collection.enabled";
 
 const COLUMNS: (TableColumnProps<DatabaseRow> & {
   sortKey?: DatabaseSortOptions;
+  hideIfTenant?: boolean;
 })[] = [
   {
     title: (
@@ -93,6 +95,8 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
         {DatabaseColName.NODE_REGIONS}
       </Tooltip>
     ),
+    hideIfTenant: true,
+    width: "fit-content",
     render: (db: DatabaseRow) => (
       <Skeleton loading={db.nodesByRegion.isLoading}>
         <RegionNodesLabel nodesByRegion={db.nodesByRegion?.data} />
@@ -132,6 +136,8 @@ const createDatabaseMetadataRequestFromParams = (
 };
 
 export const DatabasesPageV2 = () => {
+  const clusterDetails = useContext(ClusterDetailsContext);
+  const isTenant = clusterDetails.isTenant;
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
@@ -177,7 +183,7 @@ export const DatabasesPageV2 = () => {
   const sort = params.sort;
   const colsWithSort = useMemo(
     () =>
-      COLUMNS.map(col => {
+      COLUMNS.filter(c => !isTenant || !c.hideIfTenant).map(col => {
         const sortOrder: SortDirection =
           sort?.order === "desc" ? "descend" : "ascend";
         return {
@@ -186,7 +192,7 @@ export const DatabasesPageV2 = () => {
             sort.field === col.sortKey && col.sorter ? sortOrder : null,
         };
       }),
-    [sort],
+    [sort, isTenant],
   );
 
   const nodeRegionsValue = params.filters.storeIDs.map(
@@ -212,12 +218,14 @@ export const DatabasesPageV2 = () => {
           <PageConfigItem>
             <Search placeholder="Search databases" onSubmit={setSearch} />
           </PageConfigItem>
-          <PageConfigItem minWidth={"200px"}>
-            <NodeRegionsSelector
-              value={nodeRegionsValue}
-              onChange={onNodeRegionsChange}
-            />
-          </PageConfigItem>
+          {!isTenant && (
+            <PageConfigItem minWidth={"200px"}>
+              <NodeRegionsSelector
+                value={nodeRegionsValue}
+                onChange={onNodeRegionsChange}
+              />
+            </PageConfigItem>
+          )}
         </PageConfig>
       </PageSection>
       <PageSection>
