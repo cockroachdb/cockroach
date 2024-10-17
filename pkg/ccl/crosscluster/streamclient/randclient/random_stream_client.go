@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -296,7 +297,10 @@ func (r *randomEventGenerator) generateNewEvent() (crosscluster.Event, error) {
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 		resolvedSpan := jobspb.ResolvedSpan{Span: sp, Timestamp: hlcResolvedTime}
 		r.numEventsSinceLastResolved = 0
-		return crosscluster.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan}), nil
+		checkpoint := &streampb.StreamEvent_StreamCheckpoint{
+			ResolvedSpans: []jobspb.ResolvedSpan{resolvedSpan},
+		}
+		return crosscluster.MakeCheckpointEvent(checkpoint), nil
 	}
 
 	// If there are system KVs to emit, prioritize those.
@@ -713,9 +717,8 @@ func duplicateEvent(event crosscluster.Event) crosscluster.Event {
 	var dup crosscluster.Event
 	switch event.Type() {
 	case crosscluster.CheckpointEvent:
-		resolvedSpans := make([]jobspb.ResolvedSpan, len(event.GetResolvedSpans()))
-		copy(resolvedSpans, event.GetResolvedSpans())
-		dup = crosscluster.MakeCheckpointEvent(resolvedSpans)
+		checkpointClone := protoutil.Clone(event.GetCheckpoint()).(*streampb.StreamEvent_StreamCheckpoint)
+		dup = crosscluster.MakeCheckpointEvent(checkpointClone)
 	case crosscluster.KVEvent:
 		kvs := event.GetKVs()
 		res := make([]roachpb.KeyValue, len(kvs))
