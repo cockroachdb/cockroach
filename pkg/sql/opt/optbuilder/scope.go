@@ -676,6 +676,20 @@ func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 	return nil
 }
 
+// findAnonymousColumnWithMetadataName returns the first anonymous column that
+// has the given name in the query metadata.
+func (s *scope) findAnonymousColumnWithMetadataName(metadataName string) *scopeColumn {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.name.refName == "" && col.name.metadataName == metadataName {
+				return col
+			}
+		}
+	}
+	return nil
+}
+
 // startAggFunc is called when the builder starts building an aggregate
 // function. It is used to disallow nested aggregates and ensure that a
 // grouping error is not called on the aggregate arguments. For example:
