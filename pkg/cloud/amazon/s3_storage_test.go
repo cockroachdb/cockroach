@@ -615,11 +615,15 @@ func TestNewClientErrorsOnBucketRegion(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
-	cfg := s3ClientConfig{
-		bucket: "bucket-does-not-exist-v1i3m",
-		auth:   cloud.AuthParamImplicit,
+	s3 := s3Storage{
+		opts: s3ClientConfig{
+			bucket: "bucket-does-not-exist-v1i3m",
+			auth:   cloud.AuthParamImplicit,
+		},
+		metrics:  cloud.NilMetrics,
+		settings: testSettings,
 	}
-	_, _, err = newClient(ctx, cloud.NilMetrics, cfg, testSettings)
+	_, _, err = s3.newClient(ctx)
 	require.Regexp(t, "could not find s3 bucket's region", err)
 }
 
