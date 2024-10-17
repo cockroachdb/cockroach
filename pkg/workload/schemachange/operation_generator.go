@@ -3025,17 +3025,18 @@ const (
 
 type opStmtQueryResultCallback func(ctx context.Context, rows pgx.Rows) error
 
-// opStmt a generated statement that is either DDL or DML, including the potential
-// set of execution errors this statement can generate.
+// opStmt encapsulates a generated SQL statement, its type (DDL or DML),
+// expected and potential execution errors, and a callback for handling query results.
 type opStmt struct {
 	// sql the query being executed.
 	sql string
-	// queryType family of the query type being executed (DML or DDL).
+	// queryType indicates whether the type being executed is DDL or DML.
 	queryType opStmtType
 	// expectedExecErrors expected set of execution errors.
 	expectedExecErrors errorCodeSet
 	// potentialExecErrors errors that could be potentially seen on execution.
 	potentialExecErrors errorCodeSet
+	// queryResultCallback handles the results of the query execution.
 	queryResultCallback opStmtQueryResultCallback
 }
 
