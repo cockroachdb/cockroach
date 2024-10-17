@@ -172,6 +172,12 @@ func TestCloudStorageSink(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
+		var options cloud.ExternalStorageOptions
+		for _, opt := range opts {
+			opt(&options)
+		}
+		require.Equal(t, options.ClientName, "cdc")
+
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
 			clientFactory,
 			user,
