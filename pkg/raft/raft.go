@@ -832,13 +832,27 @@ func (r *raft) sendFortify(to pb.PeerID) {
 
 // sendDeFortify sends a de-fortification RPC to the given peer.
 func (r *raft) sendDeFortify(to pb.PeerID) {
+	fortifiedTerm := r.fortificationTracker.Term()
 	if to == r.id {
 		// We handle the case where the leader is trying to de-fortify itself
 		// specially. Doing so avoids a self-addressed message.
-		r.deFortify(r.id, r.fortificationTracker.Term())
+		switch {
+		case r.Term == fortifiedTerm:
+			r.deFortify(r.id, fortifiedTerm)
+		case r.Term > fortifiedTerm:
+			// NB: The current term has advanced, so we don't attempt to de-fortify, as the de-fortification
+			// attempt corresponds to a prior term. These term checks would have happened in Step had we
+			// sent a self-addressed message; we decided not to, so we need to handle this especially
+			// ourselves.
+			r.logger.Debugf("de-foritfying self at term %d is a no-op; current term %d",
+				fortifiedTerm, r.Term,
+			)
+		case r.Term < fortifiedTerm:
+			panic("fortification tracker's term cannot be higher than raft group's")
+		}
 		return
 	}
-	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: r.fortificationTracker.Term()})
+	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: fortifiedTerm})
 }
 
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
@@ -2306,6 +2320,21 @@ func (r *raft) handleDeFortify(m pb.Message) {
 }
 
 // deFortify revokes previously provided fortification to a leader.
+//
+// The from argument corresponds to the ID of the peer initiating (directly[1]
+// or indirectly[2]) the de-fortification. The term argument corresponds to the
+// term known to the peer[3] initiating de-fortification.
+//
+// [1] For example, if a peer realizes it's no longer supporting a previously
+// fortified leader or if a previously fortified leader steps down and
+// broadcasts MsgDeFortifyLeader to the raft group.
+//
+// [2] For example, if a new leader is elected without a vote from this peer
+// (who continues to fortify the previous leader). The peer then learns about
+// the previous leadership term ending when the new leader contacts it.
+//
+// [3] Note that this may not be the term being de-fortified. The term being
+// de-fortified is r.Term, which is the term of the peer being de-fortified.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
 	assertTrue(
 		// We're not currently fortified, so de-fortification is a no-op...

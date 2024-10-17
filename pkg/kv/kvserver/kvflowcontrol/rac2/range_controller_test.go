@@ -1424,7 +1424,7 @@ func TestRangeController(t *testing.T) {
 				}
 				return buf.String()
 
-			case "set-flow-control-config":
+			case "set_flow_control_config":
 				if d.HasArg("enabled") {
 					var enabled bool
 					d.ScanArgs(t, "enabled", &enabled)
