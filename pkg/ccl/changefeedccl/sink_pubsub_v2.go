@@ -17,6 +17,7 @@ import (
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -429,6 +430,7 @@ func makePubsubSink(
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	settings *cluster.Settings,
 	knobs *TestingKnobs,
 ) (Sink, error) {
 	m := mb(requiresResourceAccounting)
@@ -474,5 +476,6 @@ func makePubsubSink(
 		pacerFactory,
 		source,
 		mb(requiresResourceAccounting),
+		settings,
 	), nil
 }
