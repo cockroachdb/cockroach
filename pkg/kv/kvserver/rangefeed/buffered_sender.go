@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -51,7 +52,7 @@ type BufferedSender struct {
 	// thread safety.
 	sender ServerStreamSender
 
-	// metrics is used to record rangefeed metrics for the node.
+	// metrics is used to recod rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
 }
 
@@ -64,9 +65,18 @@ func NewBufferedSender(
 	}
 }
 
+func (bs *BufferedSender) NewStream(
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64,
+) Stream {
+	return &BufferedPerRangeEventSink{
+		PerRangeEventSink: NewPerRangeEventSink(ctx, rangeID, streamID, bs.sendUnbuffered),
+		sendBuffered:      bs.sendBuffered,
+	}
+}
+
 // SendBuffered buffers the event before sending them to the underlying
 // ServerStreamSender.
-func (bs *BufferedSender) SendBuffered(
+func (bs *BufferedSender) sendBuffered(
 	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
 	panic("unimplemented: buffered sender for rangefeed #126560")
@@ -75,14 +85,22 @@ func (bs *BufferedSender) SendBuffered(
 // SendUnbuffered bypasses the buffer and sends the event to the underlying
 // ServerStreamSender directly. Note that this can cause event re-ordering.
 // Caller is responsible for ensuring that events are sent in order.
-func (bs *BufferedSender) SendUnbuffered(
-	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+func (bs *BufferedSender) sendUnbuffered(
+	event *kvpb.MuxRangeFeedEvent,
 ) error {
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }
 
-func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
-	// Disconnect stream and cancel context. Then call SendBuffered with the error
+// Left here to implement but to be removed and replaced with a Disconnect
+// interface.
+func (bs *BufferedSender) Disconnect(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
+	// Disconnect stream and cancel context. Then call sendBuffered with the error
+	// event.
+	panic("unimplemented: buffered sender for rangefeed #126560")
+}
+
+func (bs *BufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+	// Disconnect stream and cancel context. Then call sendBuffered with the error
 	// event.
 	panic("unimplemented: buffered sender for rangefeed #126560")
 }

@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -147,6 +148,32 @@ func NewUnbufferedSender(
 	}
 }
 
+func (ubs *UnbufferedSender) NewStream(
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64,
+) Stream {
+	return &PerRangeEventSink{
+		ctx:      ctx,
+		rangeID:  rangeID,
+		streamID: streamID,
+		send:     ubs.sendUnbuffered,
+	}
+}
+
+func (ubs *UnbufferedSender) Disconnect(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
+	if err == nil {
+		log.Fatalf(context.Background(), "unexpected: Disconnect called with non-error event")
+		return
+	}
+	ev := &kvpb.MuxRangeFeedEvent{
+		StreamID: streamID,
+		RangeID:  rangeID,
+	}
+	ev.MustSetValue(&kvpb.RangeFeedError{
+		Error: *err,
+	})
+	ubs.sendBufferedError(ev)
+}
+
 // SendBufferedError 1. Sends a mux rangefeed completion error to the
 // client without blocking. It does so by delegating the responsibility of
 // sending mux error to UnbufferedSender.run 2. Disconnects the stream with
@@ -163,7 +190,7 @@ func NewUnbufferedSender(
 // raftMu, so it is important that this function doesn't block on IO. Caller
 // needs to make sure this is called only with non-nil error events. Important
 // to be thread-safe.
-func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+func (ubs *UnbufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
@@ -182,9 +209,10 @@ func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // rangefeed.Stream to avoid potential event loss. (NB: While subsequent Send
 // should also return an error if one is encountered, let's play safe.)
 // Important to be thread-safe.
-func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
+func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
-		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
+		ubs.sendBufferedError(event)
+		return nil
 	}
 	return ubs.sender.Send(event)
 }

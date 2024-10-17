@@ -2047,10 +2047,12 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 // rangefeed.Stream at the node level. Implemented by rangefeed.BufferedSender
 // and rangefeed.UnbufferedSender.
 type streamManager interface {
-	// SendBufferedError disconnects the stream with the ev.StreamID and sends
-	// error back to client. This call is un-blocking, and additional clean-up
-	// takes place async. Caller cannot expect immediate disconnection.
-	SendBufferedError(ev *kvpb.MuxRangeFeedEvent)
+	NewStream(ctx context.Context, rangeID roachpb.RangeID, streamID int64) rangefeed.Stream
+	// Disconnect disconnects the stream with the ev.StreamID and sends error back
+	// to client. This call is un-blocking, and additional clean-up takes place
+	// async. Caller cannot expect immediate disconnection.
+	// TODO(ssd, wenyihu): follow up pr better interface for sendbufferederror
+	Disconnect(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
 	// AddStream adds a new per-range stream for the streamManager to manage.
 	AddStream(streamID int64, cancel context.CancelFunc)
 	// Start starts the streamManager background job to manage all active streams.
@@ -2086,19 +2088,6 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	}
 	defer sm.Stop()
 
-	makeMuxRangefeedErrorEvent := func(
-		streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
-	) *kvpb.MuxRangeFeedEvent {
-		ev := &kvpb.MuxRangeFeedEvent{
-			StreamID: streamID,
-			RangeID:  rangeID,
-		}
-		ev.MustSetValue(&kvpb.RangeFeedError{
-			Error: *err,
-		})
-		return ev
-	}
-
 	for {
 		select {
 		case err := <-sm.Error():
@@ -2118,8 +2107,8 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 				// Note that we will call DisconnectStreamWithError again when
 				// registration.disconnect happens, but DisconnectStreamWithError will
 				// ignore subsequent errors.
-				sm.SendBufferedError(makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID,
-					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
+				sm.Disconnect(req.StreamID, req.RangeID,
+					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 				continue
 			}
 
@@ -2128,14 +2117,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "sm", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			var streamSink rangefeed.Stream
-			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
-				streamSink = rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, ubs)
-			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
-				streamSink = rangefeed.NewBufferedPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, bs)
-			} else {
-				log.Fatalf(streamCtx, "unknown sender type %T", sm)
-			}
+			streamSink := sm.NewStream(streamCtx, req.RangeID, req.StreamID)
 			sm.AddStream(req.StreamID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
@@ -2144,8 +2126,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			// the provided streamSink. If the rangefeed disconnects after being
 			// successfully registered, it calls streamSink.Disconnect with the error.
 			if err := n.stores.RangeFeed(req, streamSink); err != nil {
-				sm.SendBufferedError(
-					makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID, kvpb.NewError(err)))
+				sm.Disconnect(req.StreamID, req.RangeID, kvpb.NewError(err))
 			}
 		}
 	}
