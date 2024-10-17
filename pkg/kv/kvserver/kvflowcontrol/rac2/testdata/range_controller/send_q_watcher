@@ -13,7 +13,6 @@ t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
        send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 
-
 # Append three entries. Replica 2 has a send-queue.
 raft_event pull-mode
 range_id=1
@@ -178,8 +177,10 @@ NormalPri:
 schedule-controller-event-count: 2
 scheduled-replicas: 2
 
-# Scheduler event. Both entries in the send-queue are sent, and an extra
-# 512KiB needed to be deducted.
+# Scheduler event. Only the first entry in the send-queue is sent, because the
+# second entry would exceed the max size limit.
+# Replica 2 still has 512KiB of deducted tokens that are not used, and is
+# waiting for a scheduler event.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
@@ -190,7 +191,40 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,4) send_queue=[4,4) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+1.0 MiB deducted=+512 KiB
+eval deducted: reg=+0 B ela=+3.0 MiB
+eval original in send-q: reg=+1.0 MiB ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [2]
+++++
+schedule-controller-event-count: 3
+scheduled-replicas: 2
+
+# The second entry is sent, and empties the send-queue. Extra 512KiB needed to
+# be deducted.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false inflight=[3,4) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+3.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -207,9 +241,9 @@ NormalPri:
   term=1 index=3  tokens=1048576
 ++++
 MsgApps sent in pull mode:
- to: 2, lowPri: true entries: [2 3]
+ to: 2, lowPri: true entries: [3]
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 3
 
 # s2 has -512KiB of elastic send tokens.
 adjust_tokens send
@@ -253,7 +287,7 @@ LowPri:
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 3
 
 # Noop. Note that s3 has 0 send tokens.
 adjust_tokens send
@@ -302,7 +336,7 @@ LowPri:
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 4
 scheduled-replicas: 3
 
 # Scheduler event. Replica 3 deducts 1MiB-4KiB without waiting since the entry
@@ -334,7 +368,7 @@ LowPri:
 MsgApps sent in pull mode:
  to: 3, lowPri: true entries: [2]
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 4
 
 # Add 3MiB of elastic send tokens, to return to 2MiB+10KiB of tokens. The
 # send-stream now has an estimate of 1MiB needed per entry, and deduct 1.1 x
@@ -375,7 +409,7 @@ eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
   term=1 index=2  tokens=1048576
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 5
 scheduled-replicas: 3
 
 # Scheduler event. Replica 3 returns 0.1MiB since the entry was actually 1MiB.
@@ -408,7 +442,7 @@ LowPri:
 MsgApps sent in pull mode:
  to: 3, lowPri: true entries: [3]
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 5
 
 # Noop, to see current token values.
 adjust_tokens send

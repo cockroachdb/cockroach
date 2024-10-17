@@ -64,6 +64,12 @@ type LogStorage interface {
 	// TODO(pav-kv): all log slices in raft are constructed in context of being
 	// appended after a particular log index, so (lo, hi] semantics fits better
 	// than [lo, hi).
+	//
+	// TODO(#132789): change the semantics so that maxSize can be exceeded not
+	// only if the first entry is large. It should be ok to exceed maxSize if the
+	// last entry makes it so. In the underlying storage implementation, we have
+	// paid the cost of fetching this entry anyway, so there is no need to drop it
+	// from the result.
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
 
 	// Term returns the term of the entry at the given index, which must be in the
