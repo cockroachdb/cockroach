@@ -24,10 +24,10 @@ import (
 )
 
 type benchmarkRangefeedOpts struct {
-	procType         procType
-	opType           opType
-	numRegistrations int
-	budget           int64
+	rangefeedTestType rangefeedTestType
+	opType            opType
+	numRegistrations  int
+	budget            int64
 }
 
 type opType string
@@ -47,10 +47,10 @@ func BenchmarkRangefeed(b *testing.B) {
 				name := fmt.Sprintf("procType=%s/opType=%s/numRegs=%d", procType, opType, numRegistrations)
 				b.Run(name, func(b *testing.B) {
 					runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-						procType:         procType,
-						opType:           opType,
-						numRegistrations: numRegistrations,
-						budget:           math.MaxInt64,
+						rangefeedTestType: procType,
+						opType:            opType,
+						numRegistrations:  numRegistrations,
+						budget:            math.MaxInt64,
 					})
 				})
 			}
@@ -90,7 +90,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
-		withEventTimeout(time.Hour), withProcType(opts.procType))
+		withEventTimeout(time.Hour), withRangefeedTestType(opts.rangefeedTestType))
 	defer stopper.Stop(ctx)
 
 	// Add registrations.

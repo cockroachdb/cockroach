@@ -66,9 +66,6 @@ func (t feedProcessorType) String() string {
 
 var procTypes = []feedProcessorType{
 	{
-		useScheduler: false,
-	},
-	{
 		useScheduler: true,
 	},
 }
