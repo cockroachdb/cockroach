@@ -354,7 +354,10 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
 	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
-	reg.DisconnectWithErr(ctx, all, pErr)
+	reg.forOverlappingRegs(ctx, all, func(r registration) (bool, *kvpb.Error) {
+		r.drainAllocations(ctx)
+		return true /* disconned */, pErr
+	})
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with
