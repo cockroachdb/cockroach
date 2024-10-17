@@ -19,7 +19,6 @@ func init() {
 
 					return &scop.AddIndexZoneConfig{
 						TableID:      this.TableID,
-						IndexID:      this.IndexID,
 						Subzone:      this.Subzone,
 						SubzoneSpans: this.SubzoneSpans,
 					}
