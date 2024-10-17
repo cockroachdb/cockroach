@@ -169,9 +169,9 @@ func (tr *testRunner) run() (retErr error) {
 	defer func() { tr.teardown(stepsErr, retErr != nil) }()
 	defer func() {
 		if retErr != nil {
-			// If the test failed an we haven't run any user hooks up to this
-			// point, redirect the failure to Test Eng, as this indicates a
-			// setup problem that should be investigated separately.
+			// If the test failed, and we haven't run any user hooks up to this point,
+			// redirect the failure to Test Eng, as this indicates a setup problem
+			// that should be investigated separately.
 			if !tr.ranUserHooks.Load() {
 				retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
 			}
@@ -353,7 +353,7 @@ func (tr *testRunner) stepError(
 }
 
 // testFailure generates a `testFailure` for failures that happened
-// due to the given error.  It logs the error to the logger passed,
+// due to the given error. It logs the error to the logger passed,
 // and renames the underlying file to include the "FAILED" prefix to
 // help in debugging.
 func (tr *testRunner) testFailure(
@@ -939,10 +939,9 @@ func loadAtomicVersions(v *atomic.Value) []roachpb.Version {
 	return v.Load().([]roachpb.Version)
 }
 
-// panicAsError ensures that the any panics that might happen while
-// the function passed runs are captured and returned as regular
-// errors. A stack trace is included in the logs when that happens to
-// facilitate debugging.
+// panicAsError ensures that any panics that might happen while the function
+// passed runs are captured and returned as regular errors. A stack trace is
+// included in the logs when that happens to facilitate debugging.
 func panicAsError(l *logger.Logger, f func() error) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
