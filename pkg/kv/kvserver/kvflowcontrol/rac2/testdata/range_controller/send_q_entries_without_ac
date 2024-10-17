@@ -218,11 +218,9 @@ schedule-controller-event-count: 2
 scheduled-replicas: 2
 
 # Scheduler event. Replica 2 sends the first entry that needed 1MiB of tokens.
-# The second entry, that needs 0 tokens is still queued.
-#
-# TODO(sumeer): investigate whether we need some code improvements. Arguably,
-# even though this entry is not subject to AC, we should wait for > 0 tokens,
-# since it is going to cause some load on that store.
+# The second entry, that needs 0 tokens, is still queued. The code makes a
+# deliberate choice to wait for non-zero tokens even though the send-queue is
+# only composed of entries that need 0 tokens.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[2,4) send_queue=[4,4) precise_q_size=+0 B

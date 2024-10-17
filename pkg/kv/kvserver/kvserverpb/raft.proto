@@ -96,8 +96,8 @@ message RaftMessageRequest {
   bool using_rac2_protocol = 12;
   // LowPriorityOverride is read only when UsingRAC2Protocol is true, and is
   // set only if Message is a MsgApp. When true, it specifies that the
-  // priority of the Entries in the Message are overridden to be
-  // raftpb.LowPri.
+  // priority of the Entries in the Message that are subject to replication
+  // admission control are overridden to be raftpb.LowPri.
   bool low_priority_override = 13;
   // AdmittedState annotates a MsgAppResp message with a vector of admitted log
   // indices. Used only with RACv2.
