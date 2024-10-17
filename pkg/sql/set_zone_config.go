@@ -481,6 +481,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			return err
 		}
 
+		var oldZone *zonepb.ZoneConfig
+		if completeSubzone != nil {
+			oldZone = protoutil.Clone(&completeSubzone.Config).(*zonepb.ZoneConfig)
+		} else {
+			oldZone = protoutil.Clone(completeZone).(*zonepb.ZoneConfig)
+		}
+
 		// We need to inherit zone configuration information from the correct zone,
 		// not completeZone.
 		{
@@ -749,7 +756,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		if deleteZone {
 			info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
 		} else {
-			info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails}
+			info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+				ResolvedOldConfig: oldZone.String()}
 		}
 		return params.p.logEvent(params.ctx, targetID, info)
 	}

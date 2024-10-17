@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -97,7 +98,7 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		sqltelemetry.SchemaChangeAlterCounterWithExtra(telemetryName, "configure_zone"),
 	)
 
-	zc, seqNum, err := applyZoneConfig(b, n, copyFromParentList, setters, objectType)
+	oldZone, zc, seqNum, err := applyZoneConfig(b, n, copyFromParentList, setters, objectType)
 	if err != nil {
 		panic(err)
 	}
@@ -113,7 +114,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
-	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails}
+	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+		ResolvedOldConfig: oldZone.String()}
 	b.LogEventForExistingPayload(elem, info)
 }
 
@@ -433,12 +435,12 @@ func applyZoneConfig(
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
 	objType zoneConfigObjType,
-) (*zonepb.ZoneConfig, uint32, error) {
+) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, uint32, error) {
 	// Determines the ID of the target object of the zone specifier. This is the
 	// ID of either a database or a table.
 	targetID, err := getTargetIDFromZoneSpecifier(b, n.ZoneSpecifier, objType)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	// TODO(annie): once we allow configuring zones for named zones/system ranges,
@@ -447,7 +449,7 @@ func applyZoneConfig(
 	if objType == tableObj {
 		// Check that we are not trying to configure a system table.
 		if err = checkIfConfigurationAllowed(targetID); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 	}
 
@@ -464,7 +466,7 @@ func applyZoneConfig(
 	// be written.
 	_, completeZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, objType, n.SetDefault /* getInheritedDefault */)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	// We need to inherit zone configuration information from the correct zone,
@@ -475,13 +477,16 @@ func applyZoneConfig(
 		// and completing at the level of the current zone.
 		zoneInheritedFields := zonepb.ZoneConfig{}
 		if err := completeZoneConfig(b, targetID, objType, &zoneInheritedFields); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
 	}
 
 	newZoneForVerification := *completeZone
 	finalZone := *partialZone
+
+	// Clone our zone config to log the old zone config as well as the new one.
+	oldZone := protoutil.Clone(completeZone).(*zonepb.ZoneConfig)
 
 	if n.SetDefault {
 		finalZone = *zonepb.NewZoneConfig()
@@ -510,13 +515,13 @@ func applyZoneConfig(
 			setter(&finalZone)
 			return nil
 		}(); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 	}
 
 	// Validate that there are no conflicts in the zone setup.
 	if err := zonepb.ValidateNoRepeatKeysInZone(&newZoneForVerification); err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	currentZone := zonepb.NewZoneConfig()
@@ -524,7 +529,7 @@ func applyZoneConfig(
 		currentZone = zc
 	}
 	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZoneForVerification); err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	completeZone = &newZoneForVerification
@@ -541,7 +546,7 @@ func applyZoneConfig(
 
 	// Finally, revalidate everything. Validate only the completeZone config.
 	if err := completeZone.Validate(); err != nil {
-		return nil, 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+		return nil, nil, 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
 	}
 
 	// Finally, check for the extra protection partial zone configs would
@@ -559,9 +564,9 @@ func applyZoneConfig(
 		err = errors.WithHint(err,
 			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to "+
 				"populate the field")
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
-	return partialZone, seqNum, nil
+	return oldZone, partialZone, seqNum, nil
 }
 
 // checkIfConfigurationAllowed determines whether a zone config can be set.

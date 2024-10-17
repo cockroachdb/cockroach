@@ -435,15 +435,18 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			var zcDetails eventpb.CommonZoneConfigDetails
+			var oldConfig string
 			if pb.maybePayload != nil {
 				payload := pb.maybePayload.(*eventpb.SetZoneConfig)
 				zcDetails = eventpb.CommonZoneConfigDetails{
 					Target:  payload.Target,
 					Options: payload.Options,
 				}
+				oldConfig = payload.ResolvedOldConfig
 			}
 			return &eventpb.SetZoneConfig{
 				CommonZoneConfigDetails: zcDetails,
+				ResolvedOldConfig:       oldConfig,
 			}
 		}
 	}
