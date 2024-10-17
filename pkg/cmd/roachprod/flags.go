@@ -105,6 +105,7 @@ var (
 	opentelemetryConfig opentelemetry.Config
 
 	fetchLogsTimeout time.Duration
+	pprofTimeBefore  *string
 )
 
 func initFlags() {
@@ -490,4 +491,6 @@ func initFlags() {
 		"time-range", []int64{}, "grafana annotation time range in epoch time")
 	fetchLogsCmd.Flags().DurationVarP(&fetchLogsTimeout,
 		"timeout", "t", 5*time.Minute, "Timeout for fetching the logs from the cluster nodes")
+	pprofTimeBefore = getLatestPprof.Flags().StringP(
+		"time-before", "t", "", "Timeout for fetching the logs from the cluster nodes")
 }

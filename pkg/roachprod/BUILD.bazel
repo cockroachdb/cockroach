@@ -6,6 +6,7 @@ go_library(
         "clusters_cache.go",
         "multitenant.go",
         "roachprod.go",
+        "roachprod_pprof.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
     visibility = ["//visibility:public"],

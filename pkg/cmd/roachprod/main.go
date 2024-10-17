@@ -2011,6 +2011,7 @@ func main() {
 		opentelemetryStartCmd,
 		opentelemetryStopCmd,
 		fetchLogsCmd,
+		getLatestPprof,
 	)
 	loadBalancerCmd.AddCommand(createLoadBalancerCmd)
 	loadBalancerCmd.AddCommand(loadBalancerPGUrl)
@@ -2107,5 +2108,21 @@ The logs will be placed in the directory if specified or in the directory named 
 		}
 		return roachprod.FetchLogs(ctx, config.Logger, cluster, dest,
 			fetchLogsTimeout)
+	}),
+}
+
+var getLatestPprof = &cobra.Command{
+	Use:   "get-latest-pprof <cluster> [flags]",
+	Short: "downloads the latest pprof file before the provided time.",
+	Long: `Downloads the latest pprof file before the provided time.
+The time should be of the format 2022-08-31T15:23:22Z for UTC or 2022-08-31T15:23:22+05:30 for time zone.
+If the time is not provided, it downloads the latest pprof file across all clusters.
+`,
+	Args: cobra.ExactArgs(1),
+	// Wraps the command execution with additional error handling
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		cluster := args[0]
+		ctx := context.Background()
+		return roachprod.DownloadLatestPProfFile(ctx, config.Logger, cluster, *pprofTimeBefore)
 	}),
 }
