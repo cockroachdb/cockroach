@@ -360,30 +360,30 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 
 func TestRegistrationString(t *testing.T) {
 	testCases := []struct {
-		r   baseRegistration
+		r   *baseRegistration
 		exp string
 	}{
 		{
-			r: baseRegistration{
+			r: &baseRegistration{
 				span: roachpb.Span{Key: roachpb.Key("a")},
 			},
 			exp: `[a @ 0,0+]`,
 		},
 		{
-			r: baseRegistration{span: roachpb.Span{
+			r: &baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			exp: `[{a-c} @ 0,0+]`,
 		},
 		{
-			r: baseRegistration{
+			r: &baseRegistration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
-			r: baseRegistration{span: roachpb.Span{
+			r: &baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
 			},
