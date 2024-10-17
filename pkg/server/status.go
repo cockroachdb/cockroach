@@ -1534,6 +1534,25 @@ func (s *statusServer) Stacks(
 	return stacksLocal(req)
 }
 
+// Nodes returns all node statuses for a secondary tenant with
+// `can_view_node_info` capability.
+//
+// Do not use this method inside the server code! Use ListNodesInternal()
+// instead. This method here is the one exposed to network clients over HTTP.
+func (s *statusServer) Nodes(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.sqlServer.tenantConnect.Nodes(ctx, req)
+}
+
 func (s *statusServer) processRawGoroutines(
 	_ context.Context, response profDataResponse,
 ) ([]byte, error) {
