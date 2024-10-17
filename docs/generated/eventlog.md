@@ -3380,6 +3380,9 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 An event of type `set_zone_config` is recorded when a zone config is changed.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `ResolvedOldConfig` | The string representation of the resolved old zone config. This is not necessarily the same as the zone config that was previously set -- as it includes the resolved values of the zone config options. In other words, a zone config that hasn't been properly "set" yet (and inherits from its parent) will have a resolved_old_config that has details of the values it inherits from its parent. This is particularly useful to get a proper diff between the old and new zone config. | yes |
 
 
 #### Common fields

@@ -71,7 +71,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		sqltelemetry.SchemaChangeAlterCounterWithExtra(zs.TelemetryName(), "configure_zone"),
 	)
 
-	if err = zco.applyZoneConfig(b, n, copyFromParentList, setters); err != nil {
+	oldZone, err := zco.applyZoneConfig(b, n, copyFromParentList, setters)
+	if err != nil {
 		panic(err)
 	}
 
@@ -87,7 +88,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
-	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails}
+	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+		ResolvedOldConfig: oldZone.String()}
 	b.LogEventForExistingPayload(elem, info)
 }
 
