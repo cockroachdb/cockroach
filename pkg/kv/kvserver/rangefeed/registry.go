@@ -81,11 +81,15 @@ type Disconnector interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	span             roachpb.Span
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	unreg            func()
+	span           roachpb.Span
+	withDiff       bool
+	withFiltering  bool
+	withOmitRemote bool
+	// TODO(ssd): This unreg can be removed when the LegacyProcess
+	// is removed.
+	unreg   func()
+	cleanup func(context.Context, registration)
+
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
 	keys             interval.Range

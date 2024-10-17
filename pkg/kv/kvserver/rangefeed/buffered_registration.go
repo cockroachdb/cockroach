@@ -81,6 +81,7 @@ func newBufferedRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
+	cleanup func(context.Context, registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -89,6 +90,7 @@ func newBufferedRegistration(
 			withDiff:         withDiff,
 			withFiltering:    withFiltering,
 			withOmitRemote:   withOmitRemote,
+			cleanup:          cleanup,
 			unreg:            unregisterFn,
 		},
 		metrics:       metrics,
@@ -167,6 +169,7 @@ func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 			br.mu.outputLoopCancelFn()
 		}
 		br.mu.disconnected = true
+		br.cleanup(ctx, br)
 		br.stream.SendError(pErr)
 	}
 }

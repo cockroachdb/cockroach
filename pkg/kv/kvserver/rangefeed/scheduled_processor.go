@@ -335,6 +335,9 @@ func (p *ScheduledProcessor) Register(
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+			func(ctx context.Context, r registration) {
+				p.unregisterClientAsync(r)
+			},
 		)
 	}
 
@@ -363,7 +366,6 @@ func (p *ScheduledProcessor) Register(
 		runOutputLoop := func(ctx context.Context) {
 			streamCtx = p.AnnotateCtx(ctx)
 			r.runOutputLoop(streamCtx, p.RangeID)
-			p.unregisterClientAsync(r)
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
