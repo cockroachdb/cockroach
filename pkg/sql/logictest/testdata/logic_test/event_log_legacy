@@ -506,7 +506,7 @@ ORDER BY "timestamp", info
 ##################
 
 statement ok
-CREATE TABLE a (id INT PRIMARY KEY)
+CREATE TABLE a (id INT PRIMARY KEY, foo INT, INDEX bar (foo))
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -515,6 +515,14 @@ ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes =
 skipif config 3node-tenant-default-configs
 statement ok
 ALTER TABLE a CONFIGURE ZONE DISCARD
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER INDEX a@a_pkey CONFIGURE ZONE USING gc.ttlseconds = 13000
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER INDEX a@bar CONFIGURE ZONE USING gc.ttlseconds = 15000
 
 # verify zone config changes are logged
 ##################
@@ -525,12 +533,14 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "node"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_statistics", "User": "node"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_statistics", "User": "node"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.statement_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_activity", "User": "node"}
-1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.transaction_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_activity", "User": "node"}
-1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
+1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.statement_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.transaction_statistics CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_statistics", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.statement_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.statement_activity", "User": "node"}
+1  {"ApplicationName": "$ internal-set-SQLStatsTables-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".system.transaction_activity CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.transaction_activity", "User": "node"}
+1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:3 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
+1  {"EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 13000"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:3 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER INDEX \"\".\"\".a@a_pkey CONFIGURE ZONE USING \"gc.ttlseconds\" = 13000", "Tag": "CONFIGURE ZONE", "Target": "INDEX test.public.a@a_pkey", "User": "root"}
+1  {"EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 15000"], "ResolvedOldConfig": "range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:3 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false ", "Statement": "ALTER INDEX \"\".\"\".a@bar CONFIGURE ZONE USING \"gc.ttlseconds\" = 15000", "Tag": "CONFIGURE ZONE", "Target": "INDEX test.public.a@bar", "User": "root"}
 
 skipif config 3node-tenant-default-configs
 query IT
