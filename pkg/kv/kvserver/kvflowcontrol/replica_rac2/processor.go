@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -353,7 +354,7 @@ type Processor interface {
 	//
 	// raftMu is held.
 	ProcessSchedulerEventRaftMuLocked(
-		ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot)
+		ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot raft.LogSnapshot)
 
 	// InspectRaftMuLocked returns a handle to inspect the state of the
 	// underlying range controller. It is used to power /inspectz-style debugging
@@ -1139,7 +1140,7 @@ func (p *processorImpl) AdmitForEval(
 
 // ProcessSchedulerEventRaftMuLocked implements Processor.
 func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
-	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot rac2.RaftLogSnapshot,
+	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot raft.LogSnapshot,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if p.destroyed {

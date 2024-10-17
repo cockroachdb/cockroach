@@ -999,8 +999,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
-		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs,
-		replica_rac2.RaftLogSnapshot(logSnapshot),
+		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs, logSnapshot,
 		r.raftMu.msgAppScratchForFlowControl, replicaStateInfoMap)
 	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftNodeBasicState, raftEvent)
 	if !hasReady {
@@ -1560,7 +1559,7 @@ func (r *Replica) processRACv2RangeController(ctx context.Context) {
 		}
 	}
 	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(
-		ctx, r.mu.currentRACv2Mode, replica_rac2.RaftLogSnapshot(logSnapshot))
+		ctx, r.mu.currentRACv2Mode, logSnapshot)
 }
 
 // SendMsgApp implements rac2.MsgAppSender.
