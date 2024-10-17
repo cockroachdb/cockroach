@@ -825,9 +825,10 @@ const MinimumSupportedFormatVersion = pebble.FormatSyntheticPrefixSuffix
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
-		Comparer:  EngineComparer,
-		FS:        vfs.Default,
-		KeySchema: keySchema,
+		Comparer:   EngineComparer,
+		FS:         vfs.Default,
+		KeySchema:  keySchema.Name,
+		KeySchemas: sstable.MakeKeySchemas(keySchema),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
