@@ -36,11 +36,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
-	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
-)
-
 // Setting this to less than the interval for gossiping stores is a big
 // no-no, since this value is compared to the age of the most recent gossip
 // from each store to determine whether that store is live. Put a buffer of
@@ -50,7 +45,7 @@ const minTimeUntilNodeDead = gossip.StoresInterval + 15*time.Second
 // TimeUntilNodeDead wraps "server.time_until_store_dead".
 var TimeUntilNodeDead = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
-	timeUntilNodeDeadSettingName,
+	"server.time_until_store_dead",
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute,
 	settings.DurationWithMinimum(minTimeUntilNodeDead),
@@ -71,11 +66,26 @@ const maxTimeAfterNodeSuspect = 5 * time.Minute
 // it's last failure.
 var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	timeAfterNodeSuspectSettingName,
+	"server.time_after_store_suspect",
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
 	30*time.Second,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
+)
+
+// TimeAfterNodeSuspectLongFailureMult multiplies how long we consider a node's
+// store(s) suspect after a failure longer than the TimeAfterNodeSuspect
+// duration.
+var TimeAfterNodeSuspectLongFailureMult = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"server.time_after_store_suspect.long_failure_multiplier",
+	"the multiplier for how long we consider a node suspect for after it is unavailable"+
+		" for more than server.time_after_store_suspect duration."+
+		"A suspect node is typically treated the same as an unavailable node.",
+	2.0,
+	// Don't allow setting a multiplier that would result in a shorter suspect
+	// duration on longer failures than the default.
+	settings.FloatInRange(1.0, 1000.0),
 )
 
 var (
@@ -636,7 +646,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 			// have left before our liveness entry expires.
 			if err := timeutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.renewalDuration,
 				func(ctx context.Context) error {
-					nl.cache.checkForStaleEntries(gossip.StoreTTL)
+					nl.cache.checkForStaleEntries()
 					// Retry heartbeat in the event the conditional put fails.
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						oldLiveness, ok := nl.Self()
