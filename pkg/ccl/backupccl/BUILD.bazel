@@ -323,6 +323,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//pkg/util/version",
         "//pkg/workload",

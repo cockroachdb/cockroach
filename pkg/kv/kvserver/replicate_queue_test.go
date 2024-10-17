@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -905,9 +906,11 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	require.NoError(t, err)
 
 	testStartTs := timeutil.Now()
-	recording, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
-		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
+		traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 	)
+	recording := rec()
 	require.NoError(t, enqueueErr)
 	require.Error(t, processErr, "expected processing error")
 
@@ -1028,7 +1031,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
 	require.NoError(t, err)
-	_, processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
+	processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
 		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 	)
 	require.NoError(t, enqueueErr)
@@ -1685,9 +1688,11 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		// because we know that it is the leaseholder (since it is the only voting
 		// replica).
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		recording, processErr, err := store.Enqueue(
-			ctx, "replicate", repl, false /* skipShouldQueue */, false, /* async */
+		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+		processErr, err := store.Enqueue(
+			traceCtx, "replicate", repl, false /* skipShouldQueue */, false, /* async */
 		)
+		recording := rec()
 		if err != nil {
 			log.Errorf(ctx, "err: %s", err.Error())
 			return false
@@ -2354,10 +2359,10 @@ func TestReplicateQueueAllocatorToken(t *testing.T) {
 
 	repl := tc.GetRaftLeader(t, roachpb.RKey(scratchKey))
 	require.NoError(t, repl.AllocatorToken().TryAcquire(ctx, "test"))
-	_, processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.ErrorIs(t, processErr, plan.NewErrAllocatorToken("test"))
 	repl.AllocatorToken().Release(ctx)
-	_, processErr, _ = repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	processErr, _ = repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	// Expect processing to acquire the token and error on not enough stores in
 	// the cluster, an allocation error.
 	var allocationError allocator.AllocationError
