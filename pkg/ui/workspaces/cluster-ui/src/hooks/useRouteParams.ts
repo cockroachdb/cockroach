@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 
 import { databaseIDAttr, tableIdAttr } from "src/util";
 

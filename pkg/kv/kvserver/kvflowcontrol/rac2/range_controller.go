@@ -2793,14 +2793,14 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
 		panic(errors.AssertionFailedf("watcher was registered when already had tokens"))
 	}
-	queueSize := rss.approxQueueSizeStreamLocked()
-	if queueSize == 0 {
+	if rss.isEmptySendQueueRaftMuAndStreamLocked() {
 		panic(errors.AssertionFailedf("watcher was registered with empty send-queue"))
 	}
 	// Deduct a bit more, so we can also dequeue things that get enqueued later,
 	// and transition to an empty send-queue.
 	//
 	// TODO(sumeer): refine this heuristic.
+	queueSize := rss.approxQueueSizeStreamLocked()
 	queueSize = kvflowcontrol.Tokens(float64(queueSize) * 1.1)
 	if queueSize < 2048 {
 		queueSize = 4096
@@ -2822,6 +2822,9 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 
 // NB: raftMu may or may not be held. Specifically, when called from Notify,
 // raftMu is not held.
+//
+// NB: This can return 0 despite a non-empty send-queue if none of the entries
+// are subject to replication admission control.
 func (rss *replicaSendStream) approxQueueSizeStreamLocked() kvflowcontrol.Tokens {
 	rss.mu.AssertHeld()
 	var size kvflowcontrol.Tokens
