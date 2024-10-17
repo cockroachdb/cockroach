@@ -155,7 +155,7 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		r.A("Improve this report!",
 			"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/bazci/githubpost/issues",
 		)
-		r.Escaped("\n")
+		r.Escaped("\n\n") // need a blank line here since we have one above
 	})
 	return nil
 }
