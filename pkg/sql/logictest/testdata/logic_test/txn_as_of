@@ -280,3 +280,15 @@ SET TRANSACTION AS OF SYSTEM TIME '0'
 
 statement ok
 ROLLBACK
+
+statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+BEGIN TRANSACTION AS OF SYSTEM TIME ('abc' IS OF (ident))
+
+statement ok
+BEGIN
+
+statement error AS OF SYSTEM TIME: only constant expressions or follower_read_timestamp are allowed
+SET TRANSACTION AS OF SYSTEM TIME ('abc' IS OF (ident))
+
+statement ok
+ROLLBACK
