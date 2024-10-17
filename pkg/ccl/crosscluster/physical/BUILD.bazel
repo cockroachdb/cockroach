@@ -106,6 +106,7 @@ go_test(
         "replication_execution_details_test.go",
         "replication_random_client_test.go",
         "replication_stream_e2e_test.go",
+        "standby_read_test.go",
         "standby_read_ts_poller_job_test.go",
         "stream_ingestion_dist_test.go",
         "stream_ingestion_frontier_processor_test.go",
