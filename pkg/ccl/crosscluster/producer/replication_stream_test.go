@@ -106,7 +106,7 @@ func (d *partitionStreamDecoder) pop() crosscluster.Event {
 		// TODO(yevgeniy): Fix checkpoint handling and support backfill checkpoints.
 		// For now, check that we only have one span in the checkpoint, and use that timestamp.
 		require.Equal(d.t, 1, len(d.e.Checkpoint.ResolvedSpans))
-		event := crosscluster.MakeCheckpointEvent(d.e.Checkpoint.ResolvedSpans)
+		event := crosscluster.MakeCheckpointEvent(d.e.Checkpoint)
 		d.e.Checkpoint = nil
 		return event
 	}
