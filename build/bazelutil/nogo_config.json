@@ -1624,7 +1624,7 @@
             "github.com/elastic/gosigar": "third-party",
             "github.com/shirou/gopsutil": "third-party code",
             "pkg/.*\\.eg\\.go$": "generated code",
-            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb(_[0-9]+)?\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code"
         }
