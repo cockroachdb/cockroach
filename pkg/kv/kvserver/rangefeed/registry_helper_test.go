@@ -268,6 +268,7 @@ func newTestRegistration(
 		NewMetrics(),
 		s,
 		func() {},
+		func(context.Context, registration) {},
 	)
 	return &testRegistration{
 		bufferedRegistration: r,
