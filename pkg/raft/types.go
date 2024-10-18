@@ -90,6 +90,10 @@ func (l LogMark) After(other LogMark) bool {
 // is sourced from a message that was received via transport, or from Storage,
 // or in a test code that manually hard-codes this struct. In these cases, the
 // invariants should be validated using the valid() method.
+//
+// The LogSlice is immutable. The entries slice must not be mutated, but it can
+// be appended to in some cases, when the callee protects its underlying slice
+// by capping the returned entries slice with a full slice expression.
 type LogSlice struct {
 	// term is the leader term containing the given entries in its log.
 	term uint64
