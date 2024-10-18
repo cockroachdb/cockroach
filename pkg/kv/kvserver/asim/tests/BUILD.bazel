@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tests",
     srcs = [
+        "constraints.go",
         "default_settings.go",
         "output.go",
         "rand_framework.go",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
@@ -46,7 +48,9 @@ go_test(
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/validator",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

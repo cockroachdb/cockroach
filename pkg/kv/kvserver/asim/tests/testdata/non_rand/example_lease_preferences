@@ -3,19 +3,7 @@
 gen_cluster nodes=5
 ----
 
-set_locality node=1 locality=region=a
-----
-
-set_locality node=2 locality=region=a
-----
-
-set_locality node=3 locality=region=b
-----
-
-set_locality node=4 locality=region=b
-----
-
-set_locality node=5 locality=region=b
+gen_cluster_with_locality regions=(a, b) nodes_per_region=(2,3)
 ----
 
 # Setup three span configs, the first span config should produce no violations
@@ -27,13 +15,57 @@ set_span_config
 [0,1000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
 ----
 
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
+
+
 set_span_config 
 [1000,2000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=a'],['+region=b']]
 ----
 
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
+
+
 set_span_config 
 [2000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=c']]
 ----
+
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
 
 assertion type=conformance lease-violating=1 lease-less-preferred=1
 ----
@@ -45,8 +77,10 @@ OK
 topology
 ----
 a
-  └── [1 2]
+  a1
+  │ └── [1 2]
 b
-  └── [3 4 5]
+  b1
+    └── [3 4 5]
 
 # vim:ft=sh

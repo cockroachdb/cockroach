@@ -4,19 +4,7 @@
 # constraint conjunction currently satisfied by the decommissioning replica
 # being replaced, it was possible that a valid replacement target would never
 # be selected.
-gen_cluster nodes=4
-----
-
-set_locality node=1 locality=region=a
-----
-
-set_locality node=2 locality=region=b
-----
-
-set_locality node=3 locality=region=c
-----
-
-set_locality node=4 locality=region=c
+gen_cluster_with_locality regions=(a, b, c) nodes_per_region=(1, 2, 2)
 ----
 
 # Generate 5 ranges, where initially there will be two replicas in region c and
@@ -28,9 +16,40 @@ set_span_config
 [0,10000): num_replicas=3 constraints={'+region=a':1,'+region=c':2}
 ----
 
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 1 non_voter
+		c: 2 non_voters
+	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=0
+constraints=[+region=a:1 +region=c:2]
+voter_constraints=[]
+
 set_span_config delay=5m
 [0,10000): num_replicas=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1}
 ----
+
+validate_config
+----
+satisfiable:
+validation result:
+	1.zone:
+	2.region:
+		a: 1 non_voter
+		b: 1 non_voter
+		c: 1 non_voter
+	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=0
+constraints=[+region=a:1 +region=b:1 +region=c:1]
+voter_constraints=[]
 
 set_liveness node=4 liveness=decommissioning delay=5m
 ----
@@ -45,10 +64,13 @@ OK
 topology
 ----
 a
-  └── [1]
+  a1
+  │ └── [1]
 b
-  └── [2]
+  b1
+  │ └── [2 3]
 c
-  └── [3 4]
+  c1
+    └── [4 5]
 
 # vim:ft=sh
