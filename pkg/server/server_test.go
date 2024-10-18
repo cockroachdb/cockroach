@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -841,13 +842,16 @@ Binary built without web UI.
 				Data: []byte("console.log('hello world');"),
 			},
 		}
-		fsys, err := mapfs.Sub(".")
-		require.NoError(t, err)
-		ui.Assets = fsys
+
+		ui.Assets = func() fs.FS {
+			fsys, err := mapfs.Sub(".")
+			require.NoError(t, err)
+			return fsys
+		}
 
 		// Clear fake asset FS when we're done
 		defer func() {
-			ui.Assets = nil
+			ui.Assets = ui.NoAssets
 		}()
 
 		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
