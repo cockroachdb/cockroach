@@ -1778,6 +1778,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_gogoproto",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/gogoproto",
+        sha256 = "46d5865e78b5c3b24c092c62ae8ef98af5a6aa8b166d9e729804f4ffe3e527d9",
+        strip_prefix = "github.com/cockroachdb/gogoproto@v1.3.3-0.20240819004331-da4e8a0bc8d7",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/gogoproto/com_github_cockroachdb_gogoproto-v1.3.3-0.20240819004331-da4e8a0bc8d7.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cockroachdb_gostdlib",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/gostdlib",
