@@ -449,17 +449,18 @@ func GetTypeFromCastOrCollate(expr tree.Expr) (tree.ResolvableTypeReference, err
 	return cast.Type, nil
 }
 
-var errBitLengthNotPositive = pgerror.WithCandidateCode(
-	errors.New("length for type bit must be at least 1"), pgcode.InvalidParameterValue)
+var errVarBitLengthNotPositive = pgerror.WithCandidateCode(
+	errors.New("length for type varbit must be at least 1"), pgcode.InvalidParameterValue)
 
 // newBitType creates a new BIT type with the given bit width.
 func newBitType(width int32, varying bool) (*types.T, error) {
-	if width < 1 {
-		return nil, errBitLengthNotPositive
-	}
 	if varying {
+		if width < 1 {
+			return nil, errVarBitLengthNotPositive
+		}
 		return types.MakeVarBit(width), nil
 	}
+	// The iconst32 pattern in the parser guarantees that the width is positive.
 	return types.MakeBit(width), nil
 }
 
