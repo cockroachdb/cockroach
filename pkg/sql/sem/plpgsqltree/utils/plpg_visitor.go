@@ -209,15 +209,6 @@ func (v *SQLStmtVisitor) Visit(
 			cpy.Condition = e
 			newStmt = cpy
 		}
-		e, v.Err = simpleVisit(t.Condition, v.Fn)
-		if v.Err != nil {
-			return stmt, false
-		}
-		if t.Condition != e {
-			cpy := t.CopyNode()
-			cpy.Condition = e
-			newStmt = cpy
-		}
 	case *plpgsqltree.Exit:
 		e, v.Err = simpleVisit(t.Condition, v.Fn)
 		if v.Err != nil {
@@ -311,8 +302,37 @@ func (v *SQLStmtVisitor) Visit(
 			newStmt = cpy
 		}
 
-	case *plpgsqltree.ForInt, *plpgsqltree.ForSelect, *plpgsqltree.ForCursor,
-		*plpgsqltree.ForDynamic, *plpgsqltree.ForEachArray, *plpgsqltree.ReturnNext,
+	case *plpgsqltree.ForLoop:
+		switch c := t.Control.(type) {
+		case *plpgsqltree.IntForLoopControl:
+			var newLower, newUpper, newStep tree.Expr
+			newLower, v.Err = simpleVisit(c.Lower, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			newUpper, v.Err = simpleVisit(c.Upper, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			if c.Step != nil {
+				newStep, v.Err = simpleVisit(c.Step, v.Fn)
+				if v.Err != nil {
+					return stmt, false
+				}
+			}
+			if newLower != c.Lower || newUpper != c.Upper || newStep != c.Step {
+				cpy := t.CopyNode()
+				cpy.Control = &plpgsqltree.IntForLoopControl{
+					Reverse: c.Reverse,
+					Lower:   newLower,
+					Upper:   newUpper,
+					Step:    newStep,
+				}
+				newStmt = cpy
+			}
+		}
+
+	case *plpgsqltree.ForEachArray, *plpgsqltree.ReturnNext,
 		*plpgsqltree.ReturnQuery, *plpgsqltree.Perform:
 		panic(unimp.New("plpgsql visitor", "Unimplemented PLpgSQL visitor"))
 	}
