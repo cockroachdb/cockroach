@@ -8,7 +8,6 @@ package crosscluster
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,7 +74,7 @@ type Event interface {
 
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
-	GetResolvedSpans() []jobspb.ResolvedSpan
+	GetCheckpoint() *streampb.StreamEvent_StreamCheckpoint
 
 	// GetSpanConfigEvent returns a SpanConfig event if the EventType is SpanConfigEvent
 	GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
@@ -142,7 +141,7 @@ var _ Event = delRangeEvent{}
 // keys in the span it is responsible for up until this timestamp.
 type checkpointEvent struct {
 	emptyEvent
-	resolvedSpans []jobspb.ResolvedSpan
+	checkpoint *streampb.StreamEvent_StreamCheckpoint
 }
 
 var _ Event = checkpointEvent{}
@@ -153,8 +152,8 @@ func (ce checkpointEvent) Type() EventType {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (ce checkpointEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return ce.resolvedSpans
+func (ce checkpointEvent) GetCheckpoint() *streampb.StreamEvent_StreamCheckpoint {
+	return ce.checkpoint
 }
 
 type spanConfigEvent struct {
@@ -216,8 +215,8 @@ func MakeDeleteRangeEvent(delRange kvpb.RangeFeedDeleteRange) Event {
 }
 
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
-func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
-	return checkpointEvent{resolvedSpans: resolvedSpans}
+func MakeCheckpointEvent(checkpoint *streampb.StreamEvent_StreamCheckpoint) Event {
+	return checkpointEvent{checkpoint: checkpoint}
 }
 
 func MakeSpanConfigEvent(streamedSpanConfig streampb.StreamedSpanConfigEntry) Event {
@@ -248,7 +247,7 @@ func (ee emptyEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 }
 
 // GetResolvedSpans implements the Event interface.
-func (ee emptyEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+func (ee emptyEvent) GetCheckpoint() *streampb.StreamEvent_StreamCheckpoint {
 	return nil
 }
 

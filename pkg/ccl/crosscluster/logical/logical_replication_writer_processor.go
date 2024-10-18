@@ -489,7 +489,7 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 			return err
 		}
 	case crosscluster.CheckpointEvent:
-		if err := lrw.maybeCheckpoint(ctx, event.GetResolvedSpans()); err != nil {
+		if err := lrw.maybeCheckpoint(ctx, event.GetCheckpoint().ResolvedSpans); err != nil {
 			return err
 		}
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
