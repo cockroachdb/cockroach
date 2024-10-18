@@ -176,23 +176,24 @@ CREATE TABLE foo(a CHAR(0))
                          ^
 
 parse
-CREATE TABLE a (b BIT VARYING(2), c BIT(1))
+CREATE TABLE a (b BIT VARYING(2), c BIT(1), c BIT, c BIT(0))
 ----
-CREATE TABLE a (b VARBIT(2), c BIT) -- normalized!
-CREATE TABLE a (b VARBIT(2), c BIT) -- fully parenthesized
-CREATE TABLE a (b VARBIT(2), c BIT) -- literals removed
-CREATE TABLE _ (_ VARBIT(2), _ BIT) -- identifiers removed
+CREATE TABLE a (b VARBIT(2), c BIT, c BIT, c BIT(0)) -- normalized!
+CREATE TABLE a (b VARBIT(2), c BIT, c BIT, c BIT(0)) -- fully parenthesized
+CREATE TABLE a (b VARBIT(2), c BIT, c BIT, c BIT(0)) -- literals removed
+CREATE TABLE _ (_ VARBIT(2), _ BIT, _ BIT, _ BIT(0)) -- identifiers removed
 
 error
 CREATE TABLE test (
-  foo BIT(0)
+  foo BIT(-1)
 )
 ----
-at or near ")": syntax error: length for type bit must be at least 1
+at or near "-": syntax error
 DETAIL: source SQL:
 CREATE TABLE test (
-  foo BIT(0)
-           ^
+  foo BIT(-1)
+          ^
+HINT: try \h CREATE TABLE
 
 
 parse
