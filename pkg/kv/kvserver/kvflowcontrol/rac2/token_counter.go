@@ -22,40 +22,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// TokenWaitingHandle is the interface for waiting for positive tokens from a
-// token counter.
-//
-// TODO(sumeer): remove this interface since there is only one implementation.
-type TokenWaitingHandle interface {
-	// WaitChannel is the channel that will be signaled if tokens are possibly
-	// available. If signaled, the caller must call
-	// ConfirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens
-	// being available after this channel is signaled, just that tokens were
-	// available recently. A typical usage pattern is:
-	//
-	//   for {
-	//     select {
-	//     case <-handle.WaitChannel():
-	//       if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
-	//         break
-	//       }
-	//     }
-	//   }
-	//   tokenCounter.Deduct(...)
-	//
-	// There is a possibility for races, where multiple goroutines may be
-	// signaled and deduct tokens, sending the counter into debt. These cases are
-	// acceptable, as in aggregate the counter provides pacing over time.
-	WaitChannel() <-chan struct{}
-	// ConfirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
-	// available. True is returned if tokens are available, false otherwise. If
-	// no tokens are available, the caller can resume waiting using WaitChannel.
-	ConfirmHaveTokensAndUnblockNextWaiter() bool
-	// StreamString returns a string representation of the stream. Used for
-	// tracing.
-	StreamString() string
-}
-
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
 // tokens are protected by the mutex in tokenCounter. Operations on the
 // signalCh may not be protected by that mutex -- see the comment below.
@@ -303,15 +269,16 @@ func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	return t.mu.counters[wc].limit
 }
 
-// TokensAvailable returns true if tokens are available. If false, it returns
-// a handle that may be used for waiting for tokens to become available.
+// TokensAvailable returns true if tokens are available, in which case handle
+// is empty and should be ignored. If false, it returns a handle that may be
+// used for waiting for tokens to become available.
 func (t *tokenCounter) TokensAvailable(
 	wc admissionpb.WorkClass,
-) (available bool, handle TokenWaitingHandle) {
+) (available bool, handle tokenWaitHandle) {
 	if t.tokens(wc) > 0 {
-		return true, nil
+		return true, tokenWaitHandle{}
 	}
-	return false, waitHandle{wc: wc, b: t}
+	return false, tokenWaitHandle{wc: wc, b: t}
 }
 
 // TryDeduct attempts to deduct flow tokens for the given work class. If there
@@ -358,25 +325,23 @@ func (t *tokenCounter) Return(
 	t.adjust(ctx, wc, tokens, flag)
 }
 
-// waitHandle is a handle for waiting for tokens to become available from a
-// token counter.
-type waitHandle struct {
+// tokenWaitHandle is a handle for waiting for tokens to become available from
+// a token counter.
+type tokenWaitHandle struct {
 	wc admissionpb.WorkClass
 	b  *tokenCounter
 }
 
-var _ TokenWaitingHandle = waitHandle{}
-
-// WaitChannel is the channel that will be signaled if tokens are possibly
+// waitChannel is the channel that will be signaled if tokens are possibly
 // available. If signaled, the caller must call
-// ConfirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens being
+// confirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens being
 // available after this channel is signaled, just that tokens were available
 // recently. A typical usage pattern is:
 //
 //	for {
 //	  select {
-//	  case <-handle.WaitChannel():
-//	    if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
+//	  case <-handle.waitChannel():
+//	    if handle.confirmHaveTokensAndUnblockNextWaiter() {
 //	      break
 //	    }
 //	  }
@@ -386,14 +351,14 @@ var _ TokenWaitingHandle = waitHandle{}
 // There is a possibility for races, where multiple goroutines may be signaled
 // and deduct tokens, sending the counter into debt. These cases are
 // acceptable, as in aggregate the counter provides pacing over time.
-func (wh waitHandle) WaitChannel() <-chan struct{} {
+func (wh tokenWaitHandle) waitChannel() <-chan struct{} {
 	return wh.b.mu.counters[wh.wc].signalCh
 }
 
-// ConfirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
+// confirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
 // available. True is returned if tokens are available, false otherwise. If no
-// tokens are available, the caller can resume waiting using WaitChannel.
-func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
+// tokens are available, the caller can resume waiting using waitChannel.
+func (wh tokenWaitHandle) confirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	haveTokens = wh.b.tokens(wh.wc) > 0
 	if haveTokens {
 		// Signal the next waiter if we have tokens available before returning.
@@ -402,14 +367,15 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	return haveTokens
 }
 
-// StreamString implements TokenWaitingHandle.
-func (wh waitHandle) StreamString() string {
+// streamString returns a string representation of the stream. Used for
+// tracing.
+func (wh tokenWaitHandle) streamString() string {
 	return wh.b.stream.String()
 }
 
 type tokenWaitingHandleInfo struct {
-	// Can be nil, in which case the wait on this can never succeed.
-	handle TokenWaitingHandle
+	// Can be empty, in which case no methods should be called on it.
+	handle tokenWaitHandle
 	// requiredWait will be set for the leaseholder and leader for regular work.
 	// For elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
@@ -491,8 +457,8 @@ func WaitForEval(
 			requiredWaitCount++
 		}
 		var chanValue reflect.Value
-		if h.handle != nil {
-			chanValue = reflect.ValueOf(h.handle.WaitChannel())
+		if h.handle != (tokenWaitHandle{}) {
+			chanValue = reflect.ValueOf(h.handle.waitChannel())
 		}
 		// Else, zero Value, so will never be selected.
 		scratch = append(scratch,
@@ -529,7 +495,7 @@ func WaitForEval(
 			return ReplicaRefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-3]
-			if available := handleInfo.handle.ConfirmHaveTokensAndUnblockNextWaiter(); !available {
+			if available := handleInfo.handle.confirmHaveTokensAndUnblockNextWaiter(); !available {
 				// The handle was signaled but does not currently have tokens
 				// available. Continue waiting on this handle.
 				continue
@@ -537,7 +503,7 @@ func WaitForEval(
 
 			if traceIndividualWaits {
 				log.Eventf(ctx, "wait-for-eval: waited until %s tokens available",
-					handleInfo.handle.StreamString())
+					handleInfo.handle.streamString())
 			}
 			if handleInfo.partOfQuorum {
 				signaledQuorumCount++

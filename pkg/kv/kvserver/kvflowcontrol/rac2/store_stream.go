@@ -541,8 +541,8 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 				select {
 				case <-w.stopper.ShouldQuiesce():
 					return
-				case <-handle.WaitChannel():
-					if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
+				case <-handle.waitChannel():
+					if handle.confirmHaveTokensAndUnblockNextWaiter() {
 						break waiting
 					}
 				}
