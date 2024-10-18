@@ -72,9 +72,14 @@ func (b *Builder) buildValuesClause(
 				panic(err)
 			}
 			// UDFs modify their resolved type when built, so build the scalar before
-			// resolving the column types.
+			// resolving the column types. We have to call TypeCheck again in order to
+			// update expressions that wrap a UDF to reflect the modified type.
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
 			elemPos += numCols
+			texpr, err = tree.TypeCheck(b.ctx, texpr, b.semaCtx, desired)
+			if err != nil {
+				panic(err)
+			}
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
