@@ -374,7 +374,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig) error {
 		}
 		if *fc.Auditable {
 			return errors.Newf(`File-based audit logging cannot coexist with buffering configuration. ` +
-				`Disable either the "buffering" (buffered-writes) or "auditable" log (auditable) configuration.`)
+				`Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.`)
 		}
 		// To preserve the format of log files, avoid additional formatting in the
 		// buffering configuration.
