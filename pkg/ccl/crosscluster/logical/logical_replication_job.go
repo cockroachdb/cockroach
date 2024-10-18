@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var (
@@ -209,11 +210,6 @@ func (r *logicalReplicationResumer) ingest(
 	}()
 
 	execPlan := func(ctx context.Context) error {
-
-		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.VInfof(ctx, 2, "received producer meta: %v", meta)
-			return nil
-		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
@@ -221,11 +217,13 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
+			stats:                 map[int32]*streampb.StreamEvent_RangeStats{},
+			processorCount:        planInfo.writeProcessorCount,
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
@@ -294,9 +292,10 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans      []roachpb.Span
-	streamAddress    []string
-	destTableBySrcID map[descpb.ID]dstTableMetadata
+	sourceSpans         []roachpb.Span
+	streamAddress       []string
+	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	writeProcessorCount int
 }
 
 func makeLogicalReplicationPlanner(
@@ -448,6 +447,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	// TODO(ssd): Now that we have more than one processor per
 	// node, we might actually want a tree of frontier processors
 	// spread out CPU load.
+	info.writeProcessorCount = len(plan.Topology.Partitions)
 	processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, 0, len(plan.Topology.Partitions))
 	for nodeID, parts := range specs {
 		for _, part := range parts {
@@ -484,7 +484,44 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
+	stats                 map[int32]*streampb.StreamEvent_RangeStats
+	processorCount        int
+
 	lastPartitionUpdate time.Time
+}
+
+func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+	if meta.BulkProcessorProgress == nil {
+		log.VInfof(ctx, 2, "received unexpected producer meta: %v", meta)
+		return nil
+	}
+
+	// TODO(jeffswenson): do I want this to only log errors?
+	var stats streampb.StreamEvent_RangeStats
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
+		return errors.Wrap(err, "unable to unmarshal progress details")
+	}
+
+	rh.stats[meta.BulkProcessorProgress.ProcessorId] = &stats
+
+	return rh.updateJobProgress(ctx)
+}
+
+func (rh *rowHandler) rollupStats(ctx context.Context) (streampb.StreamEvent_RangeStats, bool) {
+	var total streampb.StreamEvent_RangeStats
+	for _, producerStats := range rh.stats {
+		total.RangeCount += producerStats.RangeCount
+		total.LaggingRangeCount += producerStats.LaggingRangeCount
+	}
+	// TODO(jeffswenson): remove this
+	log.Infof(ctx, "stat count: %d processor count: %d", len(rh.stats), rh.processorCount)
+	//if len(rh.stats) != rh.processorCount || total.RangeCount == 0 {
+	if len(rh.stats) != rh.processorCount || total.RangeCount == 0 {
+		// No stats to publish
+		// TODO if stats are complete, publish them
+		return streampb.StreamEvent_RangeStats{}, false
+	}
+	return total, true
 }
 
 func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
@@ -509,16 +546,29 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 		return nil
 	}
 
+	err := rh.updateJobProgress(ctx)
+	if err != nil {
+		return err
+	}
+
+	rh.lastPartitionUpdate = timeutil.Now()
+	log.VInfof(ctx, 2, "persisting replicated time of %s", rh.frontier.Frontier().GoTime())
+	select {
+	case rh.frontierUpdates <- rh.frontier.Frontier():
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
+}
+
+func (rh *rowHandler) updateJobProgress(ctx context.Context) error {
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
 	rh.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		return span.ContinueMatch
 	})
 	replicatedTime := rh.frontier.Frontier()
-
-	rh.lastPartitionUpdate = timeutil.Now()
-	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
-	if err := rh.job.NoTxn().Update(ctx,
+	return rh.job.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
@@ -533,8 +583,16 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 				progress.Progress = &jobspb.Progress_HighWater{
 					HighWater: &replicatedTime,
 				}
+				progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
+			} else  {
+				if stats, ok := rh.rollupStats(ctx); ok {
+					doneRanges := stats.RangeCount - stats.LaggingRangeCount
+					progress.Progress = &jobspb.Progress_FractionCompleted {
+						FractionCompleted: float32(doneRanges) / float32(stats.RangeCount),
+					}
+					progress.RunningStatus = fmt.Sprintf("initial scan: \n%d / %d ranges", doneRanges, stats.RangeCount)
+				}
 			}
-			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
 			ju.UpdateProgress(progress)
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
@@ -543,15 +601,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
 			}
 			return nil
-		}); err != nil {
-		return err
-	}
-	select {
-	case rh.frontierUpdates <- replicatedTime:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return nil
+		});
 }
 
 func (r *logicalReplicationResumer) ingestWithRetries(
