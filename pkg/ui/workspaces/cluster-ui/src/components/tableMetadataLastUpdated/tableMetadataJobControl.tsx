@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { RedoOutlined } from "@ant-design/icons";
-import { Skeleton, Tooltip } from "antd";
+import { Skeleton } from "antd";
 import React, { useCallback, useEffect } from "react";
 
 import {
@@ -12,10 +12,13 @@ import {
   triggerUpdateTableMetaJobApi,
   useTableMetaUpdateJob,
 } from "src/api/databases/tableMetaUpdateJobApi";
+import { TABLE_METADATA_LAST_UPDATED_HELP } from "src/constants/tooltipMessages";
 import Button from "src/sharedFromCloud/button";
 import { Timestamp } from "src/timestamp";
 import { DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 import { usePrevious } from "src/util/hooks";
+
+import { Tooltip } from "../tooltip";
 
 import styles from "./tableMetadataJobControl.module.scss";
 
@@ -86,11 +89,7 @@ export const TableMetadataJobControl: React.FC<
   return (
     <div className={styles["controls-container"]}>
       <Skeleton loading={isLoading}>
-        <Tooltip
-          title={
-            "Data is last refreshed automatically (per cluster setting) or manually."
-          }
-        >
+        <Tooltip title={TABLE_METADATA_LAST_UPDATED_HELP}>
           Last refreshed:{" "}
           <Timestamp
             format={DATE_WITH_SECONDS_FORMAT_24_TZ}
