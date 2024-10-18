@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -357,6 +358,7 @@ func makeWebhookSink(
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	settings *cluster.Settings,
 ) (Sink, error) {
 	m := mb(requiresResourceAccounting)
 
@@ -381,5 +383,6 @@ func makeWebhookSink(
 		pacerFactory,
 		source,
 		mb(requiresResourceAccounting),
+		settings,
 	), nil
 }
