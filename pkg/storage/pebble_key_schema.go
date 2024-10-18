@@ -434,10 +434,10 @@ func (ks *cockroachKeySeeker) MaterializeUserKey(
 	}
 
 	// Inline binary.BigEndian.PutUint32.
-	*(*byte)(ptr) = byte(mvccWall >> 24)
-	*(*byte)(unsafe.Pointer(uintptr(ptr) + 1)) = byte(mvccWall >> 16)
-	*(*byte)(unsafe.Pointer(uintptr(ptr) + 2)) = byte(mvccWall >> 8)
-	*(*byte)(unsafe.Pointer(uintptr(ptr) + 3)) = byte(mvccWall)
+	*(*byte)(ptr) = byte(mvccLogical >> 24)
+	*(*byte)(unsafe.Pointer(uintptr(ptr) + 1)) = byte(mvccLogical >> 16)
+	*(*byte)(unsafe.Pointer(uintptr(ptr) + 2)) = byte(mvccLogical >> 8)
+	*(*byte)(unsafe.Pointer(uintptr(ptr) + 3)) = byte(mvccLogical)
 	*(*byte)(unsafe.Pointer(uintptr(ptr) + 4)) = 13
 	return ki.Buf[:len(ki.Buf)+14]
 }
