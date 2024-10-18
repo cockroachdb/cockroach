@@ -137,7 +137,7 @@ func newUnbufferedRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
-	unregisterFn func(),
+	unregisterFn func(registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -147,10 +147,12 @@ func newUnbufferedRegistration(
 			withDiff:         withDiff,
 			withFiltering:    withFiltering,
 			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
 		},
 		metrics: metrics,
 		stream:  stream,
+	}
+	br.unreg = func() {
+		unregisterFn(br)
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.catchUpIter = catchUpIter

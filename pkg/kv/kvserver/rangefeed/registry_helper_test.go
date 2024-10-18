@@ -343,7 +343,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			false, /* blockWhenFull */
 			cfg.metrics,
 			s,
-			func() {},
+			func(registration) {},
 		)
 	case unbuffered:
 		return newUnbufferedRegistration(
@@ -357,7 +357,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			5,
 			cfg.metrics,
 			&testBufferedStream{Stream: s},
-			func() {},
+			func(registration) {},
 		)
 	default:
 		panic("unknown registration type")

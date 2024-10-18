@@ -211,7 +211,6 @@ type Processor interface {
 		withFiltering bool,
 		withOmitRemote bool,
 		stream Stream,
-		disconnectFn func(),
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -596,7 +595,6 @@ func (p *LegacyProcessor) Register(
 	withFiltering bool,
 	withOmitRemote bool,
 	stream Stream,
-	disconnectFn func(),
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -606,8 +604,9 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
 		streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, func(r registration) {
+			p.reg.Unregister(context.Background(), r)
+		})
 	select {
 	case p.regC <- r:
 		// Wait for response.
