@@ -297,7 +297,7 @@ func TestTokenCounter(t *testing.T) {
 	assertStateReset := func(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.ElasticWorkClass)
 		require.True(t, available)
-		require.Nil(t, handle)
+		require.Equal(t, tokenWaitHandle{}, handle)
 		require.Equal(t, limits.regular, counter.tokens(admissionpb.RegularWorkClass))
 		require.Equal(t, limits.elastic, counter.tokens(admissionpb.ElasticWorkClass))
 	}
@@ -307,11 +307,11 @@ func TestTokenCounter(t *testing.T) {
 		// classes.
 		available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 		require.True(t, available)
-		require.Nil(t, handle)
+		require.Equal(t, tokenWaitHandle{}, handle)
 
 		available, handle = counter.TokensAvailable(admissionpb.ElasticWorkClass)
 		require.True(t, available)
-		require.Nil(t, handle)
+		require.Equal(t, tokenWaitHandle{}, handle)
 		assertStateReset(t)
 	})
 
@@ -326,7 +326,7 @@ func TestTokenCounter(t *testing.T) {
 		// Now there should be no tokens available for regular work class.
 		available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 		require.False(t, available)
-		require.NotNil(t, handle)
+		require.NotEqual(t, tokenWaitHandle{}, handle)
 		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, AdjNormal)
 		assertStateReset(t)
 	})
@@ -353,18 +353,18 @@ func TestTokenCounter(t *testing.T) {
 		// returned.
 		available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 		require.False(t, available)
-		require.NotNil(t, handle)
+		require.NotEqual(t, tokenWaitHandle{}, handle)
 		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, AdjNormal)
 		// Wait on the handle to be unblocked and expect that there are tokens
 		// available when the wait channel is signaled.
-		<-handle.WaitChannel()
-		haveTokens := handle.ConfirmHaveTokensAndUnblockNextWaiter()
+		<-handle.waitChannel()
+		haveTokens := handle.confirmHaveTokensAndUnblockNextWaiter()
 		require.True(t, haveTokens)
 		// Wait on the handle to be unblocked again, this time try deducting such
 		// that there are no tokens available after.
 		counter.Deduct(ctx, admissionpb.RegularWorkClass, limits.regular, AdjNormal)
-		<-handle.WaitChannel()
-		haveTokens = handle.ConfirmHaveTokensAndUnblockNextWaiter()
+		<-handle.waitChannel()
+		haveTokens = handle.confirmHaveTokensAndUnblockNextWaiter()
 		require.False(t, haveTokens)
 		// Return the tokens deducted from the first wait above.
 		counter.Return(ctx, admissionpb.RegularWorkClass, limits.regular, AdjNormal)
@@ -394,14 +394,14 @@ func TestTokenCounter(t *testing.T) {
 					// available.
 					available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)
 					if !available {
-						<-handle.WaitChannel()
+						<-handle.waitChannel()
 						// This may or may not have raced with another goroutine, there's
 						// no guarantee we have tokens here. If we don't have tokens here,
 						// the next call to TryDeduct will fail (unless someone returns
 						// tokens between here and that call), which is harmless. This test
 						// is using TokensAvailable and the returned handle to avoid
 						// busy-waiting.
-						handle.ConfirmHaveTokensAndUnblockNextWaiter()
+						handle.confirmHaveTokensAndUnblockNextWaiter()
 					}
 				}
 
@@ -416,8 +416,8 @@ func TestTokenCounter(t *testing.T) {
 	})
 }
 
-func (t *tokenCounter) testingHandle() waitHandle {
-	return waitHandle{wc: admissionpb.RegularWorkClass, b: t}
+func (t *tokenCounter) testingHandle() tokenWaitHandle {
+	return tokenWaitHandle{wc: admissionpb.RegularWorkClass, b: t}
 }
 
 type namedTokenCounter struct {
