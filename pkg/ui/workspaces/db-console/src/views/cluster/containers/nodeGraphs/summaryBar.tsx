@@ -140,35 +140,15 @@ export default function (props: ClusterSummaryProps) {
           id="qps"
           title="Queries per second"
           format={formatOnePlace}
-          aggregator={SummaryMetricsAggregator.SUM}
           summaryStatMessage="Sum of Selects, Updates, Inserts, and Deletes across your entire cluster."
         >
           <Metric
             sources={props.nodeSources}
-            name="cr.node.sql.select.count"
+            name="cr.node.sql.crud_query.count"
             title="Queries/Sec"
             tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.insert.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.update.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.delete.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
+            aggregateMax
+            downsampleMax
             nonNegativeRate
           />
         </SummaryMetricStat>
