@@ -1,0 +1,257 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+----
+
+exec-ddl
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+----
+
+# ------------------------------------------------------------------------------
+# Row-level BEFORE triggers.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+norm format=(hide-all,show-columns)
+INSERT INTO xy VALUES (1, 2);
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── x_new:22 => x:1
+ │    └── y_new:23 => y:2
+ └── project
+      ├── columns: x_new:22 y_new:23 column1:5 column2:6 new:7 f:21
+      ├── barrier
+      │    ├── columns: column1:5 column2:6 new:7 f:21
+      │    └── select
+      │         ├── columns: column1:5 column2:6 new:7 f:21
+      │         ├── project
+      │         │    ├── columns: f:21 column1:5 column2:6 new:7
+      │         │    ├── barrier
+      │         │    │    ├── columns: column1:5 column2:6 new:7
+      │         │    │    └── values
+      │         │    │         ├── columns: column1:5 column2:6 new:7
+      │         │    │         └── (1, 2, ((1, 2) AS x, y))
+      │         │    └── projections
+      │         │         └── f(new:7, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:21]
+      │         └── filters
+      │              └── f:21 IS DISTINCT FROM NULL
+      └── projections
+           ├── (f:21).x [as=x_new:22]
+           └── (f:21).y [as=y_new:23]
+
+norm format=(hide-all,show-columns)
+UPDATE xy SET y = 3 WHERE x = 1;
+----
+update xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── update-mapping:
+ │    ├── x_new:26 => x:1
+ │    └── y_new:27 => y:2
+ └── project
+      ├── columns: x_new:26 y_new:27 x:5 y:6
+      ├── barrier
+      │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 y_new:9 old:10 new:11 f:25
+      │    └── select
+      │         ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 y_new:9 old:10 new:11 f:25
+      │         ├── project
+      │         │    ├── columns: f:25 x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 y_new:9 old:10 new:11
+      │         │    ├── barrier
+      │         │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 y_new:9 old:10 new:11
+      │         │    │    └── project
+      │         │    │         ├── columns: new:11 old:10 y_new:9 x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │         │    │         ├── select
+      │         │    │         │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │         │    │         │    ├── scan xy
+      │         │    │         │    │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │         │    │         │    └── filters
+      │         │    │         │         └── x:5 = 1
+      │         │    │         └── projections
+      │         │    │              ├── ((x:5, 3) AS x, y) [as=new:11]
+      │         │    │              ├── ((x:5, y:6) AS x, y) [as=old:10]
+      │         │    │              └── 3 [as=y_new:9]
+      │         │    └── projections
+      │         │         └── f(new:11, old:10, 'tr', 'BEFORE', 'ROW', 'UPDATE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:25]
+      │         └── filters
+      │              └── f:25 IS DISTINCT FROM NULL
+      └── projections
+           ├── (f:25).x [as=x_new:26]
+           └── (f:25).y [as=y_new:27]
+
+norm format=(hide-all,show-columns)
+DELETE FROM xy WHERE x = 1;
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:5
+ └── barrier
+      ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 old:9 f:23
+      └── select
+           ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 old:9 f:23
+           ├── project
+           │    ├── columns: f:23 x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 old:9
+           │    ├── barrier
+           │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8 old:9
+           │    │    └── project
+           │    │         ├── columns: old:9 x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │         ├── select
+           │    │         │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │         │    ├── scan xy
+           │    │         │    │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │         │    └── filters
+           │    │         │         └── x:5 = 1
+           │    │         └── projections
+           │    │              └── ((x:5, y:6) AS x, y) [as=old:9]
+           │    └── projections
+           │         └── f(NULL, old:9, 'tr', 'BEFORE', 'ROW', 'DELETE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:23]
+           └── filters
+                └── f:23 IS DISTINCT FROM NULL
+
+norm format=(hide-all,show-columns)
+UPSERT INTO xy VALUES (1, 2);
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: x:7
+ ├── fetch columns: x:7 y:8
+ ├── insert-mapping:
+ │    ├── x_new:26 => x:1
+ │    └── y_new:27 => y:2
+ ├── update-mapping:
+ │    ├── upsert_x:46 => x:1
+ │    └── upsert_y:47 => y:2
+ └── project
+      ├── columns: upsert_x:46 upsert_y:47 x:7 y:8 x_new:26 y_new:27
+      ├── barrier
+      │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 old:28 new:29 f:43
+      │    └── select
+      │         ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 old:28 new:29 f:43
+      │         ├── project
+      │         │    ├── columns: f:43 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 old:28 new:29
+      │         │    ├── barrier
+      │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 old:28 new:29
+      │         │    │    └── project
+      │         │    │         ├── columns: new:29 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 old:28
+      │         │    │         ├── project
+      │         │    │         │    ├── columns: old:28 x_new:26 y_new:27 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    ├── barrier
+      │         │    │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    │    └── select
+      │         │    │         │    │         ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    │         ├── project
+      │         │    │         │    │         │    ├── columns: f:25 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11
+      │         │    │         │    │         │    ├── barrier
+      │         │    │         │    │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11
+      │         │    │         │    │         │    │    └── project
+      │         │    │         │    │         │    │         ├── columns: new:11 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         ├── left-join (cross)
+      │         │    │         │    │         │    │         │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    ├── values
+      │         │    │         │    │         │    │         │    │    ├── columns: column1:5 column2:6
+      │         │    │         │    │         │    │         │    │    └── (1, 2)
+      │         │    │         │    │         │    │         │    ├── select
+      │         │    │         │    │         │    │         │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    │    ├── scan xy
+      │         │    │         │    │         │    │         │    │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    │    └── filters
+      │         │    │         │    │         │    │         │    │         └── x:7 = 1
+      │         │    │         │    │         │    │         │    └── filters (true)
+      │         │    │         │    │         │    │         └── projections
+      │         │    │         │    │         │    │              └── ((column1:5, column2:6) AS x, y) [as=new:11]
+      │         │    │         │    │         │    └── projections
+      │         │    │         │    │         │         └── f(new:11, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:25]
+      │         │    │         │    │         └── filters
+      │         │    │         │    │              └── f:25 IS DISTINCT FROM NULL
+      │         │    │         │    └── projections
+      │         │    │         │         ├── ((x:7, y:8) AS x, y) [as=old:28]
+      │         │    │         │         ├── (f:25).x [as=x_new:26]
+      │         │    │         │         └── (f:25).y [as=y_new:27]
+      │         │    │         └── projections
+      │         │    │              └── ((x_new:26, y_new:27) AS x, y) [as=new:29]
+      │         │    └── projections
+      │         │         └── CASE WHEN x:7 IS NOT NULL THEN f(new:29, old:28, 'tr', 'BEFORE', 'ROW', 'UPDATE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) ELSE new:29 END [as=f:43]
+      │         └── filters
+      │              └── f:43 IS DISTINCT FROM NULL
+      └── projections
+           ├── CASE WHEN x:7 IS NULL THEN x_new:26 ELSE (f:43).x END [as=upsert_x:46]
+           └── CASE WHEN x:7 IS NULL THEN y_new:27 ELSE (f:43).y END [as=upsert_y:47]
+
+norm format=(hide-all,show-columns)
+INSERT INTO xy VALUES (1, 2) ON CONFLICT (x) DO UPDATE SET y = 3;
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: x:7
+ ├── fetch columns: x:7 y:8
+ ├── insert-mapping:
+ │    ├── x_new:26 => x:1
+ │    └── y_new:27 => y:2
+ ├── update-mapping:
+ │    ├── upsert_x:47 => x:1
+ │    └── upsert_y:48 => y:2
+ └── project
+      ├── columns: upsert_x:47 upsert_y:48 x:7 y:8 x_new:26 y_new:27
+      ├── barrier
+      │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 y_new:28 old:29 new:30 f:44
+      │    └── select
+      │         ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 y_new:28 old:29 new:30 f:44
+      │         ├── project
+      │         │    ├── columns: f:44 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 y_new:28 old:29 new:30
+      │         │    ├── barrier
+      │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 y_new:28 old:29 new:30
+      │         │    │    └── project
+      │         │    │         ├── columns: new:30 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25 x_new:26 y_new:27 y_new:28 old:29
+      │         │    │         ├── project
+      │         │    │         │    ├── columns: old:29 y_new:28 x_new:26 y_new:27 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    ├── barrier
+      │         │    │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    │    └── select
+      │         │    │         │    │         ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11 f:25
+      │         │    │         │    │         ├── project
+      │         │    │         │    │         │    ├── columns: f:25 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11
+      │         │    │         │    │         │    ├── barrier
+      │         │    │         │    │         │    │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10 new:11
+      │         │    │         │    │         │    │    └── project
+      │         │    │         │    │         │    │         ├── columns: new:11 column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         ├── left-join (cross)
+      │         │    │         │    │         │    │         │    ├── columns: column1:5 column2:6 x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    ├── values
+      │         │    │         │    │         │    │         │    │    ├── columns: column1:5 column2:6
+      │         │    │         │    │         │    │         │    │    └── (1, 2)
+      │         │    │         │    │         │    │         │    ├── select
+      │         │    │         │    │         │    │         │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    │    ├── scan xy
+      │         │    │         │    │         │    │         │    │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │         │    │         │    │    └── filters
+      │         │    │         │    │         │    │         │    │         └── x:7 = 1
+      │         │    │         │    │         │    │         │    └── filters (true)
+      │         │    │         │    │         │    │         └── projections
+      │         │    │         │    │         │    │              └── ((column1:5, column2:6) AS x, y) [as=new:11]
+      │         │    │         │    │         │    └── projections
+      │         │    │         │    │         │         └── f(new:11, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:25]
+      │         │    │         │    │         └── filters
+      │         │    │         │    │              └── f:25 IS DISTINCT FROM NULL
+      │         │    │         │    └── projections
+      │         │    │         │         ├── ((x:7, y:8) AS x, y) [as=old:29]
+      │         │    │         │         ├── 3 [as=y_new:28]
+      │         │    │         │         ├── (f:25).x [as=x_new:26]
+      │         │    │         │         └── (f:25).y [as=y_new:27]
+      │         │    │         └── projections
+      │         │    │              └── ((x_new:26, 3) AS x, y) [as=new:30]
+      │         │    └── projections
+      │         │         └── CASE WHEN x:7 IS NOT NULL THEN f(new:30, old:29, 'tr', 'BEFORE', 'ROW', 'UPDATE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) ELSE new:30 END [as=f:44]
+      │         └── filters
+      │              └── f:44 IS DISTINCT FROM NULL
+      └── projections
+           ├── CASE WHEN x:7 IS NULL THEN x_new:26 ELSE (f:44).x END [as=upsert_x:47]
+           └── CASE WHEN x:7 IS NULL THEN y_new:27 ELSE (f:44).y END [as=upsert_y:48]
