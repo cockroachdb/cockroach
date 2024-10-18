@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -305,6 +306,13 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 				return false, err
 			}
 			break
+		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+				fn()
+			}
 		}
 
 		// Process the insertion for the current source row, potentially
