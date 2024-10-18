@@ -137,12 +137,12 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SQL Statements"
+      title="SQL Queries Per Second"
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and
-          DELETE statements successfully executed per second ${tooltipSelection}.`}
+          DELETE statements, and the sum of all four, successfully executed per second ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
       <Axis label="queries">
@@ -164,6 +164,11 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.delete.count"
           title="Deletes"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.crud_query.count"
+          title="Total Queries"
           nonNegativeRate
         />
       </Axis>
