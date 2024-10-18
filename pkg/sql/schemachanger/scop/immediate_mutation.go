@@ -989,6 +989,8 @@ type CreateDatabaseDescriptor struct {
 }
 
 // AddDatabaseZoneConfig adds a zone config to a database.
+//
+// TODO(before merge): rename this to be less confusing
 type AddDatabaseZoneConfig struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
