@@ -443,7 +443,10 @@ func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
 		p[i].Typ.Identical(typ) ||
 		// Special case for CHAR, CHAR(N), and BPCHAR which are not "identical"
 		// but have the same OID. See #129007.
-		(p[i].Typ.Oid() == oid.T_bpchar && typ.Oid() == oid.T_bpchar))
+		(p[i].Typ.Oid() == oid.T_bpchar && typ.Oid() == oid.T_bpchar) ||
+		// Special case for BIT, BIT(N), and BIT(0) which are not "identical"
+		// but have the same OID. See #132944.
+		(p[i].Typ.Oid() == oid.T_bit && typ.Oid() == oid.T_bit))
 }
 
 // MatchLen is part of the TypeList interface.
