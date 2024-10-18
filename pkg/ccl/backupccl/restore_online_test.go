@@ -101,7 +101,7 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP DATABASE data TO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
 		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
 		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3')`)
 
