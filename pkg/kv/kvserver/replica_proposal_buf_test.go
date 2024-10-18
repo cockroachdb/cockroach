@@ -217,6 +217,8 @@ func (t *testProposer) campaignLocked(ctx context.Context) {
 	}
 }
 
+func (t *testProposer) registerForTracing(*ProposalData, raftpb.Entry) bool { return true }
+
 func (t *testProposer) rejectProposalWithErrLocked(_ context.Context, _ *ProposalData, err error) {
 	if t.onRejectProposalWithErrLocked == nil {
 		panic(fmt.Sprintf("unexpected rejectProposalWithErrLocked call: err=%v", err))
@@ -301,7 +303,6 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 		}
 	}
 	p := &ProposalData{
-		ctx:   context.Background(),
 		idKey: kvserverbase.CmdIDKey("test-cmd"),
 		command: &kvserverpb.RaftCommand{
 			ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
@@ -313,6 +314,8 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 		Request:     ba,
 		leaseStatus: pc.lease,
 	}
+	ctx := context.Background()
+	p.ctx.Store(&ctx)
 	p.encodedCommand = pc.encodeProposal(p)
 	return p
 }

@@ -47,7 +47,6 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
-        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil",

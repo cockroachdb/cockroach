@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -154,7 +155,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			}
 			// Expose proposal data for external test packages.
 			return store.cfg.TestingKnobs.TestingProposalSubmitFilter(kvserverbase.ProposalFilterArgs{
-				Ctx:        p.ctx,
+				Ctx:        p.Context(),
 				RangeID:    rangeID,
 				StoreID:    store.StoreID(),
 				ReplicaID:  replicaID,
@@ -328,6 +329,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
+	r.mu.raftTracer = *rafttrace.NewRaftTracer(ctx, r.Tracer, r.ClusterSettings(), &r.store.concurrentRaftTraces)
 	r.flowControlV2.InitRaftLocked(
 		ctx, replica_rac2.NewRaftNode(rg, (*replicaForRACv2)(r)), rg.LogMark())
 	return nil
