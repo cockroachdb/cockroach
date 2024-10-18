@@ -66,7 +66,8 @@ func MakeHTTPStorage(
 		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
 
-	client, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "http", base)
+	clientName := args.ExternalStorageOptions().ClientName
+	client, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "http", base, clientName)
 	if err != nil {
 		return nil, err
 	}

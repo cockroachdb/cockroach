@@ -41,6 +41,7 @@ go_test(
     name = "cloud_test",
     srcs = [
         "cloud_io_test.go",
+        "options_test.go",
         "uris_test.go",
     ],
     embed = [":cloud"],
