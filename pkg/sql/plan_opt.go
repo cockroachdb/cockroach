@@ -727,28 +727,30 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	if err != nil {
 		return nil, err
 	}
-	switch typ {
-	case memoTypeIdealGeneric:
-		// If we have an "ideal" generic memo, store it as a base memo. It will
-		// always be used regardless of plan_cache_mode, so there is no need to
-		// set GenericCost.
-		prep.BaseMemo = newMemo
-	case memoTypeGeneric:
-		prep.GenericMemo = newMemo
-		prep.Costs.SetGeneric(newMemo.RootExpr().(memo.RelExpr).Cost())
-		// Now that the cost of the generic plan is known, we need to
-		// re-evaluate the decision to use a generic or custom plan.
-		if !opc.useGenericPlan() {
-			// The generic plan that we just built is too expensive, so we need
-			// to build a custom plan. We recursively call fetchPreparedMemo in
-			// case we have a custom plan that can be reused as a starting point
-			// for optimization. The function should not recurse more than once.
-			return opc.fetchPreparedMemo(ctx)
+	if opc.allowMemoReuse {
+		switch typ {
+		case memoTypeIdealGeneric:
+			// If we have an "ideal" generic memo, store it as a base memo. It will
+			// always be used regardless of plan_cache_mode, so there is no need to
+			// set GenericCost.
+			prep.BaseMemo = newMemo
+		case memoTypeGeneric:
+			prep.GenericMemo = newMemo
+			prep.Costs.SetGeneric(newMemo.RootExpr().(memo.RelExpr).Cost())
+			// Now that the cost of the generic plan is known, we need to
+			// re-evaluate the decision to use a generic or custom plan.
+			if !opc.useGenericPlan() {
+				// The generic plan that we just built is too expensive, so we need
+				// to build a custom plan. We recursively call fetchPreparedMemo in
+				// case we have a custom plan that can be reused as a starting point
+				// for optimization. The function should not recurse more than once.
+				return opc.fetchPreparedMemo(ctx)
+			}
+		case memoTypeCustom:
+			prep.BaseMemo = newMemo
+		default:
+			return nil, errors.AssertionFailedf("unexpected memo type %v", typ)
 		}
-	case memoTypeCustom:
-		prep.BaseMemo = newMemo
-	default:
-		return nil, errors.AssertionFailedf("unexpected memo type %v", typ)
 	}
 
 	// Re-optimize the memo, if necessary.
