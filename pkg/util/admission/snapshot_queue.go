@@ -11,9 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/queue"
@@ -263,28 +261,21 @@ func newSnapshotWorkItem(count int64) *snapshotWorkItem {
 
 type SnapshotPacer struct {
 	snapshotQ     snapshotRequester
-	storeID       roachpb.StoreID
 	intWriteBytes int64
 }
 
-func NewSnapshotPacer(q snapshotRequester, s roachpb.StoreID) *SnapshotPacer {
+func NewSnapshotPacer(q snapshotRequester) *SnapshotPacer {
 	return &SnapshotPacer{
 		snapshotQ:     q,
-		storeID:       s,
 		intWriteBytes: 0,
 	}
 }
 
 func (p *SnapshotPacer) Pace(ctx context.Context, writeBytes int64, final bool) error {
-	// Return early if nil pacer or nil snapshotQ.
+	// Return early if nil pacer.
 	if p == nil {
 		return nil
 	}
-	if p.snapshotQ == nil {
-		log.Errorf(ctx, "unable to find snapshot queue for store: %s", p.storeID)
-		return nil
-	}
-
 	p.intWriteBytes += writeBytes
 	if p.intWriteBytes <= SnapshotBurstSize && !final {
 		return nil
@@ -294,11 +285,4 @@ func (p *SnapshotPacer) Pace(ctx context.Context, writeBytes int64, final bool) 
 	}
 	p.intWriteBytes = 0
 	return nil
-}
-
-func (p *SnapshotPacer) Close() {
-	if p == nil {
-		return
-	}
-	p.snapshotQ = nil
 }

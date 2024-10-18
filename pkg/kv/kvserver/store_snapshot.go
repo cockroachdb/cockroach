@@ -735,13 +735,14 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	var prevWriteBytes int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
+	if snapshotQ == nil {
+		log.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
+	}
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
-	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) {
-		pacer = admission.NewSnapshotPacer(snapshotQ, s.StoreID())
+	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
+		pacer = admission.NewSnapshotPacer(snapshotQ)
 	}
-	// It is safe to call Close() on a nil pacer.
-	defer pacer.Close()
 
 	for {
 		timingTag.start("recv")
