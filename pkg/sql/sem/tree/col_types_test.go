@@ -25,6 +25,7 @@ func TestParseColumnType(t *testing.T) {
 		expectedType *types.T
 	}{
 		{"BIT", types.MakeBit(1)},
+		{"BIT(0)", types.MakeBit(0)},
 		{"VARBIT", types.MakeVarBit(0)},
 		{"BIT(2)", types.MakeBit(2)},
 		{"VARBIT(2)", types.MakeVarBit(2)},
