@@ -154,11 +154,7 @@ func setupMetamorphic(p perturbation) variations {
 func setupFull(p perturbation) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.EpochLeases
-	// TODO(baptist): Inject this in a better way.
-	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
-		v.leaseType = registry.ExpirationLeases
-	}
+	v.leaseType = registry.ExpirationLeases
 	v.maxBlockBytes = 4096
 	v.splits = 10000
 	v.numNodes = 12
@@ -178,11 +174,7 @@ func setupFull(p perturbation) variations {
 func setupDev(p perturbation) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.EpochLeases
-	// TODO(baptist): Inject this in a better way.
-	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
-		v.leaseType = registry.ExpirationLeases
-	}
+	v.leaseType = registry.ExpirationLeases
 	v.maxBlockBytes = 1024
 	v.splits = 1
 	v.numNodes = 4
@@ -746,10 +738,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// TODO(baptist): Remove this block once #120073 is fixed.
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
+		stmt := "SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true"
+		t.L().Printf("setting %s", stmt)
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			t.Fatal(err)
 		}
+		t.L().Printf("set %s", stmt)
 		// This isn't strictly necessary, but it would be nice if this test passed at 10s (or lower).
 		if _, err := db.ExecContext(ctx,
 			`SET CLUSTER SETTING server.time_after_store_suspect = '10s'`); err != nil {
