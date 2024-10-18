@@ -879,4 +879,4 @@ file-defaults:
     flush-trigger-size: 1.0MiB
     max-buffer-size: 50MiB
 ----
-ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the "buffering" (buffered-writes) or "auditable" log (auditable) configuration.
+ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.
