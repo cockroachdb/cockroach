@@ -197,6 +197,34 @@ func NewTokenMetrics() *TokenMetrics {
 	return m
 }
 
+// TestingClear is used in tests to reset the metrics.
+func (m *TokenMetrics) TestingClear() {
+	// NB: we only clear the counter metrics, as the stream metrics are gauges.
+	for _, typ := range []TokenType{
+		EvalToken,
+		SendToken,
+	} {
+		for _, wc := range []admissionpb.WorkClass{
+			admissionpb.RegularWorkClass,
+			admissionpb.ElasticWorkClass,
+		} {
+			m.CounterMetrics[typ].Deducted[wc].Clear()
+			m.CounterMetrics[typ].Returned[wc].Clear()
+			m.CounterMetrics[typ].Unaccounted[wc].Clear()
+			m.CounterMetrics[typ].Disconnected[wc].Clear()
+			if typ == SendToken {
+				m.CounterMetrics[typ].SendQueue[0].ForceFlushDeducted.Clear()
+				for _, wc := range []admissionpb.WorkClass{
+					admissionpb.RegularWorkClass,
+					admissionpb.ElasticWorkClass,
+				} {
+					m.CounterMetrics[typ].SendQueue[0].PreventionDeducted[wc].Clear()
+				}
+			}
+		}
+	}
+}
+
 type TokenCounterMetrics struct {
 	Deducted     [admissionpb.NumWorkClasses]*metric.Counter
 	Returned     [admissionpb.NumWorkClasses]*metric.Counter
