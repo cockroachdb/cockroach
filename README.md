@@ -1,3 +1,5 @@
+[![Open in DevZero](https://assets.devzero.io/open-in-devzero.svg)](https://www.devzero.io/dashboard/recipes/new?repo-url=https://github.com/cockroachdb/cockroach)
+
 <p align="center">
   <img src='docs/media/cockroach_db.png?raw=true' width='70%'>
 </p>
