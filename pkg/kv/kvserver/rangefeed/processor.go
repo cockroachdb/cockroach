@@ -58,13 +58,18 @@ var (
 	)
 )
 
-// newErrBufferCapacityExceeded creates an error that is returned to subscribers
-// if the rangefeed processor is not able to keep up with the flow of incoming
-// events and is forced to drop events in order to not block.
+// newRetryErrBufferCapacityExceeded creates a retry error that is returned to
+// subscribers if the rangefeed processor is not able to keep up with the flow
+// of incoming events and is forced to drop events in order to not block. Client
+// side may choose to retry by restarting the rangefeed.
+func newRetryErrBufferCapacityExceeded() error {
+	return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+}
+
+// newErrBufferCapacityExceeded creates kvpb.Error that wraps
+// newRetryErrBufferCapacityExceeded.
 func newErrBufferCapacityExceeded() *kvpb.Error {
-	return kvpb.NewError(
-		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
-	)
+	return kvpb.NewError(newRetryErrBufferCapacityExceeded())
 }
 
 // Config encompasses the configuration required to create a Processor.
@@ -460,7 +465,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
+				r.Disconnect(kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 
@@ -578,7 +583,7 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	}
 }
 
-// Register  implements Processor interface.
+// Register implements Processor interface.
 func (p *LegacyProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
@@ -602,7 +607,9 @@ func (p *LegacyProcessor) Register(
 	select {
 	case p.regC <- r:
 		// Wait for response.
-		return true, <-p.filterResC
+		f := <-p.filterResC
+		stream.AddRegistration(r)
+		return true, f
 	case <-p.stoppedC:
 		return false, nil
 	}
