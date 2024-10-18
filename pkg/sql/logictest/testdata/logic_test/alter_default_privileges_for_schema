@@ -125,10 +125,6 @@ user root
 statement ok
 USE d
 
-# root must be a member of testuser to ALTER DEFAULT PRIVILEGES FOR ROLE testuser.
-statement ok
-GRANT testuser TO root
-
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SCHEMAS FROM testuser, testuser2
 

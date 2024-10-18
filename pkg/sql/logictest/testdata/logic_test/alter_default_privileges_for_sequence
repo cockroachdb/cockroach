@@ -141,9 +141,6 @@ statement ok
 USE d
 
 statement ok
-GRANT testuser TO root
-
-statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON SEQUENCES FROM testuser, testuser2
 
 user testuser
