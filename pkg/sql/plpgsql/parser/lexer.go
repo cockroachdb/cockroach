@@ -156,19 +156,10 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 				pos++
 			}
 			// Read in one or more comma-separated variables as the INTO target.
-			for ; pos < endPos; pos += 2 {
-				tok = l.tokens[pos]
-				if tok.id != IDENT {
-					return nil, errors.Newf("\"%s\" is not a scalar variable", tok.str)
-				}
-				variable := plpgsqltree.Variable(strings.TrimSpace(l.getStr(pos, pos+1)))
-				target = append(target, variable)
-				if pos+1 == endPos || l.tokens[pos+1].id != ',' {
-					// This is the end of the target list.
-					break
-				}
+			target, intoEndPos, err = l.readTarget(pos, endPos)
+			if err != nil {
+				return nil, err
 			}
-			intoEndPos = pos + 1
 		}
 	}
 
@@ -252,6 +243,176 @@ func (l *lexer) MakeDynamicExecuteStmt() (*plpgsqltree.DynamicExecute, error) {
 	return ret, nil
 }
 
+func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+	prefix := "FETCH "
+	if isMove {
+		prefix = "MOVE "
+	}
+	sqlStr, terminator, err := l.ReadSqlStatement(INTO, ';')
+	if err != nil {
+		return nil, err
+	}
+	sqlStr = prefix + sqlStr
+	sqlStmt, err := parser.ParseOne(sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	var cursor tree.CursorStmt
+	switch t := sqlStmt.AST.(type) {
+	case *tree.FetchCursor:
+		cursor = t.CursorStmt
+	case *tree.MoveCursor:
+		cursor = t.CursorStmt
+	default:
+		return nil, errors.Newf("invalid FETCH or MOVE syntax")
+	}
+	var target []plpgsqltree.Variable
+	if !isMove {
+		if terminator != INTO {
+			return nil, errors.Newf("invalid syntax for FETCH")
+		}
+		// Read past the INTO.
+		l.lastPos++
+		startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, false /* allowEmpty */, ';')
+		if err != nil {
+			return nil, err
+		}
+		var targetEnd int
+		target, targetEnd, err = l.readTarget(startPos, endPos)
+		if err != nil {
+			return nil, err
+		}
+		if targetEnd != endPos {
+			return nil, errors.Newf("expected INTO target to be a comma-separated list")
+		}
+		if len(target) == 0 {
+			return nil, errors.Newf("expected INTO target")
+		}
+	}
+	// Move past the semicolon.
+	l.lastPos++
+	return &plpgsqltree.Fetch{
+		Cursor: cursor,
+		Target: target,
+		IsMove: isMove,
+	}, nil
+}
+
+// ReadIntegerForLoopControl reads a loop control statement that uses integer
+// bounds. Syntax:
+//
+//	[ REVERSE ] expression .. expression [ BY expression ] LOOP
+func (l *lexer) ReadIntegerForLoopControl() (plpgsqltree.ForLoopControl, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+	var reverse bool
+	var byExprStr string
+	if l.Peek().id == REVERSE {
+		reverse = true
+		l.lastPos++
+	}
+	lowerBoundStr, _, err := l.ReadSqlExpr(DOT_DOT)
+	if err != nil {
+		return nil, err
+	}
+	l.lastPos++
+	upperBoundStr, terminator, err := l.ReadSqlExpr(LOOP, BY)
+	if err != nil {
+		return nil, err
+	}
+	l.lastPos++
+	if terminator == BY {
+		byExprStr, terminator, err = l.ReadSqlExpr(LOOP)
+		if err != nil {
+			return nil, err
+		}
+		l.lastPos++
+	}
+	if terminator == 0 {
+		return nil, errors.New("missing LOOP keyword")
+	}
+	var lowerBound, upperBound, byExpr plpgsqltree.Expr
+	lowerBound, err = l.ParseExpr(lowerBoundStr)
+	if err != nil {
+		return nil, err
+	}
+	upperBound, err = l.ParseExpr(upperBoundStr)
+	if err != nil {
+		return nil, err
+	}
+	if byExprStr != "" {
+		byExpr, err = l.ParseExpr(byExprStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &plpgsqltree.IntForLoopControl{
+		Reverse: reverse,
+		Lower:   lowerBound,
+		Upper:   upperBound,
+		Step:    byExpr,
+	}, err
+}
+
+func (l *lexer) ReadSqlExpr(
+	terminator1 int, terminators ...int,
+) (sqlStr string, terminatorMet int, err error) {
+	var startPos, endPos int
+	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
+		true /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
+	)
+	return l.getStr(startPos, endPos), terminatorMet, err
+}
+
+// ReadReturnExpr handles reading the expression for a RETURN statement, which
+// can be nonexistent.
+func (l *lexer) ReadReturnExpr() (sqlStr string, err error) {
+	var startPos, endPos int
+	startPos, endPos, _, err = l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
+	if err != nil || startPos == endPos {
+		return "", err
+	}
+	return l.getStr(startPos, endPos), err
+}
+
+func (l *lexer) ReadSqlStatement(
+	terminator1 int, terminators ...int,
+) (sqlStr string, terminatorMet int, err error) {
+	var startPos, endPos int
+	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
+		false /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
+	)
+	return l.getStr(startPos, endPos), terminatorMet, err
+}
+
+// findFirstOccurrence searches from the current position for occurrences of the
+// supplied tokens, returning the first one found. The cursor is not advanced
+// unless there is an error. If the given terminators are not found, the
+// function returns 0.
+func (l *lexer) findFirstOccurrence(
+	terminator1 int, terminators ...int,
+) (foundToken int, err error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+	originalPos := l.lastPos
+	_, _, terminatorMet, err := l.readSQLConstruct(
+		true /* isExpr */, true /* allowEmpty */, terminator1, terminators...,
+	)
+	if err == nil {
+		// Restore the original position.
+		l.lastPos = originalPos
+	}
+	return terminatorMet, err
+}
+
 func (l *lexer) readSQLConstruct(
 	isExpr, allowEmpty bool, terminator1 int, terminators ...int,
 ) (startPos, endPos, terminatorMet int, err error) {
@@ -305,99 +466,6 @@ func (l *lexer) readSQLConstruct(
 		}
 	}
 	return startPos, endPos, terminatorMet, nil
-}
-
-func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) {
-	if l.parser.Lookahead() != -1 {
-		// Push back the lookahead token so that it can be included.
-		l.PushBack(1)
-	}
-	prefix := "FETCH "
-	if isMove {
-		prefix = "MOVE "
-	}
-	sqlStr, terminator, err := l.ReadSqlStatement(INTO, ';')
-	if err != nil {
-		return nil, err
-	}
-	sqlStr = prefix + sqlStr
-	sqlStmt, err := parser.ParseOne(sqlStr)
-	if err != nil {
-		return nil, err
-	}
-	var cursor tree.CursorStmt
-	switch t := sqlStmt.AST.(type) {
-	case *tree.FetchCursor:
-		cursor = t.CursorStmt
-	case *tree.MoveCursor:
-		cursor = t.CursorStmt
-	default:
-		return nil, errors.Newf("invalid FETCH or MOVE syntax")
-	}
-	var target []plpgsqltree.Variable
-	if !isMove {
-		if terminator != INTO {
-			return nil, errors.Newf("invalid syntax for FETCH")
-		}
-		// Read past the INTO.
-		l.lastPos++
-		startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, false /* allowEmpty */, ';')
-		if err != nil {
-			return nil, err
-		}
-		for pos := startPos; pos < endPos; pos += 2 {
-			tok := l.tokens[pos]
-			if tok.id != IDENT {
-				return nil, errors.Newf("\"%s\" is not a scalar variable", tok.str)
-			}
-			if pos+1 != endPos && l.tokens[pos+1].id != ',' {
-				return nil, errors.Newf("expected INTO target to be a comma-separated list")
-			}
-			variable := plpgsqltree.Variable(strings.TrimSpace(l.getStr(pos, pos+1)))
-			target = append(target, variable)
-		}
-		if len(target) == 0 {
-			return nil, errors.Newf("expected INTO target")
-		}
-	}
-	// Move past the semicolon.
-	l.lastPos++
-	return &plpgsqltree.Fetch{
-		Cursor: cursor,
-		Target: target,
-		IsMove: isMove,
-	}, nil
-}
-
-func (l *lexer) ReadSqlExpr(
-	terminator1 int, terminators ...int,
-) (sqlStr string, terminatorMet int, err error) {
-	var startPos, endPos int
-	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
-		true /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
-	)
-	return l.getStr(startPos, endPos), terminatorMet, err
-}
-
-// ReadReturnExpr handles reading the expression for a RETURN statement, which
-// can be nonexistent.
-func (l *lexer) ReadReturnExpr() (sqlStr string, err error) {
-	var startPos, endPos int
-	startPos, endPos, _, err = l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
-	if err != nil || startPos == endPos {
-		return "", err
-	}
-	return l.getStr(startPos, endPos), err
-}
-
-func (l *lexer) ReadSqlStatement(
-	terminator1 int, terminators ...int,
-) (sqlStr string, terminatorMet int, err error) {
-	var startPos, endPos int
-	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
-		false /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
-	)
-	return l.getStr(startPos, endPos), terminatorMet, err
 }
 
 func (l *lexer) getStr(startPos, endPos int) string {
@@ -495,6 +563,36 @@ func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
 		return nil, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
 	}
 	return exprs[0], nil
+}
+
+// ReadTarget reads a comma-separated list of target variables from the current
+// position.
+func (l *lexer) ReadTarget() ([]plpgsqltree.Variable, error) {
+	startPos, endPos := l.lastPos+1, len(l.tokens)
+	target, targetEnd, err := l.readTarget(startPos, endPos)
+	l.lastPos = targetEnd - 1
+	return target, err
+}
+
+// readTarget reads a comma-separated list of target variables from the given
+// start position to the given end position. It returns the target list and its
+// end position.
+func (l *lexer) readTarget(
+	pos, endPos int,
+) (target []plpgsqltree.Variable, targetEnd int, err error) {
+	for ; pos < endPos; pos += 2 {
+		tok := l.tokens[pos]
+		if tok.id != IDENT {
+			return nil, 0, errors.Newf("\"%s\" is not a scalar variable", tok.str)
+		}
+		variable := plpgsqltree.Variable(strings.TrimSpace(l.getStr(pos, pos+1)))
+		target = append(target, variable)
+		if pos+1 == endPos || l.tokens[pos+1].id != ',' {
+			// This is the end of the target list.
+			break
+		}
+	}
+	return target, pos + 1, nil
 }
 
 func checkLoopLabels(start, end string) error {

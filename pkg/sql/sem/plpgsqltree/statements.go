@@ -605,95 +605,102 @@ func (s *While) WalkStmt(visitor StatementVisitor) Statement {
 	return newStmt
 }
 
-// stmt_for
-type ForInt struct {
-	StatementImpl
-	Label   string
-	Var     Variable
+// ForLoopControl is an interface covering the loop control structures for the
+// integer range, query, and cursor FOR loops.
+type ForLoopControl interface {
+	isForLoopControl()
+	Format(ctx *tree.FmtCtx)
+}
+
+type IntForLoopControl struct {
+	Reverse bool
 	Lower   Expr
 	Upper   Expr
 	Step    Expr
-	Reverse int
+}
+
+var _ ForLoopControl = &IntForLoopControl{}
+
+func (c *IntForLoopControl) isForLoopControl() {}
+
+func (c *IntForLoopControl) Format(ctx *tree.FmtCtx) {
+	if c.Reverse {
+		ctx.WriteString("REVERSE ")
+	}
+	ctx.FormatNode(c.Lower)
+	ctx.WriteString("..")
+	ctx.FormatNode(c.Upper)
+	if c.Step != nil {
+		ctx.WriteString(" BY ")
+		ctx.FormatNode(c.Step)
+	}
+}
+
+// stmt_for
+type ForLoop struct {
+	StatementImpl
+	Label   string
+	Target  []Variable
+	Control ForLoopControl
 	Body    []Statement
 }
 
-func (s *ForInt) Format(ctx *tree.FmtCtx) {
+func (s *ForLoop) CopyNode() *ForLoop {
+	copyNode := *s
+	copyNode.Body = append([]Statement(nil), copyNode.Body...)
+	return &copyNode
 }
 
-func (s *ForInt) PlpgSQLStatementTag() string {
-	return "stmt_for_int_loop"
+func (s *ForLoop) Format(ctx *tree.FmtCtx) {
+	if s.Label != "" {
+		ctx.WriteString("<<")
+		ctx.FormatNameP(&s.Label)
+		ctx.WriteString(">>\n")
+	}
+	ctx.WriteString("FOR ")
+	for i, target := range s.Target {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatName(string(target))
+	}
+	ctx.WriteString(" IN ")
+	ctx.FormatNode(s.Control)
+	ctx.WriteString(" LOOP\n")
+	for _, stmt := range s.Body {
+		ctx.FormatNode(stmt)
+	}
+	ctx.WriteString("END LOOP")
+	if s.Label != "" {
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
+	}
+	ctx.WriteString(";\n")
 }
 
-func (s *ForInt) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
+func (s *ForLoop) PlpgSQLStatementTag() string {
+	switch s.Control.(type) {
+	case *IntForLoopControl:
+		return "stmt_for_int_loop"
+	}
+	return "stmt_for_unknown"
 }
 
-type ForQuery struct {
-	StatementImpl
-	Label string
-	Var   Variable
-	Body  []Statement
-}
+func (s *ForLoop) WalkStmt(visitor StatementVisitor) Statement {
+	newStmt, recurse := visitor.Visit(s)
 
-func (s *ForQuery) Format(ctx *tree.FmtCtx) {
-}
-
-func (s *ForQuery) PlpgSQLStatementTag() string {
-	return "stmt_for_query_loop"
-}
-
-func (s *ForQuery) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
-}
-
-type ForSelect struct {
-	ForQuery
-	Query Expr
-}
-
-func (s *ForSelect) Format(ctx *tree.FmtCtx) {
-}
-
-func (s *ForSelect) PlpgSQLStatementTag() string {
-	return "stmt_query_select_loop"
-}
-
-func (s *ForSelect) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
-}
-
-type ForCursor struct {
-	ForQuery
-	CurVar   int
-	ArgQuery Expr
-}
-
-func (s *ForCursor) Format(ctx *tree.FmtCtx) {
-}
-
-func (s *ForCursor) PlpgSQLStatementTag() string {
-	return "stmt_for_query_cursor_loop"
-}
-
-func (s *ForCursor) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
-}
-
-type ForDynamic struct {
-	ForQuery
-	Query  Expr
-	Params []Expr
-}
-
-func (s *ForDynamic) Format(ctx *tree.FmtCtx) {
-}
-
-func (s *ForDynamic) PlpgSQLStatementTag() string {
-	return "stmt_for_dyn_loop"
-}
-
-func (s *ForDynamic) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
+	if recurse {
+		for i, bodyStmt := range s.Body {
+			newBodyStmt := bodyStmt.WalkStmt(visitor)
+			if newBodyStmt != bodyStmt {
+				if newStmt == s {
+					newStmt = s.CopyNode()
+				}
+				newStmt.(*ForLoop).Body[i] = newBodyStmt
+			}
+		}
+	}
+	return newStmt
 }
 
 // stmt_foreach_a
