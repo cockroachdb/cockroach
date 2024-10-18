@@ -4435,6 +4435,8 @@ type StatementCounters struct {
 	UpdateCount telemetry.CounterWithMetric
 	InsertCount telemetry.CounterWithMetric
 	DeleteCount telemetry.CounterWithMetric
+	// CRUDQueryCount includes all 4 CRUD statements above.
+	CRUDQueryCount telemetry.CounterWithMetric
 
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithMetric
@@ -4499,6 +4501,8 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertStarted, internal)),
 		DeleteCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
+		CRUDQueryCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
 		CopyCount: telemetry.NewCounterWithMetric(
@@ -4542,6 +4546,8 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertExecuted, internal)),
 		DeleteCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
+		CRUDQueryCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),
 		CopyCount: telemetry.NewCounterWithMetric(
@@ -4562,12 +4568,16 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		sc.TxnBeginCount.Inc()
 	case *tree.Select:
 		sc.SelectCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Update:
 		sc.UpdateCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Insert:
 		sc.InsertCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Delete:
 		sc.DeleteCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.CommitTransaction:
 		sc.TxnCommitCount.Inc()
 	case *tree.RollbackTransaction:
