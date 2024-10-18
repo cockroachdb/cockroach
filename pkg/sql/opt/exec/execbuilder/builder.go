@@ -7,6 +7,8 @@ package execbuilder
 
 import (
 	"context"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -168,7 +170,41 @@ type Builder struct {
 	IsANSIDML bool
 
 	// IndexesUsed list the indexes used in query with the format tableID@indexID.
-	IndexesUsed []string
+	IndexesUsed
+}
+
+// IndexesUsed is a list of indexes used in a query.
+type IndexesUsed struct {
+	indexes []struct {
+		tableID cat.StableID
+		indexID cat.StableID
+	}
+}
+
+// add adds the given index to the list, if it is not already present.
+func (iu *IndexesUsed) add(tableID, indexID cat.StableID) {
+	s := struct {
+		tableID cat.StableID
+		indexID cat.StableID
+	}{tableID, indexID}
+	if !slices.Contains(iu.indexes, s) {
+		iu.indexes = append(iu.indexes, s)
+	}
+}
+
+// Strings returns a slice of strings with the format tableID@indexID for each
+// index in the list.
+//
+// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of converting
+// to strings.
+func (iu *IndexesUsed) Strings() []string {
+	res := make([]string, len(iu.indexes))
+	const base = 10
+	for i, u := range iu.indexes {
+		res[i] = strconv.FormatUint(uint64(u.tableID), base) + "@" +
+			strconv.FormatUint(uint64(u.indexID), base)
+	}
+	return res
 }
 
 // New constructs an instance of the execution node builder using the

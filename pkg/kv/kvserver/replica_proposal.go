@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -116,7 +117,15 @@ type ProposalData struct {
 	// that during command application one should always use `replicatedCmd.ctx`
 	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
 	// scope, i.e. outside of raft command application.
-	ctx context.Context
+	//
+	// The context may be updated during the proposal lifecycle but will never
+	// be nil. To clear out the context, set it to context.Background().  It is
+	// protected by an atomic pointer because it can be read without holding the
+	// raftMu. Use ProposalData.Context() to read it.
+	//
+	// TODO(baptist): Track down all the places where we read and write ctx and
+	// determine whether we can convert this back to non-atomic field.
+	ctx atomic.Pointer[context.Context]
 
 	// An optional tracing span bound to the proposal in the case of async
 	// consensus (it will be referenced by p.ctx). We need to finish this span
@@ -216,6 +225,12 @@ type ProposalData struct {
 	lastReproposal *ProposalData
 }
 
+// Context returns the context associated with the proposal. The context may
+// change during the lifetime of the proposal.
+func (proposal *ProposalData) Context() context.Context {
+	return *proposal.ctx.Load()
+}
+
 // useReplicationAdmissionControl indicates whether this raft command should
 // be subject to replication admission control.
 func (proposal *ProposalData) useReplicationAdmissionControl() bool {
@@ -270,7 +285,8 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 		//
 		// NB: `proposal.ec.repl` might already have been cleared if we arrive here
 		// through finishApplication.
-		proposal.ctx = context.Background()
+		ctx := context.Background()
+		proposal.ctx.Store(&ctx)
 	}
 }
 
@@ -1050,13 +1066,13 @@ func (r *Replica) requestToProposal(
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
-		ctx:         ctx,
 		idKey:       idKey,
 		doneCh:      make(chan proposalResult, 1),
 		Local:       &res.Local,
 		Request:     ba,
 		leaseStatus: *st,
 	}
+	proposal.ctx.Store(&ctx)
 
 	if needConsensus {
 		proposal.command = &kvserverpb.RaftCommand{

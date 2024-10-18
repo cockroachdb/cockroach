@@ -942,6 +942,11 @@ type Store struct {
 	// has likely improved).
 	draining atomic.Bool
 
+	// concurrentRaftTraces is the number of concurrent raft trace requests that
+	// are currently registered. This limit is used to prevent extensive raft
+	// tracing from inadvertently impacting performance.
+	concurrentRaftTraces atomic.Int64
+
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: baseQueue.mu < Replica.raftMu < Replica.readOnlyCmdMu < Store.mu
 	// < Replica.mu < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
