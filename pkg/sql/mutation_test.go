@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -263,8 +264,9 @@ PARTITION ALL BY LIST (r) (
 			if err := rows.Scan(&id, &k, &r, &a); err != nil {
 				t.Fatal(err)
 			}
-			if id != tc.expectedOutput[0] || k != tc.expectedOutput[1] || r != tc.expectedOutput[2] || a != tc.expectedOutput[3] {
-				t.Fatalf("%d: expected %v, got %v", idx, tc.expectedOutput, []string{id, k, r, a})
+			res := []string{id, k, r, a}
+			if !reflect.DeepEqual(tc.expectedOutput, res) {
+				t.Fatalf("%d: expected %v, got %v", idx, tc.expectedOutput, res)
 			}
 		}
 		rows.Close()
