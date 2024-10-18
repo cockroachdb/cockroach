@@ -33,8 +33,14 @@ func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
 	return lg
 }
 
+func (m *latchManagerImpl) CheckOptimisticNoConflictsCtx(
+	ctx context.Context, lg latchGuard, spans *spanset.SpanSet,
+) bool {
+	return m.m.CheckOptimisticNoConflictsCtx(ctx, lg.(*spanlatch.Guard), spans)
+}
+
 func (m *latchManagerImpl) CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool {
-	return m.m.CheckOptimisticNoConflicts(lg.(*spanlatch.Guard), spans)
+	return m.m.CheckOptimisticNoConflictsCtx(context.Background(), lg.(*spanlatch.Guard), spans)
 }
 
 func (m *latchManagerImpl) WaitUntilAcquired(
