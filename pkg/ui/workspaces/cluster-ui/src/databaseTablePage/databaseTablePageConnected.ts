@@ -89,6 +89,9 @@ export const mapStateToProps = (
       lastReset,
     },
     isTenant,
+    // When running in cloud, we always load this information. The
+    // configurability is for SH customers.
+    includeLocalityMetadata: true,
   };
 };
 
@@ -99,9 +102,15 @@ export const mapDispatchToProps = (
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => {
     dispatch(
-      tableDetailsActions.refresh({ database, table, csIndexUnusedDuration }),
+      tableDetailsActions.refresh({
+        database,
+        table,
+        csIndexUnusedDuration,
+        includeLocalityMetadata,
+      }),
     );
   },
   refreshIndexStats: (database: string, table: string) => {

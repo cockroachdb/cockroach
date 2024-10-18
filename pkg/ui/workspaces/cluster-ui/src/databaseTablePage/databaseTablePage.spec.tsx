@@ -60,6 +60,7 @@ describe("DatabaseTablePage", () => {
       isExact: false,
       params: {},
     },
+    includeLocalityMetadata: true,
   };
   it("should call refreshNodes if isTenant is false", () => {
     const mockCallback = jest.fn(() => {});

@@ -36,6 +36,7 @@ type ZoneConfigLevelType = cockroach.server.serverpb.ZoneConfigurationLevel;
 export type DatabaseDetailsReqParams = {
   database: string;
   csIndexUnusedDuration: string;
+  includeLocalityMetadata: boolean;
 };
 
 export type DatabaseDetailsSpanStatsReqParams = {
@@ -471,26 +472,50 @@ type DatabaseDetailsQuery<RowType> = {
   ) => Promise<boolean>;
 };
 
-const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseId,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseGrantsQuery,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseTablesQuery,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseReplicasAndRegions,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseIndexUsageStats,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getDatabaseZoneConfig,
-];
+function databaseDetailQueries(
+  includeLocalityData: boolean,
+): DatabaseDetailsQuery<DatabaseDetailsRow>[] {
+  if (includeLocalityData) {
+    return [
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseId,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseGrantsQuery,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseTablesQuery,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseReplicasAndRegions,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseIndexUsageStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseZoneConfig,
+    ];
+  } else {
+    return [
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseId,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseGrantsQuery,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseTablesQuery,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseIndexUsageStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getDatabaseZoneConfig,
+    ];
+  }
+}
 
 export function createDatabaseDetailsReq(
   params: DatabaseDetailsReqParams,
@@ -498,7 +523,7 @@ export function createDatabaseDetailsReq(
   return {
     ...createSqlExecutionRequest(
       params.database,
-      databaseDetailQueries.map(query =>
+      databaseDetailQueries(params.includeLocalityMetadata).map(query =>
         query.createStmt(params.database, params.csIndexUnusedDuration),
       ),
     ),
@@ -554,7 +579,9 @@ async function fetchDatabaseDetails(
       errs.push(txnResult.error);
     }
     const query: DatabaseDetailsQuery<DatabaseDetailsRow> =
-      databaseDetailQueries[txnResult.statement - 1];
+      databaseDetailQueries(params.includeLocalityMetadata)[
+        txnResult.statement - 1
+      ];
     query.addToDatabaseDetail(txnResult, detailsResponse);
   });
   if (resp.error) {
@@ -578,7 +605,9 @@ async function fetchSeparatelyDatabaseDetails(
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
   const errs: Error[] = [];
-  for (const databaseDetailQuery of databaseDetailQueries) {
+  for (const databaseDetailQuery of databaseDetailQueries(
+    params.includeLocalityMetadata,
+  )) {
     const req = createSqlExecutionRequest(params.database, [
       databaseDetailQuery.createStmt(
         params.database,

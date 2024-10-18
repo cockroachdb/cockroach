@@ -313,6 +313,7 @@ Replaces 'make ui-watch'.`,
 			args := []string{
 				"build",
 				"//pkg/ui/workspaces/cluster-ui:cluster-ui-lib",
+				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files",
 			}
 			if !isOss {
 				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib")

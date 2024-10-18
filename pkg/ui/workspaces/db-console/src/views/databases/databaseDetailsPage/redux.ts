@@ -19,6 +19,7 @@ import {
 } from "src/redux/apiReducers";
 import {
   selectDropUnusedIndexDuration,
+  selectIncludeLocalityMetadataEnabled,
   selectIndexRecommendationsEnabled,
 } from "src/redux/clusterSettings";
 import { LocalSetting } from "src/redux/localsettings";
@@ -99,25 +100,33 @@ export const mapStateToProps = (
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
     csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
+    includeLocalityMetadataSetting: selectIncludeLocalityMetadataEnabled(state),
   };
 };
 
 export const mapDispatchToProps = {
-  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+  refreshDatabaseDetails: (
+    database: string,
+    csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
+  ) => {
     return refreshDatabaseDetails({
       database,
       csIndexUnusedDuration,
+      includeLocalityMetadata,
     });
   },
   refreshTableDetails: (
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => {
     return refreshTableDetails({
       database,
       table,
       csIndexUnusedDuration,
+      includeLocalityMetadata,
     });
   },
   onViewModeChange: (viewMode: ViewMode) => viewModeLocalSetting.set(viewMode),

@@ -39,7 +39,7 @@ describe("DatabaseDetails sagas", () => {
   const database = "test_db";
   const csIndexUnusedDuration = indexUnusedDuration;
   const requestAction: PayloadAction<DatabaseDetailsReqParams> = {
-    payload: { database, csIndexUnusedDuration },
+    payload: { database, csIndexUnusedDuration, includeLocalityMetadata: true },
     type: "request",
   };
   const databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse> = {

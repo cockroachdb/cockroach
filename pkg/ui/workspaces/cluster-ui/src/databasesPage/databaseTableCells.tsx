@@ -63,7 +63,7 @@ export const DatabaseNameCell = ({ database }: CellProps): JSX.Element => {
   const isCockroachCloud = useContext(CockroachCloudContext);
   const linkURL = isCockroachCloud
     ? `${location.pathname}/${database.name}`
-    : EncodeDatabaseUri(database.name);
+    : `/legacy${EncodeDatabaseUri(database.name)}`;
   let icon = <StackIcon className={cx("icon--s", "icon--primary")} />;
 
   const needsWarning =

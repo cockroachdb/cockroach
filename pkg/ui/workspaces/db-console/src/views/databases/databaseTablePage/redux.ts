@@ -22,6 +22,7 @@ import {
 import {
   selectAutomaticStatsCollectionEnabled,
   selectDropUnusedIndexDuration,
+  selectIncludeLocalityMetadataEnabled,
   selectIndexRecommendationsEnabled,
   selectIndexUsageStatsEnabled,
 } from "src/redux/clusterSettings";
@@ -82,6 +83,7 @@ export const mapStateToProps = (
       lastReset: lastReset,
     },
     isTenant,
+    includeLocalityMetadata: selectIncludeLocalityMetadataEnabled(state),
   };
 };
 
@@ -90,11 +92,13 @@ export const mapDispatchToProps = {
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => {
     return refreshTableDetails({
       database,
       table,
       csIndexUnusedDuration,
+      includeLocalityMetadata,
     });
   },
   refreshIndexStats: (database: string, table: string) => {

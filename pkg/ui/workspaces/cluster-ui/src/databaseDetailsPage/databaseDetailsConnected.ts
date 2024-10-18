@@ -86,16 +86,28 @@ const mapDispatchToProps = (
 ): DatabaseDetailsPageActions => ({
   refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
     dispatch(
-      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+      databaseDetailsActions.refresh({
+        database,
+        csIndexUnusedDuration,
+        // When running in cloud, we always load this information. The
+        // configurability is for SH customers.
+        includeLocalityMetadata: true,
+      }),
     );
   },
   refreshTableDetails: (
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => {
     dispatch(
-      tableDetailsActions.refresh({ database, table, csIndexUnusedDuration }),
+      tableDetailsActions.refresh({
+        database,
+        table,
+        csIndexUnusedDuration,
+        includeLocalityMetadata,
+      }),
     );
   },
   onViewModeChange: (viewMode: ViewMode) => {

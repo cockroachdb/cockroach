@@ -220,32 +220,49 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           path={`/table/:${tableIdAttr}`}
                           component={TableDetailsPageV2}
                         />
+
+                        {/* legacy databases page */}
                         <Route
                           exact
                           path="/legacy/databases"
                           component={DatabasesPageLegacy}
                         />
-                        <Redirect
-                          from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
-                          to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
-                        />
-
-                        <Redirect exact from="/database" to="/databases" />
                         <Route
                           exact
-                          path={`/database/:${databaseNameAttr}`}
+                          path={`/legacy/databases/:${databaseIDAttr}`}
+                          component={DatabaseDetailsPageLegacy}
+                        />
+                        <Redirect
+                          from={`/legacy/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                          to={`/legacy/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                        />
+                        <Redirect
+                          exact
+                          from="/legacy/database"
+                          to="/legacy/databases"
+                        />
+                        <Route
+                          exact
+                          path={`/legacy/database/:${databaseNameAttr}`}
                           component={DatabaseDetailsPageLegacy}
                         />
                         <Redirect
                           exact
-                          from={`/database/:${databaseNameAttr}/table`}
-                          to={`/database/:${databaseNameAttr}`}
+                          from={`/legacy/database/:${databaseNameAttr}/table`}
+                          to={`/legacy/database/:${databaseNameAttr}`}
                         />
                         <Route
                           exact
-                          path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                          path={`/legacy/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                           component={DatabaseTablePage}
                         />
+                        <Route
+                          exact
+                          path={`/legacy/database/:${databaseNameAttr}/table/:${tableNameAttr}/index/:${indexNameAttr}`}
+                          component={IndexDetailsPage}
+                        />
+
+                        {/* The index page component is identical in legacy and V2 releases for DB pages. */}
                         <Route
                           exact
                           path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}/index/:${indexNameAttr}`}
