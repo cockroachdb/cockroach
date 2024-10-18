@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Stream is an object capable of transmitting RangeFeedEvents from a server
@@ -29,26 +30,22 @@ type PerRangeEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *UnbufferedSender
+	sender   sender
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64, sender sender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		ctx:      ctx,
 		rangeID:  rangeID,
 		streamID: streamID,
-		wrapped:  wrapped,
+		sender:   sender,
 	}
 }
 
 var _ kvpb.RangeFeedEventSink = (*PerRangeEventSink)(nil)
 var _ Stream = (*PerRangeEventSink)(nil)
-
-func (s *PerRangeEventSink) Context() context.Context {
-	return s.ctx
-}
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -61,7 +58,7 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendUnbuffered(response)
+	return s.sender.send(response, nil)
 }
 
 // Disconnect implements the Stream interface. It requests the UnbufferedSender
@@ -76,7 +73,10 @@ func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	s.wrapped.SendBufferedError(ev)
+	if err := s.sender.send(ev, nil); err != nil {
+		log.Errorf(context.Background(),
+			"failed to send rangefeed completion error back to client due to broken stream: %v", err)
+	}
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client

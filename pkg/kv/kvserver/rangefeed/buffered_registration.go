@@ -70,6 +70,7 @@ type bufferedRegistration struct {
 var _ registration = &bufferedRegistration{}
 
 func newBufferedRegistration(
+	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -80,21 +81,24 @@ func newBufferedRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
-	unregisterFn func(),
+	unregisterFn func(registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			streamCtx:        streamCtx,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
 			withFiltering:    withFiltering,
 			withOmitRemote:   withOmitRemote,
-			unreg:            unregisterFn,
 		},
 		metrics:       metrics,
 		stream:        stream,
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
+	}
+	br.unreg = func() {
+		unregisterFn(br)
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.caughtUp = true
@@ -212,8 +216,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.stream.Context().Done():
-			return br.stream.Context().Err()
+		case <-br.streamCtx.Done():
+			return br.streamCtx.Err()
 		}
 	}
 }

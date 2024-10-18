@@ -58,13 +58,15 @@ var (
 	)
 )
 
+func newRetryErrBufferCapacityExceeded() error {
+	return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+}
+
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
 func newErrBufferCapacityExceeded() *kvpb.Error {
-	return kvpb.NewError(
-		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
-	)
+	return kvpb.NewError(newRetryErrBufferCapacityExceeded())
 }
 
 // Config encompasses the configuration required to create a Processor.
@@ -111,6 +113,11 @@ type Config struct {
 	// for low-volume system ranges, since the worker pool is small (default 2).
 	// Only has an effect when Scheduler is used.
 	Priority bool
+
+	// UnregisterFromReplica is a callback provided from the
+	// replica that this processor can call when shutting down to
+	// remove itself from the replica.
+	UnregisterFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -196,6 +203,7 @@ type Processor interface {
 	//
 	// NB: startTS is exclusive; the first possible event will be at startTS.Next().
 	Register(
+		streamCtx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
 		catchUpIter *CatchUpIterator,
@@ -203,7 +211,6 @@ type Processor interface {
 		withFiltering bool,
 		withOmitRemote bool,
 		stream Stream,
-		disconnectFn func(),
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -580,6 +587,7 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 
 // Register  implements Processor interface.
 func (p *LegacyProcessor) Register(
+	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -587,7 +595,6 @@ func (p *LegacyProcessor) Register(
 	withFiltering bool,
 	withOmitRemote bool,
 	stream Stream,
-	disconnectFn func(),
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -596,9 +603,10 @@ func (p *LegacyProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+		streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, func(r registration) {
+			p.reg.Unregister(context.Background(), r)
+		})
 	select {
 	case p.regC <- r:
 		// Wait for response.
