@@ -30,7 +30,7 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="SQL Statements"
+      title="SQL Queries Per Second"
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
@@ -58,6 +58,11 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.delete.count"
           title="Deletes"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.crud_query.count"
+          title="Total Queries"
           nonNegativeRate
         />
       </Axis>
