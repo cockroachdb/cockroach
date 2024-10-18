@@ -129,22 +129,24 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	for _, oldRole := range n.normalizedOldRoles {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
-			isOwner, err := isOwner(params.ctx, params.p, lCtx.dbDescs[dbID], oldRole)
+			dbDesc := lCtx.dbDescs[dbID]
+			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, dbDesc)
 			if err != nil {
 				return err
 			}
-			if isOwner {
-				if err := n.reassignDatabaseOwner(lCtx.dbDescs[dbID], params); err != nil {
+			if owner == oldRole {
+				if err := n.reassignDatabaseOwner(dbDesc, params); err != nil {
 					return err
 				}
 			}
 		}
 		for _, schemaID := range lCtx.schemaIDs {
-			isOwner, err := isOwner(params.ctx, params.p, lCtx.schemaDescs[schemaID], oldRole)
+			schemaDesc := lCtx.schemaDescs[schemaID]
+			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, schemaDesc)
 			if err != nil {
 				return err
 			}
-			if isOwner {
+			if owner == oldRole {
 				// Don't reassign the descriptorless public schema for the system
 				// database.
 				if schemaID == keys.SystemPublicSchemaID {
@@ -157,33 +159,36 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 
 		for _, tbID := range lCtx.tbIDs {
-			isOwner, err := isOwner(params.ctx, params.p, lCtx.tbDescs[tbID], oldRole)
+			tbDesc := lCtx.tbDescs[tbID]
+			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, tbDesc)
 			if err != nil {
 				return err
 			}
-			if isOwner {
+			if owner == oldRole {
 				if err := n.reassignTableOwner(lCtx.tbDescs[tbID], params); err != nil {
 					return err
 				}
 			}
 		}
 		for _, typID := range lCtx.typIDs {
-			isOwner, err := isOwner(params.ctx, params.p, lCtx.typDescs[typID], oldRole)
+			typDesc := lCtx.typDescs[typID]
+			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, typDesc)
 			if err != nil {
 				return err
 			}
-			if isOwner && (lCtx.typDescs[typID].AsAliasTypeDescriptor() == nil) {
+			if owner == oldRole && (lCtx.typDescs[typID].AsAliasTypeDescriptor() == nil) {
 				if err := n.reassignTypeOwner(lCtx.typDescs[typID].(catalog.NonAliasTypeDescriptor), params); err != nil {
 					return err
 				}
 			}
 		}
 		for _, fnID := range lCtx.fnIDs {
-			isOwner, err := isOwner(params.ctx, params.p, lCtx.fnDescs[fnID], oldRole)
+			fnDesc := lCtx.fnDescs[fnID]
+			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, fnDesc)
 			if err != nil {
 				return err
 			}
-			if isOwner {
+			if owner == oldRole {
 				if err := n.reassignFunctionOwner(lCtx.fnDescs[fnID], params); err != nil {
 					return err
 				}
