@@ -7,10 +7,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,16 +46,6 @@ cockroachdb/dev-inf:
 
 func loadYamlTeams(yaml string) (team.Map, error) {
 	return team.LoadTeams(strings.NewReader(yaml))
-}
-
-func prefixAll(params map[string]string) map[string]string {
-	updated := make(map[string]string)
-
-	for k, v := range params {
-		updated[roachtestPrefix(k)] = v
-	}
-
-	return updated
 }
 
 func TestShouldPost(t *testing.T) {
@@ -125,377 +117,170 @@ func TestCreatePostRequest(t *testing.T) {
 	createFailure := func(ref error) failure {
 		return failure{squashedErr: ref}
 	}
-
+	reg := makeTestRegistry()
 	const testName = "github_test"
 
-	// TODO(radu): these tests should be converted to datadriven tests which
-	// output the full rendering of the github issue message along with the
-	// metadata.
-	testCases := []struct {
-		nonReleaseBlocker       bool
-		clusterCreationFailed   bool
-		loadTeamsFailed         bool
-		localSSD                bool
-		runtimeAssertionsBuild  bool
-		coverageBuild           bool
-		extraLabels             []string
-		arch                    vm.CPUArch
-		failures                []failure
-		sideEyeURL              string
-		expectedPost            bool
-		expectedLabels          []string
-		expectedTeam            string
-		expectedName            string
-		expectedMessagePrefix   string
-		expectedReleaseBlocker  bool
-		expectedSkipTestFailure bool
-		expectedParams          map[string]string
-		message                 string
-	}{
-		// 1.
-		{
-			nonReleaseBlocker: true,
-			failures:          []failure{createFailure(errors.New("other"))},
-			expectedPost:      true,
-			expectedLabels:    []string{"C-test-failure"},
-			expectedTeam:      "@cockroachdb/unowned",
-			expectedName:      testName,
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"encrypted":              "false",
-				"fs":                     "ext4",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"arch":                   "amd64",
-				"localSSD":               "false",
-				"runtimeAssertionsBuild": "false",
-				"coverageBuild":          "false",
-			}),
-		},
-		// 2.
-		{
-			localSSD: true,
-			arch:     vm.ArchARM64,
-			failures: []failure{
-				createFailure(errClusterProvisioningFailed(errors.New("gcloud error"))),
-			},
-			expectedPost:          true,
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "cluster_creation",
-			expectedMessagePrefix: testName + " failed",
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"encrypted":              "false",
-				"fs":                     "ext4",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"arch":                   "arm64",
-				"localSSD":               "true",
-				"runtimeAssertionsBuild": "false",
-				"coverageBuild":          "false",
-			}),
-		},
-		// 3. Assert that release-blocker label doesn't exist when
-		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
-		// in the event of a failed cluster creation, nil `vmOptions` and
-		// `clusterImpl` are not dereferenced
-		{
-			clusterCreationFailed: true,
-			failures:              []failure{createFailure(rperrors.NewSSHError(errors.New("oops")))},
-			expectedPost:          true,
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "ssh_problem",
-			expectedMessagePrefix: testName + " failed",
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"runtimeAssertionsBuild": "false",
-				"coverageBuild":          "false",
-			}),
-		},
-		// 4. Simulate failure loading TEAMS.yaml
-		{
-			nonReleaseBlocker: true,
-			loadTeamsFailed:   true,
-			failures:          []failure{createFailure(errors.New("other"))},
-			expectedLabels:    []string{"C-test-failure"},
-		},
-		// 5. Error during dns operation.
-		{
-			nonReleaseBlocker:     true,
-			failures:              []failure{createFailure(rperrors.TransientFailure(errors.New("oops"), "dns_problem"))},
-			expectedPost:          true,
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "dns_problem",
-			expectedMessagePrefix: testName + " failed",
-		},
-		// 6. Assert that extra labels in the test spec are added to the issue.
-		{
-			extraLabels:    []string{"foo-label"},
-			failures:       []failure{createFailure(errors.New("other"))},
-			expectedPost:   true,
-			expectedLabels: []string{"C-test-failure", "release-blocker", "foo-label"},
-			expectedTeam:   "@cockroachdb/unowned",
-			expectedName:   testName,
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"encrypted":              "false",
-				"fs":                     "ext4",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"arch":                   "amd64",
-				"localSSD":               "false",
-				"runtimeAssertionsBuild": "false",
-				"coverageBuild":          "false",
-			}),
-		},
-		// 7. Verify that release-blocker label is applied on runtime assertion builds
-		{
-			runtimeAssertionsBuild: true,
-			failures:               []failure{createFailure(errors.New("other"))},
-			expectedPost:           true,
-			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled", "release-blocker"},
-			expectedTeam:           "@cockroachdb/unowned",
-			expectedName:           testName,
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"encrypted":              "false",
-				"fs":                     "ext4",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"arch":                   "amd64",
-				"localSSD":               "false",
-				"runtimeAssertionsBuild": "true",
-				"coverageBuild":          "false",
-			}),
-		},
-		// 8. Verify that release-blocker label is not applied on coverage builds (for
-		// now).
-		{
-			extraLabels:    []string{"foo-label"},
-			coverageBuild:  true,
-			failures:       []failure{createFailure(errors.New("other"))},
-			expectedPost:   true,
-			expectedTeam:   "@cockroachdb/unowned",
-			expectedName:   testName,
-			expectedLabels: []string{"C-test-failure", "B-coverage-enabled", "foo-label"},
-			expectedParams: prefixAll(map[string]string{
-				"cloud":                  "gce",
-				"encrypted":              "false",
-				"fs":                     "ext4",
-				"ssd":                    "0",
-				"cpu":                    "4",
-				"arch":                   "amd64",
-				"localSSD":               "false",
-				"runtimeAssertionsBuild": "false",
-				"coverageBuild":          "true",
-			}),
-		},
-		// 9. Verify preemption failure are routed to test-eng and marked as infra-flake, when the
-		// first failure is a non-handled error.
-		{
-			nonReleaseBlocker:     true,
-			failures:              []failure{createFailure(errors.New("random")), createFailure(vmPreemptionError("my_VM"))},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "vm_preemption",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 10. Verify preemption failure are routed to test-eng and marked as infra-flake, when the only error is
-		// preemption failure
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				{errors: []error{vmPreemptionError("my_VM")}},
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "vm_preemption",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 11. Errors with ownership that happen as a result of roachprod
-		// errors are ignored -- roachprod errors are routed directly to
-		// test-eng.
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				createFailure(rperrors.TransientFailure(errors.New("oops"), "dns_problem")),
-				createFailure(registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.New("oops"))),
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "dns_problem",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 12. Nested ErrorWithOwnership -- assignment is based on innermost
-		// error in the chain.
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				createFailure(registry.ErrorWithOwner(
-					registry.OwnerSQLFoundations,
-					registry.ErrorWithOwner(
-						registry.OwnerTestEng,
-						errors.New("oops"),
-						registry.WithTitleOverride("monitor_failure"),
-						registry.InfraFlake,
-					),
-				)),
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "monitor_failure",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 13. Arbitrary transient failures lead to an issue assigned to
-		// test eng with the corresponding title override.
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				createFailure(rperrors.TransientFailure(errors.New("oops"), "some_problem")),
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "some_problem",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 14. When a transient error happens as a result of *another*
-		// transient error, the corresponding issue uses the first
-		// transient error in the chain.
-		{
-			failures: []failure{
-				createFailure(rperrors.TransientFailure(
-					rperrors.NewSSHError(errors.New("oops")), "some_problem",
-				)),
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "ssh_problem",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
-		// first failure is a non-handled error.
-		{
-			nonReleaseBlocker:     true,
-			failures:              []failure{createFailure(errors.New("random")), createFailure(vmHostError("my_VM"))},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "vm_host_error",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 16. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
-		// hostError failure
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				{errors: []error{vmHostError("my_VM")}},
-			},
-			expectedPost:          true,
-			expectedTeam:          "@cockroachdb/test-eng",
-			expectedName:          "vm_host_error",
-			expectedMessagePrefix: testName + " failed",
-			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
-		},
-		// 17. Verify that a Side-Eye URL is rendered in the issue.
-		{
-			nonReleaseBlocker: true,
-			failures: []failure{
-				createFailure(errors.New("random"))},
-			expectedName:   testName,
-			expectedLabels: []string{"C-test-failure"},
-			expectedTeam:   "@cockroachdb/unowned",
-			sideEyeURL:     "https://app.side-eye.io/snapshots/1",
-		},
+	type githubIssueOpts struct {
+		failures               []failure
+		runtimeAssertionsBuild bool
+		coverageBuild          bool
+		loadTeamsFailed        bool
 	}
 
-	reg := makeTestRegistry()
-	for idx, testCase := range testCases {
-		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
-			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(testCase.arch))
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
+		clusterSpec := reg.MakeClusterSpec(1)
 
-			testSpec := &registry.TestSpec{
-				Name:              testName,
-				Owner:             OwnerUnitTest,
-				Cluster:           clusterSpec,
-				NonReleaseBlocker: testCase.nonReleaseBlocker,
-				ExtraLabels:       testCase.extraLabels,
+		testSpec := &registry.TestSpec{
+			Name:    testName,
+			Owner:   OwnerUnitTest,
+			Cluster: clusterSpec,
+		}
+
+		ti := &testImpl{
+			spec:  testSpec,
+			l:     nilLogger(),
+			start: time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
+			end:   time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
+		}
+
+		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
+		vo := vm.DefaultCreateOpts()
+		vmOpts := &vo
+		teamLoadFn := validTeamsFn
+
+		testCase := githubIssueOpts{}
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			if d.Cmd == "post" {
+				github := &githubIssues{
+					vmCreateOpts: vmOpts,
+					cluster:      testClusterImpl,
+					teamLoader:   teamLoadFn,
+				}
+
+				// See: `formatFailure` which formats failures for roachtests. Try to
+				// follow it here.
+				var b strings.Builder
+				for i, f := range testCase.failures {
+					if i > 0 {
+						fmt.Fprintln(&b)
+					}
+					// N.B. Don't use %+v here even though roachtest does. We don't
+					// want the stack trace to be outputted which will differ based
+					// on where this test is run and prone to flaking.
+					fmt.Fprintf(&b, "%v", f.squashedErr)
+				}
+				message := b.String()
+
+				req, err := github.createPostRequest(
+					testName, ti.start, ti.end, testSpec, testCase.failures,
+					message, "https://app.side-eye.io/snapshots/1", testCase.runtimeAssertionsBuild, testCase.coverageBuild,
+				)
+				if testCase.loadTeamsFailed {
+					// Assert that if TEAMS.yaml cannot be loaded then function errors.
+					require.Error(t, err)
+					return ""
+				}
+				require.NoError(t, err)
+
+				post, err := formatPostRequest(req)
+				require.NoError(t, err)
+
+				return post
 			}
 
-			ti := &testImpl{
-				spec:  testSpec,
-				l:     nilLogger(),
-				start: time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
-				end:   time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
-			}
+			switch d.Cmd {
+			case "add-failure":
+				refError := errors.Newf("%s", d.CmdArgs[0].Vals[0])
 
-			testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
-			vo := vm.DefaultCreateOpts()
-			vmOpts := &vo
+				// The type(s) of error, listed from innermost to outermost.
+				if len(d.CmdArgs) == 2 {
+					errorTypes := d.CmdArgs[1].Vals
+					for _, e := range errorTypes {
+						switch e {
+						case "cluster-provision":
+							refError = errClusterProvisioningFailed(refError)
+						case "transient-error":
+							refError = rperrors.TransientFailure(refError, "some_problem")
+						case "ssh-flake":
+							refError = rperrors.NewSSHError(refError)
+						case "dns-flake":
+							refError = rperrors.TransientFailure(refError, "dns_problem")
+						case "vm-preemption":
+							refError = vmPreemptionError("my_VM")
+						case "vm-host-error":
+							refError = vmHostError("my_VM")
+						case "error-with-owner-sql-foundations":
+							refError = registry.ErrorWithOwner(registry.OwnerSQLFoundations, refError)
+						case "error-with-owner-test-eng":
+							refError = registry.ErrorWithOwner(registry.OwnerTestEng, refError)
+						}
+					}
+				}
 
-			if testCase.clusterCreationFailed {
-				testClusterImpl = nil
+				testCase.failures = append(testCase.failures, createFailure(refError))
+			case "add-label":
+				ti.spec.ExtraLabels = append(ti.spec.ExtraLabels, d.CmdArgs[0].Vals...)
+			case "set-cluster-create-failed":
+				// We won't have either if cluster create fails.
 				vmOpts = nil
-			} else if !testCase.localSSD {
-				// The default is true set in `vm.DefaultCreateOpts`
-				vmOpts.SSDOpts.UseLocalSSD = false
-			}
-
-			teamLoadFn := validTeamsFn
-
-			if testCase.loadTeamsFailed {
+				testClusterImpl = nil
+			case "set-non-release-blocker":
+				ti.spec.NonReleaseBlocker = true
+			case "set-load-teams-failed":
 				teamLoadFn = invalidTeamsFn
+				testCase.loadTeamsFailed = true
+			case "set-runtime-assertions-build":
+				testCase.runtimeAssertionsBuild = true
+			case "set-coverage-enabled-build":
+				testCase.coverageBuild = true
 			}
 
-			github := &githubIssues{
-				vmCreateOpts: vmOpts,
-				cluster:      testClusterImpl,
-				teamLoader:   teamLoadFn,
-			}
-
-			req, err := github.createPostRequest(
-				testName, ti.start, ti.end, testSpec, testCase.failures,
-				testCase.message, testCase.sideEyeURL, testCase.runtimeAssertionsBuild, testCase.coverageBuild,
-			)
-			if testCase.loadTeamsFailed {
-				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-
-			r := &issues.Renderer{}
-			req.HelpCommand(r)
-			file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
-			echotest.Require(t, r.String(), filepath.Join("testdata", file))
-
-			if testCase.expectedParams != nil {
-				require.Equal(t, testCase.expectedParams, req.ExtraParams)
-			}
-
-			expLabels := append([]string{"O-roachtest"}, testCase.expectedLabels...)
-			sort.Strings(expLabels)
-			sort.Strings(req.Labels)
-			require.Equal(t, expLabels, req.Labels)
-
-			require.Contains(t, req.MentionOnCreate, testCase.expectedTeam)
-			require.Equal(t, testCase.expectedName, req.TestName)
-			require.Contains(t, req.Message, testCase.expectedMessagePrefix)
-			if testCase.sideEyeURL != "" {
-				require.Equal(t, req.SideEyeSnapshotMsg, "A Side-Eye cluster snapshot was captured on timeout: ")
-				require.Equal(t, req.SideEyeSnapshotURL, testCase.sideEyeURL)
-			}
+			return "ok"
 		})
+	})
+}
+
+// formatPostRequest returns a string representation of the rendered PostRequest.
+// Additionally, it also includes labels, as well as a link that can be followed
+// to open the issue in Github.
+func formatPostRequest(req issues.PostRequest) (string, error) {
+	data := issues.TemplateData{
+		PostRequest:        req,
+		Parameters:         req.ExtraParams,
+		SideEyeSnapshotMsg: req.SideEyeSnapshotMsg,
+		SideEyeSnapshotURL: req.SideEyeSnapshotURL,
+		CondensedMessage:   issues.CondensedMessage(req.Message),
+		Branch:             "test_branch",
+		Commit:             "test_SHA",
+		PackageNameShort:   strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
 	}
+
+	formatter := issues.UnitTestFormatter
+	r := &issues.Renderer{}
+	if err := formatter.Body(r, data); err != nil {
+		return "", err
+	}
+
+	var post strings.Builder
+	post.WriteString(r.String())
+
+	// Github labels are normally not part of the rendered issue body, but we want to
+	// still test that they are correctly set so append them here.
+	post.WriteString("\n------\nLabels:\n")
+	for _, label := range req.Labels {
+		post.WriteString(fmt.Sprintf("- <code>%s</code>\n", label))
+	}
+
+	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Add("title", formatter.Title(data))
+	q.Add("body", post.String())
+	u.RawQuery = q.Encode()
+	post.WriteString(fmt.Sprintf("Rendered:%s", u.String()))
+
+	return post.String(), nil
 }
