@@ -91,6 +91,9 @@ type variations struct {
 	workload             workloadType
 	acceptableChange     float64
 	cloud                registry.CloudSet
+
+	// This is set after the initial fill period.
+	stableRatePerNode int
 }
 
 const NUM_REGIONS = 3
@@ -208,6 +211,7 @@ func registerLatencyTests(r registry.Registry) {
 	addMetamorphic(r, &decommission{}, 5.0)
 	addMetamorphic(r, backfill{}, 40.0)
 	addMetamorphic(r, &slowDisk{}, math.Inf(1))
+	addMetamorphic(r, &elasticWorkload{}, 5.0)
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
@@ -217,6 +221,7 @@ func registerLatencyTests(r registry.Registry) {
 	addFull(r, &decommission{drain: true}, 5.0)
 	addFull(r, backfill{}, 40.0)
 	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
+	addFull(r, &elasticWorkload{}, 5.0)
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
@@ -226,6 +231,7 @@ func registerLatencyTests(r registry.Registry) {
 	addDev(r, &decommission{drain: true}, math.Inf(1))
 	addDev(r, backfill{}, math.Inf(1))
 	addDev(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
+	addDev(r, &elasticWorkload{}, math.Inf(1))
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -305,6 +311,53 @@ type perturbation interface {
 	// endPerturbation ends the system change. Not all perturbations do anything on stop.
 	// It returns the duration looking backwards to collect performance stats.
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
+}
+
+// elasticWorkload will start a workload with elastic priority. It uses the same
+// characteristics as the normal workload. However since the normal workload
+// runs at 50% CPU this adds another 2x the stable rate so it will be slowed
+// down by AC.
+// TODO(baptist): Add whether we ramp or start full workload
+// TODO(baptist): Add max usage of the workload.
+// TODO(baptist): Add block size.
+// TODO(baptist): Add a max rate.
+type elasticWorkload struct{}
+
+var _ perturbation = elasticWorkload{}
+
+func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) {}
+
+func (e elasticWorkload) startTargetNode(ctx context.Context, t test.Test, v variations) {
+	v.startNoBackup(ctx, t, v.targetNodes())
+	// Create enough splits to start with one replica on each store.
+	initCmd := fmt.Sprintf("./cockroach workload init kv --db elastic --splits %d {pgurl:1}", v.splits)
+	v.Run(ctx, option.WithNodes(v.Node(1)), initCmd)
+}
+
+func (e elasticWorkload) startPerturbation(
+	ctx context.Context, t test.Test, v variations,
+) time.Duration {
+	startTime := timeutil.Now()
+	// TODO(baptist): Use the v.workload with the additional flags when we add
+	// new workloads. Otherwise the rate won't be relevant.
+	runCmd := fmt.Sprintf(
+		"./cockroach workload run kv --db elastic --txn-qos=background --duration=%s --max-rate=%d --max-block-bytes=%d --min-block-bytes=%d --concurrency=500 {pgurl%s}",
+		v.perturbationDuration, v.stableRatePerNode*2, v.maxBlockBytes, v.maxBlockBytes, v.stableNodes())
+	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
+
+	// Wait a few seconds to allow the latency to resume after stopping the
+	// workload. This makes it easier to separate the perturbation from the
+	// validation phases.
+	waitDuration(ctx, 5*time.Second)
+	return timeutil.Since(startTime)
+}
+
+// endPerturbation implements perturbation.
+func (e elasticWorkload) endPerturbation(
+	ctx context.Context, t test.Test, v variations,
+) time.Duration {
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
 }
 
 // backfill will create a backfill table during the startup and an index on it
@@ -785,17 +838,16 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	require.NoError(t, err)
 
 	// Start the consistent workload and begin collecting profiles.
-	var stableRatePerNode int
 	select {
 	case rate := <-clusterMaxRate:
-		stableRatePerNode = int(float64(rate) * v.ratioOfMax / float64(v.numWorkloadNodes))
-		t.Status(fmt.Sprintf("T2: running workload at stable rate of %d per node", stableRatePerNode))
+		v.stableRatePerNode = int(float64(rate) * v.ratioOfMax / float64(v.numWorkloadNodes))
+		t.Status(fmt.Sprintf("T2: running workload at stable rate of %d per node", v.stableRatePerNode))
 	case <-ctx.Done(): // closes when the caller cancels the ctx
 		t.Fatal("failed to get cluster max rate")
 	}
 	var data *workloadData
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		if data, err = v.workload.runWorkload(ctx, v, 0, stableRatePerNode); err != nil && !errors.Is(err, context.Canceled) {
+		if data, err = v.workload.runWorkload(ctx, v, 0, v.stableRatePerNode); err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil
