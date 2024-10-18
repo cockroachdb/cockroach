@@ -16,7 +16,7 @@ upload-logs
   }
 }
 ----
-ABC/123/dt=20240716/hour=17:
+ABC/123/dt=20240716/hour=17/1/cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log:
 Upload ID: 123
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs
 {"data":{"type":"archives","attributes":{"name":"123","query":"-*","destination":{"type":"gcs","path":"ABC/123","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
@@ -76,7 +76,8 @@ upload-logs log-format=crdb-v1
   }
 }
 ----
-ABC/123/dt=20240716/hour=17:
+ABC/123/dt=20240716/hour=17/1/cockroach.node1.username.2024-07-16T17_51_43Z.048498.log:
+ABC/123/dt=20240716/hour=17/2/cockroach.node2.username.2024-07-16T17_51_43Z.048498.log:
 Upload ID: 123
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=logs --log-format=crdb-v1
 {"data":{"type":"archives","attributes":{"name":"123","query":"-*","destination":{"type":"gcs","path":"ABC/123","bucket":"debugzip-archives","integration":{"project_id":"arjun-sandbox-424904","client_email":"datadog-archive@arjun-sandbox-424904.iam.gserviceaccount.com"}}}}}
