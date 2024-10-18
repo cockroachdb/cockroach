@@ -4105,6 +4105,102 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	sqlDB.ExpectErr(t, "checksum mismatch", `RESTORE data.* FROM $1`, localFoo)
 }
 
+// TestNonLinearChain observes the effect of a non-linear chain of backups, for
+// example if two inc backups run concurrently, where the second starts before
+// the first finishes and thus does not use the first's end time when picking a
+// start time. In such a chain this first backup is made redundant by the second
+// and should be ignored by restore rather than restored.
+func TestNonLinearChain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TODOTestTenantDisabled, ExternalIODir: dir, Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}})
+
+	tc.Start(t)
+	defer tc.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Make a table with a row in it and make a full backup of it.
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t VALUES (0)`)
+	sqlDB.Exec(t, `BACKUP TABLE defaultdb.t INTO $1`, localFoo)
+	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP LATEST IN $1]`, localFoo), 1)
+
+	// Write a row and note the time that includes that row.
+	var ts1, ts2 string
+	sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
+
+	// Start *but pause rather than finish* an inc backup to ts1 of our new row.
+	var j jobspb.JobID
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
+	sqlDB.QueryRow(t, fmt.Sprintf(`BACKUP TABLE defaultdb.t INTO LATEST IN $1 AS OF SYSTEM TIME %s WITH DETACHED`, ts1), localFoo).Scan(&j)
+	jobutils.WaitForJobToPause(t, sqlDB, j)
+	sqlDB.Exec(t, `RESET CLUSTER SETTING jobs.debug.pausepoints`)
+
+	// Add another row and record the time that includes it.
+	sqlDB.Exec(t, `INSERT INTO t VALUES (2)`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts2)
+
+	// Run -- and finish -- an inc backup to ts2. Since the first inc has not yet
+	// finished, this will find the full as its parent and use its end, rather
+	// than the paused inc, as its start time.
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE defaultdb.t INTO LATEST IN $1 AS OF SYSTEM TIME %s`, ts2), localFoo)
+
+	// We should see two end times now in the shown backup -- the full and this
+	// (second) inc.
+	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP LATEST IN $1]`, localFoo), 2)
+
+	// Now we have a full ending at t0, an incomplete inc from t0 to t1, and a
+	// complete inc also from t0 but to t2. We will move `t` out of our way and
+	// run a restore of the chain, i.e. to t2 to see what happens, noting how many
+	// files we open to do so.
+	sqlDB.Exec(t, `DROP TABLE t`)
+	openedBefore := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened")
+	sqlDB.Exec(t, `RESTORE TABLE defaultdb.t FROM LATEST IN $1`, localFoo)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"0"}, {"1"}, {"2"}})
+
+	// Note how many files the restore opened.
+	openedA := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened") - openedBefore
+
+	// Now let's let the paused backup finish, adding a bonus "spur" to the chian.
+	sqlDB.Exec(t, `RESUME JOB $1`, j)
+	jobutils.WaitForJobToSucceed(t, sqlDB, j)
+
+	// We should see three end times now in the shown backup -- the full, the 2nd
+	// inc we saw before, but now also this first inc as well.
+	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP LATEST IN $1]`, localFoo), 3)
+
+	// Restore the same thing -- t2 -- we did before but now with the extra inc
+	// spur hanging out in the chain. This should produce the same result, and we
+	// would like it to only open one extra file to do so -- the manifest that
+	// includes the timestamps that then show it is not needed by the restore.
+	sqlDB.Exec(t, `DROP TABLE t`)
+	sqlDB.Exec(t, `RESTORE TABLE defaultdb.t FROM LATEST IN $1`, localFoo)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"0"}, {"1"}, {"2"}})
+	openedB := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened") - openedA - openedBefore
+	// TODO(dt): enable this assertion once it holds.
+	if false {
+		require.Equal(t, openedA+1, openedB)
+	} else {
+		require.Less(t, openedA+1, openedB)
+	}
+
+	// Finally, make sure we can restore from the tip of the spur, not just the
+	// tip of the chain.
+	sqlDB.Exec(t, `DROP TABLE t`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE defaultdb.t FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts1), localFoo)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"0"}, {"1"}})
+}
+
 func TestTimestampMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
