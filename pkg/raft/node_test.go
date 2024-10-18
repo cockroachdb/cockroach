@@ -790,25 +790,25 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	}
 
 	s.hardState = persistedHardState
-	s.ents = make([]raftpb.Entry, 10)
+	entries := make([]raftpb.Entry, 10)
 	var size uint64
-	for i := range s.ents {
+	for i := range entries {
 		ent := raftpb.Entry{
 			Term:  1,
 			Index: uint64(i + 1),
 			Type:  raftpb.EntryNormal,
 			Data:  []byte("a"),
 		}
-
-		s.ents[i] = ent
+		entries[i] = ent
 		size += uint64(ent.Size())
 	}
+	s.ls = LogSlice{term: 1, entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
 	// not be included in the initial rd.CommittedEntries. However, our storage will ignore
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
-	cfg.MaxSizePerMsg = size - uint64(s.ents[len(s.ents)-1].Size()) - 1
+	cfg.MaxSizePerMsg = size - uint64(entries[len(entries)-1].Size()) - 1
 
 	rn, err := NewRawNode(cfg)
 	require.NoError(t, err)
