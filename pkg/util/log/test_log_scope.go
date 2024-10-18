@@ -62,7 +62,7 @@ type tShim interface {
 
 // Scope creates a TestLogScope which corresponds to the lifetime of a
 // temporary logging directory. If -show-logs was passed on the
-// command line, this is a no-op. Otherwise, it behaves
+// // command line, this is a no-op. Otherwise, it behaves
 // like ScopeWithoutShowLogs().
 //
 // See the documentation of ScopeWithoutShowLogs() for API usage and
