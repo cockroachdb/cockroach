@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -457,10 +458,6 @@ func newDummyStream(ctx context.Context, name string) *dummyStream {
 	}
 }
 
-func (s *dummyStream) Context() context.Context {
-	return s.ctx
-}
-
 func (s *dummyStream) SendUnbufferedIsThreadSafe() {}
 
 func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
@@ -476,11 +473,12 @@ func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *dummyStream) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *dummyStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
+
+func (s *dummyStream) AddRegistration(d rangefeed.Disconnector) {}
 
 func waitReplicaRangeFeed(
 	ctx context.Context, r *kvserver.Replica, req *kvpb.RangeFeedRequest, stream *dummyStream,
@@ -493,7 +491,7 @@ func waitReplicaRangeFeed(
 		return stream.SendUnbuffered(&event)
 	}
 
-	err := r.RangeFeed(req, stream, nil /* pacer */)
+	err := r.RangeFeed(stream.ctx, req, stream, nil /* pacer */)
 	if err != nil {
 		return sendErrToStream(kvpb.NewError(err))
 	}
