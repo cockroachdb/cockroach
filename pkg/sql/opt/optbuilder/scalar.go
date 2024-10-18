@@ -244,6 +244,8 @@ func (b *Builder) buildScalar(
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
+			// TODO(mgartner): Rather than use WithoutTypeModifiers here,
+			// consider typing the CaseExpr without a type modifier.
 			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(

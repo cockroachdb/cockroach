@@ -28,6 +28,9 @@ func CastTypeName(t *types.T) string {
 	case oid.T_text:
 		// SQLString returns `string`
 		return "text"
+	case oid.T_bit:
+		// SQLString returns `decimal`
+		return "bit"
 	}
 	return strings.ToLower(t.SQLString())
 }
