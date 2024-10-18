@@ -1456,7 +1456,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	require.NoError(t, s3.RangeFeed(&req, sink)) // check if we've errored yet
+	require.NoError(t, s3.RangeFeed(sink.ctx, &req, sink)) // check if we've errored yet
 	require.NoError(t, sink.Error())
 	t.Logf("started rangefeed on %s", repl3)
 
@@ -1626,10 +1626,6 @@ type channelSink struct {
 
 func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channelSink {
 	return &channelSink{ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1)}
-}
-
-func (c *channelSink) Context() context.Context {
-	return c.ctx
 }
 
 func (c *channelSink) SendUnbufferedIsThreadSafe() {}
