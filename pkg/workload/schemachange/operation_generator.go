@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -357,7 +358,10 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 
 	def := &tree.ColumnTableDef{
-		Name: tree.Name(columnName),
+		// This might be a bit unpleasant, but we need to ensure that even though
+		// identifiers should not be quoted due to our type-related issue, we still
+		// want to ensure that fuzzed column names get quoted if needed.
+		Name: tree.Name(lexbase.EscapeSQLIdent(columnName)),
 		Type: typName,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
@@ -391,6 +395,8 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
+	isJSONTyp := typ != nil && typ.Family() == types.ArrayFamily &&
+		typ.ArrayContents().Family() == types.JsonFamily
 	op := makeOpStmt(OpStmtDDL)
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
@@ -402,8 +408,16 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code:      pgcode.FeatureNotSupported,
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
+		// JSON arrays are not supported as a column type (#23468).
+		{
+			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
+		},
 	}.add(op.expectedExecErrors)
-	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
+	// Our type inside `def` will get quoted during
+	// lexbase.EncodeRestrictedSQLIdent down the line by default. We have to
+	// specify that identifiers should not get quoted so that our types do not
+	// get quoted (not valid SQL).
+	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsStringWithFlags(def, tree.FmtBareIdentifiers))
 	return op, nil
 }
 
@@ -995,7 +1009,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
 	duplicateStore := false
-	virtualComputedStored := false
+	isStoringVirtualComputed := false
 	regionColStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
@@ -1009,13 +1023,13 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			}
 
 			// Virtual computed columns are not allowed to be indexed
-			if columnNames[i].generated && !virtualComputedStored {
-				isStored, err := og.columnIsStoredComputed(ctx, tx, tableName, columnNames[i].name)
+			if columnNames[i].generated && !isStoringVirtualComputed {
+				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
-				if !isStored {
-					virtualComputedStored = true
+				if isVirtualComputed {
+					isStoringVirtualComputed = true
 				}
 			}
 
@@ -1077,12 +1091,12 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
-			{code: pgcode.Uncategorized, condition: virtualComputedStored},
+			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		}.add(stmt.expectedExecErrors)
 	}
 
-	stmt.sql = tree.Serialize(def)
+	stmt.sql = tree.AsStringWithFlags(def, tree.FmtBareIdentifiers)
 	return stmt, nil
 }
 
@@ -1637,16 +1651,26 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
+	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
-		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
+		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	}.add(stmt.expectedExecErrors)
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName)
+	// TODO(#126967): We need to add a check for the column being in an expression
+	// to an index. In the case where the expression does not already exist for
+	// us to use, we add an internal crdb_internal_idx_expr prefixed column to
+	// the table.
+	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
+
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -1676,11 +1700,22 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return nil, err
 	}
-	stmt := makeOpStmt(OpStmtDDL)
-	if !columnExists {
-		stmt.expectedExecErrors.add(pgcode.UndefinedColumn)
+	colIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName)
+	colIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
+	}.add(stmt.expectedExecErrors)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`, tableName,
+		lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -1725,7 +1760,7 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 		{pgcode.UndefinedColumn, !columnExists},
 		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
 	}.add(stmt.expectedExecErrors)
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -1768,7 +1803,7 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	}.add(stmt.expectedExecErrors)
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP STORED`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -2015,7 +2050,7 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, srcColumnName)
+	columnIsDependedOnByView, err := og.columnIsDependedOnByView(ctx, tx, tableName, srcColumnName)
 	if err != nil {
 		return nil, err
 	}
@@ -2024,11 +2059,11 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
 		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
-		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
+		{pgcode.DependentObjectsStillExist, columnIsDependedOnByView},
 	}.add(stmt.expectedExecErrors)
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
-		tableName, srcColumnName, destColumnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
+		tableName, lexbase.EscapeSQLIdent(srcColumnName), lexbase.EscapeSQLIdent(destColumnName))
 	return stmt, nil
 }
 
@@ -2267,8 +2302,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if !columnExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT "IrrelevantValue"`,
-				tableName, columnForDefault.name),
-			pgcode.UndefinedColumn), nil
+				tableName, lexbase.EscapeSQLIdent(columnForDefault.name)), pgcode.UndefinedColumn), nil
 	}
 
 	datumTyp := columnForDefault.typ
@@ -2279,9 +2313,16 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if newTyp == nil {
+			errCode := pgcode.UndefinedColumn
+			// Setting default on generated column short-circuits and returns a syntax
+			// error.
+			if columnForDefault.generated {
+				errCode = pgcode.Syntax
+			}
 			return makeOpStmtForSingleError(OpStmtDDL,
-				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, columnForDefault.name, newTypeName.SQLString()),
-				pgcode.UndefinedColumn), nil
+				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
+					tableName, lexbase.EscapeSQLIdent(columnForDefault.name), newTypeName.SQLString()),
+				errCode), nil
 		}
 		datumTyp = newTyp
 	}
@@ -2291,13 +2332,14 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
-
 	// Generated columns cannot have default values.
 	if columnForDefault.generated {
-		stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable))
+	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName,
+		lexbase.EscapeSQLIdent(columnForDefault.name), strDefault)
 	return stmt, nil
 }
 
@@ -2355,7 +2397,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return nil, err
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET NOT NULL`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -2423,8 +2465,8 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
 	}.add(stmt.expectedExecErrors)
 
-	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString())
+	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
+		setSessionVariableString, tableName, lexbase.EscapeSQLIdent(columnForTypeChange.name), newTypeName.SQLString())
 	return stmt, nil
 }
 
