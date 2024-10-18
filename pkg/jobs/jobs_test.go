@@ -2377,7 +2377,7 @@ func TestJobInTxn(t *testing.T) {
 
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
+		_, err = txn.Exec("BACKUP tobeaborted INTO doesnotmattter")
 		require.NoError(t, err)
 
 		// If we rollback then the job should not run
@@ -2402,7 +2402,7 @@ func TestJobInTxn(t *testing.T) {
 		// Now let's actually commit the transaction and check that the job ran.
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP tocommit TO foo")
+		_, err = txn.Exec("BACKUP tocommit INTO foo")
 		require.NoError(t, err)
 		// Committing will block and wait for all jobs to run.
 		require.NoError(t, txn.Commit())
@@ -2424,10 +2424,10 @@ func TestJobInTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add a succeeding job.
-		_, err = txn.Exec("BACKUP doesnotmatter TO doesnotmattter")
+		_, err = txn.Exec("BACKUP doesnotmatter INTO doesnotmattter")
 		require.NoError(t, err)
 		// We hooked up a failing test job to RESTORE.
-		_, err = txn.Exec("RESTORE TABLE tbl FROM somewhere")
+		_, err = txn.Exec("RESTORE TABLE tbl FROM LATEST IN somewhere")
 		require.NoError(t, err)
 
 		// Now let's actually commit the transaction and check that there is a
