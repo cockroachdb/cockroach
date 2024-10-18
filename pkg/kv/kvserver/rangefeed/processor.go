@@ -111,6 +111,11 @@ type Config struct {
 	// for low-volume system ranges, since the worker pool is small (default 2).
 	// Only has an effect when Scheduler is used.
 	Priority bool
+
+	// UnregisterFromReplica is a callback provided from the
+	// replica that this processor can call when shutting down to
+	// remove itself from the replica.
+	UnregisterFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -460,7 +465,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
+				r.disconnect(ctx, kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 
@@ -597,7 +602,7 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, func(context.Context, registration) {},
 	)
 	select {
 	case p.regC <- r:
