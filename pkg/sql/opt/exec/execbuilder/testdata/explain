@@ -560,7 +560,8 @@ vectorized: true
     └── • group (hash)
         │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
         │
-        └── • window
+        └── • sort
+            │ order: +index_name
             │
             └── • hash join (left outer)
                 │ equality: (column_name) = (column_name)
@@ -734,39 +735,41 @@ vectorized: true
             │ estimated row count: 3
             │ order: +"role"
             │
-            └── • hash join (left outer)
+            └── • merge join (right outer)
                 │ estimated row count: 3
-                │ equality: (username) = (member)
-                │ left cols are key
+                │ equality: (member) = (username)
+                │ right cols are key
                 │
-                ├── • group (hash)
-                │   │ estimated row count: 3
-                │   │ group by: username
-                │   │
-                │   └── • window
-                │       │ estimated row count: 3
-                │       │
-                │       └── • render
-                │           │
-                │           └── • hash join (left outer)
-                │               │ estimated row count: 3
-                │               │ equality: (username) = (username)
-                │               │ left cols are key
-                │               │
-                │               ├── • scan
-                │               │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
-                │               │     table: users@users_user_id_idx
-                │               │     spans: FULL SCAN
-                │               │
-                │               └── • scan
-                │                     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                │                     table: role_options@primary
-                │                     spans: FULL SCAN
+                ├── • scan
+                │     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+                │     table: role_members@role_members_member_idx
+                │     spans: FULL SCAN
                 │
-                └── • scan
-                      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                      table: role_members@role_members_role_idx
-                      spans: FULL SCAN
+                └── • group (streaming)
+                    │ estimated row count: 3
+                    │ group by: username
+                    │ ordered: +username
+                    │
+                    └── • sort
+                        │ estimated row count: 3
+                        │ order: +username,+option
+                        │
+                        └── • render
+                            │
+                            └── • hash join (left outer)
+                                │ estimated row count: 3
+                                │ equality: (username) = (username)
+                                │ left cols are key
+                                │
+                                ├── • scan
+                                │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+                                │     table: users@users_user_id_idx
+                                │     spans: FULL SCAN
+                                │
+                                └── • scan
+                                      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+                                      table: role_options@primary
+                                      spans: FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
