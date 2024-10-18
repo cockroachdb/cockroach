@@ -23,3 +23,10 @@ func WithAzureStorageTestingKnobs(knobs base.ModuleTestingKnobs) ExternalStorage
 		opts.AzureStorageTestingKnobs = knobs
 	}
 }
+
+// WithClientName sets the "client" label on network metrics.
+func WithClientName(name string) ExternalStorageOption {
+	return func(opts *ExternalStorageOptions) {
+		opts.ClientName = name
+	}
+}
