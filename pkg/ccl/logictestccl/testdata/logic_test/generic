@@ -1193,3 +1193,30 @@ quality of service: regular
           regions: <hidden>
           actual row count: 1
           size: 1 column, 1 row
+
+statement ok
+DEALLOCATE p
+
+# Regression test for #132963. Do not cache non-reusable plans.
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+PREPARE p AS SELECT create_statement FROM [SHOW CREATE TABLE a]
+
+query T
+EXECUTE p
+----
+CREATE TABLE public.a (
+  a INT8 NOT NULL,
+  CONSTRAINT a_pkey PRIMARY KEY (a ASC)
+)
+
+statement ok
+ALTER TABLE a RENAME TO b
+
+statement error pgcode 42P01 pq: relation \"a\" does not exist
+EXECUTE p
