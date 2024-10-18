@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -1141,9 +1142,11 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 	repl := store.LookupReplica(splitKeyAddr)
 	targetRange.Store(int32(repl.RangeID))
 
-	recording, processErr, enqueueErr := store.Enqueue(
-		ctx, "split", repl, true /* skipShouldQueue */, false, /* async */
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, enqueueErr := store.Enqueue(
+		traceCtx, "split", repl, true /* skipShouldQueue */, false, /* async */
 	)
+	recording := rec()
 	require.NoError(t, enqueueErr)
 	require.NoError(t, processErr)
 
@@ -4356,7 +4359,7 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			// Update the split key override so that the split queue will enqueue and
 			// process the range. Remove it afterwards to avoid retrying the LHS.
 			splitKeyOverride.Store(splitKey)
-			_, processErr, enqueueErr := store.Enqueue(ctx, "split", repl, false /* shouldSkipQueue */, false /* async */)
+			processErr, enqueueErr := store.Enqueue(ctx, "split", repl, false /* shouldSkipQueue */, false /* async */)
 			splitKeyOverride.Store(roachpb.Key{})
 			require.NoError(t, enqueueErr)
 

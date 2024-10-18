@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +86,7 @@ func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 			})
 
 			{
-				_, processErr, err := store.Enqueue(
+				processErr, err := store.Enqueue(
 					ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
 				)
 				require.NoError(t, processErr)
@@ -102,11 +103,13 @@ func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 			})
 
 			{
-				trace, processErr, err := store.Enqueue(
-					ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
+				traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+				processErr, err := store.Enqueue(
+					traceCtx, queueName, repl, true /* skipShouldQueue */, false, /* async */
 				)
 				require.NoError(t, err)
 				require.NoError(t, processErr)
+				trace := rec()
 				require.Error(t, testutils.MatchInOrder(trace.String(), `unable to retrieve conf reader`))
 				require.Error(t, testutils.MatchInOrder(trace.String(), `queue has been disabled`))
 			}
