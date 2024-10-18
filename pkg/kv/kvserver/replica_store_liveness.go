@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
@@ -121,4 +122,56 @@ func (r *replicaRLockedStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
 	// A support expiration timestamp equal to the current time is considered
 	// expired, to be consistent with support withdrawal in Store Liveness.
 	return ts.LessEq(r.store.Clock().Now())
+}
+
+// InspectAllStoreLiveness is an interface that allows for per-store Store
+// Liveness state to be combined into a per-node view. It powers the inspectz
+// Store Liveness functionality.
+// TODO(mira): This may not be the best place for this definition and the ones
+// below; we just need a place in kvserver to house them (so that we can access
+// Store.storeLiveness).
+type InspectAllStoreLiveness interface {
+	InspectAllSupportFrom() []slpb.SupportStatesPerStore
+	InspectAllSupportFor() []slpb.SupportStatesPerStore
+}
+
+// StoresForStoreLiveness is a wrapper around Stores that implements
+// InspectAllStoreLiveness.
+type StoresForStoreLiveness Stores
+
+var _ InspectAllStoreLiveness = &StoresForStoreLiveness{}
+
+// MakeStoresForStoreLiveness casts Stores into StoresForStoreLiveness.
+func MakeStoresForStoreLiveness(stores *Stores) *StoresForStoreLiveness {
+	return (*StoresForStoreLiveness)(stores)
+}
+
+// InspectAllSupportFrom implements the InspectAllStoreLiveness interface. It
+// iterates over all stores and aggregates their SupportStates.
+func (sfsl *StoresForStoreLiveness) InspectAllSupportFrom() []slpb.SupportStatesPerStore {
+	stores := (*Stores)(sfsl)
+	var sspf []slpb.SupportStatesPerStore
+	if err := stores.VisitStores(func(s *Store) error {
+		sspf = append(sspf, s.storeLiveness.InspectSupportFrom())
+		return nil
+	}); err != nil {
+		log.Errorf(stores.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return sspf
+}
+
+// InspectAllSupportFor implements the InspectAllStoreLiveness interface. It
+// iterates over all stores and aggregates their SupportStates.
+func (sfsl *StoresForStoreLiveness) InspectAllSupportFor() []slpb.SupportStatesPerStore {
+	stores := (*Stores)(sfsl)
+	var sspf []slpb.SupportStatesPerStore
+	if err := stores.VisitStores(func(s *Store) error {
+		sspf = append(sspf, s.storeLiveness.InspectSupportFor())
+		return nil
+	}); err != nil {
+		log.Errorf(stores.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return sspf
 }
