@@ -310,6 +310,69 @@ WHERE t108360_1.t = (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t
 ----
 tt
 
+# Regression test for #131346. Ensure CASE is typed correctly and that a cast to
+# the BIT type with an unspecified length behaves correctly during distributed
+# execution.
+statement ok
+CREATE TABLE t131346v (v VARBIT);
+INSERT INTO t131346v VALUES ('11');
+
+statement ok
+CREATE TABLE t131346b (b BIT);
+INSERT INTO t131346b VALUES ('0');
+
+query T
+SELECT v FROM t131346v, t131346b
+WHERE v NOT BETWEEN v AND
+  (CASE WHEN NULL THEN '0'::BIT ELSE v END)
+----
+
+query T
+SELECT v FROM t131346v, t131346b
+WHERE v NOT BETWEEN v AND
+  (CASE WHEN NULL THEN b ELSE v END)
+----
+
+query T
+SELECT v FROM t131346v, t131346b
+WHERE v NOT BETWEEN v AND
+  IF(NULL, '0'::BIT, v);
+----
+
+query T
+SELECT v FROM t131346v, t131346b
+WHERE v NOT BETWEEN v AND
+  IF(NULL, b, v);
+----
+
+query T
+SELECT (CASE WHEN v > '0'::BIT THEN v ELSE '0'::BIT END)
+FROM t131346v, t131346b
+WHERE v = (CASE WHEN v > '0'::BIT THEN v ELSE '0'::BIT END)
+----
+11
+
+query T
+SELECT (CASE WHEN v > b THEN v ELSE b END)
+FROM t131346v, t131346b
+WHERE v = (CASE WHEN v > b THEN v ELSE b END)
+----
+11
+
+query T
+SELECT (CASE WHEN v > '0'::BIT THEN v ELSE '0'::BIT END)
+FROM t131346v, t131346b
+WHERE v = (CASE WHEN v < '0'::BIT THEN '0'::BIT ELSE v END)
+----
+11
+
+query T
+SELECT (CASE WHEN v > b THEN v ELSE b END)
+FROM t131346v, t131346b
+WHERE v = (CASE WHEN v < b THEN b ELSE v END)
+----
+11
+
 # Static analysis types should never make it to execution.
 statement ok
 CREATE TABLE t83496 (
