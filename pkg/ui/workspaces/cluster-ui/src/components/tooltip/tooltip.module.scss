@@ -8,3 +8,16 @@
 .underline {
   border-bottom: 1px dashed $colors--neutral-5;
 }
+
+.container {
+  &:hover{
+    cursor: pointer;
+  }
+}
+
+.title {
+ a {
+   font-size: inherit;
+   color: inherit;
+ }
+}

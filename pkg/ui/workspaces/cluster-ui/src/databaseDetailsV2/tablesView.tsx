@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Tag } from "antd";
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -13,6 +12,7 @@ import {
   TableSortOption,
   useTableMetadata,
 } from "src/api/databases/getTableMetadataApi";
+import { Badge } from "src/badge";
 import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
@@ -150,9 +150,9 @@ const COLUMNS: (TableColumnProps<TableRow> & {
     ),
     sorter: false,
     render: (t: TableRow) => {
-      const type = t.autoStatsEnabled ? "success" : "error";
+      const type = t.autoStatsEnabled ? "success" : "default";
       const text = t.autoStatsEnabled ? "ENABLED" : "DISABLED";
-      return <Tag color={type}>{text}</Tag>;
+      return <Badge status={type} text={text} forceUpperCase />;
     },
   },
   {
