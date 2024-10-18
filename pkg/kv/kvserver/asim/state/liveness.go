@@ -93,9 +93,11 @@ func convertNodeStatusToNodeVitality(
 		now,               /* now */
 		hlc.Timestamp{},   /* descUpdateTime */
 		hlc.Timestamp{},   /* descUnavailableTime */
+		hlc.Timestamp{},   /* descUnavailableTimeBegin */
 		true,              /* connected */
 		timeUntilNodeDead, /* timeUntilNodeDead */
 		0,                 /* timeAfterNodeSuspect */
+		1.0,               /* timeAfterNodeSuspectLongMult */
 	)
 	return entry
 }
