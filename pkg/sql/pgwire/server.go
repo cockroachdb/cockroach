@@ -1203,6 +1203,25 @@ func (s *Server) serveImpl(
 				sessionID,
 			)
 		}()
+
+		// don't think we can do it like this because the conn is not thread safe and it's owned by the above goroutine. so do stuff in there
+
+		// // Spawn the notification listening (NOTIFY/LISTEN) goroutine, which
+		// // listens for notifications and sends them to the client.
+		// procWg.Add(1)
+		// go func() {
+		// 	defer procWg.Done()
+		// 	c.handleNotifications(
+		// 		ctx,
+		// 		authOpt,
+		// 		authPipe,
+		// 		sqlServer,
+		// 		reserved,
+		// 		onDefaultIntSizeChange,
+		// 		sessionID,
+		// 	)
+		// }()
+
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
