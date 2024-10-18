@@ -328,7 +328,6 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 		// span "follows from" the proposal's span, if the proposal sticks around
 		// for (some reincarnation of) the command to eventually apply, its trace
 		// will reflect the reproposal as well.
-		ctx:             origP.ctx,
 		idKey:           raftlog.MakeCmdIDKey(),
 		proposedAtTicks: 0, // set in registerProposalLocked
 		createdAtTicks:  0, // set in registerProposalLocked
@@ -364,6 +363,8 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 
 		seedProposal: seedP,
 	}
+	origCtx := origP.Context()
+	newProposal.ctx.Store(&origCtx)
 
 	return newProposal, func() {
 		// If the original proposal had an explicit span, it's an async consensus
@@ -394,7 +395,8 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 		//
 		// TODO(radu): Should this context be created via tracer.ForkSpan?
 		// We'd need to make sure the span is finished eventually.
-		origP.ctx = r.AnnotateCtx(context.TODO())
+		ctx := r.AnnotateCtx(context.TODO())
+		origP.ctx.Store(&ctx)
 		seedP.lastReproposal = newProposal
 	}
 }
