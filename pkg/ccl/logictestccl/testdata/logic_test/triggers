@@ -1,5 +1,9 @@
 # LogicTest: !local-mixed-24.1 !local-mixed-24.2 !local-legacy-schema-changer
 
+# Include some hidden columns that won't be visible to triggers.
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, foo INT NOT VISIBLE, y INT, bar INT NOT VISIBLE);
+
 # ==============================================================================
 # Trigger functions cannot be directly invoked.
 # ==============================================================================
@@ -459,9 +463,6 @@ DROP FUNCTION f;
 # ==============================================================================
 
 subtest invalid_targets
-
-statement ok
-CREATE TABLE xy (x INT, y INT);
 
 statement ok
 CREATE VIEW v AS SELECT * FROM xy;
@@ -1284,6 +1285,690 @@ statement ok
 DROP SCHEMA s CASCADE;
 DROP TABLE t;
 DROP FUNCTION g;
+
+# ==============================================================================
+# Test row-level BEFORE triggers.
+# ==============================================================================
+
+# Use the row engine to prevent batching from interfering with execution order
+# between triggers on different rows.
+statement ok
+SET vectorize=off;
+
+subtest before_row_basic
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# Test a basic INSERT trigger.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic UPDATE trigger.
+statement ok
+CREATE TRIGGER foo BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic DELETE trigger.
+statement ok
+CREATE TRIGGER foo BEFORE DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Triggers can be defined to operate on multiple events.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+# UPSERT operations can fire both INSERT and UPDATE triggers.
+#
+# First, insert some rows without conflicts.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Repeat, but with some conflicting rows.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: UPDATE: old: (1,2), new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+NOTICE: UPDATE: old: (3,4), new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+5  6
+
+# Example with the explicit UPSERT syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, -2), (3, -4), (5, -6), (7, -8);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,-2)
+NOTICE: UPDATE: old: (1,12), new: (1,-2)
+NOTICE: INSERT: old: <NULL>, new: (3,-4)
+NOTICE: UPDATE: old: (3,14), new: (3,-4)
+NOTICE: INSERT: old: <NULL>, new: (5,-6)
+NOTICE: UPDATE: old: (5,6), new: (5,-6)
+NOTICE: INSERT: old: <NULL>, new: (7,-8)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  -2
+3  -4
+5  -6
+7  -8
+
+statement ok
+DELETE FROM xy WHERE True;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test row-level BEFORE triggers that modify the row.
+# ==============================================================================
+
+subtest before_row_modify
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE new_new xy;
+  BEGIN
+    new_new = ROW((NEW).x, (NEW).y + 10);
+    RAISE NOTICE '%: old: %, new: %, new_new: %', TG_OP, OLD, NEW, new_new;
+    RETURN new_new;
+  END
+$$;
+
+# Test an INSERT trigger that modifies the row.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+
+# The inserted "y" values should reflect the increment in the trigger function.
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+
+# Test an UPDATE trigger that modifies the row.
+statement ok
+CREATE TRIGGER foo2 BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 5 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,12), new: (5,12), new_new: (5,22)
+
+# The updated row should have incremented "y" once again.
+query II rowsort
+SELECT * FROM xy;
+----
+3  14
+5  22
+
+# The trigger function updates the row after the update is applied.
+query T noticetrace
+UPDATE xy SET y = xy.y * 10 WHERE x = 5;
+----
+NOTICE: UPDATE: old: (5,22), new: (5,220), new_new: (5,230)
+
+query II rowsort
+SELECT * FROM xy;
+----
+3  14
+5  230
+
+statement ok
+DELETE FROM xy WHERE True;
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+
+# When both INSERT and UPDATE triggers fire, modifications from both are applied
+# to the row. First the INSERT trigger's modification will be applied, then the
+# update specified in the ON CONFLICT clause, and finally the UPDATE trigger's
+# modification.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y * 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,12), new: (1,120), new_new: (1,130)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,14), new: (3,140), new_new: (3,150)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  130
+3  150
+5  16
+
+# No update is applied for ON CONFLICT DO NOTHING.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO NOTHING;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  130
+3  150
+5  16
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# UPSERT with ON CONFLICT syntax. Note that the effect of the INSERT trigger
+# propagates to the special "excluded" data source.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = excluded.y;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,130), new: (1,12), new_new: (1,22)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,150), new: (3,14), new_new: (3,24)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  22
+3  24
+5  16
+
+# Similar to the previous case, but modifying the EXCLUDED row in the DO UPDATE
+# clause.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = excluded.y - 1;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,22), new: (1,11), new_new: (1,21)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,24), new: (3,13), new_new: (3,23)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+NOTICE: UPDATE: old: (5,16), new: (5,15), new_new: (5,25)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  21
+3  23
+5  25
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# UPSERT with explicit syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,21), new: (1,12), new_new: (1,22)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,23), new: (3,14), new_new: (3,24)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  22
+3  24
+5  16
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# The old version of conflicting rows can be accessed via the relation's name.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,22), new: (1,32), new_new: (1,42)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,24), new: (3,34), new_new: (3,44)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  42
+3  44
+5  16
+
+# When there is a WHERE clause for the DO UPDATE part of the UPSERT, the UPDATE
+# trigger fires only for the rows that are actually updated. The INSERT trigger
+# fires for every row.
+#
+# Rows that are filtered by this clause are ignored, like for DO NOTHING.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 100 WHERE xy.x <> 3;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,42), new: (1,142), new_new: (1,152)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+NOTICE: UPDATE: old: (5,16), new: (5,116), new_new: (5,126)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  152
+3  44
+5  126
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# DELETE triggers cannot modify the row. The custom is to return OLD, although
+# any non-NULL value will have the same effect.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE ret xy;
+  BEGIN
+    ret := ROW((OLD).x + 10, (OLD).y + 10);
+    RAISE NOTICE '%: old: %, new: %, ret: %', TG_OP, OLD, NEW, ret;
+    RETURN ret;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,44), new: <NULL>, ret: (13,54)
+
+# Only the row with x = 3 should be deleted.
+query II rowsort
+SELECT * FROM xy;
+----
+1  152
+5  126
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level BEFORE triggers that filter the row.
+# ==============================================================================
+
+subtest before_row_filter
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE val xy := COALESCE(NEW, OLD);
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    IF (val).x % 2 = 0 THEN
+      RETURN val;
+    ELSE
+      RETURN NULL;
+    END IF;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+2  2
+4  4
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Fill in the missing values.
+statement ok
+INSERT INTO xy VALUES (1, 1), (3, 3);
+
+statement ok
+CREATE TRIGGER foo BEFORE UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (1,1), new: (1,11)
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (3,3), new: (3,13)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  12
+3  3
+4  14
+
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (1,1), new: <NULL>
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (3,3), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+3  3
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Include hidden columns that won't be visible to triggers.
+statement ok
+CREATE TABLE nullable (a INT, foo INT NOT VISIBLE, b INT, bar INT NOT VISIBLE DEFAULT 1);
+
+# A tuple with only NULL elements does not cause the filter to remove rows.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN ROW(NULL, NULL);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON nullable FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO nullable VALUES (1, 1), (2, 2), (3, 3);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+
+# NOTE: the trigger does not modify the default value of "bar".
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+UPDATE nullable SET b = 10;
+----
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+DELETE FROM nullable WHERE a IS NULL LIMIT 2;
+----
+NOTICE: DELETE: old: (,), new: <NULL>
+NOTICE: DELETE: old: (,), new: <NULL>
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+
+statement ok
+DROP TABLE nullable;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level BEFORE triggers with a WHERE clause.
+# ==============================================================================
+
+subtest before_row_where
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW WHEN ((NEW).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# inserted.
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  2
+3  3
+4  4
+
+statement ok
+CREATE TRIGGER foo2 BEFORE UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# updated.
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  11
+2  12
+3  13
+4  14
+
+# The trigger should not fire for the odd values, but they should still be
+# deleted.
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test order of execution.
+# ==============================================================================
+
+subtest before_row_order
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER c_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER d_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER b_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER a_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: a_trig: old: <NULL>, new: (1,2)
+NOTICE: b_trig: old: <NULL>, new: (1,2)
+NOTICE: c_trig: old: <NULL>, new: (1,2)
+NOTICE: d_trig: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER a_trig ON xy;
+
+statement ok
+DROP TRIGGER b_trig ON xy;
+
+statement ok
+DROP TRIGGER c_trig ON xy;
+
+statement ok
+DROP TRIGGER d_trig ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP FUNCTION h;
+
+statement ok
+DELETE FROM xy WHERE True;
 
 # ==============================================================================
 # Test unsupported syntax.

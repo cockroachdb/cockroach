@@ -142,6 +142,11 @@ func (node *TriggerEventType) Format(ctx *FmtCtx) {
 	}
 }
 
+// String implements the Stringer interface.
+func (node *TriggerEventType) String() string {
+	return AsString(node)
+}
+
 // TriggerEventTypeSet is a set of TriggerEventType values, used to conveniently
 // check for the presence of a given event type in a trigger definition.
 type TriggerEventTypeSet uint8
