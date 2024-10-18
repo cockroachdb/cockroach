@@ -3229,6 +3229,162 @@ inner-join (hash)
            ├── variable: xyz.x:1 [type=int]
            └── variable: foo.x:6 [type=int]
 
+exec-ddl
+CREATE TABLE p (
+  region STRING,
+  id INT,
+  s STRING,
+  PRIMARY KEY (region, id),
+  UNIQUE WITHOUT INDEX (id),
+  UNIQUE (region, id, s)
+)
+----
+
+exec-ddl
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  region STRING,
+  id INT,
+  p_id INT,
+  FOREIGN KEY (region, p_id) REFERENCES p (region, id)
+)
+----
+
+exec-ddl
+CREATE TABLE c2 (
+  region STRING,
+  id INT,
+  p_id INT,
+  s STRING,
+  PRIMARY KEY (region, id),
+  UNIQUE WITHOUT INDEX (id),
+  FOREIGN KEY (region, p_id, s) REFERENCES p (region, id, s)
+)
+----
+
+# Equality of the region columns is implied by the FK and uniqueness constraint
+# on p.id.
+norm
+SELECT * FROM c JOIN p ON c.p_id = p.id
+----
+inner-join (hash)
+ ├── columns: id:1(int!null) region:2(string) id:3(int!null) p_id:4(int!null) region:7(string!null) id:8(int!null) s:9(string)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (8)-->(7,9), (4)==(8), (8)==(4), (2)==(7), (7)==(2)
+ ├── prune: (1-3,7,9)
+ ├── interesting orderings: (+1) (+7,+8)
+ ├── scan c
+ │    ├── columns: c.id:1(int!null) c.region:2(string) c.id:3(int!null) p_id:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan p
+ │    ├── columns: p.region:7(string!null) p.id:8(int!null) s:9(string)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(7,9)
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+7,+8)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+           ├── variable: p_id:4 [type=int]
+           └── variable: p.id:8 [type=int]
+
+# Similar as the case above, but different join order.
+norm
+SELECT * FROM p JOIN c ON c.p_id = p.id
+----
+inner-join (hash)
+ ├── columns: region:1(string!null) id:2(int!null) s:3(string) id:6(int!null) region:7(string) id:8(int!null) p_id:9(int!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── key: (6)
+ ├── fd: (2)-->(1,3), (6)-->(7-9), (2)==(9), (9)==(2), (1)==(7), (7)==(1)
+ ├── prune: (1,3,6-8)
+ ├── interesting orderings: (+1,+2) (+6)
+ ├── scan p
+ │    ├── columns: p.region:1(string!null) p.id:2(int!null) s:3(string)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1,3)
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-5)
+ ├── scan c
+ │    ├── columns: c.id:6(int!null) c.region:7(string) c.id:8(int!null) p_id:9(int)
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7-9)
+ │    ├── prune: (6-9)
+ │    ├── interesting orderings: (+6)
+ │    └── unfiltered-cols: (6-11)
+ └── filters
+      └── eq [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+           ├── variable: p_id:9 [type=int]
+           └── variable: p.id:2 [type=int]
+
+# Equality of the region and s columns is implied by the FK and uniqueness
+# constraint on p.id.
+norm
+SELECT * FROM c2 JOIN p ON c2.p_id = p.id
+----
+inner-join (hash)
+ ├── columns: region:1(string!null) id:2(int!null) p_id:3(int!null) s:4(string) region:7(string!null) id:8(int!null) s:9(string)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (2)
+ ├── fd: (2)-->(1,3,4), (8)-->(7,9), (3)==(8), (8)==(3), (1)==(7), (7)==(1), (4)==(9), (9)==(4)
+ ├── prune: (1,2,4,7,9)
+ ├── interesting orderings: (+1,+2) (+7,+8)
+ ├── scan c2
+ │    ├── columns: c2.region:1(string!null) c2.id:2(int!null) p_id:3(int) c2.s:4(string)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1,3,4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan p
+ │    ├── columns: p.region:7(string!null) p.id:8(int!null) p.s:9(string)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(7,9)
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+7,+8)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+           ├── variable: p_id:3 [type=int]
+           └── variable: p.id:8 [type=int]
+
+# No additional equality is implied because region is not a key of p.
+norm
+SELECT * FROM c2 JOIN p ON c2.region = p.region
+----
+inner-join (hash)
+ ├── columns: region:1(string!null) id:2(int!null) p_id:3(int) s:4(string) region:7(string!null) id:8(int!null) s:9(string)
+ ├── key: (2,8)
+ ├── fd: (2)-->(1,3,4), (8)-->(7,9), (1)==(7), (7)==(1)
+ ├── prune: (2-4,8,9)
+ ├── interesting orderings: (+1,+2) (+7,+8)
+ ├── scan c2
+ │    ├── columns: c2.region:1(string!null) c2.id:2(int!null) p_id:3(int) c2.s:4(string)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1,3,4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1,+2)
+ │    └── unfiltered-cols: (1-6)
+ ├── scan p
+ │    ├── columns: p.region:7(string!null) p.id:8(int!null) p.s:9(string)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(7,9)
+ │    ├── prune: (7-9)
+ │    ├── interesting orderings: (+7,+8)
+ │    └── unfiltered-cols: (7-11)
+ └── filters
+      └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+           ├── variable: c2.region:1 [type=string]
+           └── variable: p.region:7 [type=string]
+
+# TODO: Add a case with a non-valid FK.
+
 # Regression tests for #116943.
 
 # Semi-joins with right side cardinality of 0 have cardinality of 0.
