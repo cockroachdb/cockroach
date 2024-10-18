@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -128,9 +129,10 @@ ORDER BY raw_start_key ASC`)
 			var startKey roachpb.Key
 			require.NoError(t, rows.Scan(&startKey))
 			s, repl := getFirstStoreReplica(t, tc.Server(0), startKey)
-			trace, _, err := s.Enqueue(ctx, "mvccGC", repl, skipShouldQueue, false /* async */)
+			traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, s.GetStoreConfig().Tracer(), "trace-enqueue")
+			_, err := s.Enqueue(traceCtx, "mvccGC", repl, skipShouldQueue, false /* async */)
 			require.NoError(t, err)
-			fmt.Fprintf(&traceBuf, "%s\n", trace.String())
+			fmt.Fprintf(&traceBuf, "%s\n", rec().String())
 		}
 		require.NoError(t, rows.Err())
 		return traceBuf.String()

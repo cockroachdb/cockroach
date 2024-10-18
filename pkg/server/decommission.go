@@ -71,7 +71,7 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 					if !shouldEnqueue {
 						return true /* wantMore */
 					}
-					_, processErr, enqueueErr := store.Enqueue(
+					processErr, enqueueErr := store.Enqueue(
 						// NB: We elide the shouldQueue check since we _know_ that the
 						// range being enqueued has replicas on a decommissioning node.
 						// Unfortunately, until
