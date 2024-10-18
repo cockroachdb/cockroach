@@ -1640,6 +1640,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1656,7 +1657,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		nil, /* uniqueWithTombstoneIndexes */
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		insertCols,
 		ef.getDatumAlloc(),
 		&ef.planner.ExecCfg().Settings.SV,
@@ -1673,7 +1674,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		nil, /* uniqueWithTombstoneIndexes */
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,

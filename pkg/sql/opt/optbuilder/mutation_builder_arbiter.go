@@ -304,11 +304,6 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 						Strength:   tree.ForShare,
 						Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
 						WaitPolicy: tree.LockWaitBlock,
-						// Unique arbiters must ensure the non-existence of certain rows, so
-						// we use predicate locks instead of record locks to prevent
-						// insertion of new rows into the locked span(s) by other concurrent
-						// transactions.
-						Form: tree.LockPredicate,
 					},
 				},
 			}
@@ -439,11 +434,6 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 						Strength:   tree.ForUpdate,
 						Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
 						WaitPolicy: tree.LockWaitBlock,
-						// Unique arbiters must ensure the non-existence of certain rows, so
-						// we use predicate locks instead of record locks to prevent
-						// insertion of new rows into the locked span(s) by other concurrent
-						// transactions.
-						Form: tree.LockPredicate,
 					},
 				},
 			}

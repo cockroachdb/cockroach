@@ -561,6 +561,7 @@ define Upsert {
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction, or there are
