@@ -1,0 +1,3 @@
+host    all           roachprod           0.0.0.0/0          password
+host    all           all            all                 ldap ldapserver=crlcloud.dev ldapport=636 \"ldapbasedn=OU=AADDC Users,DC=crlcloud,DC=dev\" \"ldapbinddn=CN=Test User,OU=AADDC Users,DC=crlcloud,DC=dev\" ldapbindpasswd=%s ldapsearchattribute=sAMAccountName \"ldapsearchfilter=(memberOf=CN=crl-crlcloud-dev-domain-sync-users,OU=AADDC Users,DC=crlcloud,DC=dev)\" \"ldapgrouplistfilter=(objectCategory=CN=Group,CN=Schema,CN=Configuration,DC=crlcloud,DC=dev)\"
+host    all           root           0.0.0.0/0          password
