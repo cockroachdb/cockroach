@@ -133,7 +133,7 @@ func MakeMetrics(cidrLookup *cidr.Lookup) metric.Struct {
 		ConnsOpened:    metric.NewCounter(connsOpened),
 		ConnsReused:    metric.NewCounter(connsReused),
 		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
-		NetMetrics:     cidrLookup.MakeNetMetrics(cloudWriteBytes, cloudReadBytes, "cloud", "bucket"),
+		NetMetrics:     cidrLookup.MakeNetMetrics(cloudWriteBytes, cloudReadBytes, "cloud", "bucket", "client"),
 	}
 }
 

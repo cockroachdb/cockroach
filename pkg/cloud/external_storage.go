@@ -182,12 +182,22 @@ type EarlyBootExternalStorageContext struct {
 	MetricsRecorder *Metrics
 }
 
+// ExternalStorageOptions rolls up the Options into a struct.
+func (e *EarlyBootExternalStorageContext) ExternalStorageOptions() ExternalStorageOptions {
+	var options ExternalStorageOptions
+	for _, option := range e.Options {
+		option(&options)
+	}
+	return options
+}
+
 // ExternalStorageOptions holds dependencies and values that can be
 // overridden by callers of an ExternalStorageFactory via a passed
 // ExternalStorageOption.
 type ExternalStorageOptions struct {
 	ioAccountingInterceptor  ReadWriterInterceptor
 	AzureStorageTestingKnobs base.ModuleTestingKnobs
+	ClientName               string
 }
 
 // ExternalStorageConstructor is a function registered to create instances

@@ -77,9 +77,9 @@ var httpMetrics = settings.RegisterBoolSetting(
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
 ) (*http.Client, error) {
-	t, err := MakeTransport(settings, metrics, cloud, bucket)
+	t, err := MakeTransport(settings, metrics, cloud, bucket, client)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // used for interacting with cloud storage (timeouts, retries, CA certs, etc).
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
 ) (*http.Transport, error) {
 	var tlsConf *tls.Config
 	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
@@ -121,7 +121,7 @@ func MakeTransport(
 	// most bulk jobs.
 	t.MaxIdleConnsPerHost = 64
 	if metrics != nil {
-		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket)
+		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket, client)
 	}
 	return t, nil
 }
