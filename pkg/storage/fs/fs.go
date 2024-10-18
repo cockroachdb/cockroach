@@ -54,7 +54,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
-	true,
+	false,
 	settings.WithPublic)
 
 // InitEnvsFromStoreSpecs constructs Envs for all the provided store specs.
