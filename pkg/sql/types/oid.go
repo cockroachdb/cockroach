@@ -57,7 +57,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_anyelement: Any,
 	oid.T_bit:        typeBit,
 	oid.T_bool:       Bool,
-	oid.T_bpchar:     typeBpChar,
+	oid.T_bpchar:     BPChar,
 	oid.T_bytea:      Bytes,
 	oid.T_char:       QChar,
 	oid.T_date:       Date,
