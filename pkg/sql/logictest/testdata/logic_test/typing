@@ -122,6 +122,28 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 ----
 2010-09-28 12:00:00.1 +0000 +0000
 
+# Test qualified type references.
+query IITR
+SELECT 1::pg_catalog.int4, 1::pg_catalog.int8, 'aa'::pg_catalog.text, 4.2::pg_catalog.float4
+----
+1 1 aa 4.2
+
+# Test fixed-length types.
+
+query TTT
+SELECT VARCHAR(4) 'foo', CHAR(2) 'bar', STRING(1) 'cat'
+----
+foo  ba  c
+
+# Test that we error out referencing unknown types in pg_catalog.
+query error pq: type "pg_catalog.special_int" does not exist
+SELECT 1::pg_catalog.special_int
+
+# Test that we error out trying to reference types in schemas that
+# don't have types.
+query error pq: type "crdb_internal.mytype" does not exist
+SELECT 1::crdb_internal.mytype
+
 # Regression tests for #15050
 
 statement error pq: parsing as type timestamp: could not parse "Not Timestamp"
@@ -220,28 +242,6 @@ query T
 SELECT max(NULL) FROM (VALUES (NULL), (NULL)) t0(c0)
 ----
 NULL
-
-# Test qualified type references.
-query IITR
-SELECT 1::pg_catalog.int4, 1::pg_catalog.int8, 'aa'::pg_catalog.text, 4.2::pg_catalog.float4
-----
-1 1 aa 4.2
-
-# Test fixed-length types.
-
-query TTT
-SELECT VARCHAR(4) 'foo', CHAR(2) 'bar', STRING(1) 'cat'
-----
-foo  ba  c
-
-# Test that we error out referencing unknown types in pg_catalog.
-query error pq: type "pg_catalog.special_int" does not exist
-SELECT 1::pg_catalog.special_int
-
-# Test that we error out trying to reference types in schemas that
-# don't have types.
-query error pq: type "crdb_internal.mytype" does not exist
-SELECT 1::crdb_internal.mytype
 
 # Regression test for #50978.
 query T
