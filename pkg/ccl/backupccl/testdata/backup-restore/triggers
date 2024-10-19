@@ -131,20 +131,23 @@ SELECT nextval('sc1.sq1'::REGCLASS)
 exec-sql
 INSERT INTO sc1.tbl1 VALUES (123)
 ----
-
-query-sql
-SELECT nextval('sc1.sq1'::REGCLASS)
-----
-2
-
-exec-sql
-INSERT INTO sc2.tbl2 VALUES (123)
-----
+NOTICE: 2
 
 query-sql
 SELECT nextval('sc1.sq1'::REGCLASS)
 ----
 3
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+NOTICE: x: 123
+NOTICE: a: Good
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+5
 
 exec-sql
 BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
@@ -231,7 +234,28 @@ pq: cannot drop type "enum1" because other objects ([db1_new.sc1.tbl1 db1_new.pu
 query-sql
 SELECT nextval('sc1.sq1'::REGCLASS)
 ----
-4
+6
+
+exec-sql
+INSERT INTO sc1.tbl1 VALUES (124)
+----
+NOTICE: 7
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+8
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (124)
+----
+NOTICE: x: 123
+NOTICE: a: Good
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+10
 
 query-sql
 WITH descs AS (
