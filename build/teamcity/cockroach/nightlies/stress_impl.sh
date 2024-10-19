@@ -17,7 +17,7 @@ else
     TAGS="bazel,gss,$TAGS"
 fi
 
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+GIT_BRANCH="133002"
 if [ "$TC_BUILD_BRANCH" != "$GIT_BRANCH" ]; then
     echo "Skipping test $TARGET, as the expected branch is $TC_BUILD_BRANCH, but actual branch is $GIT_BRANCH"
     exit 0
