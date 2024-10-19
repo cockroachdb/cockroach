@@ -322,6 +322,14 @@ var (
 	String = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_text, Locale: &emptyLocale}}
 
+	// BPChar is a CHAR type with an unspecified width. "BP" stands for
+	// "blank padded".
+	//
+	// It is reported as BPCHAR in SHOW CREATE and "character" in introspection
+	// for compatibility with PostgreSQL.
+	BPChar = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
+
 	// VarChar is equivalent to String, but has a differing OID (T_varchar),
 	// which makes it show up differently when displayed. It is reported as
 	// VARCHAR in SHOW CREATE and "character varying" in introspection for
@@ -724,15 +732,6 @@ var (
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
 
-	// typeBpChar is a CHAR type with an unspecified width. "bp" stands for
-	// "blank padded". It is not exported to avoid confusion with QChar, as well
-	// as confusion over CHAR's default width of 1.
-	//
-	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
-	// compatibility with PostgreSQL.
-	typeBpChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
-
 	// typeQChar is a "char" type with an unspecified width. It is not exported
 	// to avoid confusion with QChar. The "char" type should always have a width
 	// of one. A "char" type with an unspecified width is only used when the
@@ -940,7 +939,7 @@ func MakeVarChar(width int32) *T {
 // the given max # characters (0 = unspecified number).
 func MakeChar(width int32) *T {
 	if width == 0 {
-		return typeBpChar
+		return BPChar
 	}
 	if width < 0 {
 		panic(errors.AssertionFailedf("width %d cannot be negative", width))
