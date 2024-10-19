@@ -1288,6 +1288,64 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			return err
 		}
 
+		// Check for a binary operator with parameter types exactly matching the
+		// argument types.
+		if inBinOp && len(s.exprs) == 2 {
+			var err error
+			left := s.typedExprs[0]
+			if left == nil {
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					return
+				}
+			}
+			right := s.typedExprs[1]
+			if right == nil {
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				if err != nil {
+					return
+				}
+			}
+			leftType := left.ResolvedType()
+			rightType := right.ResolvedType()
+			numConsts := s.constIdxs.Len()
+			numPlaceholders := s.placeholderIdxs.Len()
+			if (numConsts == 1 && numPlaceholders == 0) ||
+				(numConsts == 0 && numPlaceholders == 1) {
+				// If one argument is a constant then it assumes the same type
+				// as the other argument. This matches Postgres's behavior. See
+				// the documentation about "unknown" types (this is how Postgres
+				// initially types constant values):
+				// https://www.postgresql.org/docs/17/typeconv-oper.html.
+				if constIdx, ok := s.constIdxs.Next(0); ok {
+					if constIdx == 0 {
+						leftType = rightType
+					} else {
+						rightType = leftType
+					}
+				} else {
+					if pIdx, _ := s.placeholderIdxs.Next(0); pIdx == 0 {
+						leftType = rightType
+					} else {
+						rightType = leftType
+					}
+				}
+			}
+			exactOverloads := filterOverloads(s.overloadIdxs, s.overloads,
+				func(ov overloadImpl) bool {
+					typs := ov.params().Types()
+					return leftType.Oid() == typs[0].Oid() && rightType.Oid() == typs[1].Oid()
+				})
+			if len(exactOverloads) == 1 {
+				prevOverloadIdxs := s.overloadIdxs
+				s.overloadIdxs = exactOverloads
+				if ok, err := checkReturn(ctx, semaCtx, s); ok {
+					return err
+				}
+				s.overloadIdxs = prevOverloadIdxs
+			}
+		}
+
 		// The fourth heuristic is to prefer candidates that accept the "best"
 		// mutual type in the resolvable type set of all constants.
 		if bestConstType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
@@ -1429,6 +1487,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// we prefer overloads where we infer the type of the NULL to be the same as the
 	// other argument. This is used to differentiate the behavior of
 	// STRING[] || NULL and STRING || NULL.
+	// TODO: Maybe delete this.
 	if inBinOp && len(s.exprs) == 2 {
 		if ok, err := filterAttempt(ctx, semaCtx, s, func() {
 			var err error
