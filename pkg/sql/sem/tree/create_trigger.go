@@ -160,8 +160,13 @@ func (s *TriggerEventTypeSet) Add(t TriggerEventType) {
 }
 
 // Contains returns true if the set contains the given TriggerEventType value.
-func (s TriggerEventTypeSet) Contains(t TriggerEventType) bool {
-	return s&(1<<t) != 0
+func (s *TriggerEventTypeSet) Contains(t TriggerEventType) bool {
+	return *s&(1<<t) != 0
+}
+
+// Intersects returns true if the set intersects with the given set.
+func (s *TriggerEventTypeSet) Intersects(o TriggerEventTypeSet) bool {
+	return *s&o != 0
 }
 
 type TriggerEvent struct {
