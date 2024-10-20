@@ -406,10 +406,12 @@ func ShouldUseEFOS(settings *settings.Values) bool {
 	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
 }
 
-// EngineSuffixCompare implements pebble.Comparer.CompareSuffixes. It compares
-// cockroach suffixes (which are composed of the version and a trailing sentinel
-// byte); the version can be an MVCC timestamp or a lock key.
-func EngineSuffixCompare(a, b []byte) int {
+// EngineRangeSuffixCompare implements pebble.Comparer.CompareRangeSuffixes. It
+// compares cockroach suffixes (which are composed of the version and a trailing
+// sentinel byte); the version can be an MVCC timestamp or a lock key. It is
+// more strict than EnginePointSuffixCompare due to historical reasons; see
+// https://github.com/cockroachdb/cockroach/issues/130533
+func EngineRangeSuffixCompare(a, b []byte) int {
 	if len(a) == 0 || len(b) == 0 {
 		// Empty suffixes sort before non-empty suffixes.
 		return cmp.Compare(len(a), len(b))
@@ -617,10 +619,11 @@ func normalizeEngineSuffixForCompare(a []byte) []byte {
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = &pebble.Comparer{
-	Split:           EngineKeySplit,
-	CompareSuffixes: EngineSuffixCompare,
-	Compare:         EngineKeyCompare,
-	Equal:           EngineKeyEqual,
+	Split:                EngineKeySplit,
+	CompareRangeSuffixes: EngineRangeSuffixCompare,
+	ComparePointSuffixes: EnginePointSuffixCompare,
+	Compare:              EngineKeyCompare,
+	Equal:                EngineKeyEqual,
 
 	AbbreviatedKey: func(k []byte) uint64 {
 		key, ok := GetKeyPartFromEngineKey(k)
