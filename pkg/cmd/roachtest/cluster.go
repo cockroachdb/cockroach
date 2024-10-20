@@ -999,8 +999,8 @@ func (f *clusterFactory) newCluster(
 		// There isn't a point to creating a different sized vm for local clusters, so skip it.
 		if cfg.spec.WorkloadNode && !cfg.localCluster {
 			opts = []*cloud.ClusterCreateOpts{
-				{Nodes: cfg.spec.NodeCount - 1, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
-				{Nodes: 1, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
+				{Nodes: cfg.spec.NodeCount - cfg.spec.WorkloadNodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
+				{Nodes: cfg.spec.WorkloadNodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
 			}
 		}
 		err = create(ctx, l, cfg.username, opts...)
@@ -1146,11 +1146,12 @@ func (c *clusterImpl) validate(
 	if len(cDetails.VMs) < c.spec.NodeCount {
 		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.spec.NodeCount)
 	}
+	crdbNodes := c.spec.NodeCount - c.spec.WorkloadNodeCount
 	if cpus := nodes.CPUs; cpus != 0 {
 		for i, vm := range cDetails.VMs {
 			nodeID := i + 1
-			// If we are using a workload node, the last node may have a different cpu count.
-			if len(cDetails.VMs) == nodeID && c.spec.WorkloadNode {
+			// If we are using a workload node, workload nodes may have a different cpu count.
+			if nodeID > crdbNodes && c.spec.WorkloadNode {
 				cpus = c.spec.WorkloadNodeCPUs
 			}
 			vmCPUs := MachineTypeToCPUs(vm.MachineType)
@@ -1174,7 +1175,7 @@ func (c *clusterImpl) lister() option.NodeLister {
 	if c.f != nil { // accommodates poorly set up tests
 		fatalf = c.f.Fatalf
 	}
-	return option.NodeLister{NodeCount: c.spec.NodeCount, WorkloadNodeProvisioned: c.spec.WorkloadNode, Fatalf: fatalf}
+	return option.NodeLister{NodeCount: c.spec.NodeCount, WorkloadNodeCount: c.spec.WorkloadNodeCount, Fatalf: fatalf}
 }
 
 func (c *clusterImpl) All() option.NodeListOption {
