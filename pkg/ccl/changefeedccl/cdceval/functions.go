@@ -119,7 +119,7 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 		volatility.Stable,
 		types.Decimal,
 		func(rowEvalCtx *rowEvalContext) hlc.Timestamp {
-			return rowEvalCtx.startTime
+			return rowEvalCtx.creationTime
 		},
 	),
 }
