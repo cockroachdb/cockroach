@@ -101,5 +101,9 @@ targets:
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_init_cct_tpcc.sh
+          - true # determines whether to execute the script immediately on workload node
         flags:
           warehouses: 15000
+          db: cct_tpcc
