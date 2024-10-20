@@ -101,5 +101,9 @@ targets:
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc
+          - true
         flags:
           warehouses: 15000
+          db: cct_tpcc
