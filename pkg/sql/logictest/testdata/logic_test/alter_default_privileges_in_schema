@@ -12,9 +12,6 @@ CREATE USER testuser2
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
 
-statement ok
-GRANT testuser TO root
-
 user testuser
 
 # Test on public schema.

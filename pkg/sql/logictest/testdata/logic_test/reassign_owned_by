@@ -243,7 +243,18 @@ user root
 statement ok
 REVOKE CREATE ON DATABASE test FROM testuser, testuser2;
 DROP ROLE testuser;
+
+# Ownership of the public schema was transferred to testuser2.
+
+statement error role testuser2 cannot be dropped because some objects depend on it\nowner of schema test.public
 DROP ROLE testuser2
+
+statement ok
+REASSIGN OWNED BY testuser2 TO root
+
+statement ok
+DROP ROLE testuser2
+
 
 # ------------------------------------------------------------------------------
 # Make sure only objects in the current database are reassigned

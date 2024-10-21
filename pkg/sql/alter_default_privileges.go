@@ -134,10 +134,12 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		return err
 	}
 
+	var hasAdmin bool
+	if hasAdmin, err = params.p.HasAdminRole(params.ctx); err != nil {
+		return err
+	}
 	if n.n.ForAllRoles {
-		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
-			return err
-		} else if !hasAdmin {
+		if !hasAdmin {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to ALTER DEFAULT PRIVILEGES FOR ALL ROLES")
 		}
@@ -145,7 +147,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// You can change default privileges only for objects that will be created
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
-			if targetRole != params.p.User() {
+			if targetRole != params.p.User() && !hasAdmin {
 				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
 				if err != nil {
 					return err
@@ -153,7 +155,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 				if _, found := memberOf[targetRole]; !found {
 					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"must be a member of %s", targetRole.Normalized())
+						"must be an admin or member of %s", targetRole.Normalized())
 				}
 			}
 		}
