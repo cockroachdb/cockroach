@@ -86,6 +86,7 @@ type variations struct {
 	numWorkloadNodes     int
 	vcpu                 int
 	disks                int
+	mem                  spec.MemPerCPU
 	leaseType            registry.LeaseType
 	perturbation         perturbation
 	workload             workloadType
@@ -101,6 +102,9 @@ var maxBlockBytes = []int{1, 1024, 4096}
 var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
+
+// TODO(baptist): Re-enable spec.Low testing. Currently it causes OOMs in backfill tests.
+var memOptions = []spec.MemPerCPU{spec.Standard, spec.High}
 var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
 
 var leases = []registry.LeaseType{
@@ -111,10 +115,10 @@ var leases = []registry.LeaseType{
 func (v variations) String() string {
 	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
 		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, leaseType: %s, cloud: %v, perturbation: %s",
+		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, perturbation: %s",
 		v.seed, v.fillDuration, v.maxBlockBytes,
 		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.leaseType, v.cloud, v.perturbation)
+		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.perturbation)
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -145,6 +149,7 @@ func setupMetamorphic(p perturbation) variations {
 	// TODO(baptist): Temporarily disable the metamorphic tests on other clouds
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
+	v.mem = memOptions[rng.Intn(len(memOptions))]
 	p.setupMetamorphic(rng)
 	v.perturbation = p
 	return v
@@ -170,6 +175,7 @@ func setupFull(p perturbation) variations {
 	v.perturbationDuration = 10 * time.Minute
 	v.ratioOfMax = 0.5
 	v.cloud = registry.OnlyGCE
+	v.mem = spec.Standard
 	v.perturbation = p
 	return v
 }
@@ -194,6 +200,7 @@ func setupDev(p perturbation) variations {
 	v.perturbationDuration = 30 * time.Second
 	v.ratioOfMax = 0.5
 	v.cloud = registry.AllClouds
+	v.mem = spec.Standard
 	v.perturbation = p
 	return v
 }
@@ -229,9 +236,8 @@ func registerLatencyTests(r registry.Registry) {
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	// NB: We use low memory to force non-cache disk reads earlier.
 	// TODO(baptist): Allow the non-disk tests to reuse the cluster.
-	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low), spec.ReuseNone())
+	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem), spec.ReuseNone())
 }
 
 func (v variations) perturbationName() string {
