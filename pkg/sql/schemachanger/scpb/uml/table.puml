@@ -267,6 +267,12 @@ object LDRJobIDs
 LDRJobIDs :  TableID
 LDRJobIDs : []JobIDs
 
+object NamedRangeZoneConfig
+
+NamedRangeZoneConfig :  RangeID
+NamedRangeZoneConfig :  ZoneConfig
+NamedRangeZoneConfig :  SeqNum
+
 object Namespace
 
 Namespace :  DatabaseID
@@ -551,6 +557,13 @@ PrimaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- IndexPartitioning
 Index <|-- IndexZoneConfig
 Table <|-- LDRJobIDs
+Table <|-- NamedRangeZoneConfig
+View <|-- NamedRangeZoneConfig
+Sequence <|-- NamedRangeZoneConfig
+Database <|-- NamedRangeZoneConfig
+Schema <|-- NamedRangeZoneConfig
+AliasType <|-- NamedRangeZoneConfig
+EnumType <|-- NamedRangeZoneConfig
 Table <|-- Namespace
 View <|-- Namespace
 Sequence <|-- Namespace

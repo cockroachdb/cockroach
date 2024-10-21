@@ -1500,6 +1500,10 @@ func (s *TestState) RegionProvider() scbuild.RegionProvider {
 	return s
 }
 
+func (s *TestState) SystemConfigProvider() scbuild.SystemConfigProvider {
+	return s
+}
+
 func (s *TestState) NodesStatusServer() *serverpb.OptionalNodesStatusServer {
 	return &serverpb.OptionalNodesStatusServer{}
 }

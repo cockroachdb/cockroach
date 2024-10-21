@@ -9,6 +9,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -49,9 +50,10 @@ var _ scbuildstmt.BuilderState = (*builderState)(nil)
 
 // QueryByID implements the scbuildstmt.BuilderState interface.
 func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
-	if id == catid.InvalidDescID {
-		return nil
-	}
+	// TODO a bit weird here since it overlaps with invalid desc id
+	//if id == catid.InvalidDescID {
+	//	return nil
+	//}
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	if c.cachedCollection == nil {
@@ -1515,18 +1517,14 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		b.descCache[id] = b.newCachedDescForNewDesc()
 		return
 	}
-
-	c := b.newCachedDesc(id)
-	// Collect privileges
-	if !c.hasOwnership {
-		var err error
-		c.hasOwnership, err = b.auth.HasOwnership(b.ctx, c.desc)
-		if err != nil {
-			panic(err)
-		}
+	// For pseudo-table IDs used in named ranges, we don't need to
+	// read the descriptor as it is descriptor-less.
+	_, ok := zonepb.NamedZonesByID[uint32(id)]
+	if ok {
+		b.ensurePseudoDescriptor(id)
+		return
 	}
-	// Collect backrefs and elements.
-	b.descCache[id] = c
+
 	crossRefLookupFn := func(id catid.DescID) catalog.Descriptor {
 		return b.readDescriptor(id)
 	}
@@ -1538,6 +1536,17 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 			target:  scpb.AsTargetStatus(status),
 		})
 	}
+	c := b.newCachedDesc(id)
+	// Collect privileges
+	if !c.hasOwnership {
+		var err error
+		c.hasOwnership, err = b.auth.HasOwnership(b.ctx, c.desc)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// Collect backrefs and elements.
+	b.descCache[id] = c
 
 	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn,
 		b.commentGetter, b.zoneConfigReader, b.evalCtx.Settings.Version.ActiveVersion(b.ctx))
@@ -1562,7 +1571,32 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	}
 }
 
+func (b *builderState) ensurePseudoDescriptor(id catid.DescID) {
+	crossRefLookupFn := func(id catid.DescID) catalog.Descriptor {
+		return b.readDescriptor(id)
+	}
+	visitorFn := func(status scpb.Status, e scpb.Element) {
+		b.addNewElementState(elementState{
+			element: e,
+			initial: status,
+			current: status,
+			target:  scpb.AsTargetStatus(status),
+		})
+	}
+	if id != keys.RootNamespaceID {
+		b.descCache[id] = b.newCachedDescForNewDesc()
+	} else {
+		b.descCache[id] = b.newCachedDesc(id)
+	}
+	scdecomp.WalkNamedRanges(b.ctx, nil, crossRefLookupFn, visitorFn,
+		b.commentGetter, b.zoneConfigReader, b.evalCtx.Settings.Version.ActiveVersion(b.ctx), id)
+}
+
 func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
+	_, ok := zonepb.NamedZonesByID[uint32(id)]
+	if ok {
+		return nil
+	}
 	if id == catid.InvalidDescID {
 		panic(errors.AssertionFailedf("invalid descriptor ID %d", id))
 	}

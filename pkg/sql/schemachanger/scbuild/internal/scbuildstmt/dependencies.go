@@ -8,6 +8,7 @@ package scbuildstmt
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -43,6 +44,7 @@ type BuildCtx interface {
 	Telemetry
 	NodeStatusInfo
 	RegionProvider
+	SystemConfigProvider
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -468,7 +470,6 @@ type TemporarySchemaProvider interface {
 
 // NodeStatusInfo provides access to observe node descriptors.
 type NodeStatusInfo interface {
-
 	// NodesStatusServer gives access to the NodesStatus service and is only
 	// available when running as a system tenant.
 	NodesStatusServer() *serverpb.OptionalNodesStatusServer
@@ -481,4 +482,14 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
+}
+
+// SystemConfigProvider provides access to basic host-tenant controlled
+// information regarding tenant zone configs. This is critical for the
+// mixed version 21.2->22.1 state where the tenant has not yet configured
+// its own zones.
+type SystemConfigProvider interface {
+	// GetSystemConfig returns the local unmarshaled version of the system
+	// config. Returns nil if the system config hasn't been set yet.
+	GetSystemConfig() *config.SystemConfig
 }
