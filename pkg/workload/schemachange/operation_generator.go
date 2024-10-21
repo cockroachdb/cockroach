@@ -2515,6 +2515,11 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
+	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnForTypeChange.name)
+	if err != nil {
+		return nil, err
+	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	if newType != nil {
 		// Ignoring the error here intentionally, as we want to carry on with
@@ -2522,18 +2527,21 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		kind, _ := schemachange.ClassifyConversion(context.Background(), columnForTypeChange.typ, newType)
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.CannotCoerce, condition: kind == schemachange.ColumnConversionImpossible},
-			{code: pgcode.FeatureNotSupported, condition: kind != schemachange.ColumnConversionTrivial},
 		})
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
-		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
+		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed},
 	})
+
+	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 
 	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
 		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
+
 }
 
 func (og *operationGenerator) alterTableAlterPrimaryKey(
