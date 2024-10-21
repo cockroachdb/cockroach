@@ -385,7 +385,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 						return errors.New(`could not find replica`)
 					}
 					for _, queueName := range []string{"split", "replicate", "raftsnapshot"} {
-						_, processErr, err := store.Enqueue(
+						processErr, err := store.Enqueue(
 							ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
 						)
 						if processErr != nil {
