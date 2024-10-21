@@ -1,0 +1,16 @@
+# Simulate failure loading TEAMS.yaml
+
+add-failure name=(other)
+----
+ok
+
+set-non-release-blocker
+----
+ok
+
+set-load-teams-failed
+----
+ok
+
+post
+----
