@@ -758,6 +758,9 @@ type ClientComm interface {
 	// CreateDrainResult creates a result for a Drain command.
 	CreateDrainResult(pos CmdPos) DrainResult
 
+	// is this good? probably not...
+	notificationSender
+
 	// LockCommunication ensures that no further results are delivered to the
 	// client. The returned ClientLock can be queried to see what results have
 	// been already delivered to the client and to discard results that haven't
