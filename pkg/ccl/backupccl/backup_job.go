@@ -1535,7 +1535,7 @@ func backupTenantSpan(prefix roachpb.Key) roachpb.Span {
 	return roachpb.Span{Key: prefix, EndKey: append(prefix, keys.MaxKey...)}
 }
 
-// checkForNewDatabases returns an error if any new complete databases were
+// checkForNewCompleteDatabases returns an error if any new complete databases were
 // introduced.
 func checkForNewCompleteDatabases(
 	targetDescs []catalog.Descriptor, curDBs []descpb.ID, prevDBs map[descpb.ID]struct{},

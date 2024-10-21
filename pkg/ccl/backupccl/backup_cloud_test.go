@@ -34,7 +34,7 @@ import (
 // customenv.mak (gitignored) may be a useful place to record these.
 // Cockroach Labs Employees: symlink customenv.mk to copy in `production`.
 
-// TestBackupRestoreS3 hits the real S3 and so could occasionally be flaky. It's
+// TestCloudBackupRestoreS3 hits the real S3 and so could occasionally be flaky. It's
 // only run if the AWS_S3_BUCKET environment var is set.
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -142,7 +142,7 @@ func TestOnlineRestoreS3(t *testing.T) {
 	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
 }
 
-// TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
+// TestCloudBackupRestoreGoogleCloudStorage hits the real GCS and so could
 // occasionally be flaky. It's only run if the GS_BUCKET environment var is set.
 func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
