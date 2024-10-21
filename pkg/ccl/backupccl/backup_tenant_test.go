@@ -42,6 +42,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 	ctx := context.Background()
 
 	skip.UnderRace(t, "multi-node, multi-tenant test too slow under race")
+	skip.UnderDeadlock(t, "too slow under deadlock detector")
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
