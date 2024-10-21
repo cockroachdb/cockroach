@@ -399,7 +399,6 @@ var pgjdbcBlockList = blocklist{
 	`org.postgresql.test.jdbc2.ServerErrorTest.testNotNullConstraint`:                                                                                               "27796",
 	`org.postgresql.test.jdbc2.ServerErrorTest.testPrimaryKey`:                                                                                                      "27796",
 	`org.postgresql.test.jdbc2.StatementTest.closeInProgressStatement()`:                                                                                            "unknown",
-	`org.postgresql.test.jdbc2.StatementTest.concurrentWarningReadAndClear()`:                                                                                       "unknown",
 	`org.postgresql.test.jdbc2.StatementTest.fastCloses()`:                                                                                                          "unknown",
 	`org.postgresql.test.jdbc2.StatementTest.parsingSemiColons()`:                                                                                                   "unknown",
 	`org.postgresql.test.jdbc2.StatementTest.updateCount()`:                                                                                                         "unknown",
