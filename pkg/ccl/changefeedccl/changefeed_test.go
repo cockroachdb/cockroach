@@ -6646,8 +6646,6 @@ INSERT INTO foo VALUES (1, 'f');
 		assertPayloads(t, foo, []string{
 			`foo: [6, "a"]->{"after": {"a": 6, "b": "a"}}`,
 			`foo: [14, "e"]->{"after": {"a": 5, "b": "e"}}`,
-		})
-		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1, "b": "f"}}`,
 		})
 	}
