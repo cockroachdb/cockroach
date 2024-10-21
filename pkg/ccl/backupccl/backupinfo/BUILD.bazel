@@ -73,6 +73,7 @@ go_test(
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/cloud",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
