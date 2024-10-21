@@ -222,6 +222,33 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			expectedStatus: livenesspb.NodeLivenessStatus_LIVE,
 		},
 		{
+			name: "Unavailable descriptor a long time ago that lasted a short time",
+			liveness: livenesspb.Liveness{
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(threshold).ToLegacyTimestamp(),
+				Draining:   false,
+			},
+			descriptor:     UpdateInfo{lastUnavailableTime: now.AddDuration(-suspectThreshold), firstUnavailableTime: now.AddDuration(-suspectThreshold), lastUpdateTime: now},
+			expectedAlive:  true,
+			expectedStatus: livenesspb.NodeLivenessStatus_LIVE,
+		},
+		{
+			name: "Unavailable descriptor a long time ago that lasted a long time",
+			liveness: livenesspb.Liveness{
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(threshold).ToLegacyTimestamp(),
+				Draining:   false,
+			},
+			descriptor: UpdateInfo{lastUnavailableTime: now.AddDuration(-suspectThreshold), firstUnavailableTime: now.AddDuration(-2 * suspectThreshold), lastUpdateTime: now},
+			// NB: The node is considered live because the extended suspect timer
+			// only applies to the status, used by the store pool and indirectly in
+			// the allocator. The IsAlive() call is used elsewhere.
+			expectedAlive:  true,
+			expectedStatus: livenesspb.NodeLivenessStatus_UNAVAILABLE,
+		},
+		{
 			name: "Unavailable and Expired descriptor",
 			liveness: livenesspb.Liveness{
 				NodeID:     1,
@@ -401,7 +428,8 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 
 			nv := cache.convertToNodeVitality(tc.liveness)
 			require.Equal(t, tc.expectedAlive, nv.IsLive(livenesspb.Rebalance))
-			require.Equal(t, tc.expectedStatus, nv.LivenessStatus())
+			require.Equal(t, tc.expectedStatus, nv.LivenessStatus(), "expected %v found %v",
+				tc.expectedStatus, nv.LivenessStatus())
 		})
 	}
 }
