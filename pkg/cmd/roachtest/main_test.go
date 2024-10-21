@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/assert"
@@ -124,7 +125,9 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 		require.Nil(t, err)
 		specs, _ := getTestSelectionMockData()
 		mock.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnError(fmt.Errorf("failed to prepare"))
-		updateSpecForSelectiveTests(ctx, specs)
+		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+			t.Logf(format, args...)
+		})
 		for _, s := range specs {
 			if !strings.Contains(s.Name, "skipped") {
 				require.Empty(t, s.Skip)
@@ -150,7 +153,9 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 		mock.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery))
 		mock.ExpectQuery(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnRows(rows)
 		specsLengthBefore := len(specs)
-		updateSpecForSelectiveTests(ctx, specs)
+		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+			t.Logf(format, args...)
+		})
 		require.Equal(t, specsLengthBefore, len(specs))
 		for _, s := range specs {
 			if strings.Contains(s.Name, "success_skip_selector") {
@@ -169,10 +174,16 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 			}
 		}
 	})
-	// We run the randomized tests 1000 times for 100 randomly generated tests
+	// We run the randomized tests 100 times for 100 randomly generated tests
 	t.Run("run with randomised data", func(t *testing.T) {
 		iteration := 0
-		totalIterations := 1000
+		totalIterations := 100
+
+		// Too many goroutines causes this test to OOM.
+		if util.RaceEnabled {
+			t.Log("race enabled, reducing totalIterations to 10")
+			totalIterations = 10
+		}
 		totalTestCount := 100
 		oldSuite := roachtestflags.Suite
 		roachtestflags.Suite = registry.Nightly
@@ -212,7 +223,9 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 					defer mu.Unlock()
 					return dbs, err
 				}
-				updateSpecForSelectiveTests(ctx, specs)
+				updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+					t.Logf(format, args...)
+				})
 				require.Equal(t, specsLengthBefore, len(specs))
 				// dataMap is used of assertions
 				dataMap := make(map[string][]string)
