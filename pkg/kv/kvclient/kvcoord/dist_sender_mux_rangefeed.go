@@ -148,7 +148,7 @@ type muxStreamOrError struct {
 // ││└──│── Maybe release catchup scan quota
 // ││   │
 // ││   ├─► OR Handle error
-// ││   └─► restartActiveRangeFeeds
+// ││   └─► restartActiveRangeFeed
 // ││       Determine if the error is fatal, if so terminate
 // ││       Transient error can be retried, using retry/transport state
 // │└────── stored in this structure (for example: try next replica)
@@ -221,8 +221,14 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 		parentRangeFeedMetadata: parentRangefeedMetadata,
 	}
 
+	doRelease := true
+	defer func() {
+		if doRelease {
+			stream.release()
+		}
+	}()
+
 	if err := stream.start(ctx, m); err != nil {
-		stream.release()
 		return err
 	}
 
@@ -234,6 +240,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 		}
 	}
 
+	doRelease = false
 	return nil
 }
 
@@ -413,6 +420,8 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 		toRestart := ms.close()
 
+		// TODO(wenyihu6): rework this - doesn't feel right to call
+		// handleRangefeedError here but seems needed for unit tests
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
 		if _, err := handleRangefeedError(ctx, m.metrics, recvErr, false); err != nil {
@@ -427,7 +436,20 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		if log.V(1) {
 			log.Infof(ctx, "mux to node %d restarted %d streams", ms.nodeID, len(toRestart))
 		}
-		return m.restartActiveRangeFeeds(ctx, recvErr, toRestart)
+
+		var returnErr error
+		for _, active := range toRestart {
+			if returnErr != nil {
+				if err := m.restartActiveRangeFeed(ctx, active, recvErr); err != nil {
+					returnErr = err
+					active.release()
+				}
+			} else {
+				active.release()
+			}
+		}
+
+		return returnErr
 	}
 
 	return nil
@@ -508,23 +530,10 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 	}
 }
 
-// restartActiveRangeFeeds restarts one or more rangefeeds.
-func (m *rangefeedMuxer) restartActiveRangeFeeds(
-	ctx context.Context, reason error, toRestart []*activeMuxRangeFeed,
-) error {
-	for _, active := range toRestart {
-		if err := m.restartActiveRangeFeed(ctx, active, reason); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // restartActiveRangeFeed restarts rangefeed after it encountered "reason" error.
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
 
 	// Release catchup scan reservation if any -- we will acquire another
