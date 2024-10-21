@@ -2321,10 +2321,9 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 				// - the query is not an internal query.
 				ex.metrics.EngineMetrics.FullTableOrIndexScanRejectedCount.Inc(1)
 				return errors.WithHint(
-					pgerror.Newf(pgcode.TooManyRows,
-						"query `%s` contains a full table/index scan which is explicitly disallowed",
-						planner.stmt.SQL),
-					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+					errors.WithMessage(pgerror.Newf(pgcode.TooManyRows,
+						"query requires a full table/index scan"), "rejected (disallow_full_table_scans = true)"),
+					"ensure WHERE or LIMIT clause is present with appropriate index. If a full scan is needed, override disallow_full_table_scans or increase large_full_scan_rows",
 				)
 			}
 		}
