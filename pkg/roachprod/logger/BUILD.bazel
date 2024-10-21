@@ -1,12 +1,27 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "logger",
-    srcs = ["log.go"],
+    srcs = [
+        "log.go",
+        "log_redirect.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/logger",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
+        "//pkg/util/log/logconfig",
+        "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "logger_test",
+    srcs = ["log_redirect_test.go"],
+    embed = [":logger"],
+    deps = [
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
