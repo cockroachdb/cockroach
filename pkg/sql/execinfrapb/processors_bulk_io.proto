@@ -438,8 +438,7 @@ message GenerativeSplitAndScatterSpec {
   // Spans is the required spans in the restore.
   repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreDetails.BackupLocalityInfo backup_locality_info = 11 [(gogoproto.nullable) = false];
-  // HighWater is the high watermark of the previous run of restore.
-  optional bytes high_water = 12;
+  reserved 12;
   // User who initiated the restore.
   optional string user_proto = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // ChunkSize is the number of import spans per chunk.
@@ -451,7 +450,7 @@ message GenerativeSplitAndScatterSpec {
   // NumNodes is the number of nodes available for dist restore.
   optional int64 num_nodes = 17[(gogoproto.nullable) = false];
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
+  reserved 20 ;
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
   // ExclusiveFileSpanComparison is true if the backup can safely use
   // exclusive file span comparison.

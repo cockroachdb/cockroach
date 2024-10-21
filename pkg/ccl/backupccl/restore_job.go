@@ -314,15 +314,11 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	ver := job.Payload().CreationClusterVersion
-	// TODO(radu,msbutler,stevendanna): we might be able to remove this now?
-	on231 := ver.Major > 23 || (ver.Major == 23 && ver.Minor >= 1)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
 		requiredSpans,
 		restoreCheckpoint,
-		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
 	if err != nil {
@@ -353,11 +349,9 @@ func restore(
 		return makeSpanCoveringFilter(
 			requiredSpans,
 			restoreCheckpoint,
-			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetSize,
-			maxFileCount,
-			progressTracker.useFrontier)
+			maxFileCount)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -435,13 +429,6 @@ func restore(
 			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "job progress loop")
 		}
 		tasks = append(tasks, jobProgressLoop)
-	}
-	if !progressTracker.useFrontier {
-		// This goroutine feeds the deprecated high water mark variant of the
-		// generativeCheckpointLoop.
-		tasks = append(tasks, func(ctx context.Context) error {
-			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
-		})
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)

@@ -82,7 +82,7 @@ func TestProgressTracker(t *testing.T) {
 		},
 	} {
 		restoreTime := hlc.Timestamp{}
-		pt, err := makeProgressTracker(requiredSpans, persistedSpans, true, 0, restoreTime)
+		pt, err := makeProgressTracker(requiredSpans, persistedSpans, 0, restoreTime)
 		require.NoError(t, err, "step %d", i)
 
 		done, err := pt.ingestUpdate(ctx, mockUpdate(step.update, step.completeUpTo))
