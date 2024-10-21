@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -41,10 +41,10 @@ type latencyVerifier struct {
 	initialScanHighwater time.Time
 	initialScanLatency   time.Duration
 
-	catchupScanEveryN log.EveryN
+	catchupScanEveryN roachtestutil.EveryN
 
 	maxSeenSteadyLatency time.Duration
-	maxSeenSteadyEveryN  log.EveryN
+	maxSeenSteadyEveryN  roachtestutil.EveryN
 	latencyBecameSteady  bool
 
 	latencyHist *hdrhistogram.Histogram
@@ -74,8 +74,8 @@ func makeLatencyVerifier(
 		setTestStatus:            setTestStatus,
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
-		maxSeenSteadyEveryN:      log.Every(10 * time.Second),
-		catchupScanEveryN:        log.Every(2 * time.Second),
+		maxSeenSteadyEveryN:      roachtestutil.Every(10 * time.Second),
+		catchupScanEveryN:        roachtestutil.Every(2 * time.Second),
 	}
 }
 
