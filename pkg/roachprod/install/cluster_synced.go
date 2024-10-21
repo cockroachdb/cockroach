@@ -2212,13 +2212,10 @@ func (c *SyncedCluster) Put(
 		ticker = time.NewTicker(1000 * time.Millisecond)
 	}
 	defer ticker.Stop()
-	var errOnce sync.Once
 	var finalErr error
 	setErr := func(e error) {
-		if e != nil {
-			errOnce.Do(func() {
-				finalErr = e
-			})
+		if finalErr != nil {
+			finalErr = e
 		}
 	}
 
@@ -2608,7 +2605,12 @@ func (c *SyncedCluster) Get(
 		ticker = time.NewTicker(1000 * time.Millisecond)
 	}
 	defer ticker.Stop()
-	haveErr := false
+	var finalErr error
+	setErr := func(e error) {
+		if finalErr != nil {
+			finalErr = e
+		}
+	}
 
 	var spinner = []string{"|", "/", "-", "\\"}
 	spinnerIdx := 0
@@ -2626,7 +2628,7 @@ func (c *SyncedCluster) Get(
 					linesMu.Lock()
 					defer linesMu.Unlock()
 					if r.err != nil {
-						haveErr = true
+						setErr(r.err)
 						lines[r.index] = r.err.Error()
 					} else {
 						lines[r.index] = "done"
@@ -2663,8 +2665,8 @@ func (c *SyncedCluster) Get(
 		}()
 	}
 
-	if haveErr {
-		return errors.Newf("get %s failed", src)
+	if finalErr != nil {
+		return errors.Wrapf(finalErr, "get %s failed", src)
 	}
 	return nil
 }
