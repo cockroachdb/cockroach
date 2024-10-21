@@ -23,13 +23,6 @@ withdraw-support 2 1
 2 x 1 1
 3 1 1 1
 
-withdraw-support 3 1
-----
-  1 2 3
-1 1 1 1
-2 x 1 1
-3 x 1 1
-
 campaign 1
 ----
 INFO 1 is starting a new election at term 0
@@ -81,11 +74,13 @@ stabilize
   Entries:
   1/11 EntryNormal ""
   Messages:
+  1->3 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
 > 3 receiving messages
+  1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
@@ -96,13 +91,15 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/11 Commit:10
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
   Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:10
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:10
 > 1 handling Ready
   Ready MustSync=true:
@@ -111,10 +108,12 @@ stabilize
   1/11 EntryNormal ""
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
   Ready MustSync=true:
@@ -125,18 +124,28 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
 print-fortification-state 1
 ----
 1 : 1
+3 : 1
+
+withdraw-support 3 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 x 1 1
 
 bump-epoch 2
 ----
