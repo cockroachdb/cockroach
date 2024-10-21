@@ -226,7 +226,6 @@ use test2;
 CREATE USER testuser2;
 
 statement ok
-GRANT testuser TO root;
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
 query TBTTTB colnames,rowsort
