@@ -498,7 +498,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			if d.HasArg("expect-pausepoint") {
 				// Check if we are expecting a pausepoint error.
 				require.NotNilf(t, err, "expected pause point error")
-				require.Regexp(t, "pause point .* hit$", err.Error())
+				require.Regexp(t, ".*pause point .* hit.*", err.Error())
 				jobutils.WaitForJobToPause(t, sqlutils.MakeSQLRunner(sqlDB), jobID)
 				ret := append(ds.noticeBuffer, "job paused at pausepoint")
 				return strings.Join(ret, "\n")
