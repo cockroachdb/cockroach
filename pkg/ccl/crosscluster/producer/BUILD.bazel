@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "event_stream.go",
         "producer_job.go",
+        "range_stats.go",
         "replication_manager.go",
         "span_config_event_stream.go",
         "stream_event_batcher.go",
@@ -61,6 +62,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/rangedesc",
         "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
