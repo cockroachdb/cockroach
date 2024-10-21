@@ -68,6 +68,7 @@ go_test(
         "event_size_test.go",
         "processor_helpers_test.go",
         "processor_test.go",
+        "registry_helper_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
         "scheduler_test.go",
