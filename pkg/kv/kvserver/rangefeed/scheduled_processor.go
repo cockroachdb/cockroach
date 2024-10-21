@@ -305,7 +305,7 @@ func (p *ScheduledProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-) (bool, *Filter) {
+) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -322,7 +322,6 @@ func (p *ScheduledProcessor) Register(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)
-
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -333,7 +332,6 @@ func (p *ScheduledProcessor) Register(
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
-		stream.AddRegistration(r)
 		// Add the new registration to the registry.
 		p.reg.Register(ctx, r)
 
@@ -369,9 +367,9 @@ func (p *ScheduledProcessor) Register(
 		return f
 	})
 	if filter != nil {
-		return true, filter
+		return true, r, filter
 	}
-	return false, nil
+	return false, nil, nil
 }
 
 func (p *ScheduledProcessor) unregisterClient(r registration) bool {

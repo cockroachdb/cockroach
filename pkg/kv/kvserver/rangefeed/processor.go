@@ -207,7 +207,7 @@ type Processor interface {
 		withOmitRemote bool,
 		stream Stream,
 		disconnectFn func(),
-	) (bool, *Filter)
+	) (bool, Disconnector, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
 	DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error)
@@ -592,7 +592,7 @@ func (p *LegacyProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-) (bool, *Filter) {
+) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -607,10 +607,9 @@ func (p *LegacyProcessor) Register(
 	case p.regC <- r:
 		// Wait for response.
 		f := <-p.filterResC
-		stream.AddRegistration(r)
-		return true, f
+		return true, r, f
 	case <-p.stoppedC:
-		return false, nil
+		return false, nil, nil
 	}
 }
 

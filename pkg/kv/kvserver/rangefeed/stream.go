@@ -22,7 +22,6 @@ type Stream interface {
 	// registration.Disconnect(), it is important that this function doesn't block
 	// IO or try acquiring locks that could lead to deadlocks.
 	SendError(err *kvpb.Error)
-	AddRegistration(Disconnector)
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -30,11 +29,11 @@ type Stream interface {
 type PerRangeEventSink struct {
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *StreamManager
+	wrapped  sender
 }
 
 func NewPerRangeEventSink(
-	rangeID roachpb.RangeID, streamID int64, wrapped *StreamManager,
+	rangeID roachpb.RangeID, streamID int64, wrapped sender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		rangeID:  rangeID,
@@ -73,10 +72,6 @@ func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 		log.Errorf(context.Background(),
 			"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 	}
-}
-
-func (s *PerRangeEventSink) AddRegistration(r Disconnector) {
-	s.wrapped.AddStream(s.streamID, r)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client

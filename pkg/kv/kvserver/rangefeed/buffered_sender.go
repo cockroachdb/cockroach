@@ -52,6 +52,8 @@ import (
 // Refer to the comments above UnbufferedSender for more details on the role of
 // senders in the entire rangefeed architecture.
 type BufferedSender struct {
+	sm *StreamManager // maybe a callback
+
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender
@@ -139,7 +141,7 @@ func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
 // quiesced. BufferedSender will stop forwarding events after run completes. It
 // may still buffer more events in the buffer, but they will be cleaned up soon
 // during bs.Stop(), and there should be no new events buffered after that.
-func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error {
+func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper, onError func(streamID int64)) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -156,6 +158,9 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 				if success {
 					err := bs.sender.Send(e.ev)
 					e.alloc.Release(ctx)
+					if e.ev.Error != nil {
+						onError(e.ev.StreamID)
+					}
 					if err != nil {
 						return err
 					}

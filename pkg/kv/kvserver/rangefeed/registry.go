@@ -62,6 +62,7 @@ type Disconnector interface {
 	// Disconnect disconnects the registration with the provided error. Safe to
 	// run multiple times, but subsequent errors would be discarded.
 	Disconnect(pErr *kvpb.Error)
+	IsDisconnected() bool
 }
 
 // baseRegistration is a common base for all registration types. It is intended

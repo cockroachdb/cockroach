@@ -7,13 +7,13 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,10 +48,10 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	sm := NewStreamManager(NewUnbufferedSender(testServerStream), testRangefeedCounter)
+	ubs := NewUnbufferedSender(testServerStream)
+	sm := NewStreamManager(ubs, testRangefeedCounter)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop()
-
 	t.Run("nil handling", func(t *testing.T) {
 		const streamID = 0
 		const rangeID = 1
@@ -67,24 +67,17 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		sm.AddStream(streamID, &cancelCtxDisconnector{
 			cancel: func() {
 				streamCtxCancel()
-				require.NoError(t, sm.send(makeMuxRangefeedErrorEvent(streamID, rangeID, nil), nil))
+				require.NoError(t, ubs.send(makeMuxRangefeedErrorEvent(streamID, rangeID, nil), nil))
 			},
 		})
 		// Note that kvpb.NewError(nil) == nil.
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 		sm.DisconnectStream(streamID, rangeID, err)
+		// todo(wait for error)
+		testServerStream.waitForEvent(t, ev)
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 		require.Equal(t, context.Canceled, streamCtx.Err())
-		expectedErrEvent := &kvpb.MuxRangeFeedEvent{
-			StreamID: streamID,
-			RangeID:  rangeID,
-		}
-		expectedErrEvent.MustSetValue(&kvpb.RangeFeedError{
-			Error: *kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)),
-		})
-		time.Sleep(10 * time.Millisecond)
 		require.Equal(t, 1, testServerStream.totalEventsSent())
-		require.True(t, testServerStream.hasEvent(expectedErrEvent))
 
 		// Repeat closing the stream does nothing.
 		sm.DisconnectStream(streamID, rangeID,
@@ -104,7 +97,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			{2, 2, &kvpb.NodeUnavailableError{}},
 		}
 
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, int32(0), testRangefeedCounter.get())
 
 		for _, muxError := range testRangefeedCompletionErrors {
 			streamID := muxError.streamID
@@ -112,7 +105,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			err := muxError.Error
 			sm.AddStream(muxError.streamID, &cancelCtxDisconnector{
 				cancel: func() {
-					require.NoError(t, sm.send(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)), nil))
+					require.NoError(t, ubs.send(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)), nil))
 				},
 			})
 		}
@@ -128,8 +121,6 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			}(muxError.streamID, muxError.rangeID, muxError.Error)
 		}
 		wg.Wait()
-
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
 
 		for _, muxError := range testRangefeedCompletionErrors {
 			testutils.SucceedsSoon(t, func() error {
@@ -147,6 +138,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 					muxError, testServerStream.String())
 			})
 		}
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 }
 
@@ -166,7 +158,8 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 	sp := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")}
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	sm := NewStreamManager(NewUnbufferedSender(testServerStream), testRangefeedCounter)
+	ubs := NewUnbufferedSender(testServerStream)
+	sm := NewStreamManager(ubs, testRangefeedCounter)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop()
 
@@ -177,7 +170,7 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 	sm.AddStream(0, &cancelCtxDisconnector{
 		cancel: func() {
 			streamCancel()
-			require.NoError(t, sm.send(disconnectErr, nil))
+			require.NoError(t, ubs.send(disconnectErr, nil))
 		},
 	})
 

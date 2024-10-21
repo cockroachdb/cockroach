@@ -43,10 +43,11 @@ type StreamManager struct {
 	// thread safety.
 	sender sender
 
-	// streamID -> context cancellation
-	// Note that we do not delete from the map if an error is coming from
-	// r.disconnect. Is that okay
-	streams syncutil.Map[int64, Disconnector]
+	// streamID ->
+	streams struct {
+		syncutil.Mutex
+		m map[int64]Disconnector
+	}
 
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
@@ -54,44 +55,38 @@ type StreamManager struct {
 
 type sender interface {
 	send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error
-	run(ctx context.Context, stopper *stop.Stopper) error
+	run(ctx context.Context, stopper *stop.Stopper, onError func(int64)) error
 	cleanup()
 }
 
 func NewStreamManager(sender sender, metrics RangefeedMetricsRecorder) *StreamManager {
-	return &StreamManager{
+	sm := &StreamManager{
 		sender:  sender,
 		metrics: metrics,
 	}
+	sm.streams.m = make(map[int64]Disconnector)
+	return sm
 }
 
 func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sink Stream) {
-	switch sm.sender.(type) {
+	switch sender := sm.sender.(type) {
 	case *BufferedSender:
 		return &BufferedPerRangeEventSink{
-			PerRangeEventSink: NewPerRangeEventSink(rangeID, streamID, sm),
+			PerRangeEventSink: NewPerRangeEventSink(rangeID, streamID, sender),
 		}
 	case *UnbufferedSender:
-		return NewPerRangeEventSink(rangeID, streamID, sm)
+		return NewPerRangeEventSink(rangeID, streamID, sender)
 	default:
 		log.Fatalf(context.Background(), "unexpected sender type %T", sm)
 		return nil
 	}
 }
 
-func (sm *StreamManager) send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error {
-	if ev.Error != nil {
-		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
-	}
-	//// Fine to skip nil checking here since that would be a programming error.
-	//// Ignore error since the stream is already disconnecting. There is nothing
-	//// else that could be done. When SendBuffered is returning an error, a node
-	//// level shutdown from node.MuxRangefeed is happening soon to let clients
-	//// know that the rangefeed is shutting down.
-	//log.Infof(context.Background(),
-	//	"failed to buffer rangefeed complete event for stream %d due to %s, "+
-	//		"but a node level shutdown should be happening", ev.StreamID, ev.Error)
-	return sm.sender.send(ev, alloc)
+func (sm *StreamManager) OnError(streamID int64) {
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	delete(sm.streams.m, streamID)
+	sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 }
 
 func (sm *StreamManager) DisconnectStream(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
@@ -99,24 +94,36 @@ func (sm *StreamManager) DisconnectStream(streamID int64, rangeID roachpb.RangeI
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 		return
 	}
-	ev := &kvpb.MuxRangeFeedEvent{
-		StreamID: streamID,
-		RangeID:  rangeID,
-	}
-	ev.MustSetValue(&kvpb.RangeFeedError{
-		Error: *err,
-	})
-	if disconnector, ok := sm.streams.LoadAndDelete(ev.StreamID); ok {
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	if disconnector, ok := sm.streams.m[streamID]; ok {
 		// Fine to skip nil checking here since that would be a programming error.
-		(*disconnector).Disconnect(err)
+		disconnector.Disconnect(err)
 	}
 }
 
+// lock in streamManager.m
+// lock in registration.IsDisconnected
+
+// We should never add a stream if the stream has disconnected and OnError had been called.
+// Nothing would trigger a cleanup.
+
 func (sm *StreamManager) AddStream(streamID int64, d Disconnector) {
-	// TODO(wenyihu6): make sure pointers to interface are doing well here
-	if _, loaded := sm.streams.LoadOrStore(streamID, &d); loaded {
+	// We need the lock here because we need to make sure OnError sees the stream
+	// during run.
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	// Check disconnected under lock to avoid race conditions where d becomes
+	// disconnected right before we add it.
+	if d.IsDisconnected() {
+		// todo clean up if we dont do unregister async - careful of deadlock
+		// Don't add to sm because it's already disconnected.
+		return
+	}
+	if _, ok := sm.streams.m[streamID]; ok {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
+	sm.streams.m[streamID] = d
 	sm.metrics.UpdateMetricsOnRangefeedConnect()
 }
 
@@ -126,7 +133,7 @@ func (sm *StreamManager) Start(ctx context.Context, stopper *stop.Stopper) error
 	ctx, sm.taskCancel = context.WithCancel(ctx)
 	if err := stopper.RunAsyncTask(ctx, "buffered stream output", func(ctx context.Context) {
 		defer sm.wg.Done()
-		if err := sm.sender.run(ctx, stopper); err != nil {
+		if err := sm.sender.run(ctx, stopper, sm.OnError); err != nil {
 			sm.errCh <- err
 		}
 	}); err != nil {
