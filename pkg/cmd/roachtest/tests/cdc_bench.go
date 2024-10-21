@@ -56,15 +56,21 @@ const (
 	// practice it can.
 	cdcBenchColdCatchupScan cdcBenchScanType = "catchup-cold"
 
-	cdcBenchNoServer        cdcBenchServer = ""
-	cdcBenchProcessorServer cdcBenchServer = "processor" // legacy processor
+	cdcBenchNoServer cdcBenchServer = ""
+	// The legacy processor was removed in 25.1+. This is left in
+	// place for the roachtests for now to avoid chaning the same
+	// of roachperf timeseries.
+	//
+	// In such timeseries, "processor" refers to the now defunct
+	// legacy processor
+	cdcBenchProcessorServer cdcBenchServer = "processor"
 	cdcBenchSchedulerServer cdcBenchServer = "scheduler" // new scheduler
 )
 
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
+	cdcBenchServers = []cdcBenchServer{cdcBenchSchedulerServer}
 )
 
 func registerCDCBench(r registry.Registry) {
