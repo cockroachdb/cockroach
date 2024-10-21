@@ -740,10 +740,15 @@ const DefaultBackupSchedule = `RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WI
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() install.StartOpts {
 	return install.StartOpts{
-		EncryptedStores:    false,
-		NumFilesLimit:      config.DefaultNumFilesLimit,
-		SkipInit:           false,
-		StoreCount:         1,
+		EncryptedStores: false,
+		NumFilesLimit:   config.DefaultNumFilesLimit,
+		SkipInit:        false,
+		StoreCount:      1,
+		// When a node has 1 store, --wal-failover=among-stores has no effect
+		// but is harmless. If a node has multiple stores, it'll allow failover
+		// of WALs between stores. This allows us to exercise WAL failover and
+		// helps insulate us from test failures from disk stalls in roachtests.
+		WALFailover:        "among-stores",
 		VirtualClusterID:   2,
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: DefaultBackupSchedule,
