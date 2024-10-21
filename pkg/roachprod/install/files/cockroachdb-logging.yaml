@@ -35,13 +35,13 @@ sinks:
       channels: [STORAGE]
     security:
       channels: [PRIVILEGES, USER_ADMIN]
-      auditable: true
+      auditable: false
     sql-audit:
       channels: [SENSITIVE_ACCESS]
-      auditable: true
+      auditable: false
     sql-auth:
       channels: [SESSIONS]
-      auditable: true
+      auditable: false
     sql-exec:
       channels: [SQL_EXEC]
     sql-slow:
