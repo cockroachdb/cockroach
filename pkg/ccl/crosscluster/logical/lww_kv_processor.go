@@ -106,10 +106,11 @@ func (p *kvRowProcessor) ProcessRow(
 		return batchStats{}, err
 	}
 
-	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue, 0); err != nil {
-		return batchStats{}, err
+	var s batchStats
+	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue, &s, 0); err != nil {
+		return s, err
 	}
-	return batchStats{}, nil
+	return s, nil
 
 }
 
@@ -123,6 +124,7 @@ func (p *kvRowProcessor) processParsedRow(
 	row cdcevent.Row,
 	k roachpb.KeyValue,
 	prevValue roachpb.Value,
+	s *batchStats,
 	refreshCount int,
 ) error {
 	dstTableID, ok := p.dstBySrc[row.TableID]
@@ -152,6 +154,7 @@ func (p *kvRowProcessor) processParsedRow(
 				// loser. We ignore the error and move onto the next row row we have
 				// to process.
 				if condErr.OriginTimestampOlderThan.IsSet() {
+					s.kvWriteTooOld++
 					return nil
 				}
 				// If HadNewerOriginTimestamp is true, it implies that the row we
@@ -175,11 +178,12 @@ func (p *kvRowProcessor) processParsedRow(
 					if refreshCount > maxRefreshCount {
 						return errors.Wrapf(err, "max refresh count (%d) reached", maxRefreshCount)
 					}
+					s.kvWriteValueRefreshes++
 					var refreshedValue roachpb.Value
 					if condErr.ActualValue != nil {
 						refreshedValue = *condErr.ActualValue
 					}
-					return p.processParsedRow(ctx, txn, row, k, refreshedValue, refreshCount+1)
+					return p.processParsedRow(ctx, txn, row, k, refreshedValue, s, refreshCount+1)
 				}
 			}
 			return err
