@@ -347,6 +347,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			cfg.metrics,
 			s,
 			func() {},
+			func(context.Context, registration) {},
 		)
 	case unbuffered:
 		return newUnbufferedRegistration(
@@ -361,6 +362,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			cfg.metrics,
 			&testBufferedStream{Stream: s},
 			func() {},
+			func(context.Context, registration) {},
 		)
 	default:
 		panic("unknown registration type")

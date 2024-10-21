@@ -333,7 +333,10 @@ func (p *ScheduledProcessor) Register(
 	if isBufferedStream {
 		r = newUnbufferedRegistration(streamCtx,
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn,
+			func(ctx context.Context, r registration) {
+				p.unregisterClientAsync(r)
+			})
 	} else {
 		r = newBufferedRegistration(
 			streamCtx,

@@ -138,6 +138,7 @@ func newUnbufferedRegistration(
 	metrics *Metrics,
 	stream BufferedStream,
 	unregisterFn func(),
+	cleanup func(context.Context, registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -148,6 +149,7 @@ func newUnbufferedRegistration(
 			withFiltering:    withFiltering,
 			withOmitRemote:   withOmitRemote,
 			unreg:            unregisterFn,
+			cleanup:          cleanup,
 		},
 		metrics: metrics,
 		stream:  stream,
@@ -209,6 +211,7 @@ func (ubr *unbufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	defer ubr.mu.Unlock()
 	if alreadyDisconnected := ubr.setDisconnectedIfNotWithLock(); !alreadyDisconnected {
 		ubr.stream.SendError(pErr)
+		ubr.cleanup(ubr.streamCtx, ubr)
 	}
 }
 

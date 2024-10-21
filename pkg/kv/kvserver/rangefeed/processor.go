@@ -606,7 +606,8 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
 		streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, func(ctx context.Context, r registration) {
+		},
 	)
 	select {
 	case p.regC <- r:

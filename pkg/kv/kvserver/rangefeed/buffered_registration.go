@@ -171,7 +171,7 @@ func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 			br.mu.outputLoopCancelFn()
 		}
 		br.mu.disconnected = true
-		br.cleanup(ctx, br)
+		br.cleanup(br.streamCtx, br)
 		br.stream.SendError(pErr)
 	}
 }
