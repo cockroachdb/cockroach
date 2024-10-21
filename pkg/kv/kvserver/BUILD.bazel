@@ -423,6 +423,7 @@ go_test(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/node_rac2",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvflowcontrol/replica_rac2",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
