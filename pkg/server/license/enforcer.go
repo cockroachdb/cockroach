@@ -155,7 +155,7 @@ type MetadataAccessor interface {
 func NewEnforcer(tk *TestingKnobs) *Enforcer {
 	e := &Enforcer{
 		startTime:      timeutil.Now(),
-		throttleLogger: log.Every(5 * time.Minute),
+		throttleLogger: log.Every(12 * time.Hour),
 		testingKnobs:   tk,
 	}
 	return e

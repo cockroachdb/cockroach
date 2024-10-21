@@ -502,10 +502,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Enforce license policies. Throttling can occur if there is no valid
 		// license or if the existing one has expired.
 		if isSQLOkayToThrottle(ast) {
-			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+			if _, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
 				return makeErrEvent(err)
-			} else if notice != nil {
-				res.BufferNotice(notice)
 			}
 		}
 	}
