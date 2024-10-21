@@ -1039,4 +1039,38 @@ LEFT JOIN LATERAL (
 row-1  row-1  {row-1}  1
 row-2  row-2  {row-2}  1
 
-subtest end
+# Regression test for #127814. The vectorized engine should correctly project
+# expressions operating on NULL.
+statement ok
+CREATE TABLE t127814_empty (i INT)
+
+statement ok
+CREATE TABLE t127814 (o OID)
+
+statement ok
+INSERT INTO t127814 VALUES (0)
+
+query B
+SELECT o NOT IN ((SELECT NULL FROM t127814_empty),) FROM t127814
+----
+NULL
+
+# Regression test for #130759. The vectorized engine should correctly evaluate
+# IN expressions where the tuple on the RHS contains a single NULL value.
+statement ok
+CREATE TABLE t130759 (
+  i INT
+);
+
+statement ok
+INSERT INTO t130759 VALUES (0);
+
+query I
+SELECT 1
+FROM t130759
+WHERE NOT (
+  ('127.0.0.1'::INET - i) IN (
+    (SELECT NULL FROM (VALUES (0)) v(i) WHERE false),
+  )
+)
+----
