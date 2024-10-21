@@ -924,7 +924,8 @@ func (v variations) startNoBackup(
 		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--locality=region=fake-%d", (node-1)/nodesPerRegion))
 		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, extraArgs...)
-		v.Start(ctx, t.L(), opts, install.MakeClusterSettings(), v.Node(node))
+		settings := install.MakeClusterSettings(install.EnvOption([]string{"GODEBUG=gctrace=1"}))
+		v.Start(ctx, t.L(), opts, settings, v.Node(node))
 	}
 }
 
