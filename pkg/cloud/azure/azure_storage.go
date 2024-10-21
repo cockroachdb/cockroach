@@ -220,7 +220,8 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container)
+	options := args.ExternalStorageOptions()
+	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container, options.ClientName)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: unable to create transport")
 	}
@@ -251,11 +252,6 @@ func makeAzureStorage(
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
-		}
-
-		options := cloud.ExternalStorageOptions{}
-		for _, o := range args.Options {
-			o(&options)
 		}
 
 		defaultCredentialsOptions := &DefaultAzureCredentialWithFileOptions{}
