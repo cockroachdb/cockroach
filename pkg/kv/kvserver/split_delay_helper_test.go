@@ -63,7 +63,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			raftStatus:  nil,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "", s)
+		assert.EqualValues(t, "", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
@@ -85,7 +85,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			raftStatus:  nil,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
+		assert.EqualValues(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
@@ -97,7 +97,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			raftStatus:  statusWithState(raft.StateFollower),
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
+		assert.EqualValues(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
@@ -109,7 +109,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 				raftStatus:  statusWithState(state),
 			}
 			s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-			assert.Equal(t, "; delayed by 5.5s to resolve: not leader ("+state.String()+") (without success)", s)
+			assert.EqualValues(t, "; delayed by 5.5s to resolve: not leader ("+state.String()+") (without success)", s)
 		})
 	}
 
@@ -125,7 +125,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		// We try to wake up the follower once, but then give up on it.
-		assert.Equal(t, "; delayed by 1.3s to resolve: r1/2 inactive", s)
+		assert.EqualValues(t, "; delayed by 1.3s to resolve: r1/2 inactive", s)
 		assert.Less(t, int64(h.slept), int64(2*h.TickDuration()))
 	})
 
@@ -148,7 +148,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 				raftStatus:  st,
 			}
 			s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-			assert.Equal(t, "; delayed by 5.5s to resolve: replica r1/2 not caught up: "+
+			assert.EqualValues(t, "; delayed by 5.5s to resolve: replica r1/2 not caught up: "+
 				state.String()+" match=0 next=0 paused (without success)", s)
 		})
 	}
@@ -164,7 +164,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			raftStatus:  st,
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "", s)
+		assert.EqualValues(t, "", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
@@ -187,6 +187,6 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			}
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; delayed by 2.5s to resolve: replica r1/2 not caught up: StateProbe match=0 next=0", s)
+		assert.EqualValues(t, "; delayed by 2.5s to resolve: replica r1/2 not caught up: StateProbe match=0 next=0", s)
 	})
 }
