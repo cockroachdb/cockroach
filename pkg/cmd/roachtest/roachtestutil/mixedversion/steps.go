@@ -636,9 +636,14 @@ func quoteVersionForPresentation(v string) string {
 // regular backups as some tests check for running jobs and the
 // scheduled backup may make things non-deterministic. In the future,
 // we should change the default and add an API for tests to opt-out of
-// the default scheduled backup if necessary.
+// the default scheduled backup if necessary. We disable WAL failover
+// because some versions before v24.1 will early exit since they don't
+// understand the `--wal-failover` flag.
 func startOpts(opts ...option.StartStopOption) option.StartOpts {
 	return option.NewStartOpts(
-		append([]option.StartStopOption{option.NoBackupSchedule}, opts...)...,
+		append([]option.StartStopOption{
+			option.NoBackupSchedule,
+			option.DisableWALFailover,
+		}, opts...)...,
 	)
 }
