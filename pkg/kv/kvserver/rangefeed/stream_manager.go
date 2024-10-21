@@ -43,7 +43,7 @@ type StreamManager struct {
 	// thread safety.
 	sender sender
 
-	// streamID ->
+	// streamID -> disconnects
 	streams struct {
 		syncutil.Mutex
 		m map[int64]Disconnector
@@ -73,6 +73,7 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 	case *BufferedSender:
 		return &BufferedPerRangeEventSink{
 			PerRangeEventSink: NewPerRangeEventSink(rangeID, streamID, sender),
+			sender:            sender,
 		}
 	case *UnbufferedSender:
 		return NewPerRangeEventSink(rangeID, streamID, sender)
@@ -148,6 +149,9 @@ func (sm *StreamManager) Stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
 	sm.sender.cleanup()
+	for _, d := range sm.streams.m {
+		d.Disconnect(nil)
+	}
 }
 
 func (sm *StreamManager) Error() chan error {

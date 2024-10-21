@@ -172,9 +172,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "filtering", func(t *testing.T, filtering bool) {
 			// Run a catch-up scan for a registration over a test
 			// iterator with the following keys.
-			txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-     		iter := newTestIterator(keyValues, roachpb.Key("w"))
-
+			iter := newTestIterator(keyValues, roachpb.Key("w"))
 			metrics := NewMetrics()
 			s := newTestStream()
 			r := newTestRegistration(s, withRSpan(roachpb.Span{
@@ -191,9 +189,8 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 			}
 			require.True(t, iter.closed)
 			require.NotZero(t, metrics.RangeFeedCatchUpScanNanos.Count())
-
-				// Compare the events sent on the registration's Stream to the expected events.
-        		require.Equal(t, expEvents(withFiltering), r.Events())
+			// Compare the events sent on the registration's Stream to the expected events.
+			require.Equal(t, expEvents(filtering), s.Events())
 		})
 	})
 }
