@@ -20,15 +20,21 @@ SELECT levenshtein(lpad('', 256, 'x'), '')
 statement error levenshtein argument exceeds maximum length of 255 characters
 SELECT levenshtein(lpad('', 256, 'x'), '', 2, 3, 4)
 
+statement error levenshtein argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 3)
+
+statement error levenshtein argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 2, 3, 4, 3)
+
 query TTII
-SELECT a, b, levenshtein(a, b), levenshtein(a, b, 2, 3, 4) FROM fuzzystrmatch_table ORDER BY id
+SELECT a, b, levenshtein(a, b), levenshtein(a, b, 2, 3, 4), levenshtein_less_equal(a, b, 5), levenshtein_less_equal(a, b, 2, 3, 4, 5) FROM fuzzystrmatch_table ORDER BY id
 ----
-apple  banana  5     18
-·      pear    4     8
-😄      🐯       1     4
-NULL   a       NULL  NULL
-a      NULL    NULL  NULL
-NULL   NULL    NULL  NULL
+apple  banana  5     18    5     6
+·      pear    4     8     4     8
+😄      🐯       1     4     1     4
+NULL   a       NULL  NULL   NULL  NULL
+a      NULL    NULL  NULL   NULL  NULL
+NULL   NULL    NULL  NULL   NULL  NULL
 
 query T
 SELECT soundex('hello world!')
