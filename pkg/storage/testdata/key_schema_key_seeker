@@ -147,3 +147,25 @@ MaterializeUserKey(-1, 3) = hex:6d6f6f0000000000b2d05e00000000010d
 MaterializeUserKey(3, 2) = hex:666f6f0000000000b2d05e00000000010d
 MaterializeUserKey(2, 0) = hex:6261720000000000b2d05e00000000010d
 MaterializeUserKey(0, 1) = hex:6261780000000000b2d05e00000000010d
+
+define-block
+moo@3.000000001,0
+moo@3.000000000,2
+moo@3.000000000,1
+moo@3.000000000,0
+----
+Parse("moo@3.000000001,0") = hex:6d6f6f0000000000b2d05e0109
+Parse("moo@3.000000000,2") = hex:6d6f6f0000000000b2d05e00000000020d
+Parse("moo@3.000000000,1") = hex:6d6f6f0000000000b2d05e00000000010d
+Parse("moo@3.000000000,0") = hex:6d6f6f0000000000b2d05e0009
+
+materialize-user-key
+0
+1
+2
+3
+----
+MaterializeUserKey(-1, 0) = hex:6d6f6f0000000000b2d05e0109
+MaterializeUserKey(0, 1) = hex:6d6f6f0000000000b2d05e00000000020d
+MaterializeUserKey(1, 2) = hex:6d6f6f0000000000b2d05e00000000010d
+MaterializeUserKey(2, 3) = hex:6d6f6f0000000000b2d05e0009
