@@ -160,7 +160,15 @@ SET tracing = kv
 
 # Test a blind write.
 statement ok
-UPSERT INTO overwrite VALUES (1, 'two', 3);
+UPSERT INTO overwrite VALUES (1, 'two', 3)
+
+# Test a blind rewrite. No tombstones because the PK doesn't change.
+statement ok
+UPSERT INTO overwrite VALUES (1, 'two', 4)
+
+# Test a blind overwrite.
+statement ok
+UPSERT INTO overwrite VALUES (1, 'three', 5)
 
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%'
@@ -170,6 +178,16 @@ CPut /Table/111/1/" "/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\x80"/1/0 -> /TUPLE/3:3:Int/5
+CPut /Table/111/1/" "/1/0 -> nil (tombstone)
+CPut /Table/111/1/"@"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
+
+query ITI
+SELECT * FROM overwrite ORDER BY pk
+----
+1  three  5
 
 statement ok
 INSERT INTO t VALUES (1, 'two', 3, 4, 5)
@@ -204,6 +222,11 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%'
 CPut /Table/111/1/"@"/1/0 -> /TUPLE/3:3:Int/3
 CPut /Table/111/1/" "/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\x80"/1/0 -> /TUPLE/3:3:Int/5
+CPut /Table/111/1/" "/1/0 -> nil (tombstone)
+CPut /Table/111/1/"@"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/1/0 -> /TUPLE/3:3:Int/3/1:4:Int/4/1:5:Int/5

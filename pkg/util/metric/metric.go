@@ -6,6 +6,7 @@
 package metric
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -179,6 +181,7 @@ var _ Iterable = &Counter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
 var _ Iterable = &CounterVec{}
+var _ Iterable = &HistogramVec{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
@@ -187,6 +190,7 @@ var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 var _ json.Marshaler = &GaugeVec{}
 var _ json.Marshaler = &CounterVec{}
+var _ json.Marshaler = &HistogramVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
@@ -195,6 +199,7 @@ var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
 var _ PrometheusVector = &CounterVec{}
+var _ PrometheusVector = &HistogramVec{}
 
 var now = timeutil.Now
 
@@ -1287,6 +1292,82 @@ func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 		c := cv.promVec.WithLabelValues(labels...)
 
 		if err := c.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
+}
+
+// HistogramVec wraps a prometheus.HistogramVec; it is not aggregated or persisted.
+type HistogramVec struct {
+	Metadata
+	vector
+	promVec *prometheus.HistogramVec
+}
+
+// NewExportedHistogramVec creates a new HistogramVec containing labeled counters to
+// be exported to an external collector; the contained histograms are not
+// aggregated or persisted to the tsdb (see aggmetric.Histogram for a counter that
+// persists the aggregation of n labeled child metrics).
+func NewExportedHistogramVec(
+	metadata Metadata, bucketConfig staticBucketConfig, labelNames []string,
+) *HistogramVec {
+	vec := newVector(labelNames)
+	opts := prometheus.HistogramOpts{
+		Buckets: bucketConfig.GetBucketsFromBucketConfig(),
+		Name:    metadata.Name,
+		Help:    metadata.Help,
+	}
+	promVec := prometheus.NewHistogramVec(opts, vec.orderedLabelNames)
+	return &HistogramVec{
+		Metadata: metadata,
+		vector:   vec,
+		promVec:  promVec,
+	}
+}
+
+// Observe adds invokes prometheus.Observer Observe function for the given
+// combination of labels.
+func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
+	labelValues := hv.getOrderedValues(labels)
+	hv.recordLabels(labelValues)
+	hv.promVec.WithLabelValues(labelValues...).Observe(v)
+}
+
+// GetMetadata implements Iterable.
+func (hv *HistogramVec) GetMetadata() Metadata {
+	return hv.Metadata
+}
+
+// Inspect implements Iterable.
+func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
+
+// MarshalJSON implements JSONMarshaler.
+func (hv *HistogramVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(hv)
+}
+
+// GetType implements PrometheusExportable.
+func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// ToPrometheusMetrics implements PrometheusExportable.
+func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(hv.encounteredLabelValues))
+
+	for _, labels := range hv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		o := hv.promVec.WithLabelValues(labels...)
+		histogram, ok := o.(prometheus.Histogram)
+		if !ok {
+			log.Errorf(context.TODO(), "Unable to convert Observer to prometheus.Histogram. Metric name=%s", hv.Name)
+			continue
+		}
+		if err := histogram.Write(m); err != nil {
 			panic(err)
 		}
 

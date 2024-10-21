@@ -136,12 +136,9 @@ func TestSnapshotPacer(t *testing.T) {
 	var pacer *SnapshotPacer = nil
 	// Should not panic on nil pacer.
 	require.NoError(t, pacer.Pace(ctx, 1, false))
-	// Should not panic on nil pacer.
-	pacer.Close()
 
 	q := &testingSnapshotQueue{}
-	pacer = NewSnapshotPacer(q, 1)
-	defer pacer.Close()
+	pacer = NewSnapshotPacer(q)
 
 	// Should not ask for admission since write bytes = burst size.
 	writeBytes := int64(SnapshotBurstSize)
