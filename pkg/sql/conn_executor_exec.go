@@ -505,7 +505,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
 				return makeErrEvent(err)
 			} else if notice != nil {
-				res.BufferNotice(notice)
+				p.BufferClientNotice(ctx, notice)
 			}
 		}
 	}
