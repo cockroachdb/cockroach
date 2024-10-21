@@ -52,7 +52,31 @@ func CheckLogicalReplicationCompatibility(
 			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 		}
 	}
+	if err := checkOutboundReferences(dst); err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+	}
 
+	return nil
+}
+
+// checkOutboundReferences verifies that the table descriptor does not
+// reference any user-defined functions, sequences, or triggers.
+func checkOutboundReferences(dst *descpb.TableDescriptor) error {
+	for _, col := range dst.Columns {
+		if len(col.UsesSequenceIds) > 0 {
+			return errors.Newf("table %s references sequences with IDs %v", dst.Name, col.UsesSequenceIds)
+		}
+		if len(col.UsesFunctionIds) > 0 {
+			return errors.Newf("table %s references functions with IDs %v", dst.Name, col.UsesFunctionIds)
+		}
+	}
+	if len(dst.Triggers) > 0 {
+		triggerNames := make([]string, len(dst.Triggers))
+		for i, trigger := range dst.Triggers {
+			triggerNames[i] = trigger.Name
+		}
+		return errors.Newf("table %s references triggers [%s]", dst.Name, strings.Join(triggerNames, ", "))
+	}
 	return nil
 }
 
