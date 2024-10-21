@@ -265,17 +265,12 @@ INSERT INTO t6 VALUES (1), (2), (3);
 statement ok
 ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
 
-query TT
-SHOW CREATE TABLE t6
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t6
 ----
-t6  CREATE TABLE public.t6 (
-      id INT8 NULL,
-      id2 STRING NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
-      FAMILY f1 (id, rowid),
-      FAMILY f2 (id2)
-    )
+id     INT8    true   NULL            ·  {t6_pkey}  false
+id2    STRING  true   NULL            ·  {t6_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t6_pkey}  true
 
 # Ensure the type of the default column is checked
 statement ok
@@ -300,7 +295,7 @@ INSERT INTO t8 VALUES ('hello')
 statement error pq: column "x" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING x::INT8".
 ALTER TABLE t8 ALTER COLUMN x TYPE INT
 
-statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t8 ALTER COLUMN x TYPE INT USING x::INT8
 
 query TT
@@ -442,14 +437,35 @@ ROLLBACK
 statement ok
 CREATE TABLE t21 (x INT);
 
+statement ok
+INSERT INTO t21 VALUES (888),(-32760);
+
 statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE t21 ALTER COLUMN x TYPE STRING, ALTER COLUMN x SET NOT NULL;
+
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+ALTER TABLE t21 ALTER COLUMN x TYPE VARCHAR(30), ALTER COLUMN x SET NOT VISIBLE;
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t21
+----
+x      INT8    true   NULL            ·  {t21_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t21_pkey}  true
 
 statement ok
 CREATE TABLE t22 (x INT);
 
+statement ok
+INSERT INTO t22 VALUES (0),(-5);
+
 statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE t22 ALTER COLUMN x SET NOT NULL, ALTER COLUMN x TYPE STRING;
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t22
+----
+x      INT8    true   NULL            ·  {t22_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t22_pkey}  true
 
 # Ensure ALTER COLUMN TYPE USING EXPRESSION works.
 statement ok
@@ -477,7 +493,7 @@ CREATE TABLE t24 (x STRING);
 statement ok
 INSERT INTO t24 VALUES ('1'), ('hello');
 
-statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t24  ALTER COLUMN x TYPE INT USING (x::int + 5)
 
 query TT colnames
@@ -585,7 +601,7 @@ INSERT INTO t30 VALUES (e'a\\01');
 statement error pq: column "x" cannot be cast automatically to type BYTES\nHINT: You might need to specify "USING x::BYTES".
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
 
-statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
+statement error .*could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES USING x::BYTES
 
 # Ensure that dependent views prevent column type modification.
@@ -941,7 +957,7 @@ ALTER TABLE t_bytes ALTER COLUMN c2 SET DATA TYPE CHAR(4);
 statement error pq: column "c3" cannot be cast automatically to type UUID\nHINT: You might need to specify "USING c3::UUID".
 ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID;
 
-statement error pq: could not parse "worldhello" as type uuid: uuid: UUID must be exactly 16 bytes long, got 10 bytes
+statement error .*could not parse "worldhello" as type uuid: uuid: UUID must be exactly 16 bytes long, got 10 bytes
 ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID USING c3::UUID;
 
 statement ok
@@ -961,17 +977,13 @@ SELECT c2,c3 FROM t_bytes ORDER BY c1;
 w    NULL
 w    3b5692c8-0f73-49ec-9186-8f1478f3064a
 
-query TT
-SHOW CREATE TABLE t_bytes;
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_bytes;
 ----
-t_bytes  CREATE TABLE public.t_bytes (
-           c1 STRING NULL,
-           c2 CHAR(4) NULL,
-           c3 UUID NULL,
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
-           FAMILY f1 (c1, c2, c3, rowid)
-         )
+c1     STRING  true   NULL            ·  {t_bytes_pkey}  false
+c2     CHAR(4) true   NULL            ·  {t_bytes_pkey}  false
+c3     UUID    true   NULL            ·  {t_bytes_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t_bytes_pkey}  true
 
 statement ok
 DROP TABLE t_bytes;
@@ -1029,16 +1041,12 @@ NULL  NULL
 10012.34  4563.21
 12345.60  1.23
 
-query TT
-SHOW CREATE TABLE t_decimal;
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_decimal;
 ----
-t_decimal  CREATE TABLE public.t_decimal (
-             c1 DECIMAL(7,2) NULL,
-             c2 DECIMAL(10,2) NULL,
-             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
-             FAMILY f1 (c1, c2, rowid)
-           )
+c1     DECIMAL(7,2)  true   NULL            ·  {t_decimal_pkey}  false
+c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
+rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
 
 statement ok
 DROP TABLE t_decimal;
@@ -1147,19 +1155,15 @@ SELECT c1,c2,c3,c4,c5 FROM t_bit_string ORDER BY pk;
 1010 1010  hello  worl  worldh
 NULL  NULL  NULL   NULL   NULL
 
-query TT
-SHOW CREATE TABLE t_bit_string;
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_bit_string;
 ----
-t_bit_string  CREATE TABLE public.t_bit_string (
-                pk INT8 NOT NULL,
-                c1 BIT(4) NULL,
-                c2 VARBIT(4) NULL,
-                c3 BYTES NULL,
-                c4 VARCHAR(4) NULL,
-                c5 CHAR(6) NULL,
-                CONSTRAINT t_bit_string_pkey PRIMARY KEY (pk ASC),
-                FAMILY f1 (pk, c1, c2, c3, c4, c5)
-              )
+c1     BIT(4)     true   NULL  ·  {t_bit_string_pkey}  false
+c2     VARBIT(4)  true   NULL  ·  {t_bit_string_pkey}  false
+c3     BYTES      true   NULL  ·  {t_bit_string_pkey}  false
+c4     VARCHAR(4) true   NULL  ·  {t_bit_string_pkey}  false
+c5     CHAR(6)    true   NULL  ·  {t_bit_string_pkey}  false
+pk     INT8       false  NULL  ·  {t_bit_string_pkey}  false
 
 statement ok
 DROP TABLE t_bit_string;
@@ -1202,15 +1206,11 @@ SELECT c1 FROM t_int ORDER BY pk;
 32767
 NULL
 
-query TT
-SHOW CREATE TABLE t_int;
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_int;
 ----
-t_int  CREATE TABLE public.t_int (
-         pk INT8 NOT NULL,
-         c1 INT2 NULL,
-         CONSTRAINT t_int_pkey PRIMARY KEY (pk ASC),
-         FAMILY f1 (pk, c1)
-       )
+c1     INT2     true   NULL  ·  {t_int_pkey}  false
+pk     INT8     false  NULL  ·  {t_int_pkey}  false
 
 statement ok
 DROP TABLE t_int;
@@ -1231,5 +1231,96 @@ alter table roach_village alter column age set data type bigint;
 
 statement ok
 alter table roach_village alter column legs set data type bigint;
+
+subtest convert_column_many
+
+statement ok
+create table t_many (c1 smallint);
+
+statement ok
+insert into t_many values (0),(100),(-32);
+
+# Without USING but auto cast works
+statement ok
+alter table t_many alter column c1 set data type text;
+
+query T rowsort
+SELECT * FROM t_many;
+----
+0
+100
+-32
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_many;
+----
+c1     STRING true   NULL            ·  {t_many_pkey}  false
+rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
+
+# STRING -> SMALLINT with USING
+statement ok
+alter table t_many alter column c1 set data type smallint using c1::smallint;
+
+query I rowsort
+SELECT * FROM t_many;
+----
+0
+100
+-32
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_many;
+----
+c1     INT2   true   NULL            ·  {t_many_pkey}  false
+rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
+
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+alter table t_many alter column c1 set not null, alter column c1 set data type VARCHAR(10) using concat(c1::text, 'boo');
+
+statement ok
+alter table t_many alter column c1 set data type VARCHAR(10) using concat(c1::text, 'boo');
+
+query T rowsort
+SELECT c1 FROM t_many;
+----
+0boo
+100boo
+-32boo
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_many;
+----
+c1     VARCHAR(10) true   NULL            ·  {t_many_pkey}  false
+rowid  INT8        false  unique_rowid()  ·  {t_many_pkey}  true
+
+# VARCHAR(10) -> INT4 attempt, but fail because of USING expression failure
+statement error .*could not parse "" as type int: strconv.ParseInt: parsing ""
+alter table t_many alter column c1 set data type int4 using trim('boo', c1)::int4;
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_many;
+----
+c1     VARCHAR(10) true   NULL            ·  {t_many_pkey}  false
+rowid  INT8        false  unique_rowid()  ·  {t_many_pkey}  true
+
+# Attempt again but with expression fixed.
+statement ok
+alter table t_many alter column c1 set data type int4 using trim(trailing 'boo' from c1)::int4;
+
+query I rowsort
+SELECT * FROM t_many;
+----
+0
+100
+-32
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM t_many;
+----
+c1     INT4   true   NULL            ·  {t_many_pkey}  false
+rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
+
+statement ok
+DROP TABLE t_many;
 
 subtest end

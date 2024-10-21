@@ -2370,6 +2370,20 @@ deprules
     - descriptorIsDataNotBeingAdded-24.3($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: adding a transient column compute expression moves to 'absent' after PK validation to ensures it's there for the backfill
+  from: primary-index-Node
+  kind: Precedence
+  to: transient-column-compute-Node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $transient-column-compute[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnDescID($primary-index, $transient-column-compute, $table-id)
+    - $primary-index-Target[TargetStatus] = PUBLIC
+    - $transient-column-compute-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $primary-index-Node[CurrentStatus] = VALIDATED
+    - $transient-column-compute-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
+    - joinTargetNode($transient-column-compute, $transient-column-compute-Target, $transient-column-compute-Node)
 - name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
   from: index-Node
   kind: Precedence
@@ -6746,6 +6760,20 @@ deprules
     - descriptorIsDataNotBeingAdded-24.3($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: adding a transient column compute expression moves to 'absent' after PK validation to ensures it's there for the backfill
+  from: primary-index-Node
+  kind: Precedence
+  to: transient-column-compute-Node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $transient-column-compute[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnDescID($primary-index, $transient-column-compute, $table-id)
+    - $primary-index-Target[TargetStatus] = PUBLIC
+    - $transient-column-compute-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $primary-index-Node[CurrentStatus] = VALIDATED
+    - $transient-column-compute-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
+    - joinTargetNode($transient-column-compute, $transient-column-compute-Target, $transient-column-compute-Node)
 - name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
   from: index-Node
   kind: Precedence

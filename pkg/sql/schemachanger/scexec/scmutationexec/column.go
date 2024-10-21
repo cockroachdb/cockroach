@@ -433,11 +433,17 @@ func (i *immediateVisitor) updateExistingColumnType(
 }
 
 func clearComputedExpr(col *descpb.ColumnDescriptor) {
-	// This operation needs to zero the computed column expression to remove
-	// any references to sequences and whatnot but it can't simply remove the
-	// expression entirely, otherwise in the case of virtual computed columns
-	// the column descriptor will then be interpreted as a virtual non-computed
-	// column, which doesn't make any sense.
-	null := tree.Serialize(tree.DNull)
-	col.ComputeExpr = &null
+	// This operation zeros out the computed column expression to remove references
+	// to sequences or other dependencies, but it can't always remove the expression entirely.
+	//
+	// For virtual computed columns, removing the expression would turn the column
+	// into a virtual non-computed column, which doesn't make sense. When dropping
+	// the expression for a column that still exists (e.g., a stored column), we do
+	// want to remove the expression.
+	if col.Virtual {
+		null := tree.Serialize(tree.DNull)
+		col.ComputeExpr = &null
+	} else {
+		col.ComputeExpr = nil
+	}
 }
