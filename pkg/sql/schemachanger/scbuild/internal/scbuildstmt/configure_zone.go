@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,16 +89,18 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
-	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
-		ResolvedOldConfig: oldZone.String()}
+
+	var info logpb.EventPayload
+	if n.Discard {
+		info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+	} else {
+		info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+			ResolvedOldConfig: oldZone.String()}
+	}
 	b.LogEventForExistingPayload(elem, info)
 }
 
 func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
-	if n.Discard {
-		return nil, scerrors.NotImplementedErrorf(n, "discarding zone configurations is not "+
-			"supported in the DSC")
-	}
 	zs := n.ZoneSpecifier
 	// We are a database object.
 	if n.Database != "" {

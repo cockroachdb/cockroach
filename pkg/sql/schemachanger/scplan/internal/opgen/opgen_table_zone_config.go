@@ -26,8 +26,11 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TableZoneConfig) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.TableZoneConfig) *scop.AddTableZoneConfig {
+					return &scop.AddTableZoneConfig{
+						TableID:    this.TableID,
+						ZoneConfig: this.ZoneConfig,
+					}
 				}),
 			),
 		),

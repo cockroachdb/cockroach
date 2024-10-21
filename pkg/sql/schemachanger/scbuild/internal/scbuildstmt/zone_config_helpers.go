@@ -1049,6 +1049,12 @@ func prepareZoneConfig(
 		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
 	}
 
+	if n.Discard {
+		completeZone.DeleteTableConfig()
+		partialZone.DeleteTableConfig()
+		return nil, partialZone, nil
+	}
+
 	// Determine where to load the configuration.
 	newZone := *completeZone
 
