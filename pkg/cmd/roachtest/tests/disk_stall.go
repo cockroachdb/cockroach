@@ -45,14 +45,12 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runDiskStalledWALFailover(ctx, t, c, "among-stores")
+			runDiskStalledWALFailover(ctx, t, c)
 		},
 	})
 }
 
-func runDiskStalledWALFailover(
-	ctx context.Context, t test.Test, c cluster.Cluster, failoverFlag string,
-) {
+func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startSettings := install.MakeClusterSettings()
 	// Set a high value for the max sync durations to avoid the disk
 	// stall detector fataling the node.
@@ -69,14 +67,12 @@ func runDiskStalledWALFailover(
 
 	t.Status("starting cluster")
 	startOpts := option.DefaultStartOpts()
-	if failoverFlag == "among-stores" {
-		startOpts.RoachprodOpts.StoreCount = 2
-	}
+	startOpts.RoachprodOpts.WALFailover = "among-stores"
+	startOpts.RoachprodOpts.StoreCount = 2
 	startOpts.RoachprodOpts.ExtraArgs = []string{
 		// Adopt buffering of the file logging to ensure that we don't block on
 		// flushing logs to the stalled device.
 		"--log", fmt.Sprintf(`{file-defaults: {dir: "%s", buffered-writes: false, buffering: {max-staleness: 1s, flush-trigger-size: 256KiB, max-buffer-size: 50MiB}}}`, s.LogDir()),
-		"--wal-failover=" + failoverFlag,
 	}
 	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
