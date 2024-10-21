@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -675,7 +676,20 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCannotCommitWithoutNewTermEntry(t, storeLivenessEnabled)
+		})
+}
+
+func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
+	var cfg func(c *Config) = nil
+	if !storeLivenessEnabled {
+		cfg = fortificationDisabledConfig
+	}
+
+	tt := newNetworkWithConfig(cfg, nil, nil, nil, nil, nil)
+
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -694,8 +708,23 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	// avoid committing ChangeTerm proposal
 	tt.ignore(pb.MsgApp)
 
-	// elect 2 as the new leader with term 2
+	// Elect 2 as the new leader with term 2.
+	if storeLivenessEnabled {
+		// We need to withdraw support of the current leader. This will prevent it
+		// from attempting to refortify the peers.
+		tt.allWithdrawSupportForAndFromPeer(1)
+
+		// Bumping all epochs will make all followers stop supporting the current
+		// fortified leader.
+		tt.bumpAllEpochs()
+	}
+
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// Revert the support state to normal.
+		tt.allGrantSupportForAndFromPeer(1)
+	}
 
 	// no log entries from previous term should be committed
 	sm = tt.peers[2].(*raft)
@@ -4208,6 +4237,153 @@ func preVoteConfigWithFortificationDisabled(c *Config) {
 	c.StoreLiveness = raftstoreliveness.Disabled{}
 }
 
+// livenessEntry is an entry in the mockStoreLiveness state.
+type livenessEntry struct {
+	// Controls whether supportFor returns true or false.
+	isSupporting    bool
+	supportForEpoch pb.Epoch
+
+	// Controls whether supportFrom returns true or false.
+	isSupported      bool
+	supportFromEpoch pb.Epoch
+}
+
+// initLivenessEntry is the initial state entry placed in mockStoreLiveness.
+var initLivenessEntry = livenessEntry{
+	// Initially, the node is giving support to all other nodes.
+	isSupporting:    true,
+	supportForEpoch: 1,
+
+	// Initially, the node is receiving support from all other nodes.
+	isSupported:      true,
+	supportFromEpoch: 1,
+}
+
+// mockStoreLiveness is a simple mock implementation of StoreLiveness that
+// is used in raft unit tests. Initially treats all store to store connections
+// as live, but it can be configured to withdraw support, grant support, and
+// bump the support epoch to/from any two nodes.
+// Each node's state can independently be altered. This makes it possible to
+// not have a shared liveness fabric between all the nodes in the test. This is
+// ideal for Raft unit tests as nodes are created independently.
+type mockStoreLiveness struct {
+	state          map[pb.PeerID]livenessEntry
+	supportExpired bool
+}
+
+var _ raftstoreliveness.StoreLiveness = mockStoreLiveness{}
+
+func NewMockStoreLiveness() *mockStoreLiveness {
+	return &mockStoreLiveness{
+		// Each node has its own liveness entries for other nodes.
+		state: make(map[pb.PeerID]livenessEntry),
+
+		// Controls whether this peer considers the leader support expired or not.
+		supportExpired: false,
+	}
+}
+
+// createStateEntryIfNotExist creates a new state entry for the given node if
+// it doesn't exist already.
+func (m mockStoreLiveness) createStateEntryIfNotExist(id pb.PeerID) {
+	if _, ok := m.state[id]; !ok {
+		m.state[id] = initLivenessEntry
+	}
+}
+
+// SupportFor implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFor(id pb.PeerID) (pb.Epoch, bool) {
+	m.createStateEntryIfNotExist(id)
+	return m.state[id].supportForEpoch, m.state[id].isSupporting
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
+	m.createStateEntryIfNotExist(id)
+
+	if m.state[id].isSupported {
+		return m.state[id].supportFromEpoch, hlc.MaxTimestamp
+	}
+
+	return 0, hlc.Timestamp{}
+}
+
+// SupportFromEnabled implements the StoreLiveness interface.
+func (mockStoreLiveness) SupportFromEnabled() bool {
+	return true
+}
+
+// SupportExpired implements the StoreLiveness interface.
+func (m mockStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
+	if m.supportExpired {
+		return true
+	}
+
+	// If not configured explicitly, infer from the supplied timestamp.
+	switch ts {
+	case hlc.Timestamp{}:
+		return true
+	case hlc.MaxTimestamp:
+		return false
+	default:
+		panic("unexpected timestamp")
+	}
+}
+
+// BumpSupportForEpoch bumps the supportFor epoch for the given node.
+func (m *mockStoreLiveness) BumpSupportForEpoch(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.supportForEpoch++
+	m.state[id] = entry
+}
+
+// BumpSupportFromEpoch bumps the supportFrom epoch for the given node.
+func (m *mockStoreLiveness) BumpSupportFromEpoch(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.supportFromEpoch++
+	m.state[id] = entry
+}
+
+// GrantSupportFor grants support for the given node.
+func (m *mockStoreLiveness) GrantSupportFor(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.isSupporting = true
+	m.state[id] = entry
+}
+
+// WithdrawSupportFor withdraws support for the given node.
+func (m *mockStoreLiveness) WithdrawSupportFor(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.isSupporting = false
+	m.state[id] = entry
+}
+
+// GrantSupportFrom grants support from the given node.
+func (m *mockStoreLiveness) GrantSupportFrom(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.isSupported = true
+	m.state[id] = entry
+}
+
+// WithdrawSupportFrom withdraws support from the given node.
+func (m *mockStoreLiveness) WithdrawSupportFrom(id pb.PeerID) {
+	m.createStateEntryIfNotExist(id)
+	entry := m.state[id]
+	entry.isSupported = false
+	m.state[id] = entry
+}
+
+// SetSupportExpired explicitly controls what SupportExpired returns regardless
+// of the timestamp.
+func (m *mockStoreLiveness) SetSupportExpired(expired bool) {
+	m.supportExpired = expired
+}
+
 func (nw *network) send(msgs ...pb.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
@@ -4285,6 +4461,34 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// allWithdrawSupportForAndFromPeer makes all nodes withdraw support for and
+// from the given peer.
+func (nw *network) allWithdrawSupportForAndFromPeer(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*mockStoreLiveness).WithdrawSupportFor(id)
+	}
+}
+
+// allGrantSupportForAndFromPeer makes all nodes grant support for and from the
+// given peer.
+func (nw *network) allGrantSupportForAndFromPeer(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*mockStoreLiveness).GrantSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*mockStoreLiveness).GrantSupportFor(id)
+	}
+}
+
+// bumpAllEpochs bumps the supportFor and supportFrom epochs for all peers.
+func (nw *network) bumpAllEpochs() {
+	for p1 := range nw.peers {
+		for p2 := range nw.peers {
+			nw.peers[p1].(*raft).storeLiveness.(*mockStoreLiveness).BumpSupportForEpoch(p2)
+			nw.peers[p2].(*raft).storeLiveness.(*mockStoreLiveness).BumpSupportFromEpoch(p1)
+		}
+	}
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
@@ -4350,7 +4554,7 @@ func newTestConfig(
 	if modifiers.testingDisableFortification {
 		storeLiveness = raftstoreliveness.Disabled{}
 	} else {
-		storeLiveness = raftstoreliveness.AlwaysLive{}
+		storeLiveness = NewMockStoreLiveness()
 	}
 	return &Config{
 		ID:              id,
