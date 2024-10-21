@@ -641,22 +641,22 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 				// Attempt to convert the constraint into a disjunction of ANDed IS
 				// predicates, with additional derived IS conjuncts on computed
 				// columns based on columns in the constraint spans.
-				// TODO(msirek/mgartner): Modify CombineComputedColFilters to build a
-				// `Constraint` or `constraint.Set` directly instead of building a
-				// filter and calling `makeSpansForExpr`.
-				computedColumnFilters := norm.CombineComputedColFilters(
+				// TODO(mgartner): Modify CombineComputedColFilters to build a
+				// `Constraint` or `constraint.Set` directly instead of building
+				// a filter and calling `makeSpansForExpr`.
+				disjunctions := norm.CombineComputedColFilters(
 					c.computedCols,
 					c.keyCols,
 					c.colsInComputedColsExpressions,
 					constraints.Constraint(0),
 					c.factory,
 				)
-				if len(computedColumnFilters) == 1 {
-					// All predicates in `computedColumnFilters[0].Condition` fully
-					// represent the original condition plus derived predicates, so we
-					// only have to make spans on the new condition.
+				if len(disjunctions) > 0 {
+					// All disjunctions fully represent the original condition
+					// plus derived predicates, so we only have to make spans on
+					// the list of disjunctions.
 					c.skipComputedColPredDerivation = true
-					localTight := c.makeSpansForExpr(offset, computedColumnFilters[0].Condition, out)
+					localTight := c.binaryMergeSpansForOr(offset, disjunctions, out)
 					c.skipComputedColPredDerivation = false
 					return localTight
 				}

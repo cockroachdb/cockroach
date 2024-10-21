@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1036,7 +1035,9 @@ func (c *CustomFuncs) tryFoldComputedCol(
 // which seeks to fold computed column expressions using values from single-key
 // constraint spans in order to build new predicates on those computed columns
 // and AND them with predicates built from the constraint span key used to
-// compute the computed column value.
+// compute the computed column value. If successful, it returns a list of
+// expressions representing disjunctions, with a length equal to the number of
+// spans in the constraint. If unsuccessful, nil is returned.
 //
 // New derived keys cannot be saved for the filters as a whole, for later
 // processing, because a given combination of span key values is only applicable
@@ -1090,22 +1091,19 @@ func CombineComputedColFilters(
 	colsInComputedColsExpressions opt.ColSet,
 	cons *constraint.Constraint,
 	f *Factory,
-) memo.FiltersExpr {
+) (disjunctions []opt.ScalarExpr) {
 	if len(computedCols) == 0 {
 		return nil
 	}
 	if !f.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
 		return nil
 	}
-	var combinedComputedColFilters memo.FiltersExpr
-	var orOp opt.ScalarExpr
 	if !cons.Columns.ColSet().Intersects(colsInComputedColsExpressions) {
 		// If this constraint doesn't involve any columns used to construct a
 		// computed column value, no need to process it further.
 		return nil
 	}
 	for k := 0; k < cons.Spans.Count(); k++ {
-		filterAdded := false
 		span := cons.Spans.Get(k)
 		if !span.HasSingleKey(f.ctx, f.evalCtx) {
 			// If we don't have a single value, or combination of single values
@@ -1119,40 +1117,22 @@ func CombineComputedColFilters(
 		if !ok {
 			return nil
 		}
-		var newOp opt.ScalarExpr
-		// Build a new ANDed predicate involving the computed column and columns in
-		// the computed column expression.
-		newOp, filterAdded =
-			buildConjunctionOfEqualityPredsOnComputedAndNonComputedCols(
-				initialConjunction, computedCols, constFilterCols, indexKeyCols, f)
-		// Only build a new disjunct if terms were derived for this span.
-		if filterAdded {
-			if orOp == nil {
-				// The case of the first span or only one span.
-				orOp = newOp
-			} else {
-				// The spans in a constraint represent a disjunction, so OR them
-				// together.
-				constructOr := func() {
-					orOp = f.ConstructOr(orOp, newOp)
-				}
-				var disabledRules intsets.Fast
-				// Disable this rule as it disallows finding tight constraints in
-				// some cases when a conjunct can be factored out, e.g.,
-				// `(a=3 AND b=4) OR (a=3 AND b=6)` --> `a=3 AND (b=4 OR b=6)`
-				disabledRules.Add(int(opt.ExtractRedundantConjunct))
-				f.DisableOptimizationRulesTemporarily(disabledRules, constructOr)
-			}
-		} else {
+		// Build a new ANDed predicate involving the computed column and columns
+		// in the computed column expression.
+		conjunct, ok := buildConjunctionOfEqualityPredsOnComputedAndNonComputedCols(
+			initialConjunction, computedCols, constFilterCols, indexKeyCols, f,
+		)
+		if !ok {
 			// If we failed to build any of the disjuncts, we must give up.
 			return nil
 		}
+		if disjunctions == nil {
+			// Lazily allocate the slice of disjunctions.
+			disjunctions = make([]opt.ScalarExpr, 0, cons.Spans.Count())
+		}
+		disjunctions = append(disjunctions, conjunct)
 	}
-	if orOp != nil {
-		combinedComputedColFilters =
-			append(combinedComputedColFilters, f.ConstructFiltersItem(orOp))
-	}
-	return combinedComputedColFilters
+	return disjunctions
 }
 
 // buildConstColsMapFromConstraint converts a constraint on one or more columns
