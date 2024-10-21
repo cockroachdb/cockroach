@@ -146,7 +146,7 @@ func registerActiveRecord(r registry.Registry) {
 			c,
 			node,
 			"installing bundler",
-			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.1.4`,
+			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.4.9`,
 		); err != nil {
 			t.Fatal(err)
 		}
