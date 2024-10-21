@@ -250,7 +250,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
-			sql := fmt.Sprintf(`BACKUP %s TO 'ignored'`, test.pattern)
+			sql := fmt.Sprintf(`BACKUP %s INTO 'ignored'`, test.pattern)
 			stmt, err := parser.ParseOne(sql)
 			if err != nil {
 				t.Fatal(err)
