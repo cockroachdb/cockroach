@@ -123,6 +123,16 @@ targets:
           - pkg/cmd/drt/scripts/roachtest_operations_run.sh
           - roachtest_operations_run.sh
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc_320k # suffix added to script name tpcc_init_cct_tpcc_320k.sh
+          - true # determines whether to execute the script immediately on workload node
         flags:
-          warehouses: 100000
+          warehouses: 320000
           db: cct_tpcc
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc_640k # suffix added to script name tpcc_init_cct_tpcc_640k.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: 640000
+          db: cct_tpcc_big
