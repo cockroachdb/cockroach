@@ -2166,6 +2166,34 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		dbBURL.String(),
 	).Scan(&jobAID)
 
+	// Verify that unsupported CREATE INDEX statements are blocked.
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"CREATE INDEX virtual_col_idx ON tab(virtual_col)",
+	)
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)",
+	)
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0",
+	)
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"CREATE UNIQUE INDEX unique_idx ON tab(composite_col)",
+	)
+
+	// Creating triggers is also blocked.
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"CREATE TRIGGER my_trigger BEFORE INSERT ON tab FOR EACH ROW EXECUTE FUNCTION my_trigger()",
+	)
+
+	// Creating a "normal" secondary index (and dropping it) is allowed.
+	dbA.Exec(t, "CREATE INDEX normal_idx ON tab(composite_col)")
+	dbA.Exec(t, "DROP INDEX normal_idx")
+
 	// Kill replication job.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)

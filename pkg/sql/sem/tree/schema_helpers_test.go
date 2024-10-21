@@ -64,7 +64,9 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := tree.IsAllowedLDRSchemaChange(stmt.AST); got != tc.isAllowed {
+			// Tests for virtual column checks are in
+			// TestLogicalReplicationCreationChecks.
+			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */); got != tc.isAllowed {
 				t.Errorf("expected %v, got %v", tc.isAllowed, got)
 			}
 		})
