@@ -125,6 +125,13 @@ type StartOpts struct {
 	SkipInit        bool
 	StoreCount      int
 	EncryptedStores bool
+	// WALFailover, if non-empty, configures the value to supply to the
+	// --wal-failover start flag.
+	//
+	// In a multi-store configuration, this may be set to "among-stores" to
+	// enable WAL failover among stores. In a single-store configuration, this
+	// should be set to `path=<path>`.
+	WALFailover string
 
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
 	VirtualClusterName     string
@@ -1120,6 +1127,9 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
 			args = append(args, `--enterprise-encryption`, encryptArgs)
 		}
+	}
+	if startOpts.WALFailover != "" {
+		args = append(args, fmt.Sprintf("--wal-failover=%s", startOpts.WALFailover))
 	}
 
 	args = append(args, fmt.Sprintf("--cache=%d%%", c.maybeScaleMem(25)))
