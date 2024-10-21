@@ -8,10 +8,10 @@ load_cluster config=complex
 gen_ranges ranges=1 repl_factor=5
 ----
 
-# Set the span config so that there are only voters, with 3 voters in US_East
-# and 1 voter each in US_West and EU.
+# Set the span config so that there are only voters, with 3 voters in region a
+# and 1 voter each in b and c.
 set_span_config
-[0,10000): num_replicas=5 num_voters=5 constraints={'+region=US_East':3,'+region=US_West':1,'+region=EU':1} voter_constraints={'+region=US_East':3,'+region=US_West':1,'+region=EU':1}
+[0,10000): num_replicas=5 num_voters=5 constraints={'+region=a':3,'+region=b':1,'+region=c':1} voter_constraints={'+region=a':3,'+region=b':1,'+region=c':1}
 ----
 
 # This assertion will fail if there are more than 0 unavailable, under
@@ -26,23 +26,25 @@ OK
 
 topology
 ----
-EU
-  EU_1
-  │ └── [19 20 21]
-  EU_2
-  │ └── [22 23 24]
-  EU_3
-  │ └── [25 26 27 28]
-US_East
-  US_East_1
+a
+  a1
   │ └── [1]
-  US_East_2
+  a2
   │ └── [2 3]
-  US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
-US_West
-  US_West_1
-    └── [17 18]
+  a3
+  │ └── [4 5 6]
+  a4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
+b
+  b1
+  │ └── [17 18]
+c
+  c1
+    └── [19 20 21]
+  c2
+    └── [22 23 24]
+  c3
+    └── [25 26 27 28]
 
 
 
