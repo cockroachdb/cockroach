@@ -265,7 +265,7 @@ func dropColumn(
 		}
 	})
 	if _, _, ct := scpb.FindColumnType(colElts); !ct.IsVirtual {
-		handleDropColumnPrimaryIndexes(b, tbl, n, col)
+		handleDropColumnPrimaryIndexes(b, tbl, col)
 	}
 	assertAllColumnElementsAreDropped(colElts)
 }
@@ -435,9 +435,7 @@ func panicIfColReferencedInPredicate(
 	}
 }
 
-func handleDropColumnPrimaryIndexes(
-	b BuildCtx, tbl *scpb.Table, n tree.NodeFormatter, col *scpb.Column,
-) {
+func handleDropColumnPrimaryIndexes(b BuildCtx, tbl *scpb.Table, col *scpb.Column) {
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 
 	// If `col` is already public in `old`, then we just need to drop it from `final`.

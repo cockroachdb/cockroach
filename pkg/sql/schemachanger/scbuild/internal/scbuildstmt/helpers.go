@@ -1742,6 +1742,26 @@ func mustRetrieveIndexNameElem(
 		}).MustGetOneElement()
 }
 
+func mustRetrieveColumnName(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnName {
+	return b.QueryByID(tableID).FilterColumnName().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool { return e.ColumnID == columnID }).
+		MustGetOneElement()
+}
+
+func mustRetrievePrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
+	return b.QueryByID(tableID).FilterPrimaryIndex().MustGetOneElement()
+}
+
+func retrieveColumnNotNull(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnNotNull {
+	return b.QueryByID(tableID).FilterColumnNotNull().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnNotNull) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
 // mustRetrievePartitioningFromIndexPartitioning retrieves the partitioning
 // from the index partitioning element associated with the given tableID
 // and indexID.
