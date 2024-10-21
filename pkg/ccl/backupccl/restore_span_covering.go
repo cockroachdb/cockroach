@@ -140,22 +140,18 @@ func createIntroducedSpanFrontier(
 // spanCoveringFilter holds metadata that filters which backups and required spans are used to
 // populate a restoreSpanEntry
 type spanCoveringFilter struct {
-	checkpointFrontier       spanUtils.Frontier
-	highWaterMark            roachpb.Key
-	introducedSpanFrontier   spanUtils.Frontier
-	useFrontierCheckpointing bool
-	targetSize               int64
-	maxFileCount             int
+	checkpointFrontier     spanUtils.Frontier
+	introducedSpanFrontier spanUtils.Frontier
+	targetSize             int64
+	maxFileCount           int
 }
 
 func makeSpanCoveringFilter(
 	requiredSpans roachpb.Spans,
 	checkpointedSpans []jobspb.RestoreProgress_FrontierEntry,
-	highWater roachpb.Key,
 	introducedSpanFrontier spanUtils.Frontier,
 	targetSize int64,
 	maxFileCount int64,
-	useFrontierCheckpointing bool,
 ) (spanCoveringFilter, error) {
 	f, err := loadCheckpointFrontier(requiredSpans, checkpointedSpans)
 	if err != nil {
@@ -169,12 +165,10 @@ func makeSpanCoveringFilter(
 		maxFileCount = defaultMaxFileCount
 	}
 	sh := spanCoveringFilter{
-		introducedSpanFrontier:   introducedSpanFrontier,
-		targetSize:               targetSize,
-		maxFileCount:             int(maxFileCount),
-		highWaterMark:            highWater,
-		useFrontierCheckpointing: useFrontierCheckpointing,
-		checkpointFrontier:       f,
+		introducedSpanFrontier: introducedSpanFrontier,
+		targetSize:             targetSize,
+		maxFileCount:           int(maxFileCount),
+		checkpointFrontier:     f,
 	}
 	return sh, nil
 }
@@ -182,16 +176,7 @@ func makeSpanCoveringFilter(
 // filterCompleted returns the subspans of the requiredSpan that still need to be
 // restored.
 func (f spanCoveringFilter) filterCompleted(requiredSpan roachpb.Span) roachpb.Spans {
-	if f.useFrontierCheckpointing {
-		return f.findToDoSpans(requiredSpan)
-	}
-	if requiredSpan.EndKey.Compare(f.highWaterMark) <= 0 {
-		return roachpb.Spans{}
-	}
-	if requiredSpan.Key.Compare(f.highWaterMark) < 0 {
-		requiredSpan.Key = f.highWaterMark
-	}
-	return []roachpb.Span{requiredSpan}
+	return f.findToDoSpans(requiredSpan)
 }
 
 // findToDoSpans returns the sub spans within the required span that have not completed.

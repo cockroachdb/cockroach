@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -50,26 +49,7 @@ type progressTracker struct {
 
 		// res tracks the amount of data that has been ingested.
 		res roachpb.RowCount
-
-		// Note that the fields below are used for the deprecated high watermark progress
-		// tracker.
-		// highWaterMark represents the index into the requestsCompleted map.
-		highWaterMark int64
-		ceiling       int64
-
-		// As part of job progress tracking, inFlightImportSpans tracks all the
-		// spans that have been generated are being processed by the processors in
-		// distRestore. requestsCompleleted tracks the spans from
-		// inFlightImportSpans that have completed its processing. Once all spans up
-		// to index N have been processed (and appear in requestsCompleted), then
-		// any spans with index < N will be removed from both inFlightImportSpans
-		// and requestsCompleted maps.
-		inFlightImportSpans map[int64]roachpb.Span
-		requestsCompleted   map[int64]bool
 	}
-	useFrontier        bool
-	inFlightSpanFeeder chan execinfrapb.RestoreSpanEntry
-
 	// endTime is the restore as of timestamp. This can be empty, and an empty timestamp
 	// indicates a restore of the latest revision.
 	endTime hlc.Timestamp
@@ -78,7 +58,6 @@ type progressTracker struct {
 func makeProgressTracker(
 	requiredSpans roachpb.Spans,
 	persistedSpans []jobspb.RestoreProgress_FrontierEntry,
-	useFrontier bool,
 	maxBytes int64,
 	endTime hlc.Timestamp,
 ) (*progressTracker, error) {
@@ -87,32 +66,20 @@ func makeProgressTracker(
 		checkpointFrontier  spanUtils.Frontier
 		err                 error
 		nextRequiredSpanKey map[string]roachpb.Key
-		inFlightSpanFeeder  chan execinfrapb.RestoreSpanEntry
 	)
-	if useFrontier {
-		checkpointFrontier, err = loadCheckpointFrontier(requiredSpans, persistedSpans)
-		if err != nil {
-			return nil, err
-		}
-		nextRequiredSpanKey = make(map[string]roachpb.Key)
-		for i := 0; i < len(requiredSpans)-1; i++ {
-			nextRequiredSpanKey[requiredSpans[i].EndKey.String()] = requiredSpans[i+1].Key
-		}
-
-	} else {
-		inFlightSpanFeeder = make(chan execinfrapb.RestoreSpanEntry, 1000)
+	checkpointFrontier, err = loadCheckpointFrontier(requiredSpans, persistedSpans)
+	if err != nil {
+		return nil, err
+	}
+	nextRequiredSpanKey = make(map[string]roachpb.Key)
+	for i := 0; i < len(requiredSpans)-1; i++ {
+		nextRequiredSpanKey[requiredSpans[i].EndKey.String()] = requiredSpans[i+1].Key
 	}
 
 	pt := &progressTracker{}
 	pt.mu.checkpointFrontier = checkpointFrontier
-	pt.mu.highWaterMark = -1
-	pt.mu.ceiling = 0
-	pt.mu.inFlightImportSpans = make(map[int64]roachpb.Span)
-	pt.mu.requestsCompleted = make(map[int64]bool)
 	pt.nextRequiredSpanKey = nextRequiredSpanKey
 	pt.maxBytes = maxBytes
-	pt.useFrontier = useFrontier
-	pt.inFlightSpanFeeder = inFlightSpanFeeder
 	pt.endTime = endTime
 	return pt, nil
 }
@@ -182,16 +149,10 @@ func (pt *progressTracker) updateJobCallback(
 		func() {
 			pt.mu.Lock()
 			defer pt.mu.Unlock()
-			if pt.useFrontier {
-				// TODO (msbutler): this requires iterating over every span in the frontier,
-				// and rewriting every completed required span to disk.
-				// We may want to be more intelligent about this.
-				d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
-			} else {
-				if pt.mu.highWaterMark >= 0 {
-					d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
-				}
-			}
+			// TODO (msbutler): this requires iterating over every span in the frontier,
+			// and rewriting every completed required span to disk.
+			// We may want to be more intelligent about this.
+			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
 		}()
 	default:
 		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
@@ -224,83 +185,48 @@ func (pt *progressTracker) ingestUpdate(
 	}
 
 	pt.mu.res.Add(progDetails.Summary)
-	if pt.useFrontier {
-		updateSpan := progDetails.DataSpan.Clone()
-		// If the completedSpan has the same end key as a requiredSpan_i, forward
-		// the frontier for the span [completedSpan_startKey,
-		// requiredSpan_i+1_startKey]. This trick ensures the span frontier will
-		// contain a single entry when the restore completes. Recall that requiredSpans are
-		// disjoint, and a spanFrontier never merges disjoint spans. So, without
-		// this trick, the spanFrontier will have O(requiredSpans) entries when the
-		// restore completes. This trick ensures all spans persisted to the frontier are adjacent,
-		// and consequently, will eventually merge.
-		//
-		// Here's a visual example:
-		//  - this restore has two required spans: [a,d) and [e,h).
-		//  - the restore span entry [c,d) just completed, implying the frontier logically looks like:
-		//
-		//	tC|             x---o
-		//	t0|
-		//	  keys--a---b---c---d---e---f---g---h->
-		//
-		// r-spans: |---span1---|   |---span2---|
-		//
-		// - since [c,d)'s endkey equals the required span (a,d]'s endkey,
-		//   also update the gap between required span 1 and 2 in the frontier:
-		//
-		//	tC|             x-------o
-		//	t0|
-		//	  keys--a---b---c---d---e---f---g---h->
-		//
-		// r-spans: |---span1---|   |---span2---|
-		//
-		// - this will ensure that when all subspans in required spans 1 and 2 complete,
-		//   the checkpoint frontier has one span:
-		//
-		//	tC|     x---------------------------o
-		//	t0|
-		//	  keys--a---b---c---d---e---f---g---h->
-		//
-		// r-spans: |---span1---|   |---span2---|
-		if newEndKey, ok := pt.nextRequiredSpanKey[updateSpan.EndKey.String()]; ok {
-			updateSpan.EndKey = newEndKey
-		}
-		if _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
-			return false, err
-		}
-	} else {
-		idx := progDetails.ProgressIdx
-
-		if idx >= pt.mu.ceiling {
-			for i := pt.mu.ceiling; i <= idx; i++ {
-				importSpan, ok := <-pt.inFlightSpanFeeder
-				if !ok {
-					// The channel has been closed, there is nothing left to do.
-					log.Infof(ctx, "exiting restore checkpoint loop as the import span channel has been closed")
-					return true, nil
-				}
-				pt.mu.inFlightImportSpans[i] = importSpan.Span
-			}
-			pt.mu.ceiling = idx + 1
-		}
-
-		if sp, ok := pt.mu.inFlightImportSpans[idx]; ok {
-			// Assert that we're actually marking the correct span done. See #23977.
-			if !sp.Key.Equal(progDetails.DataSpan.Key) {
-				return false, errors.Newf("request %d for span %v does not match import span for same idx: %v",
-					idx, progDetails.DataSpan, sp,
-				)
-			}
-			pt.mu.requestsCompleted[idx] = true
-			prevHighWater := pt.mu.highWaterMark
-			for j := pt.mu.highWaterMark + 1; j < pt.mu.ceiling && pt.mu.requestsCompleted[j]; j++ {
-				pt.mu.highWaterMark = j
-			}
-			for j := prevHighWater; j < pt.mu.highWaterMark; j++ {
-				delete(pt.mu.requestsCompleted, j)
-				delete(pt.mu.inFlightImportSpans, j)
-			}
-		}
+	updateSpan := progDetails.DataSpan.Clone()
+	// If the completedSpan has the same end key as a requiredSpan_i, forward
+	// the frontier for the span [completedSpan_startKey,
+	// requiredSpan_i+1_startKey]. This trick ensures the span frontier will
+	// contain a single entry when the restore completes. Recall that requiredSpans are
+	// disjoint, and a spanFrontier never merges disjoint spans. So, without
+	// this trick, the spanFrontier will have O(requiredSpans) entries when the
+	// restore completes. This trick ensures all spans persisted to the frontier are adjacent,
+	// and consequently, will eventually merge.
+	//
+	// Here's a visual example:
+	//  - this restore has two required spans: [a,d) and [e,h).
+	//  - the restore span entry [c,d) just completed, implying the frontier logically looks like:
+	//
+	//	tC|             x---o
+	//	t0|
+	//	  keys--a---b---c---d---e---f---g---h->
+	//
+	// r-spans: |---span1---|   |---span2---|
+	//
+	// - since [c,d)'s endkey equals the required span (a,d]'s endkey,
+	//   also update the gap between required span 1 and 2 in the frontier:
+	//
+	//	tC|             x-------o
+	//	t0|
+	//	  keys--a---b---c---d---e---f---g---h->
+	//
+	// r-spans: |---span1---|   |---span2---|
+	//
+	// - this will ensure that when all subspans in required spans 1 and 2 complete,
+	//   the checkpoint frontier has one span:
+	//
+	//	tC|     x---------------------------o
+	//	t0|
+	//	  keys--a---b---c---d---e---f---g---h->
+	//
+	// r-spans: |---span1---|   |---span2---|
+	if newEndKey, ok := pt.nextRequiredSpanKey[updateSpan.EndKey.String()]; ok {
+		updateSpan.EndKey = newEndKey
+	}
+	if _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
+		return false, err
 	}
 	return true, nil
 }
