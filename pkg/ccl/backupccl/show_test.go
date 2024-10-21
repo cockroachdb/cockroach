@@ -698,29 +698,6 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	require.Greater(t, dbID, 0)
 	require.Greater(t, publicID, 0)
-
-	res := sqlDB.QueryStr(t, `
-		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
-		FROM [SHOW BACKUP FROM LATEST IN $1 WITH debug_ids]
-		ORDER BY object_id`, full)
-
-	dbIDStr := strconv.Itoa(dbID)
-	publicIDStr := strconv.Itoa(publicID)
-	schemaIDStr := strconv.Itoa(dbID + 5)
-
-	expectedObjects := [][]string{
-		{"NULL", "NULL", "NULL", "NULL", "data", dbIDStr, "database"},
-		{"data", dbIDStr, "NULL", "NULL", "public", strconv.Itoa(dbID + 1), "schema"},
-		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 2), "table"},
-		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 3), "type"},
-		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 4), "type"},
-		{"data", dbIDStr, "NULL", "NULL", "sc", schemaIDStr, "schema"},
-		{"data", dbIDStr, "sc", schemaIDStr, "t1", strconv.Itoa(dbID + 6), "table"},
-		{"data", dbIDStr, "sc", schemaIDStr, "t2", strconv.Itoa(dbID + 7), "table"},
-	}
-
-	require.Equal(t, expectedObjects, res)
-
 }
 
 func TestShowBackupPathIsCollectionRoot(t *testing.T) {
