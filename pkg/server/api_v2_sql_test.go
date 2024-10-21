@@ -130,3 +130,36 @@ func getErrorResponse(t *testing.T, r []byte) (code, message string) {
 	require.NoError(t, err)
 	return er.Error.Code, er.Error.Message
 }
+
+func TestLocalityMetadataEnabledFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name        string
+		query       string
+		expectMatch bool
+	}{
+		{
+			"db query",
+			"SELECT array_agg(DISTINCT unnested_store_ids) AS store_ids" +
+				" FROM [SHOW RANGES FROM DATABASE %1], unnest(replicas) AS unnested_store_ids",
+			true,
+		},
+		{
+			"table query",
+			"SELECT count(unnested) AS replica_count, array_agg(DISTINCT unnested) AS store_ids" +
+				" FROM [SHOW RANGES FROM TABLE %1], unnest(replicas) AS unnested;",
+			true,
+		},
+		{
+			"non-matching query",
+			"SHOW RANGES FROM DATABASE abc",
+			false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expectMatch, localityMetadataQueryRegexp.Match([]byte(tc.query)))
+		})
+	}
+}
