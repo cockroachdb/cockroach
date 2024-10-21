@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -63,8 +64,8 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"./workload run querybench --db tpcc"+
 				" --tolerate-errors=t"+
 				" --concurrency=%d"+
-				" --query-file %s"+
-				" --histograms="+t.PerfArtifactsDir()+"/stats.json "+
+				" --query-file %s "+
+				roachtestutil.GetWorkloadHistogramArgsString(t, c)+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
 			s.Concurrency, queryFileName, rampDuration, duration, c.Spec().NodeCount-1)
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)

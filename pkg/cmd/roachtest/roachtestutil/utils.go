@@ -6,9 +6,14 @@
 package roachtestutil
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 )
 
 // SystemInterfaceSystemdUnitName is a convenience function that
@@ -31,4 +36,32 @@ func SetDefaultAdminUIPort(c cluster.Cluster, opts *install.StartOpts) {
 	if !c.IsLocal() {
 		opts.AdminUIPort = config.DefaultAdminUIPort
 	}
+}
+
+func GetWorkloadHistogramArgsString(t test.Test, c cluster.Cluster) string {
+	var histogramArgs string
+	if t.ExportOpenmetrics() {
+		histogramArgs += " --histogram-export-format='openmetrics' " +
+			"--histograms=" + t.PerfArtifactsDir() + "/stats.om " +
+			fmt.Sprintf("--openmetrics-labels='%s'", clusterstats.GetDefaultOpenmetricsLabelString(t, c))
+	} else {
+		histogramArgs = " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+	}
+
+	return histogramArgs
+}
+
+func CreaterWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	var metricsExporter exporter.Exporter
+	if t.ExportOpenmetrics() {
+		labels := clusterstats.GetDefaultOpenmetricsLabelMap(t, c)
+		openMetricsExporter := &exporter.OpenMetricsExporter{}
+		openMetricsExporter.SetLabels(&labels)
+		metricsExporter = openMetricsExporter
+
+	} else {
+		metricsExporter = &exporter.HdrJsonExporter{}
+	}
+
+	return metricsExporter
 }
