@@ -1594,6 +1594,10 @@ func makeLeFn(a, b *types.T, v volatility.V) *CmpOp {
 func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 	return makeCmpOpOverload(treecmp.IsNotDistinctFrom, a, b, true, v)
 }
+func preferred(cmp *CmpOp) *CmpOp {
+	cmp.PreferredOverload = true
+	return cmp
+}
 
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
@@ -1620,7 +1624,11 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeEqFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeEqFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
-		makeEqFn(types.String, types.String, volatility.Leakproof),
+		// TODO: This preferred hack avoids some "ambiguous comparison operator"
+		// errors, but causes issues with expressions with placeholders, like
+		// 'foo'::BPCHAR = $1.
+		preferred(makeEqFn(types.String, types.String, volatility.Leakproof)),
+		makeEqFn(types.BPChar, types.BPChar, volatility.Leakproof),
 		makeEqFn(types.Time, types.Time, volatility.Leakproof),
 		makeEqFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeEqFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1681,7 +1689,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLtFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeLtFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
-		makeLtFn(types.String, types.String, volatility.Leakproof),
+		preferred(makeLtFn(types.String, types.String, volatility.Leakproof)),
+		makeLtFn(types.BPChar, types.BPChar, volatility.Leakproof),
 		makeLtFn(types.Time, types.Time, volatility.Leakproof),
 		makeLtFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLtFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1741,7 +1750,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLeFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeLeFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
-		makeLeFn(types.String, types.String, volatility.Leakproof),
+		preferred(makeLeFn(types.String, types.String, volatility.Leakproof)),
+		makeLeFn(types.BPChar, types.BPChar, volatility.Leakproof),
 		makeLeFn(types.Time, types.Time, volatility.Leakproof),
 		makeLeFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLeFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1822,7 +1832,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeIsFn(types.PGVector, types.PGVector, volatility.Leakproof),
 		makeIsFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
-		makeIsFn(types.String, types.String, volatility.Leakproof),
+		preferred(makeIsFn(types.String, types.String, volatility.Leakproof)),
+		makeIsFn(types.BPChar, types.BPChar, volatility.Leakproof),
 		makeIsFn(types.Time, types.Time, volatility.Leakproof),
 		makeIsFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeIsFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1891,7 +1902,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
 		makeEvalTupleIn(types.PGVector, volatility.Leakproof),
 		makeEvalTupleIn(types.RefCursor, volatility.Leakproof),
-		makeEvalTupleIn(types.String, volatility.Leakproof),
+		preferred(makeEvalTupleIn(types.String, volatility.Leakproof)),
+		makeEvalTupleIn(types.BPChar, volatility.Leakproof),
 		makeEvalTupleIn(types.Time, volatility.Leakproof),
 		makeEvalTupleIn(types.TimeTZ, volatility.Leakproof),
 		makeEvalTupleIn(types.Timestamp, volatility.Leakproof),

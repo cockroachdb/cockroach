@@ -456,9 +456,6 @@ func commonConstantType(vals []Expr, idxs intsets.Fast) (*types.T, bool) {
 
 // StrVal represents a constant string value.
 type StrVal struct {
-	// We could embed a constant.Value here (like NumVal) and use the stringVal implementation,
-	// but that would have extra overhead without much of a benefit. However, it would make
-	// constant folding (below) a little more straightforward.
 	s string
 
 	// scannedAsBytes is true iff the input syntax was using b'...' or
@@ -507,6 +504,7 @@ var (
 		// default type that raw strings get parsed into, without any casts or type
 		// assertions.
 		types.String,
+		types.BPChar,
 		types.Bytes,
 		types.Bool,
 		types.Int,
@@ -630,12 +628,17 @@ func (expr *StrVal) ResolveAsType(
 	case types.AnyFamily:
 		fallthrough
 	case types.StringFamily:
-		if typ.Oid() == oid.T_name {
+		switch typ.Oid() {
+		case oid.T_name:
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
+		case oid.T_bpchar:
+			expr.resString = DString(strings.TrimSpace(expr.s))
+			return &expr.resString, nil
+		default:
+			expr.resString = DString(expr.s)
+			return &expr.resString, nil
 		}
-		expr.resString = DString(expr.s)
-		return &expr.resString, nil
 
 	case types.BytesFamily:
 		return ParseDByte(expr.s)
