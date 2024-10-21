@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crbytes"
 	"github.com/cockroachdb/crlib/crstrings"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/sstable/colblk"
 	"github.com/olekukonko/tablewriter"
+	"github.com/stretchr/testify/require"
 )
 
 func TestKeySchema_KeyWriter(t *testing.T) {
@@ -311,4 +314,49 @@ func parseTestKey(s string) ([]byte, error) {
 			Timestamp: ts,
 		}), nil
 	}
+}
+
+func TestKeySchema_RandomKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+	maxUserKeyLen := randutil.RandIntInRange(rng, 2, 10)
+	keys := make([][]byte, randutil.RandIntInRange(rng, 1, 1000))
+	for i := range keys {
+		keys[i] = randomSerializedEngineKey(rng, maxUserKeyLen)
+	}
+	slices.SortFunc(keys, EngineKeyCompare)
+
+	var enc colblk.DataBlockEncoder
+	enc.Init(keySchema)
+	for i := range keys {
+		ikey := pebble.InternalKey{
+			UserKey: keys[i],
+			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindSet),
+		}
+		enc.Add(ikey, keys[i], block.InPlaceValuePrefix(false), enc.KeyWriter.ComparePrev(keys[i]), false /* isObsolete */)
+	}
+	blk, _ := enc.Finish(len(keys), enc.Size())
+	blk = crbytes.CopyAligned(blk)
+
+	var dec colblk.DataBlockDecoder
+	dec.Init(keySchema, blk)
+	var it colblk.DataBlockIter
+	it.InitOnce(keySchema, EngineKeyCompare, EngineKeySplit, nil)
+	require.NoError(t, it.Init(&dec, block.NoTransforms))
+	for k, kv := 0, it.First(); kv != nil; k, kv = k+1, it.Next() {
+		require.True(t, EngineKeyEqual(keys[k], kv.K.UserKey))
+		require.Zero(t, EngineKeyCompare(keys[k], kv.K.UserKey))
+		// Note we allow the key read from the block to be physically different,
+		// because the above randomization generates point keys with the
+		// synthetic bit encoding. However the materialized key should not be
+		// longer than the original key, because we depend on the max key length
+		// during writing bounding the key length during reading.
+		if n := len(kv.K.UserKey); n > len(keys[k]) {
+			t.Fatalf("key %q is longer than original key %q", kv.K.UserKey, keys[k])
+		}
+		checkEngineKey(kv.K.UserKey)
+	}
+	require.NoError(t, it.Close())
 }
