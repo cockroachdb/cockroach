@@ -1418,12 +1418,20 @@ func (r *raft) Step(m pb.Message) error {
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
 			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
-			// NB: A fortified leader is allowed to bump its term. It'll need to
-			// re-fortify once if it gets elected at the higher term though, so the
-			// leader must take care to not regress its supported expiration. However,
-			// at the follower, we grant the fortified leader our vote at the higher
-			// term.
-			inFortifyLease := r.supportingFortifiedLeader() && r.lead != m.From
+			inFortifyLease := r.supportingFortifiedLeader() &&
+				// NB: A fortified leader is allowed to bump its term. It'll need to
+				// re-fortify once if it gets elected at the higher term though, so the
+				// leader must take care to not regress its supported expiration.
+				// However, at the follower, we grant the fortified leader our vote at
+				// the higher term.
+				r.lead != m.From &&
+				// NB: If the peer that's campaigning has an entry in its log with a
+				// higher term than what we're aware of, then this conclusively proves
+				// that a new leader was elected at a higher term. We never heard from
+				// this new leader (otherwise we'd have bumped r.Term in response).
+				// However, any fortification we're providing to a leader that has been
+				// since dethroned is pointless.
+				m.LogTerm <= r.Term
 			if !force && (inHeartbeatLease || inFortifyLease) {
 				// If a server receives a Request{,Pre}Vote message but is still
 				// supporting a fortified leader, it does not update its term or grant
@@ -1551,11 +1559,12 @@ func (r *raft) Step(m pb.Message) error {
 	case pb.MsgVote, pb.MsgPreVote:
 		// We can vote if this is a repeat of a vote we've already cast...
 		canVote := r.Vote == m.From ||
-			// ...we haven't voted and we don't think there's a leader yet in this term...
+			// ...OR we haven't voted and we don't think there's a leader yet in this
+			// term...
 			(r.Vote == None && r.lead == None) ||
-			// ...or this is a PreVote for a future term...
+			// ...OR this is a PreVote for a future term...
 			(m.Type == pb.MsgPreVote && m.Term > r.Term)
-		// ...and we believe the candidate is up to date.
+		// ...AND we believe the candidate is up to date.
 		lastID := r.raftLog.lastEntryID()
 		candLastID := entryID{term: m.LogTerm, index: m.Index}
 		if canVote && r.raftLog.isUpToDate(candLastID) {
