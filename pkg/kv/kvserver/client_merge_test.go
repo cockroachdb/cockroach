@@ -3168,7 +3168,6 @@ func TestMergeQueueWithExternalFiles(t *testing.T) {
 			store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 			require.NoError(t, err)
 
-			store.SetMergeQueueActive(true)
 			if skipExternal {
 				verifyUnmergedSoon(t, store, lhsDesc.StartKey, rhsDesc.StartKey)
 			} else {
@@ -4290,6 +4289,11 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 
 func verifyMergedSoon(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {
 	t.Helper()
+	store.SetMergeQueueActive(true)
+	defer func() {
+		store.SetMergeQueueActive(false)
+		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
+	}()
 	testutils.SucceedsSoon(t, func() error {
 		store.MustForceMergeScanAndProcess()
 		repl := store.LookupReplica(rhsStartKey)
@@ -4307,6 +4311,11 @@ func verifyUnmergedSoon(
 	t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey,
 ) {
 	t.Helper()
+	store.SetMergeQueueActive(true)
+	defer func() {
+		store.SetMergeQueueActive(false)
+		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
+	}()
 	testutils.SucceedsSoon(t, func() error {
 		store.MustForceMergeScanAndProcess()
 		repl := store.LookupReplica(rhsStartKey)
@@ -4341,9 +4350,6 @@ func TestMergeQueue(t *testing.T) {
 						WallClock:                 manualClock,
 						DefaultZoneConfigOverride: &zoneConfig,
 					},
-					Store: &kvserver.StoreTestingKnobs{
-						DisableScanner: true,
-					},
 				},
 			},
 		})
@@ -4351,11 +4357,6 @@ func TestMergeQueue(t *testing.T) {
 
 	conf := zoneConfig.AsSpanConfig()
 	store := tc.GetFirstStoreFromServer(t, 0)
-	// The cluster with manual replication disables the merge queue,
-	// so we need to re-enable.
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
-	require.NoError(t, err)
-	store.SetMergeQueueActive(true)
 
 	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
 		t.Helper()
@@ -4426,6 +4427,7 @@ func TestMergeQueue(t *testing.T) {
 			kvserver.SplitByLoadEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 		}
 
+		store.SetMergeQueueActive(false)     // reset merge queue to inactive
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, rhsStartKey.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
@@ -4815,7 +4817,8 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 	}
 
 	var clusterArgs = base.TestClusterArgs{
-		// We dont want the replicate queue mucking with our test, so disable it.
+		// We don't want the replicate queue mucking with our test, so disable it.
+		// This also disables the merge queue, until it is manually enabled.
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -4838,10 +4841,6 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 
 			store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
 			require.Nil(t, err)
-			// We're going to split the dummy range created above with an empty
-			// expiration time. Disable the merge queue before splitting so that the
-			// split ranges aren't immediately merged.
-			store.SetMergeQueueActive(false)
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(
 				t, tc, dbName, "kv" /* tableName */, hlc.Timestamp{} /* splitExpirationTime */)
 
@@ -4884,7 +4883,6 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 			tc.RemoveVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(0))
 			rightDesc = tc.LookupRangeOrFatal(t, rightDesc.StartKey.AsRawKey())
 
-			store.SetMergeQueueActive(true)
 			verifyMergedSoon(t, store, leftDesc.StartKey, rightDesc.StartKey)
 		})
 	}
@@ -4906,7 +4904,8 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 	ctx := context.Background()
 	var delaySnapshotTrap atomic.Value
 	var clusterArgs = base.TestClusterArgs{
-		// We dont want the replicate queue mucking with our test, so disable it.
+		// We don't want the replicate queue mucking with our test, so disable it.
+		// This also disables the merge queue, until it is manually enabled.
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -4942,17 +4941,9 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 	numNodes := 3
 	tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
 	defer tc.Stopper().Stop(ctx)
-	// We're controlling merge queue operation via
-	// `store.SetMergeQueueActive`, so enable the cluster setting here.
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled=true`)
-	require.NoError(t, err)
 
 	store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
 	require.Nil(t, err)
-	// We're going to split the dummy range created above with an empty
-	// expiration time. Disable the merge queue before splitting so that the
-	// split ranges aren't immediately merged.
-	store.SetMergeQueueActive(false)
 	leftDesc, rightDesc := splitDummyRangeInTestCluster(
 		t, tc, dbName, tableName, hlc.Timestamp{}, /* splitExpirationTime */
 	)
@@ -4969,7 +4960,6 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		return nil
 	})
-	store.SetMergeQueueActive(true)
 	verifyMergedSoon(t, store, leftDesc.StartKey, rightDesc.StartKey)
 }
 
