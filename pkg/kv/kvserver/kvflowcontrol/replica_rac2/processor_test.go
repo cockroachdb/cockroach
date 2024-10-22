@@ -42,7 +42,7 @@ type testReplica struct {
 	leaseholder roachpb.ReplicaID
 }
 
-var _ Replica = &testReplica{}
+var _ ReplicaForTesting = &testReplica{}
 
 func newTestReplica(b *strings.Builder) *testReplica {
 	return &testReplica{b: b}
@@ -55,14 +55,6 @@ func (r *testReplica) initRaft(stable rac2.LogMark) {
 		mark:              stable,
 		nextUnstableIndex: stable.Index + 1,
 	}
-}
-
-func (r *testReplica) RaftMuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.RaftMuAssertHeld\n")
-}
-
-func (r *testReplica) MuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.MuAssertHeld\n")
 }
 
 func (r *testReplica) IsScratchRange() bool {
@@ -249,6 +241,12 @@ func (c *testRangeController) SendStreamStats(stats *rac2.RangeSendStreamStats) 
 	fmt.Fprintf(c.b, " RangeController.SendStreamStats\n")
 }
 
+func makeTestMutexAsserter() ReplicaMutexAsserter {
+	var raftMu syncutil.Mutex
+	var replicaMu syncutil.RWMutex
+	return MakeReplicaMutexAsserter(&raftMu, &replicaMu)
+}
+
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -276,7 +274,8 @@ func TestProcessorBasic(t *testing.T) {
 			StoreID:                2,
 			RangeID:                3,
 			ReplicaID:              replicaID,
-			Replica:                r,
+			ReplicaForTesting:      r,
+			ReplicaMutexAsserter:   makeTestMutexAsserter(),
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
