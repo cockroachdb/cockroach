@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -1192,8 +1193,8 @@ func (r *raft) tickHeartbeat() {
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
+	r.setLead(lead)
 	r.tick = r.tickElection
-	r.lead = lead
 	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 }
@@ -1242,13 +1243,13 @@ func (r *raft) becomeLeader() {
 	}
 	r.step = stepLeader
 	r.reset(r.Term)
+	r.setLead(r.id)
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
 	// and not even when learning of a leader in a later term.
 	r.fortificationTracker.Reset(r.Term)
 	r.tick = r.tickHeartbeat
-	r.lead = r.id
 	r.state = pb.StateLeader
 	// Followers enter replicate mode when they've been successfully probed
 	// (perhaps after having received a snapshot as a result). The leader is
@@ -1277,6 +1278,14 @@ func (r *raft) becomeLeader() {
 	// quota of the new leader. In other words, after the call to appendEntry,
 	// r.uncommittedSize is still 0.
 	r.logger.Infof("%x became leader at term %d", r.id, r.Term)
+}
+
+func (r *raft) setLead(lead pb.PeerID) {
+	if r.lead == None {
+		r.lead = lead
+	} else if r.lead != lead {
+		r.logger.Panicf("%x had lead set to %d, trying to update to %d\n%s", r.id, r.lead, lead, string(debug.Stack()))
+	}
 }
 
 func (r *raft) hup(t CampaignType) {
@@ -2066,19 +2075,19 @@ func stepFollower(r *raft, m pb.Message) error {
 		// function is always called). Instead, if r.lead != None, we should be able
 		// to assert that the leader hasn't changed within a given term. Maybe at
 		// the caller itself.
-		r.lead = m.From
+		r.setLead(m.From)
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
 		r.electionElapsed = 0
-		r.lead = m.From
+		r.setLead(m.From)
 		r.handleHeartbeat(m)
 	case pb.MsgSnap:
 		r.electionElapsed = 0
-		r.lead = m.From
+		r.setLead(m.From)
 		r.handleSnapshot(m)
 	case pb.MsgFortifyLeader:
 		r.electionElapsed = 0
-		r.lead = m.From
+		r.setLead(m.From)
 		r.handleFortify(m)
 	case pb.MsgDeFortifyLeader:
 		r.handleDeFortify(m)
