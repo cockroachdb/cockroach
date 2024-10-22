@@ -367,3 +367,27 @@ CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
 statement ok
 DROP FUNCTION f_char(CHAR(2))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(2)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(0)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(0)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(2))
