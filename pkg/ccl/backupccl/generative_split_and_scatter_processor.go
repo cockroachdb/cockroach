@@ -477,11 +477,9 @@ func runGenerativeSplitAndScatter(
 		filter, err := makeSpanCoveringFilter(
 			spec.Spans,
 			spec.CheckpointedSpans,
-			spec.HighWater,
 			introducedSpanFrontier,
 			spec.TargetSize,
-			spec.MaxFileCount,
-			spec.UseFrontierCheckpointing)
+			spec.MaxFileCount)
 		if err != nil {
 			return errors.Wrap(err, "failed to make span covering filter")
 		}

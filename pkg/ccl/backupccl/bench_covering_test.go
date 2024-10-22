@@ -91,11 +91,10 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											filter, err := makeSpanCoveringFilter(
 												backups[numBackups-1].Spans,
 												[]jobspb.RestoreProgress_FrontierEntry{},
-												nil,
 												introducedSpanFrontier,
 												0,
 												defaultMaxFileCount,
-												false)
+											)
 											require.NoError(b, err)
 											defer filter.close()
 
