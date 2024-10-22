@@ -1925,20 +1925,22 @@ func TestUserDefinedTypes(t *testing.T) {
 	// Create the same user-defined type both tables.
 	dbA.Exec(t, "CREATE TYPE my_enum AS ENUM ('one', 'two', 'three')")
 	dbB.Exec(t, "CREATE TYPE my_enum AS ENUM ('one', 'two', 'three')")
+	dbA.Exec(t, "CREATE TYPE my_composite AS (a INT, b TEXT)")
+	dbB.Exec(t, "CREATE TYPE my_composite AS (a INT, b TEXT)")
 
-	dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val my_enum DEFAULT 'two')")
-	dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val my_enum DEFAULT 'two')")
+	dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
+	dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
 
-	dbB.Exec(t, "INSERT INTO data VALUES (1, 'one')")
+	dbB.Exec(t, "INSERT INTO data VALUES (1, 'one', (3, 'cat'))")
 	// Force default expression evaluation.
-	dbB.Exec(t, "INSERT INTO data VALUES (2)")
+	dbB.Exec(t, "INSERT INTO data (pk, val2) VALUES (2, (4, 'dog'))")
 
 	var jobAID jobspb.JobID
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data with skip schema check", dbBURL.String()).Scan(&jobAID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data", dbBURL.String()).Scan(&jobAID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "A"))
-	dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one"}, {"2", "two"}})
-	dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one"}, {"2", "two"}})
+	dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+	dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
@@ -2100,14 +2102,14 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
 
-	// Verify that the stream cannot be created with user defined types.
+	// Verify that the stream cannot be created with mismatched enum types.
 	dbA.Exec(t, "DROP TRIGGER my_trigger ON tab")
 	dbA.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b', 'c')")
-	dbB.Exec(t, "CREATE TYPE b.mytype AS ENUM ('a', 'b', 'c')")
+	dbB.Exec(t, "CREATE TYPE b.mytype AS ENUM ('a', 'b')")
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL")
 	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN enum_col b.mytype NOT NULL")
 	dbA.ExpectErr(t,
-		`cannot create logical replication stream: destination table tab column enum_col has user-defined type USER DEFINED ENUM: public.mytype`,
+		`cannot create logical replication stream: .* destination type USER DEFINED ENUM: public.mytype has logical representations \[a b c\], but the source type USER DEFINED ENUM: mytype has \[a b\]`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
 	// Allows user to create LDR stream with UDT via SKIP SCHEMA CHECK.
@@ -2118,9 +2120,21 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
 	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
 
-	// Check that UNIQUE indexes match.
+	// Verify that the stream cannot be created with mismatched composite types.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN enum_col")
 	dbB.Exec(t, "ALTER TABLE b.tab DROP COLUMN enum_col")
+	dbA.Exec(t, "CREATE TYPE composite_typ AS (a INT, b TEXT)")
+	dbB.Exec(t, "CREATE TYPE b.composite_typ AS (a TEXT, b INT)")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN composite_udt_col composite_typ NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN composite_udt_col b.composite_typ NOT NULL")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: .* destination type USER DEFINED RECORD: public.composite_typ tuple element 0 does not match source type USER DEFINED RECORD: composite_typ tuple element 0: destination type INT8 does not match source type STRING`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check that UNIQUE indexes match.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN composite_udt_col")
+	dbB.Exec(t, "ALTER TABLE b.tab DROP COLUMN composite_udt_col")
 	dbA.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
 	dbB.Exec(t, "CREATE UNIQUE INDEX multi_idx ON b.tab(composite_col, pk)")
 	dbA.ExpectErr(t,
