@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -324,7 +325,7 @@ func formatFamily(family Family, buf *bytes.Buffer) {
 // markRedactable is true.
 func MaybeMarkRedactable(unsafe string, markRedactable bool) string {
 	if markRedactable {
-		return string(redact.Sprintf("%s", redact.Unsafe(unsafe)))
+		return string(redact.Sprintf("%s", encoding.Unsafe(unsafe)))
 	}
 	return unsafe
 }

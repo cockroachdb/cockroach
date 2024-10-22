@@ -74,6 +74,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils/echotest",
         "//pkg/util/buildutil",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
