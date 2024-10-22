@@ -74,6 +74,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",

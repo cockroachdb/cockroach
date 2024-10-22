@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -208,6 +210,19 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
+		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
+		for i, desc := range spec.TypeDescriptors {
+			// Until https://github.com/cockroachdb/cockroach/issues/132164 is resolved,
+			// we cannot allow user-defined types on the SQL ingestion path.
+			if m, ok := options.GetMode(); ok && m != "immediate" {
+				return unimplemented.NewWithIssue(132164, "MODE = 'immediate' cannot be used with user-defined types")
+			}
+			sourceTypes[i] = &desc
+		}
+		// TODO(rafi): do we need a different type resolver?
+		// See https://github.com/cockroachdb/cockroach/issues/132164.
+		importResolver := importer.MakeImportTypeResolver(sourceTypes)
+
 		// If the user asked to ignore "ttl-deletes", make sure that at least one of
 		// the source tables actually has a TTL job which sets the omit bit that
 		// is used for filtering; if not, they probably forgot that step.
@@ -215,7 +230,11 @@ func createLogicalReplicationStreamPlanHook(
 
 		for i, name := range srcTableNames {
 			td := spec.TableDescriptors[name]
-			srcTableDescs[i] = &td
+			cpy := tabledesc.NewBuilder(&td).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+				return err
+			}
+			srcTableDescs[i] = cpy.TableDesc()
 			repPairs[i].SrcDescriptorID = int32(td.ID)
 			if td.RowLevelTTL != nil && td.RowLevelTTL.DisableChangefeedReplication {
 				throwNoTTLWithCDCIgnoreError = false
