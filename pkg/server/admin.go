@@ -3202,9 +3202,11 @@ func (s *systemAdminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
-	traceSpans, processErr, err := store.Enqueue(
-		ctx, queueName, repl, req.SkipShouldQueue, false, /* async */
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, err := store.Enqueue(
+		traceCtx, queueName, repl, req.SkipShouldQueue, false, /* async */
 	)
+	traceSpans := rec()
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil
