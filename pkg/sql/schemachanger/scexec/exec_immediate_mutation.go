@@ -28,7 +28,8 @@ type immediateState struct {
 	withReset                  bool
 	sequencesToInit            []sequenceToInit
 	temporarySchemasToRegister map[descpb.ID]*temporarySchemaToRegister
-	zoneConfigsToUpdate        []zoneConfigToUpdate
+	modifiedZoneConfigs        []zoneConfigToUpsert
+	zoneConfigsToDelete        []zoneConfigToDelete
 }
 
 type temporarySchemaToRegister struct {
@@ -48,14 +49,18 @@ type sequenceToInit struct {
 	startVal int64
 }
 
-// zoneConfigToUpdate is a struct that holds the information needed to update a
+// zoneConfigToUpsert is a struct that holds the information needed to update a
 // zone config or subzone configs. If zc is subzone config, then we treat this
 // as a subzone write and update the subzone configs (along with their subzone
 // spans for the table). Otherwise, we write the whole zone config as an update.
-type zoneConfigToUpdate struct {
+type zoneConfigToUpsert struct {
 	id              descpb.ID
 	zc              *zonepb.ZoneConfig
 	isSubzoneConfig bool
+}
+
+type zoneConfigToDelete struct {
+	id descpb.ID
 }
 
 var _ scmutationexec.ImmediateMutationStateUpdater = (*immediateState)(nil)
@@ -137,8 +142,8 @@ func (s *immediateState) InitSequence(id descpb.ID, startVal int64) {
 }
 
 func (s *immediateState) UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) {
-	s.zoneConfigsToUpdate = append(s.zoneConfigsToUpdate,
-		zoneConfigToUpdate{
+	s.modifiedZoneConfigs = append(s.modifiedZoneConfigs,
+		zoneConfigToUpsert{
 			id: id,
 			zc: zc,
 		})
@@ -148,11 +153,18 @@ func (s *immediateState) UpdateSubzoneConfig(
 	tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
 ) {
 	zc := &zonepb.ZoneConfig{Subzones: []zonepb.Subzone{subzone}, SubzoneSpans: subzoneSpans}
-	s.zoneConfigsToUpdate = append(s.zoneConfigsToUpdate,
-		zoneConfigToUpdate{
+	s.modifiedZoneConfigs = append(s.modifiedZoneConfigs,
+		zoneConfigToUpsert{
 			id:              tableid,
 			zc:              zc,
 			isSubzoneConfig: true,
+		})
+}
+
+func (s *immediateState) DeleteZoneConfig(id descpb.ID) {
+	s.zoneConfigsToDelete = append(s.zoneConfigsToDelete,
+		zoneConfigToDelete{
+			id: id,
 		})
 }
 
@@ -222,17 +234,23 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 		c.InsertTemporarySchema(tempIdxToRegister.schemaName, tempIdxToRegister.parentID, tempIdxId)
 	}
 
-	for _, zc := range s.zoneConfigsToUpdate {
-		if zc.isSubzoneConfig {
-			if err := c.UpdateSubzoneConfig(ctx, zc.id, zc.zc.Subzones,
-				zc.zc.SubzoneSpans); err != nil {
+	for _, zcToUpdate := range s.modifiedZoneConfigs {
+		if zcToUpdate.isSubzoneConfig {
+			if err := c.UpdateSubzoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc.Subzones,
+				zcToUpdate.zc.SubzoneSpans); err != nil {
 				return err
 			}
 		} else {
 
-			if err := c.UpdateZoneConfig(ctx, zc.id, zc.zc); err != nil {
+			if err := c.UpdateZoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc); err != nil {
 				return err
 			}
+		}
+	}
+
+	for _, zcToDelete := range s.zoneConfigsToDelete {
+		if err := c.DeleteZoneConfig(ctx, zcToDelete.id); err != nil {
+			return err
 		}
 	}
 
