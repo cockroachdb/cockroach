@@ -1238,6 +1238,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
+		// TODO(radu): disable completely for now since the format is not finalized.
+		if true {
+			return false
+		}
 		return columnarBlocksEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
