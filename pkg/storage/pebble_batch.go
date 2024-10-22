@@ -273,11 +273,7 @@ func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
-	encValue, err := EncodeMVCCValue(value)
-	if err != nil {
-		return err
-	}
-	return wb.put(key, encValue)
+	return wb.putMVCC(key, value)
 }
 
 // PutRawMVCC implements the Writer interface.
@@ -300,6 +296,32 @@ func (wb *writeBatch) PutEngineKey(key EngineKey, value []byte) error {
 	}
 	wb.buf = key.EncodeToBuf(wb.buf[:0])
 	return wb.batch.Set(wb.buf, value, nil)
+}
+
+func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
+	// For performance, this method uses the pebble Batch's deferred operation
+	// API to avoid an extra memcpy. We:
+	// - determine the length of the encoded MVCC key and MVCC value
+	// - reserve space in the pebble Batch using SetDeferred
+	// - encode the MVCC key and MVCC value directly into the Batch
+	// - call Finish on the deferred operation (which will index the key if
+	//   wb.batch is indexed)
+	valueLen, isExtended := mvccValueSize(value)
+	keyLen := encodedMVCCKeyLength(key)
+	o := wb.batch.SetDeferred(keyLen, valueLen)
+	encodeMVCCKeyToBuf(o.Key, key, keyLen)
+	if !isExtended {
+		// Fast path; we don't need to use the extended encoding and can copy
+		// RawBytes in verbatim.
+		copy(o.Value, value.Value.RawBytes)
+	} else {
+		// Slow path; we need the MVCC value header.
+		err := encodeExtendedMVCCValueToSizedBuf(value, valueLen, o.Value)
+		if err != nil {
+			return err
+		}
+	}
+	return o.Finish()
 }
 
 func (wb *writeBatch) put(key MVCCKey, value []byte) error {
