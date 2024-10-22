@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -218,6 +219,13 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 		return nstree.Catalog{}, err
 	}
 	return read, nil
+}
+
+// ScanDescriptorsInSpans is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	return c.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
 // ScanNamespaceForDatabases is part of the CatalogReader interface.
