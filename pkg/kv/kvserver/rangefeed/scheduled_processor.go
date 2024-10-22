@@ -335,9 +335,7 @@ func (p *ScheduledProcessor) Register(
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-			func(ctx context.Context, r registration) {
-				p.unregisterClientAsync(r)
-			},
+			func(r registration) { p.unregisterClientAsync(r) },
 		)
 	}
 
