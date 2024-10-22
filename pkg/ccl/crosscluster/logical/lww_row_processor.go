@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -90,6 +91,9 @@ func (q *queryBuilder) AddRow(row cdcevent.Row) error {
 		return err
 	}
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		if dEnum, ok := d.(*tree.DEnum); ok {
+			dEnum.EnumTyp = types.Unknown
+		}
 		q.scratchDatums = append(q.scratchDatums, d)
 		return nil
 	}); err != nil {
@@ -116,6 +120,9 @@ func (q *queryBuilder) AddRowDefaultNull(row *cdcevent.Row) error {
 			continue
 		}
 		if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+			if dEnum, ok := d.(*tree.DEnum); ok {
+				dEnum.EnumTyp = types.Unknown
+			}
 			q.scratchDatums = append(q.scratchDatums, d)
 			return nil
 		}); err != nil {
