@@ -575,29 +575,6 @@ export class DatabasesPage extends React.Component<
         title: (
           <Tooltip
             placement="bottom"
-            title="The total number of ranges across all tables in the database."
-          >
-            Range Count
-          </Tooltip>
-        ),
-        cell: database => (
-          <LoadingCell
-            requestError={database.spanStatsRequestError}
-            queryError={database.spanStats?.error}
-            loading={database.spanStatsLoading}
-            errorClassName={cx("databases-table__cell-error")}
-          >
-            {database.spanStats?.range_count}
-          </LoadingCell>
-        ),
-        sort: database => database.spanStats?.range_count,
-        className: cx("databases-table__col-range-count"),
-        name: "rangeCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
             title="Regions/Nodes on which the database tables are located."
           >
             {this.props.isTenant ? "Regions" : "Regions/Nodes"}
