@@ -67,10 +67,7 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftp
 		return 0, false
 	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
-	if !ok {
-		return 0, false
-	}
-	return raftpb.Epoch(epoch), true
+	return raftpb.Epoch(epoch), ok
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
