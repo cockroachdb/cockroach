@@ -232,6 +232,7 @@ func registerRubyPG(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
+		Skip:    "uses old ruby version",
 		Name:    "ruby-pg",
 		Timeout: 1 * time.Hour,
 		Owner:   registry.OwnerSQLFoundations,
