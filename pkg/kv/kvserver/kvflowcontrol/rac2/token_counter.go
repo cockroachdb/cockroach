@@ -74,7 +74,7 @@ func makeTokenCounterPerWorkClass(
 
 // adjustTokensLocked adjusts the tokens for the given work class by delta.
 func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
-	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time,
+	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time, isReset bool,
 ) (adjustment, unaccounted kvflowcontrol.Tokens) {
 	before := twc.tokens
 	twc.tokens += delta
@@ -94,7 +94,7 @@ func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
 			twc.stats.noTokenStartTime = now
 		}
 	}
-	if buildutil.CrdbTestBuild && unaccounted != 0 {
+	if buildutil.CrdbTestBuild && !isReset && unaccounted != 0 {
 		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
 			twc.wc, unaccounted, delta, twc.limit)
 	}
@@ -108,7 +108,14 @@ func (twc *tokenCounterPerWorkClass) setLimitLocked(
 ) {
 	before := twc.limit
 	twc.limit = limit
-	twc.adjustTokensLocked(ctx, twc.limit-before, now)
+	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */)
+}
+
+func (twc *tokenCounterPerWorkClass) resetLocked(ctx context.Context, now time.Time) {
+	if twc.limit <= twc.tokens {
+		return
+	}
+	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */)
 }
 
 func (twc *tokenCounterPerWorkClass) signal() {
@@ -220,6 +227,13 @@ func newTokenCounter(
 
 	kvflowcontrol.RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	kvflowcontrol.ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	kvflowcontrol.TokenCounterResetEpoch.SetOnChange(&settings.SV, func(ctx context.Context) {
+		now := t.clock.PhysicalTime()
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.counters[admissionpb.RegularWorkClass].resetLocked(ctx, now)
+		t.mu.counters[admissionpb.ElasticWorkClass].resetLocked(ctx, now)
+	})
 	return t
 }
 
@@ -593,15 +607,15 @@ func (t *tokenCounter) adjustLocked(
 	switch class {
 	case admissionpb.RegularWorkClass:
 		adjustment.regular, unaccounted.regular =
-			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now)
+			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
 			// Regular {deductions,returns} also affect elastic flow tokens.
 		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now)
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
 
 	case admissionpb.ElasticWorkClass:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
 		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now)
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
 	}
 
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
@@ -627,7 +641,7 @@ func (t *tokenCounter) testingSetTokens(
 	defer t.mu.Unlock()
 
 	t.mu.counters[wc].adjustTokensLocked(ctx,
-		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime())
+		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */)
 }
 
 func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {
