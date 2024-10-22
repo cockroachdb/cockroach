@@ -721,6 +721,26 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
 					buildPostQueries(cascade, n, level+1)
 				}
+				if t := p.AfterTriggers; t != nil {
+					// We use the same memo to build the triggers. This makes the entire
+					// tree easier to read (e.g. the column IDs won't overlap).
+					triggers, err := t.Builder.Build(
+						context.Background(),
+						&ot.semaCtx,
+						&ot.evalCtx,
+						ot.catalog,
+						o.Factory(),
+						t.WithID,
+						inputRel,
+						colMap,
+					)
+					if err != nil {
+						d.Fatalf(tb, "error building triggers: %+v", err)
+					}
+					n := tp.Child("after-triggers")
+					n.Child(strings.TrimRight(ot.FormatExpr(triggers), "\n"))
+					buildPostQueries(triggers, n, level+1)
+				}
 			}
 			for i := 0; i < e.ChildCount(); i++ {
 				buildPostQueries(e.Child(i), tp, level)
