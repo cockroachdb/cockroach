@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -215,6 +216,34 @@ func makeStructuredEntry(
 	return res
 }
 
+var (
+	envDefaultSafeRedaction = envutil.EnvOrDefaultString("COCKROACH_DEFAULT_SAFE_REDACTION", "false")
+	shouldSanitizeArgs      = envDefaultSafeRedaction == "true" || envDefaultSafeRedaction == "1"
+)
+
+// sanitizePrintArgs makes sure that there is no ambiguity in weather an argument is
+// safe or unsafe. This is done by making sure that the types of the arguments
+// either implement the SafeFormatter or SafeValue interfaces. If they do not,
+// the argument is assumed to be safe and is wrapped in a call to redact.Safe.
+func sanitizePrintArgs(args []interface{}) {
+	if !shouldSanitizeArgs {
+		return
+	}
+
+	for i, arg := range args {
+		if _, ok := arg.(redact.SafeFormatter); ok {
+			continue
+		}
+
+		if _, ok := arg.(redact.SafeValue); ok {
+			continue
+		}
+
+		// assume that the arg is safe
+		args[i] = redact.Safe(arg)
+	}
+}
+
 // makeUnstructuredEntry creates a logEntry using an unstructured message.
 func makeUnstructuredEntry(
 	ctx context.Context,
@@ -235,8 +264,10 @@ func makeUnstructuredEntry(
 			// TODO(knz): Remove this legacy case.
 			buf.Print(redact.Safe(format))
 		} else if len(format) == 0 {
+			sanitizePrintArgs(args)
 			buf.Print(args...)
 		} else {
+			sanitizePrintArgs(args)
 			buf.Printf(format, args...)
 		}
 		// Collect and append the hints, if any.
