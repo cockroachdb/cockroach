@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.telesc
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -741,6 +741,13 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 		return nstree.Catalog{}, err
 	}
 	return ret.Catalog, nil
+}
+
+// GetDescriptorsInSpans returns all descriptors within a given span.
+func (tc *Collection) GetDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
 // GetAllComments gets all comments for all descriptors in the given database.
