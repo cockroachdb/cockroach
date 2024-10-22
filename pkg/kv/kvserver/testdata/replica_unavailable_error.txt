@@ -1,3 +1,3 @@
 echo
 ----
-replica unavailable: (n1,s10):1 unable to serve request to r10:‹{a-z}› [(n1,s10):1, (n2,s20):2, next=3, gen=0]: lost quorum (down: (n2,s20):2); closed timestamp: 1136214245.000000000,0 (2006-01-02 15:04:05); raft status: {"id":"0","term":0,"vote":"0","commit":0,"lead":"0","raftState":"StateFollower","applied":0,"progress":{},"leadtransferee":"0"}: probe failed
+replica unavailable: (n1,s10):1 unable to serve request to r10:‹{a-z}› [(n1,s10):1, (n2,s20):2, next=3, gen=0]: lost quorum (down: (n2,s20):2); closed timestamp: 1136214245.000000000,0 (2006-01-02 15:04:05); raft status: {"id":"0","term":0,"vote":"0","commit":0,"lead":"0","leadEpoch":"0","raftState":"StateFollower","applied":0,"progress":{},"leadtransferee":"0"}: probe failed
