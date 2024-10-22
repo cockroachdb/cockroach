@@ -455,19 +455,9 @@ func (n noopReplicaFlowControlIntegration) handle() (kvflowcontrol.Handle, bool)
 
 type replicaForRACv2 Replica
 
-var _ replica_rac2.Replica = &replicaForRACv2{}
+var _ replica_rac2.ReplicaForTesting = &replicaForRACv2{}
 
-// RaftMuAssertHeld implements replica_rac2.Replica.
-func (r *replicaForRACv2) RaftMuAssertHeld() {
-	r.raftMu.AssertHeld()
-}
-
-// MuAssertHeld implements replica_rac2.Replica.
-func (r *replicaForRACv2) MuAssertHeld() {
-	r.mu.AssertHeld()
-}
-
-// IsScratchRange implements replica_rac2.Replica.
+// IsScratchRange implements replica_rac2.ReplicaForTesting.
 func (r *replicaForRACv2) IsScratchRange() bool {
 	return (*Replica)(r).IsScratchRange()
 }
