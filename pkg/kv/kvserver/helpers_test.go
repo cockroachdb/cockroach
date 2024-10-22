@@ -340,10 +340,10 @@ func (r *Replica) Campaign(ctx context.Context) {
 }
 
 // ForceCampaign force-campaigns the replica.
-func (r *Replica) ForceCampaign(ctx context.Context) {
+func (r *Replica) ForceCampaign(ctx context.Context, raftStatus raft.BasicStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.forceCampaignLocked(ctx)
+	r.forceCampaignLocked(ctx, raftStatus)
 }
 
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
