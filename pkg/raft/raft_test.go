@@ -2615,7 +2615,7 @@ func TestRestoreFromSnapMsg(t *testing.T) {
 	sm := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	sm.Step(m)
 
-	assert.Equal(t, pb.PeerID(1), sm.lead)
+	assert.Equal(t, None, sm.lead)
 	// TODO(bdarnell): what should this test?
 }
 

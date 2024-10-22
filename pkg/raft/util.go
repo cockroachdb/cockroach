@@ -50,8 +50,10 @@ var isResponseMsg = [...]bool{
 }
 
 var isMsgFromLeader = [...]bool{
-	pb.MsgApp:             true,
-	pb.MsgSnap:            true,
+	pb.MsgApp: true,
+	// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
+	// Message.Term until we address #127348 and #127349.
+	// pb.MsgSnap:            true,
 	pb.MsgHeartbeat:       true,
 	pb.MsgTimeoutNow:      true,
 	pb.MsgFortifyLeader:   true,
