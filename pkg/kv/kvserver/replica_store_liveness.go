@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
@@ -59,18 +60,12 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(
 func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftpb.Epoch, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
-		return 0, false
-	}
-	// TODO(arul): we can remove this once we start to assign storeLiveness in the
-	// Store constructor.
-	if r.store.storeLiveness == nil {
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Warningf(ctx, "store not found for replica %d in SupportFor", replicaID)
 		return 0, false
 	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
-	if !ok {
-		return 0, false
-	}
-	return raftpb.Epoch(epoch), true
+	return raftpb.Epoch(epoch), ok
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
@@ -79,6 +74,8 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 ) (raftpb.Epoch, hlc.Timestamp) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Warningf(ctx, "store not found for replica %d in SupportFrom", replicaID)
 		return 0, hlc.Timestamp{}
 	}
 	epoch, exp := r.store.storeLiveness.SupportFrom(storeID)
