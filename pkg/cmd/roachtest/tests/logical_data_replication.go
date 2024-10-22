@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -349,7 +350,7 @@ func TestLDRUpdateHeavy(
 	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, mode mode,
 ) {
 
-	duration := 10 * time.Minute
+	duration := 6 * time.Minute
 	if c.IsLocal() {
 		duration = 3 * time.Minute
 	}
@@ -431,6 +432,71 @@ func TestLDROnNodeShutdown(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, mode)
 
+	findCoordinatorNode := func(info *clusterInfo, jobID int, rightSide bool) int {
+		var coordinatorNode int
+		testutils.SucceedsWithin(t, func() error {
+			return info.db.QueryRowContext(ctx,
+				`SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, jobID).Scan(&coordinatorNode)
+		}, time.Minute)
+		if rightSide {
+			// From the right cluster's perspective, node ids range from 1 to
+			// num_dest_nodes, but from roachprod's perspective they range from
+			// num_source_nodes+1 to num_crdb_roachprod nodes. We need to adjust for
+			// this to shut down the right node. Example: if the coordinator node on the
+			// dest cluster is 1, and there are 4 src cluster nodes, then
+			// shut down roachprod node 5.
+			coordinatorNode += len(setup.left.nodes)
+		}
+		return coordinatorNode
+	}
+
+	findNonCoordinatorNode := func(info *clusterInfo, rng *rand.Rand, coordinatorNode int) int {
+		for {
+			anotherNode := info.nodes.SeededRandNode(rng)[0]
+			if anotherNode != coordinatorNode {
+				return anotherNode
+			}
+		}
+	}
+
+	var shutdownSide *clusterInfo
+	var shutdownNode int
+	var coordinatorNode int
+	var newGatewayNode int
+	if setup.rng.Intn(2) == 0 {
+		t.L().Printf("Shutting down on right side")
+		shutdownSide = setup.right
+		coordinatorNode = findCoordinatorNode(setup.right, rightJobID, true)
+	} else {
+		t.L().Printf("Shutting down node on left side")
+		shutdownSide = setup.left
+		coordinatorNode = findCoordinatorNode(setup.left, leftJobID, false)
+	}
+	if setup.rng.Intn(2) == 0 {
+		shutdownNode = findNonCoordinatorNode(shutdownSide, setup.rng, coordinatorNode)
+		newGatewayNode = coordinatorNode
+		t.L().Printf("Shutting down worker node %d, new gateway node %d", shutdownNode, newGatewayNode)
+	} else {
+		shutdownNode = coordinatorNode
+		newGatewayNode = findNonCoordinatorNode(shutdownSide, setup.rng, coordinatorNode)
+		t.L().Printf("Shutting down coordinator node %d, new gateway node %d", shutdownNode, newGatewayNode)
+	}
+
+	// Switch gateway node to another node that will not shutdown, so we can still serve queries.
+	shutdownSide.gatewayNodes[0] = newGatewayNode
+	shutdownSide.db = c.Conn(ctx, t.L(), shutdownSide.gatewayNodes[0])
+	defer shutdownSide.db.Close()
+	shutdownSide.sysSQL = sqlutils.MakeSQLRunner(shutdownSide.db)
+
+	var stopOpts option.StopOpts
+	if setup.rng.Intn(2) == 0 {
+		stopOpts = option.DefaultStopOpts()
+		t.L().Printf("Shutting down node immediately")
+	} else {
+		stopOpts = option.NewStopOpts(option.Graceful(shutdownGracePeriod))
+		t.L().Printf("Shutting down node gracefully")
+	}
+
 	// Setup latency verifiers, remembering to account for latency spike from killing a node
 	maxExpectedLatency := 5 * time.Minute
 	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
@@ -466,34 +532,13 @@ func TestLDROnNodeShutdown(
 	})
 
 	// Let workload run for a bit before we kill a node
-	time.Sleep(ldrWorkload.workload.(replicateKV).debugRunDuration / 10)
+	sleepNanos := setup.rng.Int63n((ldrWorkload.workload.(replicateKV).debugRunDuration / 10).Nanoseconds())
+	sleepDuration := time.Duration(sleepNanos)
+	t.L().Printf("Sleeping for %s before shutdown", sleepDuration)
+	time.Sleep(sleepDuration)
 
-	findNodeToStop := func(info *clusterInfo, rng *rand.Rand) int {
-		for {
-			anotherNode := info.nodes.SeededRandNode(rng)[0]
-			if anotherNode != info.gatewayNodes[0] {
-				return anotherNode
-			}
-		}
-	}
-
-	t.L().Printf("Finding node to stop Left")
-	nodeToStopL := findNodeToStop(setup.left, setup.rng)
-	t.L().Printf("Finding node to stop right")
-	nodeToStopR := findNodeToStop(setup.right, setup.rng)
-
-	// Graceful shutdown on both nodes
-	// TODO(naveen.setlur): maybe switch this to a less graceful shutdown via SIGKILL
-	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
-	t.L().Printf("Shutting down node-left: %d", nodeToStopL)
 	monitor.ExpectDeath()
-	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopL)); err != nil {
-		t.Fatalf("Unable to shutdown node: %s", err)
-	}
-
-	t.L().Printf("Shutting down node-right: %d", nodeToStopR)
-	monitor.ExpectDeath()
-	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopR)); err != nil {
+	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(shutdownNode)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
