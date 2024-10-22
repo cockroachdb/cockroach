@@ -593,6 +593,11 @@ func sysbenchOltpReadWrite(s sysbenchDriver, rng *rand.Rand) {
 	s.Commit()
 }
 
+func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
+	s.Begin()
+	s.Commit()
+}
+
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	drivers := []struct {
@@ -609,6 +614,7 @@ func BenchmarkSysbench(b *testing.B) {
 		{"oltp_read_only", sysbenchOltpReadOnly},
 		{"oltp_write_only", sysbenchOltpWriteOnly},
 		{"oltp_read_write", sysbenchOltpReadWrite},
+		{"oltp_begin_commit", sysbenchOltpBeginCommit},
 	}
 	for _, driver := range drivers {
 		b.Run(driver.name, func(b *testing.B) {
