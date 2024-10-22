@@ -73,25 +73,10 @@ type raftLog struct {
 	applied uint64
 
 	logger raftlogger.Logger
-
-	// maxApplyingEntsSize limits the outstanding byte size of the messages
-	// returned from calls to nextCommittedEnts that have not been acknowledged
-	// by a call to appliedTo.
-	maxApplyingEntsSize entryEncodingSize
 }
 
-// newLog returns log using the given storage and default options. It
-// recovers the log to the state that it just commits and applies the
-// latest snapshot.
+// newLog returns a raft log initialized to the state in the given storage.
 func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
-	return newLogWithSize(storage, logger, noLimit)
-}
-
-// newLogWithSize returns a log using the given storage and max
-// message size.
-func newLogWithSize(
-	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
-) *raftLog {
 	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
@@ -99,11 +84,16 @@ func newLogWithSize(
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
-		storage:             storage,
-		unstable:            newUnstable(last, logger),
-		maxApplyingEntsSize: maxApplyingEntsSize,
+		storage:  storage,
+		unstable: newUnstable(last, logger),
 
-		// Initialize our committed and applied pointers to the time of the last compaction.
+		// Initialize our committed and applied pointers to the time of the last
+		// compaction.
+		// TODO(pav-kv): this is insufficient, and the caller (newRaft) additionally
+		// moves the committed and applied indices forward, based on the loaded
+		// HardState and Config.Applied. We should consolidate initialization. All
+		// the related initial state can be read in one place, and passed in to
+		// newRaft/newLog instead of being read in 3 different places.
 		committed: firstIndex - 1,
 		applying:  firstIndex - 1,
 		applied:   firstIndex - 1,
@@ -260,12 +250,15 @@ func (l *raftLog) applyingEntsPaused() bool {
 	return l.applying > l.applied
 }
 
-// nextCommittedEnts returns all the available entries for execution.
+// nextCommittedEnts returns a batch of committed entries to be applied to the
+// state machine next. The total size of the returned entries does not exceed
+// maxSize, except when the first entry is larger than this limit.
+//
 // Entries can be committed even when the local raft instance has not durably
 // appended them to the local raft log yet. If allowUnstable is true, committed
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
-func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
+func (l *raftLog) nextCommittedEnts(maxSize entryEncodingSize, allowUnstable bool) []pb.Entry {
 	if l.applyingEntsPaused() {
 		// Some entries are still being applied.
 		return nil
@@ -279,7 +272,7 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 		// Nothing to apply.
 		return nil
 	}
-	ents, err := l.slice(lo, hi, l.maxApplyingEntsSize)
+	ents, err := l.slice(lo, hi, maxSize)
 	if err != nil {
 		l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
 	}

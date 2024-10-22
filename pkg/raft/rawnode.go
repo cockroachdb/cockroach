@@ -230,7 +230,7 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 
 	rd := Ready{
 		Entries:          r.raftLog.nextUnstableEnts(),
-		CommittedEntries: r.raftLog.nextCommittedEnts(rn.applyUnstableEntries()),
+		CommittedEntries: r.raftLog.nextCommittedEnts(r.maxApplyingEntsSize, rn.applyUnstableEntries()),
 		Messages:         r.msgs,
 	}
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {

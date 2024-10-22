@@ -352,7 +352,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			}
 
 			hasNext := raftLog.hasNextCommittedEnts(tt.allowUnstable)
-			next := raftLog.nextCommittedEnts(tt.allowUnstable)
+			next := raftLog.nextCommittedEnts(noLimit, tt.allowUnstable)
 			require.Equal(t, next != nil, hasNext)
 			require.Equal(t, tt.want, next)
 		})
@@ -360,7 +360,6 @@ func TestNextCommittedEnts(t *testing.T) {
 }
 
 func TestAcceptApplying(t *testing.T) {
-	maxSize := entryEncodingSize(100)
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
@@ -376,7 +375,7 @@ func TestAcceptApplying(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			raftLog := newLogWithSize(storage, raftlogger.DiscardLogger, maxSize)
+			raftLog := newLog(storage, raftlogger.DiscardLogger)
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 
@@ -392,7 +391,6 @@ func TestAcceptApplying(t *testing.T) {
 }
 
 func TestAppliedTo(t *testing.T) {
-	maxSize := entryEncodingSize(100)
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
@@ -409,7 +407,7 @@ func TestAppliedTo(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			raftLog := newLogWithSize(storage, raftlogger.DiscardLogger, maxSize)
+			raftLog := newLog(storage, raftlogger.DiscardLogger)
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 

@@ -44,7 +44,7 @@ func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 	r.advanceMessagesAfterAppend()
 
 	// Return committed entries.
-	ents = r.raftLog.nextCommittedEnts(true)
+	ents = r.raftLog.nextCommittedEnts(noLimit, true)
 	r.raftLog.appliedTo(r.raftLog.committed)
 	return ents
 }

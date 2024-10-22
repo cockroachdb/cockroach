@@ -315,6 +315,9 @@ type raft struct {
 
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
+	// maxApplyingEntsSize limits the byte size of MsgStorageApply messages
+	// returned from Ready calls.
+	maxApplyingEntsSize entryEncodingSize
 
 	config               quorum.Config
 	trk                  tracker.ProgressTracker
@@ -433,7 +436,7 @@ func newRaft(c *Config) *raft {
 	if err := c.validate(); err != nil {
 		panic(err.Error())
 	}
-	raftlog := newLogWithSize(c.Storage, c.Logger, entryEncodingSize(c.MaxCommittedSizePerReady))
+	raftlog := newLog(c.Storage, c.Logger)
 	hs, cs, err := c.Storage.InitialState()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -446,6 +449,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		maxApplyingEntsSize:         entryEncodingSize(c.MaxCommittedSizePerReady),
 		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
@@ -1337,7 +1341,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	// via the Ready struct for application.
 	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
 	// outside the raft package.
-	pageSize := r.raftLog.maxApplyingEntsSize
+	pageSize := r.maxApplyingEntsSize
 	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
 		for i := range ents {
 			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
