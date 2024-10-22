@@ -84,6 +84,7 @@ func WithBuilderDependenciesFromTestServer(
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	planner.SessionData().EnableUniqueWithoutIndexConstraints = true
+	planner.SessionData().AlterColumnTypeGeneralEnabled = true
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,

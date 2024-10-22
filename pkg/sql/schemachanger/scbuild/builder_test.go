@@ -95,6 +95,7 @@ func TestBuildDataDriven(t *testing.T) {
 										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 										sd.ApplicationName = ""
 										sd.EnableUniqueWithoutIndexConstraints = true
+										sd.AlterColumnTypeGeneralEnabled = true
 									},
 								),
 							),

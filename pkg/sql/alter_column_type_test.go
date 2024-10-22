@@ -75,6 +75,9 @@ INSERT INTO test2 VALUES ('hello');`)
 	go func() {
 		sqlDB.ExecMultiple(t,
 			`SET enable_experimental_alter_column_type_general = true;`,
+			// TODO(spilchen): This test is designed for the legacy schema changer.
+			// Update it for the declarative schema changer (DSC).
+			`SET use_declarative_schema_changer = 'off';`,
 			`ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 		wg.Done()
 	}()
@@ -151,6 +154,9 @@ INSERT INTO test2 VALUES (true);
 	go func() {
 		sqlDB.ExecMultiple(t,
 			`SET enable_experimental_alter_column_type_general = true;`,
+			// TODO(spilchen): This test is designed for the legacy schema changer.
+			// Update it for the declarative schema changer (DSC).
+			`SET use_declarative_schema_changer = 'off';`,
 			`ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
 		wg.Done()
 	}()
@@ -203,7 +209,10 @@ func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
 
-	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true;`)
+	sqlDB.ExecMultiple(t, `SET enable_experimental_alter_column_type_general = true;`,
+		// TODO(spilchen): This test is designed for the legacy schema changer.
+		// Update it for the declarative schema changer (DSC).
+		`SET use_declarative_schema_changer = 'off'`)
 
 	sqlDB.Exec(t, `
 CREATE DATABASE t;
@@ -259,7 +268,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t.test (x STRING);`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');`)
 
-	expected := "pq: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
+	expected := "pq: failed to construct index entries during backfill: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
 	sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ALTER COLUMN x TYPE INT USING x::INT8;`)
 
 	// Ensure that the add column and column swap mutations are cleaned up.
