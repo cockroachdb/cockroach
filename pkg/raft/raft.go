@@ -1326,8 +1326,11 @@ func (r *raft) supportingFortifiedLeader() bool {
 	}
 	assertTrue(r.lead != None, "lead epoch is set but leader is not")
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
+	if !live {
+		return false
+	}
 	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
-	return live && epoch == r.leadEpoch
+	return epoch == r.leadEpoch
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
