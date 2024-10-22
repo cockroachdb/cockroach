@@ -178,6 +178,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
