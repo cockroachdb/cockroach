@@ -162,8 +162,8 @@ func getLeadSupportStatus(r *raft) LeadSupportStatus {
 
 // MarshalJSON translates the raft status into JSON.
 func (s Status) MarshalJSON() ([]byte, error) {
-	j := fmt.Sprintf(`{"id":"%x","term":%d,"vote":"%x","commit":%d,"lead":"%x","raftState":%q,"applied":%d,"progress":{`,
-		s.ID, s.Term, s.Vote, s.Commit, s.Lead, s.RaftState, s.Applied)
+	j := fmt.Sprintf(`{"id":"%x","term":%d,"vote":"%x","commit":%d,"lead":"%x","leadEpoch":"%d","raftState":%q,"applied":%d,"progress":{`,
+		s.ID, s.Term, s.Vote, s.Commit, s.Lead, s.LeadEpoch, s.RaftState, s.Applied)
 
 	if len(s.Progress) == 0 {
 		j += "},"
