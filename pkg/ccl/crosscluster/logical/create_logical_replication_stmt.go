@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,6 +209,14 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
+		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
+		for i, desc := range spec.TypeDescriptors {
+			sourceTypes[i] = &desc
+		}
+		// TODO(rafi): do we need a different type resolver?
+		// See https://github.com/cockroachdb/cockroach/issues/132164.
+		importResolver := importer.MakeImportTypeResolver(sourceTypes)
+
 		// If the user asked to ignore "ttl-deletes", make sure that at least one of
 		// the source tables actually has a TTL job which sets the omit bit that
 		// is used for filtering; if not, they probably forgot that step.
@@ -215,7 +224,11 @@ func createLogicalReplicationStreamPlanHook(
 
 		for i, name := range srcTableNames {
 			td := spec.TableDescriptors[name]
-			srcTableDescs[i] = &td
+			cpy := tabledesc.NewBuilder(&td).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+				return err
+			}
+			srcTableDescs[i] = cpy.TableDesc()
 			repPairs[i].SrcDescriptorID = int32(td.ID)
 			if td.RowLevelTTL != nil && td.RowLevelTTL.DisableChangefeedReplication {
 				throwNoTTLWithCDCIgnoreError = false
