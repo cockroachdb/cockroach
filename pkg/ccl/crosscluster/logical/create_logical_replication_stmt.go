@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -212,11 +211,6 @@ func createLogicalReplicationStreamPlanHook(
 
 		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
 		for i, desc := range spec.TypeDescriptors {
-			// Until https://github.com/cockroachdb/cockroach/issues/132164 is resolved,
-			// we cannot allow user-defined types on the SQL ingestion path.
-			if m, ok := options.GetMode(); ok && m != "immediate" {
-				return unimplemented.NewWithIssue(132164, "MODE = 'immediate' cannot be used with user-defined types")
-			}
 			sourceTypes[i] = &desc
 		}
 		// TODO(rafi): do we need a different type resolver?
