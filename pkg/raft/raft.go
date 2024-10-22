@@ -2075,6 +2075,11 @@ func stepCandidate(r *raft, m pb.Message) error {
 	case pb.MsgProp:
 		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
+	case pb.MsgSnap:
+		// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
+		// Message.Term until we address #127348 and #127349.
+		r.becomeFollower(m.Term, None)
+		r.handleSnapshot(m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
