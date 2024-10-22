@@ -868,7 +868,7 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
@@ -882,12 +882,15 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	if len(checks) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
 	}
+	if len(triggers) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: triggers")
+	}
 	if p, ok := root.(planMaybePhysical); !ok {
 		return nil, errors.AssertionFailedf("unexpected type for root: %T", root)
 	} else {
 		p.physPlan.onClose = e.planCtx.getCleanupFunc()
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount, flags)
+	return constructPlan(e.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(

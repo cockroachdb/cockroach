@@ -1729,7 +1729,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 	}
 
-	dsp.PlanAndRunCascadesAndChecks(
+	dsp.PlanAndRunPostQueries(
 		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
 
@@ -2060,15 +2060,15 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 }
 
-// PlanAndRunCascadesAndChecks runs any cascade and check queries.
+// PlanAndRunPostQueries runs any cascade, check, and trigger queries.
 //
-// Because cascades can themselves generate more cascades or check queries, this
-// method can append to plan.cascades and plan.checkPlans (and all these plans
-// must be closed later).
+// Because cascades and triggers can themselves generate more cascades, check,
+// or trigger queries, this method can append to plan.cascades, plan.checkPlans,
+// and plan.triggers (and all these plans must be closed later).
 //
 // Returns false if an error was encountered and sets that error in the provided
 // receiver.
-func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
+func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 	ctx context.Context,
 	planner *planner,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
@@ -2082,7 +2082,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
 
-	defaultGetSaveFlowsFunc := func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+	defaultGetSaveFlowsFunc := func() SaveFlowsFunc {
 		return getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
@@ -2285,7 +2285,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
 	parallelCheck bool,
-	getSaveFlowsFunc func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error,
+	getSaveFlowsFunc func() SaveFlowsFunc,
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
@@ -2373,12 +2373,12 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			observer,
 		)
 	}
-	var getSaveFlowsFunc func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error
+	var getSaveFlowsFunc func() SaveFlowsFunc
 	if planner.instrumentation.ShouldSaveFlows() {
 		// getDefaultSaveFlowsFunc returns a concurrency-unsafe function, so we
 		// need to explicitly protect calls to it. Allocate this function only
 		// when necessary.
-		getSaveFlowsFunc = func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+		getSaveFlowsFunc = func() SaveFlowsFunc {
 			fn := getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 			return func(flowSpec map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 				mu.Lock()
