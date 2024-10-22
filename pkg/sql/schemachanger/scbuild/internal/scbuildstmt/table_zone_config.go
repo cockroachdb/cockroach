@@ -24,19 +24,16 @@ type tableZoneConfigObj struct {
 	databaseZoneConfigObj
 	tableID    catid.DescID
 	zoneConfig *zonepb.ZoneConfig
-	seqNum     uint32
 }
 
 var _ zoneConfigObject = &tableZoneConfigObj{}
 
-func (tzo *tableZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
-	tzo.seqNum += 1
+func (tzo *tableZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	elem := &scpb.TableZoneConfig{
 		TableID:    tzo.tableID,
 		ZoneConfig: tzo.zoneConfig,
 		SeqNum:     tzo.seqNum,
 	}
-	b.Add(elem)
 	return elem
 }
 

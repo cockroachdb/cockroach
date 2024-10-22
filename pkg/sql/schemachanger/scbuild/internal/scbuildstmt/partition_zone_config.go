@@ -26,7 +26,6 @@ type partitionZoneConfigObj struct {
 	indexZoneConfigObj
 	partitionSubzone *zonepb.Subzone
 	partitionName    string
-	seqNum           uint32
 }
 
 var _ zoneConfigObject = &partitionZoneConfigObj{}
@@ -35,8 +34,7 @@ func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return pzo.tableZoneConfigObj.zoneConfig
 }
 
-func (pzo *partitionZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
-	pzo.seqNum += 1
+func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	subzones := []zonepb.Subzone{*pzo.partitionSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -60,7 +58,6 @@ func (pzo *partitionZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Elem
 		SubzoneSpans:  ss,
 		SeqNum:        pzo.seqNum,
 	}
-	b.Add(elem)
 	return elem
 }
 
