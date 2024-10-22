@@ -1936,7 +1936,7 @@ func TestUserDefinedTypes(t *testing.T) {
 	dbB.Exec(t, "INSERT INTO data (pk, val2) VALUES (2, (4, 'dog'))")
 
 	var jobAID jobspb.JobID
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data", dbBURL.String()).Scan(&jobAID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data WITH mode = validated", dbBURL.String()).Scan(&jobAID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "A"))
 	dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
