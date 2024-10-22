@@ -480,7 +480,7 @@ func newRaft(c *Config) *raft {
 		r.loadState(hs)
 	}
 	if c.Applied > 0 {
-		raftlog.appliedTo(c.Applied, 0 /* size */)
+		raftlog.appliedTo(c.Applied)
 	}
 	r.becomeFollower(r.Term, r.lead)
 
@@ -938,10 +938,10 @@ func (r *raft) maybeUnpauseAndBcastAppend() {
 	})
 }
 
-func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
+func (r *raft) appliedTo(index uint64) {
 	oldApplied := r.raftLog.applied
 	newApplied := max(index, oldApplied)
-	r.raftLog.appliedTo(newApplied, size)
+	r.raftLog.appliedTo(newApplied)
 
 	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == pb.StateLeader {
 		// If the current (and most recent, at least for this leader's term)
@@ -970,7 +970,7 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 func (r *raft) appliedSnap(snap *pb.Snapshot) {
 	index := snap.Metadata.Index
 	r.raftLog.stableSnapTo(index)
-	r.appliedTo(index, 0 /* size */)
+	r.appliedTo(index)
 }
 
 // maybeCommit attempts to advance the commit index. Returns true if the commit
@@ -1552,7 +1552,7 @@ func (r *raft) Step(m pb.Message) error {
 	case pb.MsgStorageApplyResp:
 		if len(m.Entries) > 0 {
 			index := m.Entries[len(m.Entries)-1].Index
-			r.appliedTo(index, entsSize(m.Entries))
+			r.appliedTo(index)
 			r.reduceUncommittedSize(payloadsSize(m.Entries))
 		}
 

@@ -499,7 +499,7 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	if len(rd.CommittedEntries) > 0 {
 		ents := rd.CommittedEntries
 		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
+		rn.raft.raftLog.acceptApplying(index)
 	}
 }
 
