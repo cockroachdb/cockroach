@@ -81,7 +81,15 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
-	elem := zco.addZoneConfigToBuildCtx(b)
+	var elem scpb.Element
+	if n.Discard {
+		elem = zco.getZoneConfigElem(b)
+		b.Drop(elem)
+	} else {
+		zco.incrementSeqNum()
+		elem = zco.getZoneConfigElem(b)
+		b.Add(elem)
+	}
 
 	// Log event for auditing
 	eventDetails := eventpb.CommonZoneConfigDetails{
