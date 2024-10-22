@@ -45,6 +45,20 @@ func (c JointConfig) IDs() map[pb.PeerID]struct{} {
 	return m
 }
 
+// Visit calls the given function for each unique voter ID in the joint
+// configuration.
+func (c JointConfig) Visit(f func(pb.PeerID)) {
+	for id := range c[0] {
+		f(id)
+	}
+	for id := range c[1] {
+		if _, ok := c[0][id]; ok {
+			continue // skip duplicate
+		}
+		f(id)
+	}
+}
+
 // Describe returns a (multi-line) representation of the commit indexes for the
 // given lookuper.
 func (c JointConfig) Describe(l AckedIndexer) string {
