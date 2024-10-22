@@ -6188,7 +6188,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 
 	// Force-campaign n3. It may not win or hold onto leadership, but it's enough
 	// to know that it bumped the term.
-	repl3.ForceCampaign(ctx)
+	repl3.ForceCampaign(ctx, initialStatus.BasicStatus)
 	t.Logf("n3 campaigning")
 
 	var leaderStatus *raft.Status

@@ -2108,6 +2108,15 @@ func stepCandidate(r *raft, m pb.Message) error {
 }
 
 func stepFollower(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		r.setLead(m.From)
+		if m.Type != pb.MsgDeFortifyLeader {
+			// If we receive any message from the leader except a MsgDeFortifyLeader,
+			// we know that the leader is still alive and still acting as the leader,
+			// so reset the election timer.
+			r.electionElapsed = 0
+		}
+	}
 	switch m.Type {
 	case pb.MsgProp:
 		if r.lead == None {
@@ -2123,25 +2132,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgApp:
-		r.electionElapsed = 0
-		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
-		// anymore within the course of a single term (in the context of which this
-		// function is always called). Instead, if r.lead != None, we should be able
-		// to assert that the leader hasn't changed within a given term. Maybe at
-		// the caller itself.
-		r.setLead(m.From)
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
-		r.electionElapsed = 0
-		r.setLead(m.From)
 		r.handleHeartbeat(m)
 	case pb.MsgSnap:
-		r.electionElapsed = 0
-		r.setLead(m.From)
 		r.handleSnapshot(m)
 	case pb.MsgFortifyLeader:
-		r.electionElapsed = 0
-		r.setLead(m.From)
 		r.handleFortify(m)
 	case pb.MsgDeFortifyLeader:
 		r.handleDeFortify(m)
