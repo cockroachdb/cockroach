@@ -797,3 +797,21 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 func (b *Builder) addBarrier(s *scope) {
 	s.expr = b.factory.ConstructBarrier(s.expr)
 }
+
+// remapColumns remaps the given column according to the given ColMap.
+func remapColumns(cols opt.ColList, m opt.ColMap) opt.ColList {
+	res := make(opt.ColList, len(cols))
+	for i := range cols {
+		res[i] = remapColumn(cols[i], m)
+	}
+	return res
+}
+
+// remapColumn remaps the given column according to the given ColMap.
+func remapColumn(col opt.ColumnID, m opt.ColMap) opt.ColumnID {
+	val, ok := m.Get(int(col))
+	if !ok {
+		panic(errors.AssertionFailedf("column %d not in mapping %s\n", col, m.String()))
+	}
+	return opt.ColumnID(val)
+}
