@@ -215,6 +215,30 @@ func makeStructuredEntry(
 	return res
 }
 
+// sanitizePrintArgs makes sure that there is no ambiguity in weather an argument is
+// safe or unsafe. This is done by making sure that the types of the arguments
+// either implement the SafeFormatter or SafeValue interfaces. If they do not,
+// the argument is assumed to be safe and is wrapped in a call to redact.Safe.
+func sanitizePrintArgs(args []interface{}) {
+	shouldSanitizeArgs := os.Getenv(envDefaultSafeRedaction) == "true" || os.Getenv(envDefaultSafeRedaction) == "1"
+	if !shouldSanitizeArgs {
+		return
+	}
+
+	for i, arg := range args {
+		if _, ok := arg.(redact.SafeFormatter); ok {
+			continue
+		}
+
+		if _, ok := arg.(redact.SafeValue); ok {
+			continue
+		}
+
+		// assume that the arg is safe
+		args[i] = redact.Safe(arg)
+	}
+}
+
 // makeUnstructuredEntry creates a logEntry using an unstructured message.
 func makeUnstructuredEntry(
 	ctx context.Context,
@@ -235,8 +259,10 @@ func makeUnstructuredEntry(
 			// TODO(knz): Remove this legacy case.
 			buf.Print(redact.Safe(format))
 		} else if len(format) == 0 {
+			sanitizePrintArgs(args)
 			buf.Print(args...)
 		} else {
+			sanitizePrintArgs(args)
 			buf.Printf(format, args...)
 		}
 		// Collect and append the hints, if any.
@@ -348,7 +374,10 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 	return res
 }
 
-const structuredEntryPrefix = "Structured entry: "
+const (
+	structuredEntryPrefix   = "Structured entry: "
+	envDefaultSafeRedaction = "COCKROACH_DEFAULT_SAFE_REDACTION"
+)
 
 // MakeLegacyEntry creates an logpb.Entry.
 func MakeLegacyEntry(

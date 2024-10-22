@@ -228,3 +228,64 @@ func TestDefaultRedactable(t *testing.T) {
 		t.Errorf("expected marked data, got %q", contents())
 	}
 }
+
+// does not implement SafeFormatter
+type sampleSafe struct {
+	a string
+}
+
+func (s sampleSafe) String() string {
+	return s.a
+}
+
+// implements SafeFormatter
+type sampleWithUnsafe struct {
+	a, b string
+}
+
+func (s sampleWithUnsafe) String() string {
+	return fmt.Sprintf("a: %s, b: %s", s.a, s.b)
+}
+
+func (s sampleWithUnsafe) SafeFormat(w redact.SafePrinter, _ rune) {
+	// explicitly marks s.a as safe
+	w.Printf("a: %s, b: %s", redact.Safe(s.a), s.b)
+}
+
+func TestRedactReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	shouldSanitizeArgs = true
+	defer func() { shouldSanitizeArgs = false }()
+
+	defer capture()()
+	Infof(context.Background(), "\n")
+	Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
+	Infof(context.Background(), "%s", sampleSafe{a: "safe"})
+	Infof(context.Background(), "%s", redact.Unsafe(sampleSafe{a: "safe"}))
+
+	t.Log(contents())
+}
+
+func BenchmarkDefaultSafeRedaction(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer ScopeWithoutShowLogs(b).Close(b)
+	defer capture()()
+
+	b.Run("with default unsafe (current behaviour)", func(b *testing.B) {
+		shouldSanitizeArgs = false
+		for i := 0; i < b.N; i++ {
+			Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
+			Infof(context.Background(), "%s", sampleSafe{a: "safe"})
+		}
+	})
+
+	b.Run("with default safe", func(b *testing.B) {
+		shouldSanitizeArgs = true
+		for i := 0; i < b.N; i++ {
+			Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
+			Infof(context.Background(), "%s", sampleSafe{a: "safe"})
+		}
+	})
+}
