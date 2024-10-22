@@ -567,6 +567,11 @@ func sysbenchOltpReadWrite(s sysbenchDriver, rng *rand.Rand) {
 	s.Commit()
 }
 
+func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
+	s.Begin()
+	s.Commit()
+}
+
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	for _, sysFn := range []func(context.Context, *testing.B) (sysbenchDriver, func()){
@@ -581,6 +586,7 @@ func BenchmarkSysbench(b *testing.B) {
 				sysbenchOltpReadOnly,
 				sysbenchOltpWriteOnly,
 				sysbenchOltpReadWrite,
+				sysbenchOltpBeginCommit,
 			} {
 				opTyp := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
 				opTyp = strings.TrimPrefix(opTyp, "github.com/cockroachdb/cockroach/pkg/sql/tests_test.sysbench")
