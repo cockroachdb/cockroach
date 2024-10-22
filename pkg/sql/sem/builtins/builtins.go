@@ -4033,7 +4033,60 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"levenshtein_less_equal": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}, {Name: "target", Typ: types.String}, {Name: "max_d", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				max_d := int(tree.MustBeDInt(args[2]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				if max_d < 0 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"max_d must be >= 0")
+				}
+				ld := fuzzystrmatch.LevenshteinDistanceWithThreshold(s, t, max_d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info:       "Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{{Name: "source", Typ: types.String}, {Name: "target", Typ: types.String},
+				{Name: "ins_cost", Typ: types.Int}, {Name: "del_cost", Typ: types.Int}, {Name: "sub_cost", Typ: types.Int}, {Name: "max_d", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
+				max_d := int(tree.MustBeDInt(args[5]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				if max_d < 0 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"max_d must be >= 0")
+				}
+				if ins < 0 || del < 0 || sub < 0 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"cost parameters must be >= 0")
+				}
+				ld := fuzzystrmatch.LevenshteinDistanceWithCostAndThreshold(s, t, ins, del, sub, max_d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
+				"charge for each edit operation and the threshold specifies the maximum distance that is " +
+				"considered to be a match. Maximum input length is 255 characters.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	"metaphone": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
