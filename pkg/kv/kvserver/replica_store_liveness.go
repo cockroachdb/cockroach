@@ -64,11 +64,6 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftp
 		log.Warningf(ctx, "store not found for replica %d in SupportFor", replicaID)
 		return 0, false
 	}
-	// TODO(arul): we can remove this once we start to assign storeLiveness in the
-	// Store constructor.
-	if r.store.storeLiveness == nil {
-		return 0, false
-	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
 	return raftpb.Epoch(epoch), ok
 }
