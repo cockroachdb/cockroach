@@ -343,8 +343,8 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 	}
 
 	sourceTypes := make([]*descpb.TypeDescriptor, len(streamSpec.TypeDescriptors))
-	for _, desc := range streamSpec.TypeDescriptors {
-		sourceTypes = append(sourceTypes, &desc)
+	for i, desc := range streamSpec.TypeDescriptors {
+		sourceTypes[i] = &desc
 	}
 
 	return LogicalReplicationPlan{
