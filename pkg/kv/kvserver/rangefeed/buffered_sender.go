@@ -52,8 +52,6 @@ import (
 // Refer to the comments above UnbufferedSender for more details on the role of
 // senders in the entire rangefeed architecture.
 type BufferedSender struct {
-	sm *StreamManager // maybe a callback
-
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender

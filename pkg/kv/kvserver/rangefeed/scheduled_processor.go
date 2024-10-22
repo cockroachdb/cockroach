@@ -383,7 +383,6 @@ func (p *ScheduledProcessor) Register(
 			if ubr, ok := r.(*unbufferedRegistration); ok {
 				ubr.discardCatchUpBuffer(ctx)
 			}
-			p.reg.Unregister(ctx, r)
 		}
 		return f
 	})
