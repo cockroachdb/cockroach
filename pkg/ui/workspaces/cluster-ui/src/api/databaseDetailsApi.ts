@@ -81,7 +81,6 @@ function newDatabaseDetailsSpanStatsResponse(): DatabaseDetailsSpanStatsResponse
       approximate_disk_bytes: 0,
       live_bytes: 0,
       total_bytes: 0,
-      range_count: 0,
     },
     error: undefined,
   };
@@ -330,7 +329,6 @@ export type DatabaseSpanStatsRow = {
   approximate_disk_bytes: number;
   live_bytes: number;
   total_bytes: number;
-  range_count: number;
 };
 
 function formatSpanStatsExecutionResult(
@@ -355,7 +353,6 @@ function formatSpanStatsExecutionResult(
   if (txn_result.rows.length === 1) {
     const row = txn_result.rows[0];
     out.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
-    out.spanStats.range_count = row.range_count;
     out.spanStats.live_bytes = row.live_bytes;
     out.spanStats.total_bytes = row.total_bytes;
   } else {
@@ -497,7 +494,6 @@ export function createDatabaseDetailsSpanStatsReq(
 ): SqlExecutionRequest {
   const statement = {
     sql: `SELECT
-            sum(range_count) as range_count,
             sum(approximate_disk_bytes) as approximate_disk_bytes,
             sum(live_bytes) as live_bytes,
             sum(total_bytes) as total_bytes
