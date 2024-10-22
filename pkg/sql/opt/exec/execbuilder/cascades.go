@@ -183,6 +183,7 @@ func (cb *cascadeBuilder) planCascade(
 	allowAutoCommit bool,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
+	var err error
 	var o xform.Optimizer
 	o.Init(ctx, evalCtx, cb.b.catalog)
 	factory := o.Factory()
@@ -202,10 +203,9 @@ func (cb *cascadeBuilder) planCascade(
 			evalCtx,
 			cb.b.catalog,
 			factory,
-			0,   /* binding */
-			nil, /* bindingProps */
-			nil, /* oldValues */
-			nil, /* newValues */
+			0,            /* binding */
+			nil,          /* bindingProps */
+			opt.ColMap{}, /* colMap */
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "while building cascade expression")
@@ -244,16 +244,6 @@ func (cb *cascadeBuilder) planCascade(
 			RowCount:  float64(numBufferedRows),
 		}
 
-		// Remap the cascade columns.
-		oldVals, err := remapColumns(cascade.OldValues, withColRemap)
-		if err != nil {
-			return nil, err
-		}
-		newVals, err := remapColumns(cascade.NewValues, withColRemap)
-		if err != nil {
-			return nil, err
-		}
-
 		relExpr, err = cascade.Builder.Build(
 			ctx,
 			semaCtx,
@@ -262,8 +252,7 @@ func (cb *cascadeBuilder) planCascade(
 			factory,
 			cascadeInputWithID,
 			&bindingProps,
-			oldVals,
-			newVals,
+			withColRemap,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "while building cascade expression")
@@ -304,17 +293,4 @@ func (cb *cascadeBuilder) planCascade(
 		return nil, errors.Wrap(err, "while building cascade plan")
 	}
 	return plan, nil
-}
-
-// Remap columns according to a ColMap.
-func remapColumns(cols opt.ColList, m opt.ColMap) (opt.ColList, error) {
-	res := make(opt.ColList, len(cols))
-	for i := range cols {
-		val, ok := m.Get(int(cols[i]))
-		if !ok {
-			return nil, errors.AssertionFailedf("column %d not in mapping %s\n", cols[i], m.String())
-		}
-		res[i] = opt.ColumnID(val)
-	}
-	return res, nil
 }
