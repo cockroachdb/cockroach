@@ -888,7 +888,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, vectorized bool) error
+	saveFlows SaveFlowsFunc
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -981,11 +981,20 @@ func (p *PlanningCtx) setUpForMainQuery(
 	p.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 }
 
+// SaveFlowsFunc is the signature for a function used to examine the physical
+// plan for a query. Implementations may not be concurrency-safe.
+type SaveFlowsFunc func(
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
+	opChains execopnode.OpChains,
+	localProcessors []execinfra.LocalProcessor,
+	vectorized bool,
+) error
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
 func getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+) SaveFlowsFunc {
 	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
@@ -4864,7 +4873,8 @@ func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
 func checkScanParallelizationIfLocal(
 	ctx context.Context, plan *planComponents, c *localScanParallelizationChecker,
 ) (prohibitParallelization, hasScanNodeToParallelize bool) {
-	if plan.main.planNode == nil || len(plan.cascades) != 0 || len(plan.checkPlans) != 0 {
+	if plan.main.planNode == nil || len(plan.cascades) != 0 ||
+		len(plan.checkPlans) != 0 || len(plan.triggers) != 0 {
 		// We either used the experimental DistSQL spec factory or have
 		// cascades/checks; both of these conditions - for now - prohibit
 		// the scan parallelization.

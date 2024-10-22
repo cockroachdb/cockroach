@@ -49,8 +49,8 @@ func TestFactory(t *testing.T) {
 	})
 
 	plan, err := f.ConstructPlan(
-		n, nil /* subqueries */, nil /* cascades */, nil /* checks */, -1, /* rootRowCount */
-		0, /* planFlags */
+		n, nil /* subqueries */, nil /* cascades */, nil /* triggers */, nil, /* checks */
+		-1 /* rootRowCount */, 0, /* planFlags */
 	)
 	require.NoError(t, err)
 	p := plan.(*Plan)

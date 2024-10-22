@@ -68,7 +68,11 @@ type Builder struct {
 
 	// cascades accumulates cascades that run after the main query but before
 	// checks.
-	cascades []exec.Cascade
+	cascades []exec.PostQuery
+
+	// triggers accumulates triggers that run after the main query and after
+	// checks and cascades.
+	triggers []exec.PostQuery
 
 	// checks accumulates check queries that are run after the main query and
 	// any cascades.
@@ -275,7 +279,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
-		plan.root, b.subqueries, b.cascades, b.checks, rootRowCount, b.flags,
+		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,
 	)
 }
 

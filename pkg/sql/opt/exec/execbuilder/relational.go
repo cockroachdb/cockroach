@@ -3254,8 +3254,8 @@ func (b *Builder) buildRecursiveCTE(
 		}
 		rootRowCount := int64(rec.Recursive.Relational().Statistics().RowCountIfAvailable())
 		return innerBld.factory.ConstructPlan(
-			plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount,
-			innerBld.flags,
+			plan.root, innerBld.subqueries, innerBld.cascades, innerBld.triggers, innerBld.checks,
+			rootRowCount, innerBld.flags,
 		)
 	}
 

@@ -68,7 +68,7 @@ type Factory interface {
 	ConstructPlan(
 		root Node,
 		subqueries []Subquery,
-		cascades []Cascade,
+		cascades, triggers []PostQuery,
 		checks []Node,
 		rootRowCount int64,
 		flags PlanFlags,
@@ -106,7 +106,7 @@ var _ Factory = StubFactory{}
 func (StubFactory) ConstructPlan(
 	root Node,
 	subqueries []Subquery,
-	cascades []Cascade,
+	cascades, triggers []PostQuery,
 	checks []Node,
 	rootRowCount int64,
 	flags PlanFlags,

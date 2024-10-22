@@ -119,7 +119,8 @@ func newNode(
 type Plan struct {
 	Root        *Node
 	Subqueries  []exec.Subquery
-	Cascades    []exec.Cascade
+	Cascades    []exec.PostQuery
+	Triggers    []exec.PostQuery
 	Checks      []*Node
 	WrappedPlan exec.Plan
 	Gist        PlanGist
@@ -147,7 +148,7 @@ func (f *Factory) AnnotateNode(execNode exec.Node, id exec.ExplainAnnotationID, 
 func (f *Factory) ConstructPlan(
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
@@ -157,6 +158,7 @@ func (f *Factory) ConstructPlan(
 		Subqueries: subqueries,
 		Cascades:   cascades,
 		Checks:     make([]*Node, len(checks)),
+		Triggers:   triggers,
 	}
 	for i := range checks {
 		p.Checks[i] = checks[i].(*Node)
@@ -166,7 +168,7 @@ func (f *Factory) ConstructPlan(
 	for i := range wrappedSubqueries {
 		wrappedSubqueries[i].Root = wrappedSubqueries[i].Root.(*Node).WrappedNode()
 	}
-	wrappedCascades := append([]exec.Cascade(nil), cascades...)
+	wrappedCascades := append([]exec.PostQuery(nil), cascades...)
 	for i := range wrappedCascades {
 		buffer := wrappedCascades[i].Buffer
 		if buffer != nil {
@@ -231,9 +233,17 @@ func (f *Factory) ConstructPlan(
 	for i := range wrappedChecks {
 		wrappedChecks[i] = checks[i].(*Node).WrappedNode()
 	}
+	wrappedTriggers := append([]exec.PostQuery(nil), triggers...)
+	for i := range wrappedTriggers {
+		buffer := wrappedTriggers[i].Buffer
+		if buffer != nil {
+			wrappedTriggers[i].Buffer = buffer.(*Node).WrappedNode()
+		}
+	}
 	var err error
 	p.WrappedPlan, err = f.wrappedFactory.ConstructPlan(
-		p.Root.WrappedNode(), wrappedSubqueries, wrappedCascades, wrappedChecks, rootRowCount, flags,
+		p.Root.WrappedNode(), wrappedSubqueries, wrappedCascades, wrappedTriggers, wrappedChecks,
+		rootRowCount, flags,
 	)
 	if err != nil {
 		return nil, err
