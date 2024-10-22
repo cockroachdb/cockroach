@@ -2034,6 +2034,10 @@ func stepLeader(r *raft, m pb.Message) error {
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		return r.step(r, m)              // stepFollower
+	}
 	// Only handle vote responses corresponding to our candidacy (while in
 	// StateCandidate, we may get stale MsgPreVoteResp messages in this term from
 	// our pre-candidate state).
@@ -2047,18 +2051,6 @@ func stepCandidate(r *raft, m pb.Message) error {
 	case pb.MsgProp:
 		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
-	case pb.MsgApp:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleAppendEntries(m)
-	case pb.MsgHeartbeat:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleHeartbeat(m)
-	case pb.MsgSnap:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleSnapshot(m)
-	case pb.MsgFortifyLeader:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleFortify(m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
@@ -2076,8 +2068,6 @@ func stepCandidate(r *raft, m pb.Message) error {
 			// m.Term > r.Term; reuse r.Term
 			r.becomeFollower(r.Term, r.lead)
 		}
-	case pb.MsgTimeoutNow:
-		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
 	}
 	return nil
 }
