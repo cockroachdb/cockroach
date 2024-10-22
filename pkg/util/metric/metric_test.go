@@ -807,3 +807,115 @@ func TestCounterVec(t *testing.T) {
 		})
 	})
 }
+
+func TestHistogramVec(t *testing.T) {
+	t.Run("Observe", func(t *testing.T) {
+
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+		}, 20)
+
+		metrics = h.ToPrometheusMetrics()
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value3",
+		}, 10)
+
+		metrics = h.ToPrometheusMetrics()
+		require.Len(t, metrics, 2)
+		// metric[0] should be unchanged
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[1].Histogram.SampleSum)
+
+	})
+
+	t.Run("Observe no matching labels", func(t *testing.T) {
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"labelx": "value1",
+			"labely": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		// metric only has pre-defined labels with no values
+		labels := metrics[0].Label
+		require.Len(t, labels, 2)
+		require.Equal(t, "label1", *labels[0].Name)
+		require.Equal(t, "", *labels[0].Value)
+		require.Equal(t, "label2", *labels[1].Name)
+		require.Equal(t, "", *labels[1].Value)
+	})
+
+	t.Run("Observe partial matching labels", func(t *testing.T) {
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"labely": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		// metric only has pre-defined labels
+		labels := metrics[0].Label
+		require.Len(t, labels, 2)
+		require.Equal(t, "label1", *labels[0].Name)
+		require.Equal(t, "value1", *labels[0].Value)
+		require.Equal(t, "label2", *labels[1].Name)
+		require.Equal(t, "", *labels[1].Value)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"labely": "value3",
+		}, 20)
+
+		metrics = h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+			"labely": "value3",
+		}, 1)
+
+		metrics = h.ToPrometheusMetrics()
+		// new metric recorded
+		require.Len(t, metrics, 2)
+		// First metric remains the same
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
+		require.Equal(t, float64(1), *metrics[1].Histogram.SampleSum)
+	})
+}
