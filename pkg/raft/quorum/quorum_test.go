@@ -6,6 +6,7 @@
 package quorum
 
 import (
+	"slices"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -133,4 +134,22 @@ func TestLeadSupportExpirationJointConfig(t *testing.T) {
 
 		require.Equal(t, tc.exp, j.LeadSupportExpiration(tc.support))
 	}
+}
+
+func TestJointConfigVisit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	j := JointConfig{
+		MajorityConfig{1: struct{}{}, 2: struct{}{}, 3: struct{}{}},
+		MajorityConfig{2: struct{}{}, 3: struct{}{}, 4: struct{}{}},
+	}
+
+	var visited []pb.PeerID
+	j.Visit(func(id pb.PeerID) {
+		visited = append(visited, id)
+	})
+	slices.Sort(visited)
+
+	require.Equal(t, []pb.PeerID{1, 2, 3, 4}, visited)
 }
