@@ -1344,6 +1344,20 @@ type FKCascade struct {
 	WithID opt.WithID
 }
 
+// AfterTriggers stores metadata necessary for building a set of AFTER triggers.
+// AFTER triggers are built as needed, after the original query is executed.
+type AfterTriggers struct {
+	Triggers []cat.Trigger
+
+	// Builder is an object that can be used as the "optbuilder" for the cascading
+	// query.
+	Builder PostQueryBuilder
+
+	// WithID identifies the buffer for the mutation input in the original
+	// expression tree. It is always nonzero.
+	WithID opt.WithID
+}
+
 // PostQueryBuilder is an interface used to construct either a cascading query
 // for a specific FK relation, or an AFTER trigger action. For example: if we
 // are deleting rows from a parent table, after deleting the rows from the
