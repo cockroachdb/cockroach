@@ -2079,7 +2079,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 
 			if req.CloseStream {
-				sm.DisconnectStream(req.StreamID, req.RangeID,
+				sm.DisconnectStream(req.StreamID,
 					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 				continue
 			}

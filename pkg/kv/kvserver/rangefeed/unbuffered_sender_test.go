@@ -72,7 +72,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		})
 		// Note that kvpb.NewError(nil) == nil.
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
-		sm.DisconnectStream(streamID, rangeID, err)
+		sm.DisconnectStream(streamID, err)
 		// todo(wait for error)
 		testServerStream.waitForEvent(t, ev)
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
@@ -80,7 +80,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		require.Equal(t, 1, testServerStream.totalEventsSent())
 
 		// Repeat closing the stream does nothing.
-		sm.DisconnectStream(streamID, rangeID,
+		sm.DisconnectStream(streamID,
 			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 		time.Sleep(10 * time.Millisecond)
 		require.Equalf(t, 1, testServerStream.totalEventsSent(), testServerStream.String())
@@ -117,7 +117,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			wg.Add(1)
 			go func(streamID int64, rangeID roachpb.RangeID, err error) {
 				defer wg.Done()
-				sm.DisconnectStream(streamID, rangeID, kvpb.NewError(err))
+				sm.DisconnectStream(streamID, kvpb.NewError(err))
 			}(muxError.streamID, muxError.rangeID, muxError.Error)
 		}
 		wg.Wait()
@@ -191,7 +191,7 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 
 	// Although stream is blocked, we should be able to disconnect the stream
 	// without blocking.
-	sm.DisconnectStream(streamID, rangeID,
+	sm.DisconnectStream(streamID,
 		kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER)))
 	require.Equal(t, streamCtx.Err(), context.Canceled)
 	unblock()

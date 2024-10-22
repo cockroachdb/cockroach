@@ -90,7 +90,7 @@ func (sm *StreamManager) OnError(streamID int64) {
 	sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 }
 
-func (sm *StreamManager) DisconnectStream(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error) {
+func (sm *StreamManager) DisconnectStream(streamID int64, err *kvpb.Error) {
 	if err == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 		return

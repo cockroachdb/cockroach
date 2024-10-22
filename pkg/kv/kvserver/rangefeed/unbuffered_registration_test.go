@@ -112,7 +112,7 @@ func TestUnbufferedRegOnConcurrentDisconnect(t *testing.T) {
 		wg.Add(1)
 		go func(id int64) {
 			defer wg.Done()
-			sm.DisconnectStream(id, r1, kvpb.NewError(fmt.Errorf("disconnection error")))
+			sm.DisconnectStream(id, kvpb.NewError(fmt.Errorf("disconnection error")))
 		}(id)
 	}
 	wg.Wait()
