@@ -18,11 +18,16 @@ type Timers struct {
 	CheckpointJobProgress     *aggmetric.AggHistogram
 	Encode                    *aggmetric.AggHistogram
 	EmitRow                   *aggmetric.AggHistogram
+	DownstreamClientSend      *aggmetric.AggHistogram
 	KVFeedWaitForTableEvent   *aggmetric.AggHistogram
 	KVFeedBuffer              *aggmetric.AggHistogram
 	RangefeedBufferValue      *aggmetric.AggHistogram
 	RangefeedBufferCheckpoint *aggmetric.AggHistogram
 }
+
+func (*Timers) MetricStruct() {}
+
+var _ metric.Struct = &Timers{}
 
 func New(histogramWindow time.Duration) *Timers {
 	histogramOptsFor := func(name, desc string) metric.HistogramOptions {
@@ -44,6 +49,7 @@ func New(histogramWindow time.Duration) *Timers {
 		CheckpointJobProgress:     b.Histogram(histogramOptsFor("changefeed.stage.checkpoint_job_progress.latency", "Latency of the changefeed stage: checkpointing job progress")),
 		Encode:                    b.Histogram(histogramOptsFor("changefeed.stage.encode.latency", "Latency of the changefeed stage: encoding data")),
 		EmitRow:                   b.Histogram(histogramOptsFor("changefeed.stage.emit_row.latency", "Latency of the changefeed stage: emitting row to sink")),
+		DownstreamClientSend:      b.Histogram(histogramOptsFor("changefeed.stage.downstream_client_send.latency", "Latency of the changefeed stage: flushing messages from the sink's client to its downstream. This includes sends that failed for most but not all sinks.")),
 		KVFeedWaitForTableEvent:   b.Histogram(histogramOptsFor("changefeed.stage.kv_feed_wait_for_table_event.latency", "Latency of the changefeed stage: waiting for a table schema event to join to the kv event")),
 		KVFeedBuffer:              b.Histogram(histogramOptsFor("changefeed.stage.kv_feed_buffer.latency", "Latency of the changefeed stage: waiting to buffer kv events")),
 		RangefeedBufferValue:      b.Histogram(histogramOptsFor("changefeed.stage.rangefeed_buffer_value.latency", "Latency of the changefeed stage: buffering rangefeed value events")),
@@ -56,6 +62,7 @@ func (ts *Timers) GetOrCreateScopedTimers(scope string) *ScopedTimers {
 		CheckpointJobProgress:     &timer{ts.CheckpointJobProgress.AddChild(scope)},
 		Encode:                    &timer{ts.Encode.AddChild(scope)},
 		EmitRow:                   &timer{ts.EmitRow.AddChild(scope)},
+		DownstreamClientSend:      &timer{ts.DownstreamClientSend.AddChild(scope)},
 		KVFeedWaitForTableEvent:   &timer{ts.KVFeedWaitForTableEvent.AddChild(scope)},
 		KVFeedBuffer:              &timer{ts.KVFeedBuffer.AddChild(scope)},
 		RangefeedBufferValue:      &timer{ts.RangefeedBufferValue.AddChild(scope)},
@@ -67,24 +74,24 @@ type ScopedTimers struct {
 	CheckpointJobProgress     *timer
 	Encode                    *timer
 	EmitRow                   *timer
+	DownstreamClientSend      *timer
 	KVFeedWaitForTableEvent   *timer
 	KVFeedBuffer              *timer
 	RangefeedBufferValue      *timer
 	RangefeedBufferCheckpoint *timer
 }
 
-func (ts *ScopedTimers) StartTimer(stage *aggmetric.Histogram) func() {
-	start := timeutil.Now()
-	return func() {
-		stage.RecordValue(timeutil.Since(start).Nanoseconds())
-	}
-}
+var NoopScopedTimers = &ScopedTimers{}
 
 type timer struct {
 	hist *aggmetric.Histogram
 }
 
 func (t *timer) Start() (end func()) {
+	if t == nil {
+		return func() {}
+	}
+
 	start := timeutil.Now()
 	return func() {
 		t.hist.RecordValue(timeutil.Since(start).Nanoseconds())

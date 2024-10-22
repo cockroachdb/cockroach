@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -222,6 +223,10 @@ func (r *telemetryMetricsRecorder) getKafkaThrottlingMetrics(
 
 func (r *telemetryMetricsRecorder) netMetrics() *cidr.NetMetrics {
 	return r.inner.netMetrics()
+}
+
+func (r *telemetryMetricsRecorder) timers() *timers.ScopedTimers {
+	return r.inner.timers()
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
