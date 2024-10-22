@@ -315,14 +315,14 @@ func TestNextCommittedEnts(t *testing.T) {
 		snap          bool
 		want          []pb.Entry
 	}{
-		{applied: 3, applying: 3, allowUnstable: true, want: init.entries[:2]},
-		{applied: 3, applying: 4, allowUnstable: true, want: init.entries[1:2]},
+		{applied: 3, applying: 3, allowUnstable: true, want: init.sub(3, 5)},
+		{applied: 3, applying: 4, allowUnstable: true, want: init.sub(4, 5)},
 		{applied: 3, applying: 5, allowUnstable: true, want: nil},
-		{applied: 4, applying: 4, allowUnstable: true, want: init.entries[1:2]},
+		{applied: 4, applying: 4, allowUnstable: true, want: init.sub(4, 5)},
 		{applied: 4, applying: 5, allowUnstable: true, want: nil},
 		{applied: 5, applying: 5, allowUnstable: true, want: nil},
 		// Don't allow unstable entries.
-		{applied: 3, applying: 3, allowUnstable: false, want: init.entries[:1]},
+		{applied: 3, applying: 3, allowUnstable: false, want: init.sub(3, 4)},
 		{applied: 3, applying: 4, allowUnstable: false, want: nil},
 		{applied: 3, applying: 5, allowUnstable: false, want: nil},
 		{applied: 4, applying: 4, allowUnstable: false, want: nil},
