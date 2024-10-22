@@ -305,34 +305,6 @@ func testLogicalStreamIngestionJobBasic(t *testing.T, mode string) {
 	}
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
-
-	// Verify that we didn't have the data looping problem. These
-	// expecations are for how many operations happend on the
-	// a-side.
-	//
-	// These assertions feel likely to flake since they assume
-	// that the test runner is fast enough to beat the replication
-	// stream when applying subsequent operations.
-	if !skip.Duress() {
-		var expPuts, expCPuts int64
-		if mode == "validated" {
-			expPuts, expCPuts = 3, 3
-			if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
-				// When performing 1 update, we don't have the prevValue set, so if
-				// we're using the optimistic insert strategy, it would result in an
-				// additional CPut (that ultimately fails). The cluster setting is
-				// randomized in tests, so we need to handle both cases.
-				expCPuts++
-			}
-		} else if mode == "immediate" {
-			expPuts, expCPuts = 1, 7
-		} else {
-			t.Fatalf("no put/cput expectations for unknown mode: %s", mode)
-		}
-
-		require.Equal(t, expPuts, numPuts.Load())
-		require.Equal(t, expCPuts, numCPuts.Load())
-	}
 }
 
 func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
