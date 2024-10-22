@@ -1956,19 +1956,32 @@ func TestUserDefinedTypes(t *testing.T) {
 	dbA.Exec(t, "CREATE TYPE my_composite AS (a INT, b TEXT)")
 	dbB.Exec(t, "CREATE TYPE my_composite AS (a INT, b TEXT)")
 
-	dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
-	dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
+	for _, mode := range []string{"validated", "immediate"} {
+		t.Run(mode, func(t *testing.T) {
+			dbA.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
+			dbB.Exec(t, "CREATE TABLE data (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
 
-	dbB.Exec(t, "INSERT INTO data VALUES (1, 'one', (3, 'cat'))")
-	// Force default expression evaluation.
-	dbB.Exec(t, "INSERT INTO data (pk, val2) VALUES (2, (4, 'dog'))")
+			dbB.Exec(t, "INSERT INTO data VALUES (1, 'one', (3, 'cat'))")
+			// Force default expression evaluation.
+			dbB.Exec(t, "INSERT INTO data (pk, val2) VALUES (2, (4, 'dog'))")
 
-	var jobAID jobspb.JobID
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data", dbBURL.String()).Scan(&jobAID)
-	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
-	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "A"))
-	dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
-	dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+			var jobAID jobspb.JobID
+			dbA.QueryRow(t,
+				fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE data ON $1 INTO TABLE data WITH mode = %s", mode),
+				dbBURL.String(),
+			).Scan(&jobAID)
+			WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
+			require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "A"))
+			dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+			dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+
+			dbA.Exec(t, "CANCEL JOB $1", jobAID)
+			jobutils.WaitForJobToCancel(t, dbA, jobAID)
+
+			dbA.Exec(t, "DROP TABLE data")
+			dbB.Exec(t, "DROP TABLE data")
+		})
+	}
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
