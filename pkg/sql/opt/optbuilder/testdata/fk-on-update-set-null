@@ -6,7 +6,7 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON UPDATE SET NULL)
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent SET p = p * 10 WHERE p > 1
 ----
 root
@@ -75,7 +75,7 @@ CREATE TABLE child_multi (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_multi SET p = p * 10, q = q + 1 WHERE pk > 1
 ----
 root
@@ -131,7 +131,7 @@ root
                      └── NULL::INT8 [as=p_new:27]
 
 # Update only one of the two FK columns.
-build-cascades
+build-post-queries
 UPDATE parent_multi SET p = p * 10 WHERE p > 1
 ----
 root
@@ -193,7 +193,7 @@ CREATE TABLE grandchild (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_multi SET q = q * 10 WHERE p > 1
 ----
 root
@@ -279,7 +279,7 @@ root
                      └── projections
                           └── NULL::INT8 [as=c_new:41]
 
-build-cascades
+build-post-queries
 UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 ----
 root
@@ -386,7 +386,7 @@ root
                           └── NULL::INT8 [as=c_new:44]
 
 # Upsert that only touches one of the FK columns.
-build-cascades
+build-post-queries
 UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 ----
 root
@@ -496,7 +496,7 @@ root
                      └── projections
                           └── NULL::INT8 [as=c_new:45]
 
-build-cascades
+build-post-queries
 INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UPDATE SET p = 100
 ----
 root
@@ -621,7 +621,7 @@ CREATE TABLE child_partial (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_partial SET p = p * 10 WHERE p > 1
 ----
 root
@@ -696,7 +696,7 @@ CREATE TABLE child_virt (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_virt SET p = p * 10 WHERE p > 1
 ----
 root
