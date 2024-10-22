@@ -234,9 +234,9 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 // during reviews
 func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks roachpb.RangeID) {
 	ubr.mu.Lock()
+	defer ubr.discardCatchUpBuffer(ctx)
 	if ubr.mu.disconnected {
 		// already disconnected
-		ubr.discardCatchUpBufferWithLock(ctx)
 		ubr.mu.Unlock()
 		return
 	}
@@ -248,7 +248,6 @@ func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks 
 		ubr.Disconnect(kvpb.NewError(errors.Wrap(err, "catch-up scan failed")))
 		// Important to disconnect before draining to avoid upstream to interpret
 		// nil catch-up buf as sending to underlying stream directly.
-		ubr.discardCatchUpBuffer(ctx)
 		return
 	}
 
@@ -256,7 +255,6 @@ func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks 
 		ubr.Disconnect(kvpb.NewError(err))
 		// Important to disconnect before draining to avoid upstream to interpret
 		// nil catch-up buf as sending to underlying stream directly.
-		ubr.discardCatchUpBuffer(ctx)
 		return
 	}
 	// Success: publishCatchUpBuffer should have drained and set catchUpBuf to nil
@@ -374,6 +372,10 @@ func (ubr *unbufferedRegistration) setDisconnectedIfNotWithLock() (alreadyDiscon
 // the events in catch-up buffer without publishing them. It is safe to assume
 // that catch-up buffer is empty and nil after call.
 func (ubr *unbufferedRegistration) discardCatchUpBufferWithLock(ctx context.Context) {
+	if ubr.mu.catchUpBuf == nil {
+		// Already drained.
+		return
+	}
 	func() {
 		for {
 			select {

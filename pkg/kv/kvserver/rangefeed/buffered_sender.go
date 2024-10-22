@@ -84,9 +84,7 @@ func NewBufferedSender(sender ServerStreamSender) *BufferedSender {
 // alloc.Release is nil-safe. SendBuffered will take the ownership of the alloc
 // and release it if the return error is non-nil. Note that it is safe to send
 // error events without being blocked for too long.
-func (bs *BufferedSender) send(
-	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
-) error {
+func (bs *BufferedSender) send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error {
 	// Make sure this is from catch up scan.
 	if ev.Error != nil && alloc != nil {
 		return bs.sendUnbuffered(ev)
@@ -141,7 +139,9 @@ func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
 // quiesced. BufferedSender will stop forwarding events after run completes. It
 // may still buffer more events in the buffer, but they will be cleaned up soon
 // during bs.Stop(), and there should be no new events buffered after that.
-func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper, onError func(streamID int64)) error {
+func (bs *BufferedSender) run(
+	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
+) error {
 	for {
 		select {
 		case <-ctx.Done():

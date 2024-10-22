@@ -171,7 +171,9 @@ func (ubs *UnbufferedSender) send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudge
 // stopper is quiesced. UnbufferedSender will stop forward rangefeed completion
 // errors after run completes, but a node level shutdown from Node.MuxRangefeed
 // should happen soon.
-func (ubs *UnbufferedSender) run(ctx context.Context, stopper *stop.Stopper, onError func(streamID int64)) error {
+func (ubs *UnbufferedSender) run(
+	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
+) error {
 	for {
 		select {
 		case <-ubs.notifyMuxError:
