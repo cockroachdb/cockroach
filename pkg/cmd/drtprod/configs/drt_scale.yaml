@@ -8,6 +8,8 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-scale
   WORKLOAD_CLUSTER: workload-scale
+  CLUSTER_NODES: 150
+  WORKLOAD_NODES: 9
 
 targets:
   # crdb cluster specs
@@ -21,7 +23,7 @@ targets:
           gce-managed: true
           gce-enable-multiple-stores: true
           gce-zones: "us-central1-a"
-          nodes: 150
+          nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
           local-ssd: true
           gce-local-ssd-count: 4
@@ -49,10 +51,6 @@ targets:
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
-        on_rollback:
-          - command: stop
-            args:
-              - $CLUSTER
       - command: run
         args:
           - $CLUSTER
@@ -65,7 +63,7 @@ targets:
         flags:
           clouds: gce
           gce-zones: "us-central1-a"
-          nodes: 9
+          nodes: $WORKLOAD_NODES
           gce-machine-type: n2-standard-8
           os-volume-size: 100
           username: workload
@@ -110,12 +108,12 @@ targets:
       - command: put
         args:
           - $WORKLOAD_CLUSTER
-          - bin/roachprod
+          - artifacts/roachprod
           - roachprod
       - command: put
         args:
           - $WORKLOAD_CLUSTER
-          - bin/roachtest
+          - artifacts/roachtest
           - roachtest-operations
       - command: put
         args:
@@ -136,3 +134,13 @@ targets:
         flags:
           warehouses: 640000
           db: cct_tpcc_big
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        flags:
+          db: cct_tpcc
+          warehouses: 320000
+          max-rate: 10000
+          workers: 5000
+          conns: 5000
+          duration: 12h
+          ramp: 10m
+          wait: 0
