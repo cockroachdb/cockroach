@@ -531,10 +531,10 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query ITTTTITTTTTTI colnames
+query ITTTTITTTTTTIT colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  lease_holder  range_size
+range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  lease_holder  range_size  errors
 
 query ITTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0

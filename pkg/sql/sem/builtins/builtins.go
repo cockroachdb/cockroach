@@ -5850,6 +5850,54 @@ SELECT
 		},
 	),
 
+	// Fetches the corresponding lease_holder for the request key. If an error
+	// occurs, the query still succeeds and the error is included in the output.
+	"crdb_internal.lease_holder_with_errors": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.Txn == nil { // can occur during backfills
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"cannot use crdb_internal.lease_holder_with_errors in this context")
+				}
+				key := []byte(tree.MustBeDBytes(args[0]))
+				b := evalCtx.Txn.DB().NewBatch()
+				b.AddRawRequest(&kvpb.LeaseInfoRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key: key,
+					},
+				})
+				type leaseholderAndError struct {
+					Leaseholder roachpb.StoreID
+					Error       string
+				}
+				lhae := &leaseholderAndError{}
+				if err := evalCtx.Txn.DB().Run(ctx, b); err != nil {
+					lhae.Error = err.Error()
+				} else {
+					resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
+					lhae.Leaseholder = resp.Lease.Replica.StoreID
+				}
+
+				jsonStr, err := gojson.Marshal(lhae)
+				if err != nil {
+					return nil, err
+				}
+				jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+				if err != nil {
+					return nil, err
+				}
+				return jsonDatum, nil
+			},
+			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
@@ -6151,6 +6199,27 @@ SELECT
 					return nil, err
 				}
 				return jsonDatum, nil
+			},
+			Info:       "This function is used to retrieve range statistics information as a JSON object.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	// Return statistics about a range.
+	"crdb_internal.range_stats_with_errors": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "key", Typ: types.Bytes},
+			},
+			SpecializedVecBuiltin: tree.CrdbInternalRangeStatsWithErrors,
+			ReturnType:            tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// This function is a placeholder and will never be called because
+				// CrdbInternalRangeStatsWithErrors overrides it.
+				return tree.DNull, nil
 			},
 			Info:       "This function is used to retrieve range statistics information as a JSON object.",
 			Volatility: volatility.Volatile,

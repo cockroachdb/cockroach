@@ -133,7 +133,17 @@ func NewBuiltinFunctionOperator(
 			)
 		}
 		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input,
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, false, /* withErrors */
+		)
+	case tree.CrdbInternalRangeStatsWithErrors:
+		if len(argumentCols) != 1 {
+			return nil, errors.AssertionFailedf(
+				"expected 1 input column to crdb_internal.range_stats, got %d",
+				len(argumentCols),
+			)
+		}
+		return newRangeStatsOperator(
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, true, /* withErrors */
 		)
 	default:
 		return &defaultBuiltinFuncOperator{
