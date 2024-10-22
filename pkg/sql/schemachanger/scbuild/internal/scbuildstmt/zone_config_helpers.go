@@ -52,9 +52,8 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// addZoneConfigToBuildCtx adds the zone config to the build context and
-	// returns the added element for logging.
-	addZoneConfigToBuildCtx(b BuildCtx) scpb.Element
+	// getZoneConfigElem retrieves the scpb.Element for the zone config object.
+	getZoneConfigElem(b BuildCtx) scpb.Element
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -72,6 +71,9 @@ type zoneConfigObjBuilder interface {
 	// setZoneConfigToWrite fills our object with the zone config/subzone config
 	// we will be writing to KV.
 	setZoneConfigToWrite(zone *zonepb.ZoneConfig)
+
+	// incrementSeqNum increments the seqNum by 1.
+	incrementSeqNum()
 }
 
 type zoneConfigRetriever interface {
