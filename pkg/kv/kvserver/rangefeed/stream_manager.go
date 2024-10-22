@@ -85,8 +85,10 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 func (sm *StreamManager) OnError(streamID int64) {
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
-	delete(sm.streams.m, streamID)
-	sm.metrics.UpdateMetricsOnRangefeedDisconnect()
+	if _, ok := sm.streams.m[streamID]; ok {
+		delete(sm.streams.m, streamID)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
+	}
 }
 
 func (sm *StreamManager) DisconnectStream(streamID int64, err *kvpb.Error) {
@@ -148,9 +150,13 @@ func (sm *StreamManager) Stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
 	sm.sender.cleanup()
-	for _, d := range sm.streams.m {
-		d.Disconnect(nil)
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	for _, disconnector := range sm.streams.m {
+		disconnector.Disconnect(nil)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
+	sm.streams.m = make(map[int64]Disconnector)
 }
 
 func (sm *StreamManager) Error() chan error {
