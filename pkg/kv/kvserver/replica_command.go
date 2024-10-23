@@ -3058,7 +3058,18 @@ func (r *Replica) sendSnapshotUsingDelegate(
 func (r *Replica) validateSnapshotDelegationRequest(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) error {
-	desc := r.Desc()
+	var replTerm kvpb.RaftTerm
+	// Check the raft applied state index and term to determine if this replica is
+	// not too far behind the coordinator. If the delegate is too far behind, that
+	// is also needs a snapshot, then any snapshot it sends will be useless.
+	r.mu.RLock()
+	desc := r.descRLocked()
+	replIdx := r.shMu.state.RaftAppliedIndex + 1 // TODO(pav-kv): why +1?
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		replTerm = kvpb.RaftTerm(rg.Term())
+	}
+	r.mu.RUnlock()
+
 	// If the delegate doesn't know about a generation change (its index is lower
 	// than the leaseholders) the snapshot it sends may be useless, so don't
 	// attempt to send it and instead return an error.
@@ -3096,20 +3107,11 @@ func (r *Replica) validateSnapshotDelegationRequest(
 		)
 	}
 
-	// Check the raft applied state index and term to determine if this replica
-	// is not too far behind the leaseholder. If the delegate is too far behind
-	// that is also needs a snapshot, then any snapshot it sends will be useless.
-	r.mu.RLock()
-	replIdx := r.shMu.state.RaftAppliedIndex + 1
-	status := r.raftBasicStatusRLocked()
-	r.mu.RUnlock()
-
-	if status.Empty() {
+	if replTerm == 0 {
 		// This code path is sometimes hit during scatter for replicas that haven't
 		// woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
-	replTerm := kvpb.RaftTerm(status.Term)
 
 	// Delegate has a lower term than the coordinator. This typically means the
 	// lease has been transferred, and we should not process this request. There
