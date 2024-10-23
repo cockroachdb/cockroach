@@ -26,8 +26,11 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DatabaseZoneConfig) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.DatabaseZoneConfig) *scop.DiscardZoneConfig {
+					return &scop.DiscardZoneConfig{
+						DescID:     this.DatabaseID,
+						ZoneConfig: this.ZoneConfig,
+					}
 				}),
 			),
 		),

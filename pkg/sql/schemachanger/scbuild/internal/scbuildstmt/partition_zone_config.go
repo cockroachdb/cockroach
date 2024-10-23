@@ -30,6 +30,10 @@ type partitionZoneConfigObj struct {
 
 var _ zoneConfigObject = &partitionZoneConfigObj{}
 
+func (pzo *partitionZoneConfigObj) isNoOp() bool {
+	return pzo.partitionSubzone == nil
+}
+
 func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return pzo.tableZoneConfigObj.zoneConfig
 }

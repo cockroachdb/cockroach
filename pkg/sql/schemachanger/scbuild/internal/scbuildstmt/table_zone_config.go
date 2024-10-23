@@ -28,6 +28,10 @@ type tableZoneConfigObj struct {
 
 var _ zoneConfigObject = &tableZoneConfigObj{}
 
+func (tzo *tableZoneConfigObj) isNoOp() bool {
+	return tzo.zoneConfig == nil
+}
+
 func (tzo *tableZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	elem := &scpb.TableZoneConfig{
 		TableID:    tzo.tableID,
@@ -88,7 +92,7 @@ func (tzo *tableZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(options)
+	return maybeMultiregionErrorWithHint(b, tzo, options)
 }
 
 func (tzo *tableZoneConfigObj) getTargetID() catid.DescID {

@@ -6,8 +6,10 @@
 package scpb
 
 import (
+	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
+	"reflect"
 )
 
 // ElementCollection represents an ordered set of
@@ -272,4 +274,13 @@ func (c *ElementCollection[E]) MustHaveZeroOrOne() *ElementCollection[E] {
 		panic(errors.AssertionFailedf("expected element collection size 0 or 1, not %d", c.Size()))
 	}
 	return c
+}
+
+func (c *ElementCollection[E]) String() string {
+	var result string
+	for _, element := range c.Elements() {
+		elemType := reflect.TypeOf(element).Elem()
+		result += fmt.Sprintf("%s:{%+v}\n", elemType.Name(), element)
+	}
+	return result
 }
