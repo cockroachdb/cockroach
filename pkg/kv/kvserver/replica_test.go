@@ -14,6 +14,8 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strconv"
@@ -15048,4 +15050,19 @@ func TestLockAcquisitions1PCInteractions(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestBoo(t *testing.T) {
+	callers := make([]uintptr, 5)
+	n := runtime.Callers(0, callers)
+	callers = callers[:n]
+	frames := runtime.CallersFrames(callers)
+	debug.PrintStack()
+	for {
+		fr, ok := frames.Next()
+		require.NotContains(t, fr.File, "kvserver/pkg")
+		if !ok {
+			break
+		}
+	}
 }
