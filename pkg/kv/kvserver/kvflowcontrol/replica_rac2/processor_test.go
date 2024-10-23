@@ -35,14 +35,13 @@ import (
 )
 
 type testReplica struct {
-	mu       syncutil.RWMutex
 	raftNode *testRaftNode
 	b        *strings.Builder
 
 	leaseholder roachpb.ReplicaID
 }
 
-var _ Replica = &testReplica{}
+var _ ReplicaForTesting = &testReplica{}
 
 func newTestReplica(b *strings.Builder) *testReplica {
 	return &testReplica{b: b}
@@ -55,14 +54,6 @@ func (r *testReplica) initRaft(stable rac2.LogMark) {
 		mark:              stable,
 		nextUnstableIndex: stable.Index + 1,
 	}
-}
-
-func (r *testReplica) RaftMuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.RaftMuAssertHeld\n")
-}
-
-func (r *testReplica) MuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.MuAssertHeld\n")
 }
 
 func (r *testReplica) IsScratchRange() bool {
@@ -249,6 +240,28 @@ func (c *testRangeController) SendStreamStats(stats *rac2.RangeSendStreamStats) 
 	fmt.Fprintf(c.b, " RangeController.SendStreamStats\n")
 }
 
+func makeTestMutexAsserter() ReplicaMutexAsserter {
+	var raftMu syncutil.Mutex
+	var replicaMu syncutil.RWMutex
+	return MakeReplicaMutexAsserter(&raftMu, &replicaMu)
+}
+
+func LockRaftMuAndReplicaMu(mu *ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.raftMu.Lock()
+	mu.replicaMu.Lock()
+	return func() {
+		mu.replicaMu.Unlock()
+		mu.raftMu.Unlock()
+	}
+}
+
+func LockRaftMu(mu *ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.raftMu.Lock()
+	return func() {
+		mu.raftMu.Unlock()
+	}
+}
+
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -264,6 +277,7 @@ func TestProcessorBasic(t *testing.T) {
 	var rcFactory testRangeControllerFactory
 	var p *processorImpl
 	tenantID := roachpb.MustMakeTenantID(4)
+	muAsserter := makeTestMutexAsserter()
 	reset := func(enabled kvflowcontrol.V2EnabledWhenLeaderLevel) {
 		b.Reset()
 		r = newTestReplica(&b)
@@ -276,7 +290,8 @@ func TestProcessorBasic(t *testing.T) {
 			StoreID:                2,
 			RangeID:                3,
 			ReplicaID:              replicaID,
-			Replica:                r,
+			ReplicaForTesting:      r,
+			ReplicaMutexAsserter:   muAsserter,
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
@@ -311,10 +326,10 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "log-term", &mark.Term)
 				d.ScanArgs(t, "log-index", &mark.Index)
-				r.mu.Lock()
 				r.initRaft(mark)
+				unlockFunc := LockRaftMuAndReplicaMu(&muAsserter)
 				p.InitRaftLocked(ctx, r.raftNode, r.raftNode.mark)
-				r.mu.Unlock()
+				unlockFunc()
 				return builderStr()
 
 			case "set-raft-state":
@@ -357,7 +372,9 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "on-destroy":
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.OnDestroyRaftMuLocked(ctx)
+				unlockFunc()
 				return builderStr()
 
 			case "set-enabled-level":
@@ -372,7 +389,9 @@ func TestProcessorBasic(t *testing.T) {
 						Leaseholder:       r.leaseholder,
 					}
 				}
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel, state)
+				unlockFunc()
 				return builderStr()
 
 			case "get-enabled-level":
@@ -382,7 +401,9 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "on-desc-changed":
 				desc := parseRangeDescriptor(t, d)
+				unlockFunc := LockRaftMuAndReplicaMu(&muAsserter)
 				p.OnDescChangedLocked(ctx, &desc, tenantID)
+				unlockFunc()
 				return builderStr()
 
 			case "handle-raft-ready-and-admit":
@@ -409,6 +430,7 @@ func TestProcessorBasic(t *testing.T) {
 						Leaseholder:       r.leaseholder,
 					}
 				}
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.HandleRaftReadyRaftMuLocked(ctx, state, event)
 				fmt.Fprintf(&b, ".....\n")
 				if len(event.Entries) > 0 {
@@ -417,6 +439,7 @@ func TestProcessorBasic(t *testing.T) {
 					fmt.Fprintf(&b, "destroyed-or-leader-using-v2: %t\n", destroyedOrV2)
 					printLogTracker()
 				}
+				unlockFunc()
 				return builderStr()
 
 			case "enqueue-piggybacked-admitted":
@@ -440,7 +463,9 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "process-piggybacked-admitted":
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
+				unlockFunc()
 				return builderStr()
 
 			case "side-channel":
@@ -464,7 +489,9 @@ func TestProcessorBasic(t *testing.T) {
 					Last:            last,
 					LowPriOverride:  lowPriOverride,
 				}
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.SideChannelForPriorityOverrideAtFollowerRaftMuLocked(info)
+				unlockFunc()
 				return builderStr()
 
 			case "admitted-log-entry":
@@ -502,7 +529,9 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "inspect":
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.InspectRaftMuLocked(ctx)
+				unlockFunc()
 				return builderStr()
 
 			case "send-stream-stats":

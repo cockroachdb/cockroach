@@ -5,6 +5,7 @@ kv/kvclient/kvcoord
 kv/kvclient/rangecache
 kv/kvpb
 kv/kvserver/intentresolver
+kv/kvserver/kvflowcontrol/replica_rac2
 kv/kvserver/rangefeed
 roachpb
 sql/catalog/descs

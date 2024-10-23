@@ -26,17 +26,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Replica abstracts kvserver.Replica. It exposes internal implementation
-// details of Replica, specifically the locking behavior, since it is
-// essential to reason about correctness.
-//
-// TODO(sumeer): because the mutex assertions are hidden behind an interface,
-// they are not free for production builds. Fix, and then add more assertions.
-type Replica interface {
-	// RaftMuAssertHeld asserts that Replica.raftMu is held.
-	RaftMuAssertHeld()
-	// MuAssertHeld asserts that Replica.mu is held.
-	MuAssertHeld()
+// ReplicaForTesting abstracts kvserver.Replica for testing.
+type ReplicaForTesting interface {
 	// IsScratchRange returns true if this is range is a scratch range (i.e.
 	// overlaps with the scratch span and has a start key <=
 	// keys.ScratchRangeMin).
@@ -142,6 +133,37 @@ type RangeControllerFactory interface {
 	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
 }
 
+// ReplicaMutexAsserter must only be used to assert that mutexes are held.
+// This is a concrete struct so that the assertions can be compiled away in
+// production code.
+type ReplicaMutexAsserter struct {
+	raftMu    *syncutil.Mutex
+	replicaMu *syncutil.RWMutex
+}
+
+func MakeReplicaMutexAsserter(
+	raftMu *syncutil.Mutex, replicaMu *syncutil.RWMutex,
+) ReplicaMutexAsserter {
+	return ReplicaMutexAsserter{
+		raftMu:    raftMu,
+		replicaMu: replicaMu,
+	}
+}
+
+// RaftMuAssertHeld asserts that Replica.raftMu is held.
+//
+// gcassert:inline
+func (rmu ReplicaMutexAsserter) RaftMuAssertHeld() {
+	rmu.raftMu.AssertHeld()
+}
+
+// ReplicaMuAssertHeld asserts that Replica.mu is held for writing.
+//
+// gcassert:inline
+func (rmu ReplicaMutexAsserter) ReplicaMuAssertHeld() {
+	rmu.replicaMu.AssertHeld()
+}
+
 // ProcessorOptions are specified when creating a new Processor.
 type ProcessorOptions struct {
 	// Various constant fields that are duplicated from Replica, since we
@@ -154,7 +176,8 @@ type ProcessorOptions struct {
 	RangeID   roachpb.RangeID
 	ReplicaID roachpb.ReplicaID
 
-	Replica                Replica
+	ReplicaForTesting      ReplicaForTesting
+	ReplicaMutexAsserter   ReplicaMutexAsserter
 	RaftScheduler          RaftScheduler
 	AdmittedPiggybacker    AdmittedPiggybacker
 	ACWorkQueue            ACWorkQueue
@@ -519,8 +542,8 @@ func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
 func (p *processorImpl) InitRaftLocked(
 	ctx context.Context, rn rac2.RaftInterface, logMark rac2.LogMark,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
-	p.opts.Replica.MuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.ReplicaMuAssertHeld()
 	if p.desc.replicas != nil {
 		log.Fatalf(ctx, "initializing RaftNode after replica is initialized")
 	}
@@ -530,7 +553,7 @@ func (p *processorImpl) InitRaftLocked(
 
 // OnDestroyRaftMuLocked implements Processor.
 func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	p.destroyed = true
 	p.closeLeaderStateRaftMuLocked(ctx)
 	// Release some memory.
@@ -541,7 +564,7 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 	ctx context.Context, level kvflowcontrol.V2EnabledWhenLeaderLevel, state RaftNodeBasicState,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if p.destroyed || p.enabledWhenLeader >= level {
 		return
 	}
@@ -572,8 +595,8 @@ func descToReplicaSet(desc *roachpb.RangeDescriptor) rac2.ReplicaSet {
 func (p *processorImpl) OnDescChangedLocked(
 	ctx context.Context, desc *roachpb.RangeDescriptor, tenantID roachpb.TenantID,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
-	p.opts.Replica.MuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.ReplicaMuAssertHeld()
 	initialization := p.desc.replicas == nil
 	if initialization {
 		// Replica is initialized, in that we now have a descriptor.
@@ -754,7 +777,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 	ctx context.Context, state RaftNodeBasicState, e rac2.RaftEvent,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Register all snapshots / log appends without exception. If the replica is
 	// being destroyed, this should be a no-op, but there is no harm in
 	// registering the write just in case.
@@ -786,7 +809,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 	p.maybeSendAdmittedRaftMuLocked(ctx)
 	if rc := p.leader.rc; rc != nil {
 		if knobs := p.opts.Knobs; knobs == nil || !knobs.UseOnlyForScratchRanges ||
-			p.opts.Replica.IsScratchRange() {
+			p.opts.ReplicaForTesting.IsScratchRange() {
 			if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
 				log.Errorf(ctx, "error handling raft event: %v", err)
 			}
@@ -873,6 +896,7 @@ func (p *processorImpl) registerStorageAppendRaftMuLocked(ctx context.Context, e
 
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Return false only if we're not destroyed and not using V2.
 	if p.destroyed || !p.isLeaderUsingV2ProcLocked() {
 		return p.destroyed
@@ -1003,7 +1027,7 @@ func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
 func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if p.destroyed {
 		return
 	}
@@ -1040,7 +1064,7 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	info SideChannelInfoUsingRaftMessageRequest,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if p.destroyed {
 		return
 	}
@@ -1090,7 +1114,7 @@ func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
 func (p *processorImpl) AdmitRaftMuLocked(
 	ctx context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// NB: rc is always updated while raftMu is held.
 	if rc := p.leader.rc; rc != nil {
 		rc.AdmitRaftMuLocked(ctx, replicaID, av)
@@ -1099,7 +1123,7 @@ func (p *processorImpl) AdmitRaftMuLocked(
 
 // MaybeSendPingsRaftMuLocked implements Processor.
 func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if rc := p.leader.rc; rc != nil {
 		rc.MaybeSendPingsRaftMuLocked()
 	}
@@ -1107,8 +1131,8 @@ func (p *processorImpl) MaybeSendPingsRaftMuLocked() {
 
 // HoldsSendTokensLocked implements Processor.
 func (p *processorImpl) HoldsSendTokensLocked() bool {
-	p.opts.Replica.RaftMuAssertHeld()
-	p.opts.Replica.MuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.ReplicaMuAssertHeld()
 	if rc := p.leader.rc; rc != nil {
 		return rc.HoldsSendTokensLocked()
 	}
@@ -1142,7 +1166,7 @@ func (p *processorImpl) AdmitForEval(
 func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
 	ctx context.Context, mode rac2.RaftMsgAppMode, logSnapshot raft.LogSnapshot,
 ) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if p.destroyed {
 		return
 	}
@@ -1153,7 +1177,7 @@ func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
 
 // InspectRaftMuLocked implements Processor.
 func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool) {
-	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	p.leader.rcReferenceUpdateMu.RLock()
 	defer p.leader.rcReferenceUpdateMu.RUnlock()
 	if p.leader.rc == nil {
