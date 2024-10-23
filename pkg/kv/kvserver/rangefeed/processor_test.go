@@ -35,16 +35,79 @@ import (
 
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, h, stopper := newTestProcessor(t)
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	// Test processor without registrations.
-	require.Equal(t, 0, p.Len())
-	require.NotPanics(t, func() { p.ConsumeLogicalOps(ctx) })
-	require.NotPanics(t, func() { p.ConsumeLogicalOps(ctx, []enginepb.MVCCLogicalOp{}...) })
-	require.NotPanics(t, func() {
-		txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
+		// Test processor without registrations.
+		require.Equal(t, 0, p.Len())
+		require.NotPanics(t, func() { p.ConsumeLogicalOps(ctx) })
+		require.NotPanics(t, func() { p.ConsumeLogicalOps(ctx, []enginepb.MVCCLogicalOp{}...) })
+		require.NotPanics(t, func() {
+			txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
+			p.ConsumeLogicalOps(ctx,
+				writeValueOp(hlc.Timestamp{WallTime: 1}),
+				writeIntentOp(txn1, hlc.Timestamp{WallTime: 2}),
+				updateIntentOp(txn1, hlc.Timestamp{WallTime: 3}),
+				commitIntentOp(txn1, hlc.Timestamp{WallTime: 4}),
+				writeIntentOp(txn2, hlc.Timestamp{WallTime: 5}),
+				abortIntentOp(txn2))
+			h.syncEventC()
+			require.Equal(t, 0, h.rts.intentQ.Len())
+		})
+		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{}) })
+		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1}) })
+
+		// Add a registration.
+		r1Stream := newTestStream()
+		r1OK, _, r1Filter := p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
+		require.True(t, r1OK)
+		h.syncEventAndRegistrations()
+		require.Equal(t, 1, p.Len())
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 1},
+				),
+			},
+			r1Stream.Events(),
+		)
+
+		// Test the processor's operation filter.
+		require.True(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("a")}))
+		require.True(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("r")}))
+		require.False(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("z")}))
+		require.False(t, r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("a")}))
+		require.False(t,
+			r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("r")}))
+		require.False(t, r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("z")}))
+
+		// Test checkpoint with one registration.
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
+		h.syncEventAndRegistrations()
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 5},
+				),
+			},
+			r1Stream.Events(),
+		)
+
+		// Test value with one registration.
 		p.ConsumeLogicalOps(ctx,
 			writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")))
 		h.syncEventAndRegistrations()
@@ -79,23 +142,100 @@ func TestProcessorBasic(t *testing.T) {
 		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 		require.Equal(t, 0, h.rts.intentQ.Len())
 
-	// Add a registration.
-	r1Stream := newTestStream()
-	r1OK, r1Filter := p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-	require.True(t, r1OK)
-	h.syncEventAndRegistrations()
-	require.Equal(t, 1, p.Len())
-	require.Equal(t,
-		[]*kvpb.RangeFeedEvent{
+		// Test intent that is committed with one registration.
+		txn2 := uuid.MakeV4()
+		// Write intent.
+		p.ConsumeLogicalOps(ctx, writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
+		h.syncEventAndRegistrations()
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		// Forward closed timestamp. Should now be stuck on intent.
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
+		h.syncEventAndRegistrations()
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 9},
+				),
+			},
+			r1Stream.Events(),
+		)
+		// Update the intent. Should forward resolved timestamp.
+		p.ConsumeLogicalOps(ctx, updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
+		h.syncEventAndRegistrations()
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 11},
+				),
+			},
+			r1Stream.Events(),
+		)
+		// Commit intent. Should forward resolved timestamp to closed timestamp.
+		p.ConsumeLogicalOps(ctx,
+			commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13},
+				[]byte("ival"), false /* omitInRangefeeds */, 0 /* originID */))
+		h.syncEventAndRegistrations()
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedValue(
+					roachpb.Key("e"),
+					roachpb.Value{
+						RawBytes:  []byte("ival"),
+						Timestamp: hlc.Timestamp{WallTime: 13},
+					},
+				),
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 15},
+				),
+			},
+			r1Stream.Events(),
+		)
+
+		// Add another registration with withDiff = true and withFiltering = true.
+		r2Stream := newTestStream()
+		r2OK, _, r1And2Filter := p.Register(
+			r2Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			true,  /* withDiff */
+			true,  /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r2Stream),
+			func() {},
+		)
+		require.True(t, r2OK)
+		h.syncEventAndRegistrations()
+		require.Equal(t, 2, p.Len())
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
+					hlc.Timestamp{WallTime: 15},
+				),
+			},
+			r2Stream.Events(),
+		)
+
+		// Test the processor's new operation filter.
+		require.True(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("a")}))
+		require.True(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("y")}))
+		require.True(t,
+			r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("zzz")}))
+		require.False(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("zzz")}))
+		require.False(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("a")}))
+		require.True(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("y")}))
+		require.True(t,
+			r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("zzz")}))
+		require.False(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("zzz")}))
+
+		// Both registrations should see checkpoint.
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 20})
+		h.syncEventAndRegistrations()
+		chEventAM := []*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
 				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 				hlc.Timestamp{WallTime: 20},
@@ -160,79 +300,106 @@ func TestProcessorBasic(t *testing.T) {
 		require.Equal(t, valEvent3, r1Stream.Events())
 		// r2Stream should not see the event.
 
-	// Test value that only overlaps the second registration.
-	p.ConsumeLogicalOps(ctx,
-		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")))
-	h.syncEventAndRegistrations()
-	valEvent2 := []*kvpb.RangeFeedEvent{
-		rangeFeedValue(
-			roachpb.Key("v"),
-			roachpb.Value{
-				RawBytes:  []byte("val3"),
-				Timestamp: hlc.Timestamp{WallTime: 23},
-			},
-		),
-	}
-	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
-	require.Equal(t, valEvent2, r2Stream.Events())
+		// Cancel the first registration.
+		r1Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
+		require.NotNil(t, r1Stream.WaitForError(t))
 
 		// Stop the processor with an error.
 		pErr := kvpb.NewErrorf("stop err")
 		p.StopWithErr(pErr)
 		require.NotNil(t, r2Stream.WaitForError(t))
 
-	// Cancel the first registration.
-	r1Stream.Cancel()
-	require.NotNil(t, r1Stream.WaitForError(t))
-
-	// Stop the processor with an error.
-	pErr := kvpb.NewErrorf("stop err")
-	p.StopWithErr(pErr)
-	require.NotNil(t, r2Stream.WaitForError(t))
-
-	// Adding another registration should fail.
-	r3Stream := newTestStream()
-	r3OK, _ := p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r3Stream,
-		func() {},
-	)
-	require.False(t, r3OK)
+		// Adding another registration should fail.
+		r3Stream := newTestStream()
+		r3OK, _, _ := p.Register(
+			r3Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r3Stream),
+			func() {},
+		)
+		require.False(t, r3OK)
+	})
 }
 
 func TestProcessorOmitRemote(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, h, stopper := newTestProcessor(t)
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
 		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1}) })
 
-	// Add a registration.
-	r1Stream := newTestStream()
-	r1OK, _ := p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-	require.True(t, r1OK)
-	h.syncEventAndRegistrations()
-	require.Equal(t, 1, p.Len())
-	require.Equal(t,
-		[]*kvpb.RangeFeedEvent{
-			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-				hlc.Timestamp{WallTime: 1},
+		// Add a registration.
+		r1Stream := newTestStream()
+		r1OK, _, _ := p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
+		require.True(t, r1OK)
+		h.syncEventAndRegistrations()
+		require.Equal(t, 1, p.Len())
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 1},
+				),
+			},
+			r1Stream.Events(),
+		)
+
+		// Add another registration with withOmitRemote = true.
+		r2Stream := newTestStream()
+		r2OK, _, _ := p.Register(
+			r2Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			true,  /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r2Stream),
+			func() {},
+		)
+		require.True(t, r2OK)
+		h.syncEventAndRegistrations()
+
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 1},
+				),
+			},
+			r2Stream.Events(),
+		)
+
+		txn2 := uuid.MakeV4()
+		p.ConsumeLogicalOps(ctx,
+			commitIntentOpWithKV(txn2, roachpb.Key("k"), hlc.Timestamp{WallTime: 22},
+				[]byte("val3"), false /* omitInRangefeeds */, 1))
+		h.syncEventAndRegistrations()
+
+		valEvent3 := []*kvpb.RangeFeedEvent{
+			rangeFeedValue(
+				roachpb.Key("k"),
+				roachpb.Value{
+					RawBytes:  []byte("val3"),
+					Timestamp: hlc.Timestamp{WallTime: 22},
+				},
 			),
 		}
 
@@ -246,100 +413,105 @@ func TestProcessorOmitRemote(t *testing.T) {
 // doesn't apply to unbuffered registrations.
 func TestProcessorSlowConsumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, h, stopper := newTestProcessor(t)
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", []rangefeedTestType{scheduledProcessorWithBufferedReg},
+		func(t *testing.T, rt rangefeedTestType) {
+			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
+			ctx := context.Background()
+			defer stopper.Stop(ctx)
 
-	// Add a registration.
-	r1Stream := newTestStream()
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-	r2Stream := newTestStream()
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r2Stream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
-	require.Equal(t, 2, p.Len())
-	require.Equal(t,
-		[]*kvpb.RangeFeedEvent{
-			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-				hlc.Timestamp{WallTime: 0},
-			),
-		},
-		r1Stream.Events(),
-	)
-	require.Equal(t,
-		[]*kvpb.RangeFeedEvent{
-			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
-				hlc.Timestamp{WallTime: 0},
-			),
-		},
-		r2Stream.Events(),
-	)
+			// Add a registration.
+			r1Stream := newTestStream()
+			_, _, _ = p.Register(
+				r1Stream.ctx,
+				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+				hlc.Timestamp{WallTime: 1},
+				nil,   /* catchUpIter */
+				false, /* withDiff */
+				false, /* withFiltering */
+				false, /* withOmitRemote */
+				h.toBufferedStreamIfNeeded(r1Stream),
+				func() {},
+			)
+			r2Stream := newTestStream()
+			p.Register(
+				r2Stream.ctx,
+				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+				hlc.Timestamp{WallTime: 1},
+				nil,   /* catchUpIter */
+				false, /* withDiff */
+				false, /* withFiltering */
+				false, /* withOmitRemote */
+				h.toBufferedStreamIfNeeded(r2Stream),
+				func() {},
+			)
+			h.syncEventAndRegistrations()
+			require.Equal(t, 2, p.Len())
+			require.Equal(t,
+				[]*kvpb.RangeFeedEvent{
+					rangeFeedCheckpoint(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+						hlc.Timestamp{WallTime: 0},
+					),
+				},
+				r1Stream.Events(),
+			)
+			require.Equal(t,
+				[]*kvpb.RangeFeedEvent{
+					rangeFeedCheckpoint(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+						hlc.Timestamp{WallTime: 0},
+					),
+				},
+				r2Stream.Events(),
+			)
 
-	// Block its Send method and fill up the registration's input channel.
-	unblock := r1Stream.BlockSend()
-	defer func() {
-		if unblock != nil {
+			// Block its Send method and fill up the registration's input channel.
+			unblock := r1Stream.BlockSend()
+			defer func() {
+				if unblock != nil {
+					unblock()
+				}
+			}()
+			// Need one more message to fill the channel because the first one will be
+			// sent to the stream and block the registration outputLoop goroutine.
+			toFill := testProcessorEventCCap + 1
+			for i := 0; i < toFill; i++ {
+				ts := hlc.Timestamp{WallTime: int64(i + 2)}
+				p.ConsumeLogicalOps(ctx, writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")))
+
+				// Wait for just the unblocked registration to catch up. This prevents
+				// the race condition where this registration overflows anyway due to
+				// the rapid event consumption and small buffer size.
+				h.syncEventAndRegistrationsSpan(spXY)
+			}
+
+			// Consume one more event. Should not block, but should cause r1 to overflow
+			// its registration buffer and drop the event.
+			p.ConsumeLogicalOps(ctx,
+				writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 18}, []byte("val")))
+
+			// Wait for just the unblocked registration to catch up.
+			h.syncEventAndRegistrationsSpan(spXY)
+			require.Equal(t, toFill+1, len(r2Stream.Events()))
+			require.Equal(t, 2, p.Len())
+
+			// Unblock the send channel. The events should quickly be consumed.
 			unblock()
-		}
-	}()
-	// Need one more message to fill the channel because the first one will be
-	// sent to the stream and block the registration outputLoop goroutine.
-	toFill := testProcessorEventCCap + 1
-	for i := 0; i < toFill; i++ {
-		ts := hlc.Timestamp{WallTime: int64(i + 2)}
-		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")))
-
-		// Wait for just the unblocked registration to catch up. This prevents
-		// the race condition where this registration overflows anyway due to
-		// the rapid event consumption and small buffer size.
-		h.syncEventAndRegistrationsSpan(spXY)
-	}
-
-	// Consume one more event. Should not block, but should cause r1 to overflow
-	// its registration buffer and drop the event.
-	p.ConsumeLogicalOps(ctx,
-		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 18}, []byte("val")))
-
-	// Wait for just the unblocked registration to catch up.
-	h.syncEventAndRegistrationsSpan(spXY)
-	require.Equal(t, toFill+1, len(r2Stream.Events()))
-	require.Equal(t, 2, p.Len())
-
-	// Unblock the send channel. The events should quickly be consumed.
-	unblock()
-	unblock = nil
-	h.syncEventAndRegistrations()
-	// At least one event should have been dropped due to overflow. We expect
-	// exactly one event to be dropped, but it is possible that multiple events
-	// were dropped due to rapid event consumption before the r1's outputLoop
-	// began consuming from its event buffer.
-	require.LessOrEqual(t, len(r1Stream.Events()), toFill)
-	require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.WaitForError(t))
-	testutils.SucceedsSoon(t, func() error {
-		if act, exp := p.Len(), 1; exp != act {
-			return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
-		}
-		return nil
-	})
+			unblock = nil
+			h.syncEventAndRegistrations()
+			// At least one event should have been dropped due to overflow. We expect
+			// exactly one event to be dropped, but it is possible that multiple events
+			// were dropped due to rapid event consumption before the r1's outputLoop
+			// began consuming from its event buffer.
+			require.LessOrEqual(t, len(r1Stream.Events()), toFill)
+			require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.WaitForError(t))
+			testutils.SucceedsSoon(t, func() error {
+				if act, exp := p.Len(), 1; exp != act {
+					return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
+				}
+				return nil
+			})
+		})
 }
 
 // TestProcessorMemoryBudgetExceeded tests that memory budget will limit amount
@@ -347,32 +519,45 @@ func TestProcessorSlowConsumer(t *testing.T) {
 // result of budget exhaustion.
 func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	fb := newTestBudget(40)
-	m := NewMetrics()
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(time.Millisecond),
-		withMetrics(m))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		fb := newTestBudget(40)
+		m := NewMetrics()
+		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(time.Millisecond),
+			withMetrics(m), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	// Add a registration.
-	r1Stream := newTestStream()
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
+		// Add a registration.
+		r1Stream := newTestStream()
+		_, _, _ = p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
 
-	// Block it.
-	unblock := r1Stream.BlockSend()
-	defer func() {
-		if unblock != nil {
-			unblock()
+		// Block it.
+		unblock := r1Stream.BlockSend()
+		defer func() {
+			if unblock != nil {
+				unblock()
+			}
+		}()
+
+		// Write entries till budget is exhausted
+		for i := 0; i < 10; i++ {
+			if !p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
+				roachpb.Key("k"),
+				hlc.Timestamp{WallTime: int64(i + 2)},
+				[]byte(fmt.Sprintf("this is big value %02d", i)))) {
+				break
+			}
 		}
 		// Ensure that stop event generated by memory budget error is processed.
 		h.syncEventC()
@@ -391,24 +576,27 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 // TestProcessorMemoryBudgetReleased that memory budget is correctly released.
 func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	fb := newTestBudget(250)
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(15*time.Minute))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		fb := newTestBudget(250)
+		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(15*time.Minute),
+			withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	// Add a registration.
-	r1Stream := newTestStream()
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
+		// Add a registration.
+		r1Stream := newTestStream()
+		p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
 
 		// Write entries and check they are consumed so that we could write more
 		// data than total budget if inflight messages are within budget.
@@ -439,27 +627,59 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p, h, stopper := newTestProcessor(t, withRtsScanner(scanner))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		txn1 := makeTxn("txn1", uuid.MakeV4(), isolation.Serializable, hlc.Timestamp{})
+		txn2 := makeTxn("txn2", uuid.MakeV4(), isolation.Serializable, hlc.Timestamp{})
+		txnWithTs := func(txn roachpb.Transaction, ts int64) *roachpb.Transaction {
+			txnTs := hlc.Timestamp{WallTime: ts}
+			txn.TxnMeta.MinTimestamp = txnTs
+			txn.TxnMeta.WriteTimestamp = txnTs
+			txn.ReadTimestamp = txnTs
+			return &txn
+		}
+		data := []storeOp{
+			{kv: makeKV("a", "val1", 10)},
+			{kv: makeKV("c", "val4", 9)},
+			{kv: makeKV("c", "val3", 11)},
+			{kv: makeProvisionalKV("c", "txnKey1", 15), txn: txnWithTs(txn1, 15)},
+			{kv: makeKV("d", "val6", 19)},
+			{kv: makeKV("d", "val5", 20)},
+			{kv: makeProvisionalKV("d", "txnKey2", 21), txn: txnWithTs(txn2, 21)},
+			{kv: makeKV("m", "val8", 1)},
+			{kv: makeProvisionalKV("n", "txnKey1", 12), txn: txnWithTs(txn1, 12)},
+			{kv: makeKV("r", "val9", 4)},
+			{kv: makeProvisionalKV("r", "txnKey1", 19), txn: txnWithTs(txn1, 19)},
+			{kv: makeProvisionalKV("w", "txnKey1", 3), txn: txnWithTs(txn1, 3)},
+			{kv: makeKV("z", "val11", 4)},
+			{kv: makeProvisionalKV("z", "txnKey2", 21), txn: txnWithTs(txn2, 21)},
+		}
+		scanner, cleanup, err := makeIntentScanner(data, roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("zz")})
+		require.NoError(t, err, "failed to prepare test data")
+		defer cleanup()
 
-	// The resolved timestamp should not be initialized.
-	require.False(t, h.rts.IsInit())
-	require.Equal(t, hlc.Timestamp{}, h.rts.Get())
+		p, h, stopper := newTestProcessor(t, withRtsScanner(scanner), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
 		// The resolved timestamp should not be initialized.
 		require.False(t, h.rts.IsInit())
 		require.Equal(t, hlc.Timestamp{}, h.rts.Get())
 
-	// The registration should be provided a checkpoint immediately with an
-	// empty resolved timestamp because it did not perform a catch-up scan.
-	chEvent := []*kvpb.RangeFeedEvent{
-		rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-			hlc.Timestamp{},
-		),
-	}
-	require.Equal(t, chEvent, r1Stream.Events())
+		// Add a registration.
+		r1Stream := newTestStream()
+		p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
+		require.Equal(t, 1, p.Len())
 
 		// The registration should be provided a checkpoint immediately with an
 		// empty resolved timestamp because it did not perform a catch-up scan.
@@ -508,14 +728,15 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 func TestProcessorTxnPushAttempt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ts10 := hlc.Timestamp{WallTime: 10}
-	ts20 := hlc.Timestamp{WallTime: 20}
-	ts25 := hlc.Timestamp{WallTime: 25}
-	ts30 := hlc.Timestamp{WallTime: 30}
-	ts50 := hlc.Timestamp{WallTime: 50}
-	ts60 := hlc.Timestamp{WallTime: 60}
-	ts70 := hlc.Timestamp{WallTime: 70}
-	ts90 := hlc.Timestamp{WallTime: 90}
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		ts10 := hlc.Timestamp{WallTime: 10}
+		ts20 := hlc.Timestamp{WallTime: 20}
+		ts25 := hlc.Timestamp{WallTime: 25}
+		ts30 := hlc.Timestamp{WallTime: 30}
+		ts50 := hlc.Timestamp{WallTime: 50}
+		ts60 := hlc.Timestamp{WallTime: 60}
+		ts70 := hlc.Timestamp{WallTime: 70}
+		ts90 := hlc.Timestamp{WallTime: 90}
 
 		// Create a set of transactions.
 		txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
@@ -609,16 +830,9 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 			return nil
 		})
 
-		testNum++
-		switch testNum {
-		case 1:
-			assert.Equal(t, 3, len(txns))
-			assert.Equal(t, txn1Meta, txns[0])
-			assert.Equal(t, txn2Meta, txns[1])
-			assert.Equal(t, txn3Meta, txns[2])
-			if t.Failed() {
-				return nil, false, errors.New("test failed")
-			}
+		p, h, stopper := newTestProcessor(t, withPusher(&tp), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
 		// Add a few intents and move the closed timestamp forward.
 		p.ConsumeLogicalOps(ctx,
@@ -754,61 +968,61 @@ func TestProcessorTxnPushDisabled(t *testing.T) {
 // not then it would be possible for them to deadlock.
 func TestProcessorConcurrentStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	const trials = 10
-	for i := 0; i < trials; i++ {
-		p, h, stopper := newTestProcessor(t)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		ctx := context.Background()
+		const trials = 10
+		for i := 0; i < trials; i++ {
+			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 
-		var wg sync.WaitGroup
-		wg.Add(6)
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			s := newTestStream()
-			p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {})
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			p.Len()
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			p.ConsumeLogicalOps(ctx,
-				writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 2})
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			p.Stop()
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			stopper.Stop(context.Background())
-		}()
-		wg.Wait()
-	}
+			var wg sync.WaitGroup
+			wg.Add(6)
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				s := newTestStream()
+				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+					h.toBufferedStreamIfNeeded(s), func() {})
+			}()
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				p.Len()
+			}()
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				p.ConsumeLogicalOps(ctx,
+					writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
+			}()
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 2})
+			}()
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				p.Stop()
+			}()
+			go func() {
+				defer wg.Done()
+				runtime.Gosched()
+				stopper.Stop(context.Background())
+			}()
+			wg.Wait()
+		}
+	})
 }
 
 // TestProcessorRegistrationObservesOnlyNewEvents tests that a registration
 // observes only operations that are consumed after it has registered.
 func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, h, stopper := newTestProcessor(t)
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-
-	firstC := make(chan int64)
-	regDone := make(chan struct{})
-	regs := make(map[*testStream]int64)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
 		firstC := make(chan int64)
 		regDone := make(chan struct{})
@@ -828,6 +1042,24 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				// Consume the logical op. Encode the index in the timestamp.
 				p.ConsumeLogicalOps(ctx, writeValueOp(hlc.Timestamp{WallTime: i}))
 			}
+			h.syncEventC()
+			close(firstC)
+		}()
+		go func() {
+			defer wg.Done()
+			for firstIdx := range firstC {
+				// For each index, create a new registration. The first
+				// operation is should see is firstIdx.
+				s := newTestStream()
+				regs[s] = firstIdx
+				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+					h.toBufferedStreamIfNeeded(s), func() {})
+				regDone <- struct{}{}
+			}
+		}()
+		wg.Wait()
+		h.syncEventAndRegistrations()
 
 		// Verify that no registrations were given operations
 		// from before they registered.
@@ -853,37 +1085,39 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	// as sync events used to flush queues.
 	const channelCapacity = totalEvents/2 + 10
 
-	s := cluster.MakeTestingClusterSettings()
-	m := mon.NewMonitor(mon.Options{
-		Name:      "rangefeed",
-		Res:       mon.MemoryResource,
-		Increment: 1,
-		Limit:     math.MaxInt64,
-	})
-	m.Start(context.Background(), nil, mon.NewStandaloneBudget(math.MaxInt64))
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		s := cluster.MakeTestingClusterSettings()
+		m := mon.NewMonitor(mon.Options{
+			Name:      "rangefeed",
+			Res:       mon.MemoryResource,
+			Increment: 1,
+			Limit:     math.MaxInt64,
+		})
+		m.Start(context.Background(), nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 		b := m.MakeBoundAccount()
 		fb := NewFeedBudget(&b, 0, &s.SV)
 
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
-		withEventTimeout(100*time.Millisecond))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
+			withEventTimeout(100*time.Millisecond), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	// Add a registration.
-	rStream := newConsumer(50)
-	defer func() { rStream.Resume() }()
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		rStream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
+		// Add a registration.
+		rStream := newConsumer(50)
+		defer func() { rStream.Resume() }()
+		_, _, _ = p.Register(
+			rStream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(rStream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
 
 		for i := 0; i < totalEvents; i++ {
 			p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -942,27 +1176,28 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	// objects. Ideally it would be nice to have
 	const channelCapacity = totalEvents + 5
 
-	fb := newTestBudget(math.MaxInt64)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		fb := newTestBudget(math.MaxInt64)
+		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
+			withEventTimeout(time.Millisecond), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
-		withEventTimeout(time.Millisecond))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-
-	// Add a registration.
-	rStream := newConsumer(90)
-	defer func() { rStream.Resume() }()
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		rStream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
+		// Add a registration.
+		rStream := newConsumer(90)
+		defer func() { rStream.Resume() }()
+		_, _, _ = p.Register(
+			rStream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(rStream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
 
 		for i := 0; i < totalEvents; i++ {
 			p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -1010,47 +1245,42 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	// as sync events used to flush queues.
 	const channelCapacity = totalEvents/2 + 10
 
-	fb := newTestBudget(math.MaxInt64)
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		fb := newTestBudget(math.MaxInt64)
+		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
+			withEventTimeout(100*time.Millisecond), withRangefeedTestType(rt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-	p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
-		withEventTimeout(100*time.Millisecond))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
+		// Add a registration.
+		r1Stream := newConsumer(50)
+		defer func() { r1Stream.Resume() }()
+		_, _, _ = p.Register(
+			r1Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r1Stream),
+			func() {},
+		)
 
-	// Add a registration.
-	r1Stream := newConsumer(50)
-	defer func() { r1Stream.Resume() }()
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r1Stream,
-		func() {},
-	)
-
-	// Non-blocking registration that would consume all events.
-	r2Stream := newConsumer(0)
-	p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		false, /* withFiltering */
-		false, /* withOmitRemote */
-		r2Stream,
-		func() {},
-	)
-	h.syncEventAndRegistrations()
-
-	for i := 0; i < totalEvents; i++ {
-		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
-			roachpb.Key("k"),
-			hlc.Timestamp{WallTime: int64(i + 2)},
-			[]byte(fmt.Sprintf("this is value %04d", i))))
-	}
+		// Non-blocking registration that would consume all events.
+		r2Stream := newConsumer(0)
+		p.Register(
+			r2Stream.ctx,
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			h.toBufferedStreamIfNeeded(r2Stream),
+			func() {},
+		)
+		h.syncEventAndRegistrations()
 
 		for i := 0; i < totalEvents; i++ {
 			p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -1146,9 +1376,8 @@ func (c *consumer) WaitBlock() {
 	<-c.blocked
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *consumer) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
 }
 
@@ -1214,7 +1443,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 	// Add a registration.
 	stream := newTestStream()
-	ok, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
+	ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil)
 	require.True(t, ok)
 
