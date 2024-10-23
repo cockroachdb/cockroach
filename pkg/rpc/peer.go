@@ -553,7 +553,7 @@ func (p *peer) runHeartbeatUntilFailure(
 
 func logOnHealthy(ctx context.Context, disconnected, now time.Time) {
 	var buf redact.StringBuilder
-	_, _ = redact.Fprintf(&buf, "connection is now healthy")
+	buf.SafeString("connection is now healthy")
 	// When the breaker was first created, we tripped it but disconnected will
 	// have been zero, so don't log a bogus duration in that case.
 	if !disconnected.IsZero() {
