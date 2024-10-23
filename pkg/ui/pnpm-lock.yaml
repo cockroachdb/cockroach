@@ -55,9 +55,6 @@ importers:
       '@babel/runtime':
         specifier: ^7.12.13
         version: 7.12.13
-      '@cockroachlabs/crdb-protobuf-client':
-        specifier: workspace:../db-console/src/js
-        version: link:../db-console/src/js
       '@cockroachlabs/design-tokens':
         specifier: 0.4.5
         version: 0.4.5
@@ -227,6 +224,9 @@ importers:
       '@bazel/worker':
         specifier: 5.5.0
         version: 5.5.0
+      '@cockroachlabs/crdb-protobuf-client':
+        specifier: workspace:../db-console/src/js
+        version: link:../db-console/src/js
       '@cockroachlabs/eslint-config':
         specifier: 1.0.7
         version: 1.0.7(@typescript-eslint/eslint-plugin@5.62.0)(eslint-plugin-prettier@5.2.1)(eslint-plugin-react-hooks@4.6.0)(eslint-plugin-react@7.34.1)(eslint@8.57.0)(typescript@5.1.6)
