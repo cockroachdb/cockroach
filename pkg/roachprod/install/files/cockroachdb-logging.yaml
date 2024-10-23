@@ -1,7 +1,11 @@
 ---
 file-defaults:
   auditable: false
-  buffered-writes: true
+  buffered-writes: false
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 256KiB
+    max-buffer-size: 50MiB
   dir: #{ .LogDir #}
   exit-on-error: false
   filter: INFO

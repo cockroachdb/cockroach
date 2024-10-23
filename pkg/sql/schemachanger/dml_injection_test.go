@@ -116,6 +116,9 @@ type testCase struct {
 	schemaChange string
 	expectedErr  string
 	skipIssue    int
+	// Optional: If you want a query to run at each stage, you can include it here.
+	// We don't evaluate the results; we simply assert that the query executes without errors.
+	query string
 }
 
 // Captures testCase before t.Parallel is called.
@@ -298,6 +301,17 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD PRIMARY KEY (id)",
 			},
 			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
+		},
+		{
+			desc:        "alter primary key and replace rowid in PK",
+			createTable: createTableNoPK,
+			setup: []string{
+				"CREATE INDEX i1 ON tbl (val)",
+			},
+			// Run a query against the secondary index at each stage.
+			query:        "SELECT operation FROM tbl@i1",
+			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
+			skipIssue:    133129,
 		},
 		{
 			desc:        "alter primary key using columns using hash",
@@ -522,6 +536,12 @@ func TestAlterTableDMLInjection(t *testing.T) {
 								// Use subset instead of equals for better error output.
 								require.Subset(t, expectedResults, actualResults, errorMessage)
 								require.Subset(t, actualResults, expectedResults, errorMessage)
+
+								// If a query is provided, run it without checking the results—just
+								// ensure it doesn't fail.
+								if tc.query != "" {
+									sqlDB.Exec(t, tc.query)
+								}
 
 								for i := 0; i < poIdx; i++ {
 									insertPO := poSlice[i]
