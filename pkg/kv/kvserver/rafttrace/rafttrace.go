@@ -40,11 +40,26 @@ var MaxConcurrentRaftTraces = settings.RegisterIntSetting(
 	settings.IntInRange(0, 1000),
 )
 
+// LogRaftEventsToCockroachLog controls whether we log raft traces to the
+// cockroach.log in addition to adding the event to the trace. Traces are only
+// created on the leaseholder but logging is done on both leaders and followers
+// if the setting is enabled and the trace is registered. The potential downside
+// of enabling this setting is the churn it can cause in cockroach.log.
+var LogRaftEventsToCockroachLog = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft.log_to_cockroach_log",
+	"when true, log raft traces to the cockroach log in addition to the trace",
+	true,
+)
+
 // traceValue represents the trace information for a single registration.
 type traceValue struct {
 	traced kvserverpb.TracedEntry
 	// ctx is a trace specific context used to log events on this trace.
 	ctx context.Context
+
+	// alsoLog is true if we should log the trace to the cockroach log.
+	alsoLog bool
 
 	mu struct {
 		syncutil.Mutex
@@ -73,7 +88,9 @@ type traceValue struct {
 // proposal context is populated on the leaseholder and is attached to the SQL
 // trace.
 func (t *traceValue) logf(depth int, format string, args ...interface{}) {
-	log.InfofDepth(t.ctx, depth+1, format, args...)
+	if t.alsoLog {
+		log.InfofDepth(t.ctx, depth+1, format, args...)
+	}
 
 	t.mu.Lock()
 	propCtx := t.mu.propCtx
@@ -252,7 +269,10 @@ func (r *RaftTracer) tryStore(tv *traceValue) (*traceValue, bool) {
 func (r *RaftTracer) newTraceValue(
 	te kvserverpb.TracedEntry, propCtx context.Context, propSpan *tracing.Span,
 ) *traceValue {
-	tv := &traceValue{traced: te}
+	tv := &traceValue{
+		traced:  te,
+		alsoLog: LogRaftEventsToCockroachLog.Get(&r.st.SV),
+	}
 	tv.ctx = logtags.AddTag(r.ctx, "id", redact.Safe(tv.String()))
 	tv.mu.seenMsgAppResp = make(map[raftpb.PeerID]bool)
 	tv.mu.propCtx = propCtx
