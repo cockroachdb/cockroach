@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
@@ -303,6 +304,12 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 
 	if roachtestflags.SelectProbability > 0 && roachtestflags.SelectProbability < 1 {
 		fmt.Printf("Matching tests will be selected with probability %.2f\n", roachtestflags.SelectProbability)
+	}
+
+	for override := range roachtestflags.VersionsBinaryOverride {
+		if _, err := version.Parse(override); err != nil {
+			return errors.Wrapf(err, "binary version override %s is not a valid version", override)
+		}
 	}
 	return nil
 }

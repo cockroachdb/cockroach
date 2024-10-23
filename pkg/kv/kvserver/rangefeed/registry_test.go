@@ -105,9 +105,9 @@ func TestRegistrationBasic(t *testing.T) {
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 
 	streamCancelReg.Cancel()
-	go streamCancelReg.runOutputLoop(ctx, 0)
+	go streamCancelReg.runOutputLoop(streamCancelReg.ctx, 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
-	require.Equal(t, streamCancelReg.stream.Context().Err(), streamCancelReg.WaitForError(t))
+	require.Equal(t, streamCancelReg.ctx.Err(), streamCancelReg.WaitForError(t))
 }
 
 func TestRegistrationCatchUpScan(t *testing.T) {
