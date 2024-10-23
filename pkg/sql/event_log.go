@@ -446,8 +446,9 @@ func (*EventLogTestingKnobs) ModuleTestingKnobs() {}
 // event should be directed to.
 type LogEventDestination int
 
+// hasFlag returns true if the receiver has all of the given flags.
 func (d LogEventDestination) hasFlag(f LogEventDestination) bool {
-	return d&f != 0
+	return d&f == f
 }
 
 const (

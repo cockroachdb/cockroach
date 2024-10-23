@@ -1860,9 +1860,9 @@ const (
 // LikeTableOptAll is the full LikeTableOpt bitmap.
 const LikeTableOptAll = ^likeTableOptInvalid
 
-// Has returns true if the receiver has the other options bits set.
+// Has returns true if the receiver has all of the given option bits set.
 func (o LikeTableOpt) Has(other LikeTableOpt) bool {
-	return int(o)&int(other) != 0
+	return int(o)&int(other) == int(other)
 }
 
 func (o LikeTableOpt) String() string {

@@ -49,7 +49,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	st := raft.NewMemoryStorage()
 	c := &raft.Config{
 		ID:                        id,
-		ElectionTick:              10,
+		ElectionTick:              50,
 		HeartbeatTick:             1,
 		Storage:                   st,
 		MaxSizePerMsg:             1024 * 1024,
