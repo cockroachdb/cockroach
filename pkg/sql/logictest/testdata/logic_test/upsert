@@ -1357,3 +1357,73 @@ query III
 SELECT * FROM arbiter_index
 ----
 1  2  10
+
+subtest regression_133146
+
+# Regression test for #133146. Columns that are not updated in an UPSERT should
+# not cause not-null constraint violations.
+statement ok
+CREATE TABLE t133146 (
+  id INT PRIMARY KEY,
+  a INT NOT NULL,
+  b INT
+)
+
+statement ok
+INSERT INTO t133146 (id, a, b) VALUES (1, 2, 3)
+
+# This should not cause a not-null constraint violation of column "a" because
+# the value of "a" is not being updated to NULL in the existing row.
+statement ok
+UPSERT INTO t133146 (id, b) VALUES (1, 30)
+
+query III
+SELECT * FROM t133146
+----
+1  2  30
+
+statement ok
+INSERT INTO t133146 (id, b) VALUES (1, 40) ON CONFLICT (id) DO UPDATE SET b = 40
+
+query III
+SELECT * FROM t133146
+----
+1  2  40
+
+statement error pgcode 23502 pq: null value in column \"a\" violates not-null constraint
+UPSERT INTO t133146 (id, a) VALUES (1, NULL)
+
+statement error pgcode 23502 pq: null value in column \"a\" violates not-null constraint
+INSERT INTO t133146 (id, b) VALUES (1, 50) ON CONFLICT (id) DO UPDATE SET a = NULL
+
+statement ok
+CREATE TABLE t133146b (
+  a INT,
+  b INT NOT NULL,
+  id INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO t133146b (id, a, b) VALUES (1, 2, 3)
+
+statement ok
+UPSERT INTO t133146b (id, b) VALUES (1, 30)
+
+query III
+SELECT * FROM t133146b
+----
+2  30  1
+
+statement ok
+INSERT INTO t133146b (id, b) VALUES (1, 40) ON CONFLICT (id) DO UPDATE SET b = 40
+
+query III
+SELECT * FROM t133146b
+----
+2  40  1
+
+statement error pgcode 23502 pq: null value in column \"b\" violates not-null constraint
+UPSERT INTO t133146b (id, b) VALUES (1, NULL)
+
+statement error pgcode 23502 pq: null value in column \"b\" violates not-null constraint
+INSERT INTO t133146b (id, a) VALUES (1, 20) ON CONFLICT (id) DO UPDATE SET b = NULL
