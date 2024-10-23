@@ -1575,7 +1575,9 @@ func runMVCCDeleteRangeUsingTombstone(
 			defer eng.Close()
 
 			ms, err := ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
-			require.NoError(b, err)
+			if err != nil {
+				b.Fatal(err)
+			}
 
 			leftPeekBound = keys.LocalMax
 			rightPeekBound = keys.MaxKey
@@ -1657,8 +1659,12 @@ func runMVCCDeleteRangeWithPredicate(
 				0,
 			)
 			b.StopTimer()
-			require.NoError(b, err)
-			require.Nil(b, resumeSpan)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if resumeSpan != nil {
+				b.Fatalf("unexpected resume span: %v", resumeSpan)
+			}
 		}()
 	}
 }
@@ -1996,9 +2002,13 @@ func runMVCCAcquireLockCommon(
 			}
 			// Acquire a shared and an exclusive lock on the key.
 			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0, 0)
-			require.NoError(b, err)
+			if err != nil {
+				b.Fatal(err)
+			}
 			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0, 0)
-			require.NoError(b, err)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 
@@ -2022,9 +2032,11 @@ func runMVCCAcquireLockCommon(
 			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0, 0)
 		}
 		if heldOtherTxn {
-			require.Error(b, err)
-		} else {
-			require.NoError(b, err)
+			if err == nil {
+				b.Fatalf("expected error but got %s", err)
+			}
+		} else if err != nil {
+			b.Fatal(err)
 		}
 	}
 
@@ -2082,10 +2094,17 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			}
 			startKey := mkKey(start)
 			endKey := mkKey(end)
-			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
+			err := MVCCDeleteRangeUsingTombstone(
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 		}
-		require.NoError(b, batch.Commit(false /* sync */))
+		err := batch.Commit(false /* sync */)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}()
 
 	batch := engine.NewBatch()
@@ -2165,11 +2184,15 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		b.StopTimer()
 
 		if i == 0 {
-			require.NotZero(b, buf.Len())
+			if buf.Len() == 0 {
+				b.Fatalf("empty SST")
+			}
 			assertLen = buf.Len()
 		}
 
-		require.Equal(b, assertLen, buf.Len())
+		if buf.Len() != assertLen {
+			b.Fatalf("unexpected SST size: %d, expected %d", buf.Len(), assertLen)
+		}
 	}
 
 	// Run sanity checks on last produced SST.
@@ -2180,13 +2203,17 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			KeyTypes:   IterKeyTypePointsAndRanges,
 		},
 	)
+	if err != nil {
+		b.Fatal(err)
+	}
 	it.SeekGE(MakeMVCCMetadataKey(roachpb.LocalMax))
-	require.NoError(b, err)
 	var n int // points
 	var r int // range keys (within stacks)
 	for {
 		ok, err := it.Valid()
-		require.NoError(b, err)
+		if err != nil {
+			b.Fatal(err)
+		}
 		if !ok {
 			break
 		}
@@ -2199,13 +2226,16 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		}
 		it.Next()
 	}
-	require.Equal(b, expKVsInSST, n)
+	if expKVsInSST != n {
+		b.Fatalf("unexpected number of keys in SST: %d, expected %d", n, expKVsInSST)
+	}
 	// Should not see any rangedel stacks if startTS is set.
 	if opts.numRangeKeys > 0 && startWall == 0 && opts.exportAllRevisions {
-		require.NotZero(b, r)
-		require.GreaterOrEqual(b, r, opts.numRangeKeys)
-	} else {
-		require.Zero(b, r)
+		if r < opts.numRangeKeys {
+			b.Fatalf("unexpected number of range keys in SST: %d, expected at least %d", r, opts.numRangeKeys)
+		}
+	} else if r != 0 {
+		b.Fatalf("unexpected number of range keys in SST: %d, expected 0", r)
 	}
 }
 
@@ -2227,7 +2257,7 @@ func runCheckSSTConflicts(
 		for j := 0; j < numVersions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: int64(j + 1)}
-			require.NoError(b, batch.PutMVCC(MVCCKey{Key: key, Timestamp: ts}, value))
+			batch.PutMVCC(MVCCKey{Key: key, Timestamp: ts}, value)
 		}
 		require.NoError(b, batch.Commit(false))
 	}
@@ -2269,7 +2299,9 @@ func runCheckSSTConflicts(
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
-		require.NoError(b, err)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
