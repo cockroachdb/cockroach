@@ -17,7 +17,6 @@ go_library(
         "import_processor.go",
         "import_processor_planning.go",
         "import_table_creation.go",
-        "import_type_resolver.go",
         "read_import_avro.go",
         "read_import_base.go",
         "read_import_csv.go",
@@ -32,6 +31,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/crosscluster",
         "//pkg/cloud",
         "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
@@ -93,7 +93,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlclustersettings",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/stats",
         "//pkg/sql/types",

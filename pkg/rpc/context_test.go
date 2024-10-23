@@ -283,10 +283,6 @@ type rangefeedEventSink struct {
 
 var _ kvpb.RangeFeedEventSink = (*rangefeedEventSink)(nil)
 
-func (s *rangefeedEventSink) Context() context.Context {
-	return s.ctx
-}
-
 // Note that SendUnbuffered itself is not thread-safe (grpc stream is not
 // thread-safe), but tests were written in a way that sends sequentially,
 // ensuring thread-safety for SendUnbuffered.

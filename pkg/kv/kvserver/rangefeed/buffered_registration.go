@@ -70,6 +70,7 @@ type bufferedRegistration struct {
 var _ registration = &bufferedRegistration{}
 
 func newBufferedRegistration(
+	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -84,6 +85,7 @@ func newBufferedRegistration(
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			streamCtx:        streamCtx,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -212,8 +214,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.stream.Context().Done():
-			return br.stream.Context().Err()
+		case <-br.streamCtx.Done():
+			return br.streamCtx.Err()
 		}
 	}
 }

@@ -686,3 +686,27 @@ func TestWaitForEval(t *testing.T) {
 		}
 	})
 }
+
+func TestTokenCounterReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	provider := NewStreamTokenCounterProvider(st, hlc.NewClockForTesting(nil))
+	stream := kvflowcontrol.Stream{StoreID: 1}
+	evalCounter := provider.Eval(stream)
+	sendCounter := provider.Send(stream)
+	evalCounter.Deduct(ctx, admissionpb.RegularWorkClass, 1<<20, AdjNormal)
+	sendCounter.Deduct(ctx, admissionpb.RegularWorkClass, 1<<20, AdjNormal)
+	for wc := admissionpb.WorkClass(0); wc < admissionpb.NumWorkClasses; wc++ {
+		require.Greater(t, evalCounter.limit(wc), evalCounter.tokens(wc))
+		require.Greater(t, sendCounter.limit(wc), sendCounter.tokens(wc))
+	}
+	prevEpoch := kvflowcontrol.TokenCounterResetEpoch.Get(&st.SV)
+	kvflowcontrol.TokenCounterResetEpoch.Override(ctx, &st.SV, prevEpoch+1)
+	for wc := admissionpb.WorkClass(0); wc < admissionpb.NumWorkClasses; wc++ {
+		require.Equal(t, evalCounter.limit(wc), evalCounter.tokens(wc))
+		require.Equal(t, sendCounter.limit(wc), sendCounter.tokens(wc))
+	}
+}

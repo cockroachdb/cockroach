@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -359,15 +358,13 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	// TODO(msbutler): is this import type resolver kosher? Should put in a new package.
-	// See https://github.com/cockroachdb/cockroach/issues/132164.
-	importResolver := importer.MakeImportTypeResolver(plan.SourceTypes)
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
 	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
 		for _, pair := range payload.ReplicationPairs {
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
 			cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
-			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
 				return err
 			}
 			srcTableDesc = *cpy.TableDesc()
