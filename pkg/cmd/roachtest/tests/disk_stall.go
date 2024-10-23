@@ -73,9 +73,6 @@ func runDiskStalledWALFailover(
 		startOpts.RoachprodOpts.StoreCount = 2
 	}
 	startOpts.RoachprodOpts.ExtraArgs = []string{
-		// Adopt buffering of the file logging to ensure that we don't block on
-		// flushing logs to the stalled device.
-		"--log", fmt.Sprintf(`{file-defaults: {dir: "%s", buffered-writes: false, buffering: {max-staleness: 1s, flush-trigger-size: 256KiB, max-buffer-size: 50MiB}}}`, s.LogDir()),
 		"--wal-failover=" + failoverFlag,
 	}
 	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
