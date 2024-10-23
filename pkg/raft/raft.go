@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/exp/maps"
 )
 
@@ -1440,14 +1441,14 @@ func (r *raft) Step(m pb.Message) error {
 				// leader it does not update its term or grant its vote.
 				{
 					// Log why we're ignoring the Request{,Pre}Vote.
-					var inHeartbeatLeaseMsg string
-					var inFortifyLeaseMsg string
-					var sep string
+					var inHeartbeatLeaseMsg redact.RedactableString
+					var inFortifyLeaseMsg redact.RedactableString
+					var sep redact.SafeString
 					if inHeartbeatLease {
-						inHeartbeatLeaseMsg = fmt.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+						inHeartbeatLeaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
 					}
 					if inFortifyLease {
-						inFortifyLeaseMsg = fmt.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
+						inFortifyLeaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
 					}
 					if inFortifyLease && inHeartbeatLease {
 						sep = " and "
