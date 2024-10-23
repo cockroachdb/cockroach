@@ -1490,6 +1490,8 @@ func (r *raft) Step(m pb.Message) error {
 		}
 
 	case m.Term < r.Term:
+		ignore := true
+
 		switch m.Type {
 		case pb.MsgHeartbeat, pb.MsgApp, pb.MsgFortifyLeader:
 			if !r.checkQuorum && !r.preVote {
@@ -1529,11 +1531,30 @@ func (r *raft) Step(m pb.Message) error {
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
 			return nil
+
+		case pb.MsgSnap:
+			// A snapshot message may arrive under an outdated term. Since it carries
+			// committed state, we can safely process it regardless of the term. The
+			// message term means the snapshot is committed as of this term. By raft
+			// invariants, all committed state under a particular term will be
+			// committed under later terms as well.
+			//
+			// TODO(#127348): the MsgSnap handler assumes the message came from this
+			// term leader, which is not true if the term is bumped here.
+			// TODO(#127349): it is generally not true because the snapshot could have
+			// been initiated by a leaseholder (which at the time of writing is not
+			// necessarily the leader), and/or delegated via a follower.
+			m.Term = r.Term
+			ignore = false
 		}
-		// Ignore the message if it has not been handled above.
-		r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
-			r.id, r.Term, m.Type, m.From, m.Term)
-		return nil
+
+		// Ignore the message if it has not been handled above and can not be
+		// handled below.
+		if ignore {
+			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
+				r.id, r.Term, m.Type, m.From, m.Term)
+			return nil
+		}
 	}
 
 	switch m.Type {
