@@ -6,6 +6,7 @@
 package tabledesc
 
 import (
+	"bytes"
 	"cmp"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -203,20 +205,76 @@ func checkSrcDstColsMatch(src *descpb.TableDescriptor, dst *descpb.TableDescript
 			)
 		}
 
-		if dstCol.Type.UserDefined() {
-			return errors.Newf(
-				"destination table %s column %s has user-defined type %s",
-				dst.Name, dstCol.Name, dstCol.Type.SQLStringForError(),
-			)
-		}
-
-		if !srcCol.Type.Identical(dstCol.Type) {
-			return errors.Newf(
+		if err := checkTypesMatch(srcCol.Type, dstCol.Type); err != nil {
+			return errors.Wrapf(err,
 				"destination table %s column %s has type %s, but the source table %s has type %s",
 				dst.Name, dstCol.Name, dstCol.Type.SQLStringForError(), src.Name, srcCol.Type.SQLStringForError(),
 			)
 		}
 	}
+	return nil
+}
+
+// checkTypesMatch checks that the source and destination types match. Enums
+// need to be equal in both physical and logical representations.
+func checkTypesMatch(srcTyp *types.T, dstTyp *types.T) error {
+	switch {
+	case dstTyp.TypeMeta.EnumData != nil:
+		if srcTyp.TypeMeta.EnumData == nil {
+			return errors.Newf(
+				"destination type %s is an ENUM, but the source type %s is not",
+				dstTyp.SQLStringForError(), srcTyp.SQLStringForError(),
+			)
+		}
+		if !slices.Equal(srcTyp.TypeMeta.EnumData.LogicalRepresentations, dstTyp.TypeMeta.EnumData.LogicalRepresentations) {
+			return errors.Newf(
+				"destination type %s has logical representations %v, but the source type %s has %v",
+				dstTyp.SQLStringForError(), dstTyp.TypeMeta.EnumData.LogicalRepresentations,
+				srcTyp.SQLStringForError(), srcTyp.TypeMeta.EnumData.LogicalRepresentations,
+			)
+		}
+		if !slices.EqualFunc(
+			srcTyp.TypeMeta.EnumData.PhysicalRepresentations, dstTyp.TypeMeta.EnumData.PhysicalRepresentations,
+			func(x, y []byte) bool { return bytes.Equal(x, y) },
+		) {
+			return errors.Newf(
+				"destination type %s and source type %s have mismatched physical representations",
+				dstTyp.SQLStringForError(), srcTyp.SQLStringForError(),
+			)
+		}
+
+	case len(dstTyp.TupleContents()) > 0:
+		if len(srcTyp.TupleContents()) == 0 {
+			return errors.Newf(
+				"destination type %s is a tuple, but the source type %s is not",
+				dstTyp.SQLStringForError(), srcTyp.SQLStringForError(),
+			)
+		}
+		if len(dstTyp.TupleContents()) != len(srcTyp.TupleContents()) {
+			return errors.Newf(
+				"destination type %s has %d tuple elements, but the source type %s has %d tuple elements",
+				dstTyp.SQLStringForError(), len(dstTyp.TupleContents()),
+				srcTyp.SQLStringForError(), len(srcTyp.TupleContents()),
+			)
+		}
+		for i := range dstTyp.TupleContents() {
+			if err := checkTypesMatch(srcTyp.TupleContents()[i], dstTyp.TupleContents()[i]); err != nil {
+				return errors.Wrapf(err,
+					"destination type %s tuple element %d does not match source type %s tuple element %d",
+					dstTyp.SQLStringForError(), i, srcTyp.SQLStringForError(), i,
+				)
+			}
+		}
+
+	default:
+		if !srcTyp.Identical(dstTyp) {
+			return errors.Newf(
+				"destination type %s does not match source type %s",
+				dstTyp.SQLStringForError(), srcTyp.SQLStringForError(),
+			)
+		}
+	}
+
 	return nil
 }
 

@@ -360,6 +360,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	}
 
 	// TODO(msbutler): is this import type resolver kosher? Should put in a new package.
+	// See https://github.com/cockroachdb/cockroach/issues/132164.
 	importResolver := importer.MakeImportTypeResolver(plan.SourceTypes)
 	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
