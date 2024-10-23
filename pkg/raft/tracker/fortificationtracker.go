@@ -164,26 +164,31 @@ func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.
 	if state != pb.StateLeader {
 		panic("computeLeadSupportUntil should only be called by the leader")
 	}
+	if len(ft.fortification) == 0 {
+		return hlc.Timestamp{} // fast-path for no fortification
+	}
 
 	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
 	// from hot paths.
 	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
-	for id, supportEpoch := range ft.fortification {
-		curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
-		// NB: We can't assert that supportEpoch <= curEpoch because there may be a
-		// race between a successful MsgFortifyLeaderResp and the store liveness
-		// heartbeat response that lets the leader know the follower's store is
-		// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
-		// message.
-		if curEpoch == supportEpoch {
-			supportExpMap[id] = curExp
+	ft.config.Voters.Visit(func(id pb.PeerID) {
+		if supportEpoch, ok := ft.fortification[id]; ok {
+			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
+			// NB: We can't assert that supportEpoch <= curEpoch because there may be
+			// a race between a successful MsgFortifyLeaderResp and the store liveness
+			// heartbeat response that lets the leader know the follower's store is
+			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
+			// message.
+			if curEpoch == supportEpoch {
+				supportExpMap[id] = curExp
+			}
 		}
-	}
+	})
 	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
 // CanDefortify returns whether the caller can safely[1] de-fortify the term
-// based on the sate tracked by the FortificationTracker.
+// based on the state tracked by the FortificationTracker.
 //
 // [1] Without risking regressions in the maximum that's ever been indicated to
 // the layers above. Or, more simply, without risking regression of leader
