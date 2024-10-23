@@ -387,6 +387,7 @@ type raft struct {
 	// disableConfChangeValidation is Config.DisableConfChangeValidation,
 	// see there for details.
 	disableConfChangeValidation bool
+	campaignOnConfChange        bool
 	// an estimate of the size of the uncommitted tail of the Raft log. Used to
 	// prevent unbounded log growth. Only maintained by the leader. Reset on
 	// term changes.
@@ -1039,6 +1040,7 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
+	r.campaignOnConfChange = false
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -1281,6 +1283,10 @@ func (r *raft) becomeLeader() {
 }
 
 func (r *raft) hup(t CampaignType) {
+	r.hup2(t, true)
+}
+
+func (r *raft) hup2(t CampaignType, checkConfChange bool) {
 	if r.state == pb.StateLeader {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
@@ -1299,8 +1305,11 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
-	if r.hasUnappliedConfChanges() {
+	if checkConfChange && r.hasUnappliedConfChanges() {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
+		if t == campaignTransfer {
+			r.campaignOnConfChange = true
+		}
 		return
 	}
 
@@ -2489,6 +2498,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	// The remaining steps only make sense if this node is the leader and there
 	// are other nodes.
 	if r.state != pb.StateLeader || len(cs.Voters) == 0 {
+		if r.campaignOnConfChange {
+			r.campaignOnConfChange = false
+			r.hup2(campaignTransfer, false)
+		}
 		return cs
 	}
 
