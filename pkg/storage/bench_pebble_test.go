@@ -71,7 +71,7 @@ func setupPebbleInMemPebbleForLatestRelease(b testing.TB, _ string) Engine {
 	return peb
 }
 
-func BenchmarkMVCCScan_Pebble(b *testing.B) {
+func BenchmarkMVCCScan(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -135,7 +135,7 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
+func BenchmarkMVCCScanGarbage(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -190,7 +190,7 @@ func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCScanSQLRows_Pebble(b *testing.B) {
+func BenchmarkMVCCScanSQLRows(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -249,7 +249,7 @@ func BenchmarkMVCCScanSQLRows_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
+func BenchmarkMVCCReverseScan(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -303,7 +303,7 @@ func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
+func BenchmarkMVCCScanTransactionalData(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	ctx := context.Background()
@@ -317,7 +317,7 @@ func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
 	})
 }
 
-func BenchmarkMVCCGet_Pebble(b *testing.B) {
+func BenchmarkMVCCGet(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -367,7 +367,7 @@ func BenchmarkMVCCGet_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
+func BenchmarkMVCCComputeStats(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -404,7 +404,7 @@ func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
+func BenchmarkMVCCFindSplitKey(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	for _, valueSize := range []int{32} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -414,7 +414,7 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCPut_Pebble(b *testing.B) {
+func BenchmarkMVCCPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -450,7 +450,7 @@ func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCBlindPut_Pebble(b *testing.B) {
+func BenchmarkMVCCBlindPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
@@ -466,7 +466,7 @@ func BenchmarkMVCCBlindPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCConditionalPut_Pebble(b *testing.B) {
+func BenchmarkMVCCConditionalPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
@@ -490,7 +490,7 @@ func BenchmarkMVCCConditionalPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCBlindConditionalPut_Pebble(b *testing.B) {
+func BenchmarkMVCCBlindConditionalPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
@@ -506,7 +506,7 @@ func BenchmarkMVCCBlindConditionalPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCInitPut_Pebble(b *testing.B) {
+func BenchmarkMVCCInitPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
@@ -522,7 +522,7 @@ func BenchmarkMVCCInitPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCBlindInitPut_Pebble(b *testing.B) {
+func BenchmarkMVCCBlindInitPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
@@ -538,7 +538,7 @@ func BenchmarkMVCCBlindInitPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
+func BenchmarkMVCCPutDelete(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	db := setupMVCCInMemPebble(b, "put_delete")
@@ -563,7 +563,7 @@ func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCBatchPut_Pebble(b *testing.B) {
+func BenchmarkMVCCBatchPut(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	batchSizes := []int{10, 100, 1000, 10000}
@@ -583,7 +583,7 @@ func BenchmarkMVCCBatchPut_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCBatchTimeSeries_Pebble(b *testing.B) {
+func BenchmarkMVCCBatchTimeSeries(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	for _, batchSize := range []int{282} {
@@ -595,7 +595,7 @@ func BenchmarkMVCCBatchTimeSeries_Pebble(b *testing.B) {
 
 // BenchmarkMVCCGetMergedTimeSeries computes performance of reading merged
 // time series data using `MVCCGet()`. Uses an in-memory engine.
-func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
+func BenchmarkMVCCGetMergedTimeSeries(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -630,12 +630,12 @@ func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
 
 // DeleteRange benchmarks below (using on-disk data).
 //
-// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}_Pebble
+// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}
 // give nonsensical results (DeleteRange is absurdly slow and ClearRange
 // reports a processing speed of 481 million MB/s!). We need to take a look at
 // what these benchmarks are trying to measure, and fix them.
 
-func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
+func BenchmarkMVCCDeleteRange(b *testing.B) {
 	// TODO(radu): run one configuration under Short once the above TODO is
 	// resolved.
 	skip.UnderShort(b)
@@ -648,7 +648,7 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
+func BenchmarkMVCCDeleteRangeUsingTombstone(b *testing.B) {
 	// TODO(radu): run one configuration under Short once the above TODO is
 	// resolved.
 	skip.UnderShort(b)
@@ -669,11 +669,11 @@ func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
 	}
 }
 
-// BenchmarkMVCCDeleteRangeWithPredicate_Pebble benchmarks predicate based
+// BenchmarkMVCCDeleteRangeWithPredicate benchmarks predicate based
 // delete range under certain configs. A lower streak bound simulates sequential
 // imports with more interspersed keys, leading to fewer range tombstones and
 // more point tombstones.
-func BenchmarkMVCCDeleteRangeWithPredicate_Pebble(b *testing.B) {
+func BenchmarkMVCCDeleteRangeWithPredicate(b *testing.B) {
 	// TODO(radu): run one configuration under Short once the above TODO is
 	// resolved.
 	skip.UnderShort(b)
@@ -696,7 +696,7 @@ func BenchmarkMVCCDeleteRangeWithPredicate_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
+func BenchmarkClearMVCCVersions(b *testing.B) {
 	// TODO(radu): run one configuration under Short once the above TODO is
 	// resolved.
 	skip.UnderShort(b)
@@ -707,7 +707,7 @@ func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	})
 }
 
-func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCIteratorRange(b *testing.B) {
 	ctx := context.Background()
 	defer log.Scope(b).Close(b)
 	runClearRange(ctx, b, func(eng Engine, batch Batch, start, end MVCCKey) error {
@@ -715,7 +715,7 @@ func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	})
 }
 
-func BenchmarkBatchApplyBatchRepr_Pebble(b *testing.B) {
+func BenchmarkBatchApplyBatchRepr(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
@@ -798,7 +798,7 @@ func acquireLockTestCases() []acquireLockTestCase {
 	return res
 }
 
-func BenchmarkMVCCCheckForAcquireLock_Pebble(b *testing.B) {
+func BenchmarkMVCCCheckForAcquireLock(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	for _, tc := range acquireLockTestCases() {
@@ -809,7 +809,7 @@ func BenchmarkMVCCCheckForAcquireLock_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCAcquireLock_Pebble(b *testing.B) {
+func BenchmarkMVCCAcquireLock(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	for _, tc := range acquireLockTestCases() {
