@@ -122,7 +122,6 @@ go_test(
         "batch_test.go",
         "bench_cloud_io_test.go",
         "bench_data_test.go",
-        "bench_pebble_test.go",
         "bench_test.go",
         "disk_map_test.go",
         "engine_key_test.go",
