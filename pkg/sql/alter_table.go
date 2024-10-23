@@ -2330,8 +2330,17 @@ func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) 
 	if desc.IsSchemaLocked() && !tree.IsSetOrResetSchemaLocked(n) {
 		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
 	}
-	if len(desc.TableDesc().LDRJobIDs) > 0 && !tree.IsAllowedLDRSchemaChange(n) {
-		return sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(desc.GetName(), desc.TableDesc().LDRJobIDs)
+	if len(desc.TableDesc().LDRJobIDs) > 0 {
+		var virtualColNames []string
+		for _, col := range desc.NonDropColumns() {
+			if col.IsVirtual() {
+				virtualColNames = append(virtualColNames, col.GetName())
+			}
+		}
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+			return sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(desc.GetName(), desc.TableDesc().LDRJobIDs)
+
+		}
 	}
 	return nil
 }
