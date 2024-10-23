@@ -35,7 +35,9 @@ import (
 // buildRowLevelBeforeTriggers builds any applicable row-level BEFORE triggers
 // based on the event type. It returns true if triggers were built, and false
 // otherwise.
-func (mb *mutationBuilder) buildRowLevelBeforeTriggers(eventType tree.TriggerEventType) bool {
+func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
+	eventType tree.TriggerEventType, cascade bool,
+) bool {
 	var eventsToMatch tree.TriggerEventTypeSet
 	eventsToMatch.Add(eventType)
 	triggers := mb.getRowLevelTriggers(tree.TriggerActionTimeBefore, eventsToMatch)
