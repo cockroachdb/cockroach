@@ -918,7 +918,11 @@ func (rot *rcOpTicker) tick(ctx context.Context, t time.Time) {
 	}
 	switch rot.op {
 	case "close":
-		rot.handle.rc.CloseRaftMuLocked(ctx)
+		func() {
+			rot.handle.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+			defer rot.handle.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+			rot.handle.rc.CloseRaftMuLocked(ctx)
+		}()
 		rot.handle.rc = nil
 	case "disconnect":
 		rot.handle.testingDisconnectStream(rot.t, ctx, rot.stream)
@@ -1102,13 +1106,17 @@ func (r *testingRCRange) testingDeductTokens(
 		testR.info.Next = r.mu.quorumPosition.Index + 1
 		r.mu.r.replicaSet[k] = testR
 	}
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{
-		MsgAppMode:        MsgAppPush,
-		ReplicasStateInfo: r.replicasStateInfo(),
-		Term:              r.mu.quorumPosition.Term,
-		Entries:           []raftpb.Entry{entry},
-		MsgApps:           msgApps,
-	}))
+	func() {
+		r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+		defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{
+			MsgAppMode:        MsgAppPush,
+			ReplicasStateInfo: r.replicasStateInfo(),
+			Term:              r.mu.quorumPosition.Term,
+			Entries:           []raftpb.Entry{entry},
+			MsgApps:           msgApps,
+		}))
+	}()
 }
 
 // testingReturnTokens returns tokens via the RangeController for a given work
@@ -1152,8 +1160,12 @@ func (r *testingRCRange) testingReturnTokens(
 		repl.info.Match = r.mu.quorumPosition.Index
 		repl.info.Next = r.mu.quorumPosition.Index + 1
 		r.mu.r.replicaSet[rid] = repl
-		r.rc.AdmitRaftMuLocked(ctx, rs.desc.ReplicaID, av)
-		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+		func() {
+			r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+			defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+			r.rc.AdmitRaftMuLocked(ctx, rs.desc.ReplicaID, av)
+			require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+		}()
 	}
 }
 
@@ -1192,9 +1204,13 @@ func (r *testingRCRange) testingConnectStream(
 			Next:  r.mu.quorumPosition.Index + 1,
 		},
 	}
-	// Send an empty raft event in order to trigger any state changes.
-	require.NoError(t, r.rc.SetReplicasRaftMuLocked(ctx, r.mu.r.replicas()))
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+	func() {
+		r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+		defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+		// Send an empty raft event in order to trigger any state changes.
+		require.NoError(t, r.rc.SetReplicasRaftMuLocked(ctx, r.mu.r.replicas()))
+		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+	}()
 }
 
 // testingDisconnectStream changes the tracker state of a given stream's
@@ -1210,8 +1226,12 @@ func (r *testingRCRange) testingDisconnectStream(
 	rs := r.mu.r.replicaSet[rid]
 	rs.info.State = tracker.StateSnapshot
 	r.mu.r.replicaSet[rid] = rs
-	// Send an empty raft event in order to trigger any state changes.
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+	func() {
+		r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+		defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+		// Send an empty raft event in order to trigger any state changes.
+		require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, r.makeRaftEventWithReplicasState()))
+	}()
 }
 
 // testingString returns a string representation of the tracker state for use

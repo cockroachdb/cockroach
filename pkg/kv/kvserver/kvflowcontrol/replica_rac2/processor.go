@@ -125,43 +125,13 @@ type rangeControllerInitState struct {
 	localReplicaID roachpb.ReplicaID
 	raftInterface  rac2.RaftInterface
 	msgAppSender   rac2.MsgAppSender
+	muAsserter     rac2.ReplicaMutexAsserter
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
 type RangeControllerFactory interface {
 	// New creates a new RangeController.
 	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
-}
-
-// ReplicaMutexAsserter must only be used to assert that mutexes are held.
-// This is a concrete struct so that the assertions can be compiled away in
-// production code.
-type ReplicaMutexAsserter struct {
-	raftMu    *syncutil.Mutex
-	replicaMu *syncutil.RWMutex
-}
-
-func MakeReplicaMutexAsserter(
-	raftMu *syncutil.Mutex, replicaMu *syncutil.RWMutex,
-) ReplicaMutexAsserter {
-	return ReplicaMutexAsserter{
-		raftMu:    raftMu,
-		replicaMu: replicaMu,
-	}
-}
-
-// RaftMuAssertHeld asserts that Replica.raftMu is held.
-//
-// gcassert:inline
-func (rmu ReplicaMutexAsserter) RaftMuAssertHeld() {
-	rmu.raftMu.AssertHeld()
-}
-
-// ReplicaMuAssertHeld asserts that Replica.mu is held for writing.
-//
-// gcassert:inline
-func (rmu ReplicaMutexAsserter) ReplicaMuAssertHeld() {
-	rmu.replicaMu.AssertHeld()
 }
 
 // ProcessorOptions are specified when creating a new Processor.
@@ -177,7 +147,7 @@ type ProcessorOptions struct {
 	ReplicaID roachpb.ReplicaID
 
 	ReplicaForTesting      ReplicaForTesting
-	ReplicaMutexAsserter   ReplicaMutexAsserter
+	ReplicaMutexAsserter   rac2.ReplicaMutexAsserter
 	RaftScheduler          RaftScheduler
 	AdmittedPiggybacker    AdmittedPiggybacker
 	ACWorkQueue            ACWorkQueue
@@ -759,6 +729,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 		localReplicaID: p.opts.ReplicaID,
 		raftInterface:  p.raftInterface,
 		msgAppSender:   p.opts.MsgAppSender,
+		muAsserter:     p.opts.ReplicaMutexAsserter,
 	})
 
 	func() {
@@ -1257,6 +1228,7 @@ func (f RangeControllerFactoryImpl) New(
 			EvalWaitMetrics:        f.evalWaitMetrics,
 			RangeControllerMetrics: f.rangeControllerMetrics,
 			WaitForEvalConfig:      f.waitForEvalConfig,
+			ReplicaMutexAsserter:   state.muAsserter,
 			Knobs:                  f.knobs,
 		},
 		rac2.RangeControllerInitState{
