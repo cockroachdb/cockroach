@@ -160,16 +160,15 @@ func (ubr *unbufferedRegistration) publish(
 	// is nil. Safe to send to underlying stream.
 	if ubr.mu.catchUpBuf == nil {
 		if err := ubr.stream.SendBuffered(strippedEvent, alloc); err != nil {
-			// BufferedSender is full or has been stopped. A node level shutdown is
-			// happening, so BufferedSender should disconnect all streams soon. There
-			// is not anything else we can do here. Disconnect again just in case.
-			// TODO(ssd) 2024-10-23: maybe we have a disconnectLocked() or we just log?
-			// ubr.Disconnect(kvpb.NewError(err))
+			// For production code, we expect buffered sender to shut down all
+			// registrations. But there are many test stream implementations that
+			// inject errors without calling disconnect.
+			ubr.disconnectLocked(kvpb.NewError(err))
 		}
 	} else {
 		// catchUpBuf is set, put event into the catchUpBuf if
 		// there is room.
-		e := getPooledSharedEvent(sharedEvent{event: event, alloc: alloc})
+		e := getPooledSharedEvent(sharedEvent{event: strippedEvent, alloc: alloc})
 		alloc.Use(ctx)
 		select {
 		case ubr.mu.catchUpBuf <- e:
@@ -206,6 +205,10 @@ func (ubr *unbufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	// on a hot path.ubr.mu.Lock()
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
+	ubr.disconnectLocked(pErr)
+}
+
+func (ubr *unbufferedRegistration) disconnectLocked(pErr *kvpb.Error) {
 	if ubr.mu.disconnected {
 		return
 	}

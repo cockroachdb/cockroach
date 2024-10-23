@@ -67,7 +67,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		sm.AddStream(streamID, &cancelCtxDisconnector{
 			cancel: func() {
 				streamCtxCancel()
-				require.NoError(t, ubs.send(makeMuxRangefeedErrorEvent(streamID, rangeID, nil), nil))
+				require.NoError(t, ubs.sendBuffered(makeMuxRangefeedErrorEvent(streamID, rangeID, nil), nil))
 			},
 		})
 		// Note that kvpb.NewError(nil) == nil.
@@ -105,7 +105,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			err := muxError.Error
 			sm.AddStream(muxError.streamID, &cancelCtxDisconnector{
 				cancel: func() {
-					require.NoError(t, ubs.send(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)), nil))
+					require.NoError(t, ubs.sendBuffered(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)), nil))
 				},
 			})
 		}
@@ -170,7 +170,7 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 	sm.AddStream(0, &cancelCtxDisconnector{
 		cancel: func() {
 			streamCancel()
-			require.NoError(t, ubs.send(disconnectErr, nil))
+			require.NoError(t, ubs.sendBuffered(disconnectErr, nil))
 		},
 	})
 
@@ -182,7 +182,7 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 		Span:       sp,
 		ResolvedTS: hlc.Timestamp{WallTime: 1},
 	})
-	require.NoError(t, sm.sender.send(ev, nil))
+	require.NoError(t, sm.sender.sendUnbuffered(ev))
 	require.Truef(t, testServerStream.hasEvent(ev),
 		"expected event %v not found in %v", ev, testServerStream)
 
@@ -232,11 +232,11 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 			val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 			ev1 := new(kvpb.RangeFeedEvent)
 			ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
-			require.NoError(t, sm.sender.send(&kvpb.MuxRangeFeedEvent{
+			require.NoError(t, sm.sender.sendUnbuffered(&kvpb.MuxRangeFeedEvent{
 				StreamID:       1,
 				RangeID:        1,
 				RangeFeedEvent: *ev1,
-			}, nil))
+			}))
 		}()
 	}
 	wg.Wait()

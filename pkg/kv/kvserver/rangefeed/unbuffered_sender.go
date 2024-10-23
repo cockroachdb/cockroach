@@ -135,11 +135,14 @@ func NewUnbufferedSender(sender ServerStreamSender) *UnbufferedSender {
 // raftMu, so it is important that this function doesn't block on IO. Caller
 // needs to make sure this is called only with non-nil error events. Important
 // to be thread-safe.
-func (ubs *UnbufferedSender) sendBuffered(ev *kvpb.MuxRangeFeedEvent) {
-	if ev.Error == nil {
+func (ubs *UnbufferedSender) sendBuffered(
+	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	if ev.Error == nil || alloc != nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
 	ubs.appendMuxError(ev)
+	return nil
 }
 
 // sendUnbuffered blocks until the event is sent to the underlying grpc stream.

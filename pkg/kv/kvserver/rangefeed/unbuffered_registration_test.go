@@ -58,7 +58,7 @@ func TestUnbufferedRegOnConcurrentDisconnect(t *testing.T) {
 		wg.Add(1)
 		go func(id int64) {
 			defer wg.Done()
-			_, d, _ := p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			_, d, _ := p.Register(context.Background(), h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
 				sm.NewStream(id, r1), func() {})
 			sm.AddStream(id, d)
@@ -150,7 +150,7 @@ func TestUnbufferedRegOnDisconnect(t *testing.T) {
 	const r1 = 1
 	const s1 = 1
 
-	_, d, _ := p.Register(h.span, startTs, makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
+	_, d, _ := p.Register(context.Background(), h.span, startTs, makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
 		true /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
 		sm.NewStream(s1, r1), func() {})
 	sm.AddStream(s1, d)

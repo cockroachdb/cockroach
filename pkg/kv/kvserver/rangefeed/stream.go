@@ -21,7 +21,19 @@ type Stream interface {
 	// the processor worker while holding raftMu as part of
 	// registration.Disconnect(), it is important that this function doesn't block
 	// IO or try acquiring locks that could lead to deadlocks.
-	SendError(err *kvpb.Error)
+	SendError(*kvpb.Error)
+}
+
+// BufferedStream is a Stream that can buffer events before sending them to the
+// underlying Stream. Note that the caller may still choose to bypass the buffer
+// and send to the underlying Stream directly by calling Send directly. Doing so
+// can cause event re-ordering. Caller is responsible for ensuring that events
+// are sent in order.
+type BufferedStream interface {
+	Stream
+	// SendBuffered buffers the event before sending it to the underlying Stream.
+	// It should not block if ev.Error != nil.
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -44,6 +56,7 @@ func NewPerRangeEventSink(
 
 var _ kvpb.RangeFeedEventSink = (*PerRangeEventSink)(nil)
 var _ Stream = (*PerRangeEventSink)(nil)
+var _ BufferedStream = (*PerRangeEventSink)(nil)
 
 // SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
 // that the SendUnbuffered method is thread-safe. Note that
@@ -59,6 +72,17 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		StreamID:       s.streamID,
 	}
 	return s.sender.sendUnbuffered(response)
+}
+
+func (s *PerRangeEventSink) SendBuffered(
+	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.sender.sendBuffered(response, alloc)
 }
 
 // SendError implements the Stream interface. It sends an error to the stream.
