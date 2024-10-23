@@ -240,25 +240,25 @@ func (c *testRangeController) SendStreamStats(stats *rac2.RangeSendStreamStats) 
 	fmt.Fprintf(c.b, " RangeController.SendStreamStats\n")
 }
 
-func makeTestMutexAsserter() ReplicaMutexAsserter {
+func makeTestMutexAsserter() rac2.ReplicaMutexAsserter {
 	var raftMu syncutil.Mutex
 	var replicaMu syncutil.RWMutex
-	return MakeReplicaMutexAsserter(&raftMu, &replicaMu)
+	return rac2.MakeReplicaMutexAsserter(&raftMu, &replicaMu)
 }
 
-func LockRaftMuAndReplicaMu(mu *ReplicaMutexAsserter) (unlockFunc func()) {
-	mu.raftMu.Lock()
-	mu.replicaMu.Lock()
+func LockRaftMuAndReplicaMu(mu *rac2.ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.RaftMu.Lock()
+	mu.ReplicaMu.Lock()
 	return func() {
-		mu.replicaMu.Unlock()
-		mu.raftMu.Unlock()
+		mu.ReplicaMu.Unlock()
+		mu.RaftMu.Unlock()
 	}
 }
 
-func LockRaftMu(mu *ReplicaMutexAsserter) (unlockFunc func()) {
-	mu.raftMu.Lock()
+func LockRaftMu(mu *rac2.ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.RaftMu.Lock()
 	return func() {
-		mu.raftMu.Unlock()
+		mu.RaftMu.Unlock()
 	}
 }
 
