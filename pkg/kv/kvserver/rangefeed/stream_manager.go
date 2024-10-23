@@ -54,12 +54,13 @@ type StreamManager struct {
 // UnbufferedSender. It is wrapped under StreamManager, Stream, and
 // BufferedStream.
 type sender interface {
+	sendUnbuffered(ev *kvpb.MuxRangeFeedEvent) error
 	// send sends a RangeFeedEvent to the underlying sender. BufferedStream,
 	// Stream share this method. The contract is: send should not block if
 	// ev.Error != nil. If alloc is not nil, BufferedSender should buffer events
 	// in the queue. Otherwise, BufferedSender/UnbufferedSender should send the
 	// event to the underlying gRPC stream directly.
-	send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error
+	sendBuffered(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error
 	// run is the main loop for the sender. It is expected to run in the
 	// background until a node level error is encountered which would shut down
 	// all streams in StreamManager.

@@ -24,6 +24,7 @@ type BufferedStream interface {
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
 	*PerRangeEventSink
+	sendBuf func(*kvpb.MuxRangeFeedEvent, *SharedBudgetAllocation) error
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
@@ -41,10 +42,10 @@ var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
 func (s *BufferedPerRangeEventSink) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	response := &kvpb.MuxRangeFeedEvent{
+	rfe := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.send(response, alloc)
+	return s.sendBuf(rfe, alloc)
 }

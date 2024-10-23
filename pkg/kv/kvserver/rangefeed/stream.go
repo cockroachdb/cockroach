@@ -29,16 +29,16 @@ type Stream interface {
 type PerRangeEventSink struct {
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  sender
+	sender   sender
 }
 
 func NewPerRangeEventSink(
-	rangeID roachpb.RangeID, streamID int64, wrapped sender,
+	rangeID roachpb.RangeID, streamID int64, sender sender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		rangeID:  rangeID,
 		streamID: streamID,
-		wrapped:  wrapped,
+		sender:   sender,
 	}
 }
 
@@ -58,7 +58,7 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.send(response, nil)
+	return s.sender.sendUnbuffered(response)
 }
 
 // SendError implements the Stream interface. It sends an error to the stream.
@@ -71,7 +71,7 @@ func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	if err := s.wrapped.send(ev, nil); err != nil {
+	if err := s.sender.sendBuffered(ev, nil); err != nil {
 		log.Errorf(context.Background(),
 			"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 	}

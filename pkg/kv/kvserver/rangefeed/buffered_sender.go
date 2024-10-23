@@ -75,22 +75,12 @@ func NewBufferedSender(sender ServerStreamSender) *BufferedSender {
 	return bs
 }
 
-// SendBuffered buffers the event before sending them to the underlying
-// ServerStreamSender.
-//
-// alloc.Release is nil-safe. SendBuffered will take the ownership of the alloc
-// and release it if the return error is non-nil. Note that it is safe to send
-// error events without being blocked for too long.
-func (bs *BufferedSender) send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error {
-	// Make sure this is from catch up scan.
-	if ev.Error != nil && alloc != nil {
-		return bs.sendUnbuffered(ev)
-	}
-	return bs.sendBuffered(ev, alloc)
-}
-
 // sendBuffered buffers the event before sending it to the underlying grpc
 // stream. It should not block since errors are sent directly here.
+//
+// sendBuffered will take the ownership of the alloc and release it if the
+// return error is non-nil. Note that it is safe to send error events without
+// being blocked for too long.
 func (bs *BufferedSender) sendBuffered(
 	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {

@@ -135,14 +135,14 @@ func NewUnbufferedSender(sender ServerStreamSender) *UnbufferedSender {
 // raftMu, so it is important that this function doesn't block on IO. Caller
 // needs to make sure this is called only with non-nil error events. Important
 // to be thread-safe.
-func (ubs *UnbufferedSender) sendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
+func (ubs *UnbufferedSender) sendBuffered(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
 	ubs.appendMuxError(ev)
 }
 
-// SendUnbuffered blocks until the event is sent to the underlying grpc stream.
+// sendUnbuffered blocks until the event is sent to the underlying grpc stream.
 // It should be only called for non-error events. If this function returns an
 // error, caller must ensure that no further events are sent from
 // rangefeed.Stream to avoid potential event loss. (NB: While subsequent Send
@@ -153,19 +153,6 @@ func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
 	return ubs.sender.Send(event)
-}
-
-func (ubs *UnbufferedSender) send(ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation) error {
-	if alloc != nil {
-		log.Fatalf(context.Background(),
-			"unexpected: Send called with non-nil SharedBudgetAllocation")
-		return nil
-	}
-	if ev.Error != nil {
-		ubs.sendBufferedError(ev)
-		return nil
-	}
-	return ubs.sendUnbuffered(ev)
 }
 
 // run forwards rangefeed completion errors back to the client. run is expected
