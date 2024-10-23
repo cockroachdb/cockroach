@@ -995,6 +995,13 @@ type AddDatabaseZoneConfig struct {
 	ZoneConfig *zonepb.ZoneConfig
 }
 
+// DiscardZoneConfig discards the zone config for the given descriptor ID.
+type DiscardZoneConfig struct {
+	immediateMutationOp
+	DescID     descpb.ID
+	ZoneConfig *zonepb.ZoneConfig
+}
+
 // AddTableZoneConfig adds a zone config to a table.
 type AddTableZoneConfig struct {
 	immediateMutationOp
