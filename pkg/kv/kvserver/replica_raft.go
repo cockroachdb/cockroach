@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1310,20 +1309,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
-
-		if stats.apply.numConfChangeEntries > 0 {
-			// If the raft leader got removed, campaign on the leaseholder. Uses
-			// forceCampaignLocked() to bypass PreVote+CheckQuorum, since we otherwise
-			// wouldn't get prevotes from other followers who recently heard from the
-			// old leader and haven't applied the conf change. We know the leader
-			// isn't around anymore anyway.
-			leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
-			raftStatus := raftGroup.BasicStatus()
-			if shouldCampaignAfterConfChange(ctx, r.store.ClusterSettings(), r.store.StoreID(),
-				r.descRLocked(), raftStatus, leaseStatus) {
-				r.forceCampaignLocked(ctx)
-			}
-		}
 
 		// If the Raft group still has more to process then we immediately
 		// re-enqueue it for another round of processing. This is possible if
@@ -2603,27 +2588,6 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
 }
 
-// forceCampaignLocked campaigns for raft leadership, but skips the
-// pre-candidate/pre-vote stage, calling an immediate election as candidate, and
-// bypasses the CheckQuorum recent leader condition for votes.
-//
-// This will disrupt an existing leader, and can cause prolonged unavailability
-// under partial/asymmetric network partitions. It should only be used when the
-// caller is certain that the current leader is actually dead, and we're not
-// simply partitioned away from it and/or liveness.
-//
-// TODO(nvanbenschoten): this is the remaining logic which needs work in order
-// to complete #125254. See the comment in raft.go about how even a local
-// fortification check is not enough to make MsgTimeoutNow safe.
-func (r *Replica) forceCampaignLocked(ctx context.Context) {
-	log.VEventf(ctx, 3, "force campaigning")
-	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
-	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
-		log.VEventf(ctx, 1, "failed to campaign: %s", err)
-	}
-	r.store.enqueueRaftUpdateCheck(r.RangeID)
-}
-
 // forgetLeaderLocked forgets a follower's current raft leader, remaining a
 // leaderless follower in the current term. The replica will not campaign unless
 // the election timeout elapses. However, this allows it to grant (pre)votes if
@@ -3026,55 +2990,6 @@ func ComputeRaftLogSize(
 		return 0, err
 	}
 	return ms.SysBytes + totalSideloaded, nil
-}
-
-// shouldCampaignAfterConfChange returns true if the current replica should
-// campaign after a conf change. If the leader replica is demoted or removed,
-// the leaseholder should campaign. We don't want to campaign on multiple
-// replicas, since that would cause ties.
-//
-// If there is no current leaseholder we'll have to wait out the election
-// timeout before someone campaigns, but that's ok -- either we'll have to wait
-// for the lease to expire anyway, or the range is presumably idle.
-//
-// The caller should campaign using forceCampaignLocked(), transitioning
-// directly to candidate and bypassing PreVote+CheckQuorum. Otherwise it won't
-// receive prevotes since other replicas have heard from the leader recently.
-func shouldCampaignAfterConfChange(
-	ctx context.Context,
-	st *cluster.Settings,
-	storeID roachpb.StoreID,
-	desc *roachpb.RangeDescriptor,
-	raftStatus raft.BasicStatus,
-	leaseStatus kvserverpb.LeaseStatus,
-) bool {
-	if raftStatus.Lead == raft.None {
-		// Leader unknown. We can't know if it was removed by the conf change, and
-		// because we force an election without prevote we don't want to risk
-		// throwing spurious elections.
-		return false
-	}
-	if raftStatus.RaftState == raftpb.StateLeader {
-		// We're already the leader, no point in campaigning.
-		return false
-	}
-	if !desc.IsInitialized() {
-		// No descriptor, so we don't know if the leader has been removed. We
-		// don't expect to hit this, but let's be defensive.
-		return false
-	}
-	if replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead)); ok {
-		if replDesc.IsAnyVoter() {
-			// The leader is still a voter in the descriptor.
-			return false
-		}
-	}
-	if !leaseStatus.OwnedBy(storeID) || !leaseStatus.IsValid() {
-		// We're not the leaseholder.
-		return false
-	}
-	log.VEventf(ctx, 3, "leader got removed by conf change, campaigning")
-	return true
 }
 
 // printRaftTail pretty-prints the tail of the log and returns it as a string,
