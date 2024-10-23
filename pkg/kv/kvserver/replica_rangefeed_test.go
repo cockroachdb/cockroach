@@ -65,10 +65,6 @@ func (s *testStream) SetHeader(metadata.MD) error  { panic("unimplemented") }
 func (s *testStream) SendHeader(metadata.MD) error { panic("unimplemented") }
 func (s *testStream) SetTrailer(metadata.MD)       { panic("unimplemented") }
 
-func (s *testStream) Context() context.Context {
-	return s.ctx
-}
-
 func (s *testStream) Cancel() {
 	s.cancel()
 }
@@ -88,11 +84,12 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	return s.mu.events
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *testStream) Disconnect(error *kvpb.Error) {
+// SendError implements the Stream interface.
+func (s *testStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
+
+func (s *testStream) AddRegistration(rangefeed.Disconnector) {}
 
 // WaitForError waits for the rangefeed to complete and returns the error sent
 // to the done channel. It fails the test if rangefeed cannot complete within 30
@@ -110,7 +107,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 func waitRangeFeed(
 	t *testing.T, store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
 ) error {
-	if err := store.RangeFeed(req, stream); err != nil {
+	if _, err := store.RangeFeed(stream.ctx, req, stream); err != nil {
 		return err
 	}
 	return stream.WaitForError(t)

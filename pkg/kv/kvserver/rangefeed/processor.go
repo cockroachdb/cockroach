@@ -113,6 +113,11 @@ type Config struct {
 	// for low-volume system ranges, since the worker pool is small (default 2).
 	// Only has an effect when Scheduler is used.
 	Priority bool
+
+	// UnregisterFromReplica is a callback provided from the
+	// replica that this processor can call when shutting down to
+	// remove itself from the replica.
+	UnregisterFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -198,6 +203,7 @@ type Processor interface {
 	//
 	// NB: startTS is exclusive; the first possible event will be at startTS.Next().
 	Register(
+		streamCtx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
 		catchUpIter *CatchUpIterator,
@@ -206,7 +212,7 @@ type Processor interface {
 		withOmitRemote bool,
 		stream Stream,
 		disconnectFn func(),
-	) (bool, *Filter)
+	) (bool, Disconnector, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
 	DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error)
@@ -462,7 +468,7 @@ func (p *LegacyProcessor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
+				r.Disconnect(kvpb.NewError(err))
 				p.reg.Unregister(ctx, r)
 			}
 
@@ -580,8 +586,9 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	}
 }
 
-// Register  implements Processor interface.
+// Register implements Processor interface.
 func (p *LegacyProcessor) Register(
+	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -590,7 +597,7 @@ func (p *LegacyProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-) (bool, *Filter) {
+) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -598,15 +605,17 @@ func (p *LegacyProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, func(ctx context.Context, r registration) {
+		},
 	)
 	select {
 	case p.regC <- r:
 		// Wait for response.
-		return true, <-p.filterResC
+		f := <-p.filterResC
+		return true, r, f
 	case <-p.stoppedC:
-		return false, nil
+		return false, nil, nil
 	}
 }
 

@@ -194,14 +194,16 @@ func (s *testStream) BlockSend() func() {
 	s.mu.Lock()
 	var once sync.Once
 	return func() {
+		// nolint:deferunlockcheck
 		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
 	}
 }
 
 // Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *testStream) Disconnect(err *kvpb.Error) {
+func (s *testStream) SendError(err *kvpb.Error) {
 	s.done <- err
+	s.ctxDone()
 }
 
 // Error returns the error that was sent to the done channel. It returns nil if
@@ -228,11 +230,6 @@ func (s *testStream) WaitForError(t *testing.T) error {
 	}
 }
 
-type testRegistration struct {
-	*bufferedRegistration
-	*testStream
-}
-
 func makeCatchUpIterator(
 	iter storage.SimpleMVCCIterator, span roachpb.Span, startTime hlc.Timestamp,
 ) *CatchUpIterator {
@@ -246,30 +243,128 @@ func makeCatchUpIterator(
 	}
 }
 
-func newTestRegistration(
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	catchup storage.SimpleMVCCIterator,
-	withDiff bool,
-	withFiltering bool,
-	withOmitRemote bool,
-) *testRegistration {
-	s := newTestStream()
-	r := newBufferedRegistration(
-		span,
-		ts,
-		makeCatchUpIterator(catchup, span, ts),
-		withDiff,
-		withFiltering,
-		withOmitRemote,
-		5,
-		false, /* blockWhenFull */
-		NewMetrics(),
-		s,
-		func() {},
-	)
-	return &testRegistration{
-		bufferedRegistration: r,
-		testStream:           s,
+type registrationOption func(*testRegistrationConfig)
+
+func withCatchUpIter(iter storage.SimpleMVCCIterator) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.catchup = iter
+	}
+}
+
+func withDiff(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withDiff = opt
+	}
+}
+
+func withFiltering(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withFiltering = opt
+	}
+}
+
+func withRMetrics(metrics *Metrics) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.metrics = metrics
+	}
+}
+
+func withOmitRemote(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withOmitRemote = opt
+	}
+}
+
+func withRegistrationType(regType registrationType) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withRegistrationTestTypes = regType
+	}
+}
+
+func withRSpan(span roachpb.Span) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.span = span
+	}
+}
+
+func withStartTs(ts hlc.Timestamp) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.ts = ts
+	}
+}
+
+type registrationType bool
+
+const (
+	buffered   registrationType = false
+	unbuffered                  = true
+)
+
+func (t registrationType) String() string {
+	switch t {
+	case buffered:
+		return "buffered registration"
+	case unbuffered:
+		return "unbuffered registration"
+	}
+	panic("unknown processor type")
+}
+
+var registrationTestTypes = []registrationType{buffered, unbuffered}
+
+type testRegistrationConfig struct {
+	span                      roachpb.Span
+	ts                        hlc.Timestamp
+	catchup                   storage.SimpleMVCCIterator
+	withDiff                  bool
+	withFiltering             bool
+	withOmitRemote            bool
+	withRegistrationTestTypes registrationType
+	metrics                   *Metrics
+}
+
+func newTestRegistration(s *testStream, opts ...registrationOption) registration {
+	cfg := testRegistrationConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.metrics == nil {
+		cfg.metrics = NewMetrics()
+	}
+
+	switch cfg.withRegistrationTestTypes {
+	case buffered:
+		return newBufferedRegistration(
+			s.ctx,
+			cfg.span,
+			cfg.ts,
+			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			5,
+			false, /* blockWhenFull */
+			cfg.metrics,
+			s,
+			func() {},
+			func(context.Context, registration) {},
+		)
+	case unbuffered:
+		return newUnbufferedRegistration(
+			s.ctx,
+			cfg.span,
+			cfg.ts,
+			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			5,
+			cfg.metrics,
+			&testBufferedStream{Stream: s},
+			func() {},
+			func(context.Context, registration) {},
+		)
+	default:
+		panic("unknown registration type")
 	}
 }

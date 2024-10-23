@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	kvrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1456,7 +1457,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	require.NoError(t, s3.RangeFeed(&req, sink)) // check if we've errored yet
+	_, rErr := s3.RangeFeed(sink.ctx, &req, sink)
+	require.NoError(t, rErr) // check if we've errored yet
 	require.NoError(t, sink.Error())
 	t.Logf("started rangefeed on %s", repl3)
 
@@ -1628,10 +1630,6 @@ func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channe
 	return &channelSink{ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1)}
 }
 
-func (c *channelSink) Context() context.Context {
-	return c.ctx
-}
-
 func (c *channelSink) SendUnbufferedIsThreadSafe() {}
 
 func (c *channelSink) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
@@ -1654,11 +1652,12 @@ func (c *channelSink) Error() error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (c *channelSink) Disconnect(err *kvpb.Error) {
+// SendError implements the Stream interface.
+func (c *channelSink) SendError(err *kvpb.Error) {
 	c.done <- err
 }
+
+func (c *channelSink) AddRegistration(r kvrangefeed.Disconnector) {}
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a
 // metadata event which indicates if it spawned to due a manual split. The
