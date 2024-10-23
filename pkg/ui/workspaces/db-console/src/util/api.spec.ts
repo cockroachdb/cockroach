@@ -117,7 +117,6 @@ describe("rest api", function () {
                 approximate_disk_bytes: 100,
                 live_bytes: 200,
                 total_bytes: 300,
-                range_count: 400,
               },
             ],
           },
@@ -128,7 +127,6 @@ describe("rest api", function () {
         expect(res.results.spanStats.approximate_disk_bytes).toEqual(100);
         expect(res.results.spanStats.live_bytes).toEqual(200);
         expect(res.results.spanStats.total_bytes).toEqual(300);
-        expect(res.results.spanStats.range_count).toEqual(400);
       });
     });
   });
