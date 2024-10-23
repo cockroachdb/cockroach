@@ -41,7 +41,6 @@ describe("DatabaseDetails sagas", () => {
       spanStats: {
         approximate_disk_bytes: 100,
         live_bytes: 200,
-        range_count: 300,
         total_bytes: 400,
         error: undefined,
       },
