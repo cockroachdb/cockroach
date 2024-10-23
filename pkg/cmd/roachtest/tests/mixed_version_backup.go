@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1825,6 +1826,7 @@ func (d *BackupRestoreTestDriver) saveContents(
 func (d *BackupRestoreTestDriver) runBackup(
 	ctx context.Context,
 	l *logger.Logger,
+	tasker task.Tasker,
 	rng *rand.Rand,
 	nodes option.NodeListOption,
 	pauseProbability float64,
@@ -1889,13 +1891,14 @@ func (d *BackupRestoreTestDriver) runBackup(
 	}
 
 	backupErr := make(chan error)
-	go func() {
+	tasker.Go(func(ctx context.Context, l *logger.Logger) error {
 		defer close(backupErr)
 		l.Printf("waiting for job %d (%s)", jobID, collection.name)
 		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 			backupErr <- err
 		}
-	}()
+		return nil
+	}, task.Name(fmt.Sprintf("backup %s", collection.name)))
 
 	var numPauses int
 	for {
@@ -1994,7 +1997,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	}
 
 	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(
-		ctx, l, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
+		ctx, l, h, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
 		internalSystemJobs, h.IsMultitenant(),
 	)
 	if err != nil {
@@ -2013,6 +2016,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 func (d *BackupRestoreTestDriver) createBackupCollection(
 	ctx context.Context,
 	l *logger.Logger,
+	tasker task.Tasker,
 	rng *rand.Rand,
 	fullBackupSpec backupSpec,
 	incBackupSpec backupSpec,
@@ -2028,7 +2032,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
-			ctx, l, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
+			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
 			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
 		)
 		return err
@@ -2050,7 +2054,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
 			collection, latestIncBackupEndTime, err = d.runBackup(
-				ctx, l, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
+				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
 				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
 			)
 			return err
