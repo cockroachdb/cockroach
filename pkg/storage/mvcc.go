@@ -3116,7 +3116,7 @@ func MVCCInitPut(
 // confusing and redundant. See the comment on mvccPutInternal for details.
 func MVCCBlindInitPut(
 	ctx context.Context,
-	rw ReadWriter,
+	w Writer,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
@@ -3124,12 +3124,12 @@ func MVCCBlindInitPut(
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	return mvccInitPutUsingIter(
-		ctx, rw, nil, nil, key, timestamp, value, failOnTombstones, opts)
+		ctx, w, nil, nil, key, timestamp, value, failOnTombstones, opts)
 }
 
 func mvccInitPutUsingIter(
 	ctx context.Context,
-	rw ReadWriter,
+	w Writer,
 	iter MVCCIterator,
 	ltScanner *lockTableKeyScanner,
 	key roachpb.Key,
@@ -3153,7 +3153,7 @@ func mvccInitPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
+	return mvccPutUsingIter(ctx, w, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
