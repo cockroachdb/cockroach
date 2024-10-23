@@ -467,16 +467,30 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			var zcDetails eventpb.CommonZoneConfigDetails
 			var oldConfig string
 			if pb.maybePayload != nil {
-				payload := pb.maybePayload.(*eventpb.SetZoneConfig)
-				zcDetails = eventpb.CommonZoneConfigDetails{
-					Target:  payload.Target,
-					Options: payload.Options,
+				if payload, ok := pb.maybePayload.(*eventpb.SetZoneConfig); ok {
+					zcDetails = eventpb.CommonZoneConfigDetails{
+						Target:  payload.Target,
+						Options: payload.Options,
+					}
+					oldConfig = payload.ResolvedOldConfig
 				}
-				oldConfig = payload.ResolvedOldConfig
 			}
 			return &eventpb.SetZoneConfig{
 				CommonZoneConfigDetails: zcDetails,
 				ResolvedOldConfig:       oldConfig,
+			}
+		} else {
+			var zcDetails eventpb.CommonZoneConfigDetails
+			if pb.maybePayload != nil {
+				if payload, ok := pb.maybePayload.(*eventpb.RemoveZoneConfig); ok {
+					zcDetails = eventpb.CommonZoneConfigDetails{
+						Target:  payload.Target,
+						Options: payload.Options,
+					}
+				}
+			}
+			return &eventpb.RemoveZoneConfig{
+				CommonZoneConfigDetails: zcDetails,
 			}
 		}
 	case *scpb.Trigger:

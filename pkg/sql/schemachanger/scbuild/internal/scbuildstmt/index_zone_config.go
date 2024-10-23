@@ -26,6 +26,10 @@ type indexZoneConfigObj struct {
 
 var _ zoneConfigObject = &indexZoneConfigObj{}
 
+func (izo *indexZoneConfigObj) isNoOp() bool {
+	return izo.indexSubzone == nil
+}
+
 func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
