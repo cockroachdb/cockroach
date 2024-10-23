@@ -1166,7 +1166,7 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	raiseErrArgs := make([]memo.ScalarListExpr, 0, 4)
 	const severity, detail, hint = "ERROR", "", ""
 	addCheck := func(message, code string, checkCond opt.ScalarExpr) {
-		raiseErrArgs = append(raiseErrArgs, b.makeConstRaiseArgs(severity, message, detail, hint, code))
+		raiseErrArgs = append(raiseErrArgs, b.ob.makeConstRaiseArgs(severity, message, detail, hint, code))
 		branches = append(branches, checkCond)
 	}
 	addNullCheck := func(context string, varRef tree.Expr) {
@@ -1488,29 +1488,10 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListExpr) *scope {
 	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
 	raiseScope := inScope.push()
-	fn := b.makePLpgSQLRaiseFn(args)
+	fn := b.ob.makePLpgSQLRaiseFn(args)
 	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, fn)
 	b.ob.constructProjectForScope(inScope, raiseScope)
 	return raiseScope
-}
-
-// makePLpgSQLRaiseFn builds a call to the crdb_internal.plpgsql_raise builtin
-// function, which implements the notice-sending behavior of RAISE statements.
-func (b *plpgsqlBuilder) makePLpgSQLRaiseFn(args memo.ScalarListExpr) opt.ScalarExpr {
-	const raiseFnName = "crdb_internal.plpgsql_raise"
-	fnProps, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
-	if len(overloads) != 1 {
-		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
-	}
-	return b.ob.factory.ConstructFunction(
-		args,
-		&memo.FunctionPrivate{
-			Name:       raiseFnName,
-			Typ:        types.Int,
-			Properties: fnProps,
-			Overload:   &overloads[0],
-		},
-	)
 }
 
 // getRaiseArgs validates the options attached to the given PLpgSQL RAISE
@@ -1599,23 +1580,6 @@ func (b *plpgsqlBuilder) getRaiseArgs(s *scope, raise *ast.Raise) memo.ScalarLis
 		}
 	}
 	return args
-}
-
-// makeConstRaiseArgs builds the arguments for a crdb_internal.plpgsql_raise
-// function call.
-func (b *plpgsqlBuilder) makeConstRaiseArgs(
-	severity, message, detail, hint, code string,
-) memo.ScalarListExpr {
-	makeConstStr := func(str string) opt.ScalarExpr {
-		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
-	}
-	return memo.ScalarListExpr{
-		makeConstStr(severity),
-		makeConstStr(message),
-		makeConstStr(detail),
-		makeConstStr(hint),
-		makeConstStr(code),
-	}
 }
 
 // A PLpgSQL RAISE statement can specify a format string, where supplied
@@ -1818,7 +1782,7 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 // throws an end-of-function error, as well as a typed RETURN NULL to ensure
 // that type-checking works out.
 func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
-	args := b.makeConstRaiseArgs(
+	args := b.ob.makeConstRaiseArgs(
 		"ERROR", /* severity */
 		"control reached end of function without RETURN", /* message */
 		"", /* detail */
@@ -1858,14 +1822,14 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	s.expr = b.ob.factory.ConstructScalarGroupBy(s.expr, aggs, &memo.GroupingPrivate{})
 
 	// Add a runtime check for the row count.
-	tooFewRowsArgs := b.makeConstRaiseArgs(
+	tooFewRowsArgs := b.ob.makeConstRaiseArgs(
 		"ERROR",                     /* severity */
 		"query returned no rows",    /* message */
 		"",                          /* detail */
 		"",                          /* hint */
 		pgcode.NoDataFound.String(), /* code */
 	)
-	tooManyRowsArgs := b.makeConstRaiseArgs(
+	tooManyRowsArgs := b.ob.makeConstRaiseArgs(
 		"ERROR",                            /* severity */
 		"query returned more than one row", /* message */
 		"",                                 /* detail */
@@ -1894,7 +1858,7 @@ func (b *plpgsqlBuilder) addRuntimeCheck(
 	originalCols := s.colSet()
 	caseWhens := make(memo.ScalarListExpr, len(branches))
 	for i := range branches {
-		raiseErrFn := b.makePLpgSQLRaiseFn(raiseErrArgs[i])
+		raiseErrFn := b.ob.makePLpgSQLRaiseFn(raiseErrArgs[i])
 		caseWhens[i] = b.ob.factory.ConstructWhen(branches[i], raiseErrFn)
 	}
 	caseExpr := b.ob.factory.ConstructCase(

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -810,4 +811,40 @@ func (b *Builder) projectColWithMetadataName(
 	proj := memo.ProjectionsExpr{b.factory.ConstructProjectionsItem(scalar, col.id)}
 	s.expr = b.factory.ConstructProject(s.expr, proj, passThroughCols)
 	return col.id
+}
+
+// makeConstRaiseArgs builds the arguments for a crdb_internal.plpgsql_raise
+// function call.
+func (b *Builder) makeConstRaiseArgs(
+	severity, message, detail, hint, code string,
+) memo.ScalarListExpr {
+	makeConstStr := func(str string) opt.ScalarExpr {
+		return b.factory.ConstructConstVal(tree.NewDString(str), types.String)
+	}
+	return memo.ScalarListExpr{
+		makeConstStr(severity),
+		makeConstStr(message),
+		makeConstStr(detail),
+		makeConstStr(hint),
+		makeConstStr(code),
+	}
+}
+
+// makePLpgSQLRaiseFn builds a call to the crdb_internal.plpgsql_raise builtin
+// function, which implements the notice-sending behavior of RAISE statements.
+func (b *Builder) makePLpgSQLRaiseFn(args memo.ScalarListExpr) opt.ScalarExpr {
+	const raiseFnName = "crdb_internal.plpgsql_raise"
+	fnProps, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
+	}
+	return b.factory.ConstructFunction(
+		args,
+		&memo.FunctionPrivate{
+			Name:       raiseFnName,
+			Typ:        types.Int,
+			Properties: fnProps,
+			Overload:   &overloads[0],
+		},
+	)
 }
