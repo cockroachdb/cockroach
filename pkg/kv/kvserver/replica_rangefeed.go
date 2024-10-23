@@ -488,13 +488,12 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		RangeID:               r.RangeID,
 		Span:                  desc.RSpan(),
 		TxnPusher:             &tp,
-		PushTxnsInterval:      r.store.TestingKnobs().RangeFeedPushTxnsInterval,
 		PushTxnsAge:           r.store.TestingKnobs().RangeFeedPushTxnsAge,
 		EventChanCap:          defaultEventChanCap,
 		EventChanTimeout:      defaultEventChanTimeout,
 		Metrics:               r.store.metrics.RangeFeedMetrics,
 		MemBudget:             feedBudget,
-		Scheduler:             sched,
+		Scheduler:             r.store.getRangefeedScheduler(),
 		Priority:              isSystemSpan, // only takes effect when Scheduler != nil
 		UnregisterFromReplica: r.unsetRangefeedProcessor,
 	}

@@ -53,7 +53,7 @@ func BenchmarkRangefeed(b *testing.B) {
 						budget:           math.MaxInt64,
 					})
 				})
-			})
+			}
 		}
 	}
 }

@@ -282,7 +282,6 @@ var (
 	}
 
 	testTypes = []rangefeedTestType{
-		legacyProcessor,
 		scheduledProcessorWithUnbufferedReg,
 		scheduledProcessorWithBufferedReg,
 	}
