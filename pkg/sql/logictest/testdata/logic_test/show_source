@@ -205,6 +205,7 @@ transaction_timeout                                        0
 troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
+unsafe_allow_triggers_modifying_cascades                   off
 use_declarative_schema_changer                             on
 variable_inequality_lookup_join_enabled                    on
 vectorize                                                  on

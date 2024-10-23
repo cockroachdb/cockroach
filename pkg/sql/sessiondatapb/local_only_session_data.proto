@@ -551,6 +551,11 @@ message LocalOnlySessionData {
   // BypassPCRReaderCatalogAOST disables the AOST used by all user queries on
   // the PCR reader catalog.
   bool bypass_pcr_reader_catalog_aost = 141  [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
+  // UnsafeAllowTriggersModifyingCascades, when true, allows row-level BEFORE
+  // triggers to modify or filter rows that are being updated or deleted as
+  // part of a cascading foreign key action. This is unsafe because it can
+  // lead to constraint violations.
+  bool unsafe_allow_triggers_modifying_cascades = 142;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
