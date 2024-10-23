@@ -122,6 +122,18 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaKVUpdateTooOld = metric.Metadata{
+		Name:        "logical_replication.kv.update_too_old",
+		Help:        "Total number of updates that were not applied because they were too old",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaKVValueRefreshes = metric.Metadata{
+		Name:        "logical_replication.kv.value_refreshes",
+		Help:        "Total number of batches that refreshed the previous value",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Labeled metrics.
 	metaLabeledReplicatedTime = metric.Metadata{
@@ -174,6 +186,8 @@ type Metrics struct {
 	// a specific way.
 	CheckpointEvents *metric.Counter
 	ReplanCount      *metric.Counter
+	KVValueRefreshes *metric.Counter
+	KVUpdateTooOld   *metric.Counter
 
 	// Labeled export-only metrics.
 	LabeledReplicatedTime *metric.GaugeVec
@@ -213,8 +227,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
 		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),
 		RetriedApplyFailures:  metric.NewCounter(metaRetriedApplyFailures),
-		CheckpointEvents:      metric.NewCounter(metaCheckpointEvents),
-		ReplanCount:           metric.NewCounter(metaDistSQLReplanCount),
+
+		CheckpointEvents: metric.NewCounter(metaCheckpointEvents),
+		ReplanCount:      metric.NewCounter(metaDistSQLReplanCount),
+		KVUpdateTooOld:   metric.NewCounter(metaKVUpdateTooOld),
+		KVValueRefreshes: metric.NewCounter(metaKVValueRefreshes),
 
 		// Labeled export-only metrics.
 		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
