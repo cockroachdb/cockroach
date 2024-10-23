@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "task",
+    srcs = [
+        "options.go",
+        "tasker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/roachprod/logger"],
+)
