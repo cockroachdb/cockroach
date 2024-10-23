@@ -991,12 +991,24 @@ func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Stat
 	}
 
 	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
-	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 && !tree.IsAllowedLDRSchemaChange(n) {
-		_, _, ns := scpb.FindNamespace(tableElements)
-		if ns == nil {
-			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
+		var virtualColNames []string
+		scpb.ForEachColumnType(tableElements, func(current scpb.Status, target scpb.TargetStatus, colTypeElem *scpb.ColumnType) {
+			if !colTypeElem.IsVirtual {
+				return
+			}
+			col := tableElements.FilterColumnName().Filter(func(current scpb.Status, target scpb.TargetStatus, colNameElem *scpb.ColumnName) bool {
+				return colNameElem.ColumnID == colTypeElem.ColumnID && target == scpb.ToPublic
+			}).MustGetOneElement()
+			virtualColNames = append(virtualColNames, col.Name)
+		})
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+			_, _, ns := scpb.FindNamespace(tableElements)
+			if ns == nil {
+				panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+			}
+			panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
 		}
-		panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
 	}
 }
 

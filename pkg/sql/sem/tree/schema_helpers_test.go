@@ -58,13 +58,31 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			stmt:      "ALTER TABLE t ADD COLUMN a INT, DROP COLUMN b",
 			isAllowed: false,
 		},
+		{
+			stmt:      "ALTER TABLE t ADD COLUMN a INT, SET (ttl = 'on', ttl_expiration_expression = 'expires_at')",
+			isAllowed: false,
+		},
+		{
+			stmt:      "ALTER TABLE t SET (ttl = 'on', ttl_expire_after = '5m')",
+			isAllowed: false,
+		},
+		{
+			stmt:      "ALTER TABLE t SET (ttl = 'on', ttl_expiration_expression = 'expires_at')",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER TABLE t RESET (ttl, ttl_expiration_expression)",
+			isAllowed: false,
+		},
 	} {
 		t.Run(tc.stmt, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.stmt)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := tree.IsAllowedLDRSchemaChange(stmt.AST); got != tc.isAllowed {
+			// Tests for virtual column checks are in
+			// TestLogicalReplicationCreationChecks.
+			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */); got != tc.isAllowed {
 				t.Errorf("expected %v, got %v", tc.isAllowed, got)
 			}
 		})
