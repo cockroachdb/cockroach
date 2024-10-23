@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -112,6 +113,14 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 		// Finally, project a column that invokes the trigger function.
 		triggerFnColID := mb.b.projectColWithMetadataName(triggerScope, def.Name, tableTyp, triggerFn)
 
+		// Don't allow the trigger to modify or filter the row if the mutation is
+		// for a cascade.
+		if cascade {
+			mb.ensureNoRowsModifiedByTrigger(
+				triggerScope, triggers[i].Name(), eventType, triggerFnColID, oldColID, newColID,
+			)
+		}
+
 		// BEFORE triggers can return a NULL value to indicate that the row should
 		// be skipped.
 		mb.applyFilterFromTrigger(triggerScope, triggerFnColID)
@@ -142,33 +151,28 @@ func (mb *mutationBuilder) buildOldAndNewCols(
 	triggerScope *scope, eventType tree.TriggerEventType, tableTyp *types.T, visibleColOrds []int,
 ) (oldColID, newColID opt.ColumnID) {
 	f := mb.b.factory
-	makeTuple := func(colIDs opt.OptionalColList, name string) opt.ColumnID {
+	makeTuple := func(colIDs, backupColIDs opt.OptionalColList, name string) opt.ColumnID {
 		elems := make(memo.ScalarListExpr, 0, len(visibleColOrds))
 		for _, i := range visibleColOrds {
-			if colIDs[i] == 0 {
+			col := colIDs[i]
+			if col == 0 && backupColIDs != nil {
+				col = backupColIDs[i]
+			}
+			if col == 0 {
 				panic(errors.AssertionFailedf("missing column for trigger"))
 			}
-			elems = append(elems, f.ConstructVariable(colIDs[i]))
+			elems = append(elems, f.ConstructVariable(col))
 		}
 		tup := f.ConstructTuple(elems, tableTyp)
 		return mb.b.projectColWithMetadataName(triggerScope, name, tableTyp, tup)
 	}
 	if eventType == tree.TriggerEventUpdate || eventType == tree.TriggerEventDelete {
-		oldColID = makeTuple(mb.fetchColIDs, triggerColOld)
+		oldColID = makeTuple(mb.fetchColIDs, nil /* backupColIDs */, triggerColOld)
 	}
 	if eventType == tree.TriggerEventInsert {
-		newColID = makeTuple(mb.insertColIDs, triggerColNew)
+		newColID = makeTuple(mb.insertColIDs, mb.fetchColIDs, triggerColNew)
 	} else if eventType == tree.TriggerEventUpdate {
-		// Build a colIDs slice using updateColIDs, filling in the missing columns
-		// (which are not being updated) with the old column values.
-		colIDs := make(opt.OptionalColList, len(mb.updateColIDs))
-		copy(colIDs, mb.updateColIDs)
-		for i, colID := range colIDs {
-			if colID == 0 {
-				colIDs[i] = mb.fetchColIDs[i]
-			}
-		}
-		newColID = makeTuple(colIDs, triggerColNew)
+		newColID = makeTuple(mb.updateColIDs, mb.fetchColIDs, triggerColNew)
 	}
 	return oldColID, newColID
 }
@@ -273,6 +277,61 @@ func (mb *mutationBuilder) applyChangesFromTriggers(
 		projections[i] = f.ConstructProjectionsItem(elem, elemCol.id)
 	}
 	triggerScope.expr = f.ConstructProject(triggerScope.expr, projections, passThroughCols)
+}
+
+// ensureNoRowsModifiedByTrigger adds a runtime check to the scope that ensures
+// that the trigger function does not modify or filter any rows. This is
+// necessary for cascading operations, where modifications made by the trigger
+// function could cause constraint violations.
+func (mb *mutationBuilder) ensureNoRowsModifiedByTrigger(
+	triggerScope *scope,
+	triggerName tree.Name,
+	eventType tree.TriggerEventType,
+	triggerFnColID opt.ColumnID,
+	oldColID, newColID opt.ColumnID,
+) {
+	if mb.b.evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades {
+		return
+	}
+	// Construct a call to crdb_internal.plpgsql_raise with the error message.
+	message := fmt.Sprintf(
+		"trigger %s attempted to modify or filter a mutated row in a cascade operation", triggerName,
+	)
+	detail := "changing the rows updated or deleted by a foreign-key cascade can cause\n" +
+		"constraint violations, and therefore is not allowed"
+	hint := "to enable this behavior (with risk of constraint violation), set\n" +
+		"the session variable 'unsafe_allow_triggers_modifying_cascades' to true"
+	args := mb.b.makeConstRaiseArgs(
+		"ERROR", /* severity */
+		message,
+		detail,
+		hint,
+		pgcode.TriggeredDataChangeViolation.String(), /* code */
+	)
+	raiseFn := mb.b.makePLpgSQLRaiseFn(args)
+
+	// Build a CASE statement to raise the error if the trigger function modified
+	// the row. Add a barrier to ensure the check isn't removed or re-ordered with
+	// a filter.
+	//
+	// TODO(#133787): consider relaxing this check, for example, to ignore updates
+	// to non-FK columns.
+	f := mb.b.factory
+	expectedColID := newColID
+	if eventType == tree.TriggerEventDelete {
+		expectedColID = oldColID
+	}
+	check := f.ConstructCase(memo.TrueSingleton,
+		memo.ScalarListExpr{
+			f.ConstructWhen(
+				f.ConstructIsNot(f.ConstructVariable(triggerFnColID), f.ConstructVariable(expectedColID)),
+				raiseFn,
+			),
+		},
+		f.ConstructNull(types.Int),
+	)
+	mb.b.projectColWithMetadataName(triggerScope, "check-rows", types.Int, check)
+	triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
 }
 
 // ============================================================================
