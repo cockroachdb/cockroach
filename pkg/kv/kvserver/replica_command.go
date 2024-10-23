@@ -3256,7 +3256,7 @@ func (r *Replica) followerSendSnapshot(
 		return nil, err
 	}
 
-	snap, err := r.GetSnapshot(ctx, req.SnapId)
+	term, snap, err := r.GetSnapshot(ctx, req.SnapId)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s: failed to generate snapshot", r)
 	}
@@ -3312,10 +3312,18 @@ func (r *Replica) followerSendSnapshot(
 			FromReplica: req.CoordinatorReplica,
 			ToReplica:   req.RecipientReplica,
 			Message: raftpb.Message{
-				Type:     raftpb.MsgSnap,
-				From:     raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
-				To:       raftpb.PeerID(req.RecipientReplica.ReplicaID),
-				Term:     uint64(req.Term),
+				Type: raftpb.MsgSnap,
+				// NB: From is not necessarily the leader of the term. The receiver raft
+				// instance (To) should not assume so when handling this message. The
+				// response will be sent to the coordinator, so its raft instance should
+				// similarly not assume leadership when handling the response, or that
+				// the snapshot was sent at the same term and index.
+				From: raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
+				To:   raftpb.PeerID(req.RecipientReplica.ReplicaID),
+				// NB: use the term of this replica because it needs to be consistent
+				// with the generated snapshot. It does not necessarily match the term
+				// of the coordinator.
+				Term:     uint64(term),
 				Snapshot: &snap.RaftSnap,
 			},
 		},
