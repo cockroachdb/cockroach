@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -224,29 +225,42 @@ func (h *Helper) ExecWithGateway(
 	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
 }
 
-// Background allows test authors to create functions that run in the
-// background in mixed-version hooks.
-func (h *Helper) Background(
-	name string, fn func(context.Context, *logger.Logger) error,
-) context.CancelFunc {
-	return h.runner.background.Start(name, func(ctx context.Context) error {
+// GoWithCancel implements the Tasker interface.
+func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
+	loggerFuncOpt := task.LoggerFunc(func(name string) (*logger.Logger, error) {
 		bgLogger, err := h.loggerFor(name)
 		if err != nil {
-			return fmt.Errorf("failed to create logger for background function %q: %w", name, err)
+			return nil, fmt.Errorf("failed to create logger for background function %q: %w", name, err)
 		}
-
-		err = panicAsError(bgLogger, func() error { return fn(ctx, bgLogger) })
+		return bgLogger, nil
+	})
+	panicOpt := task.PanicHandler(func(_ context.Context, name string, l *logger.Logger, r interface{}) error {
+		return logPanicToErr(l, r)
+	})
+	errHandlerOpt := task.ErrorHandler(func(ctx context.Context, name string, l *logger.Logger, err error) error {
 		if err != nil {
-			if isContextCanceled(ctx) {
+			if task.IsContextCanceled(ctx) {
 				return err
 			}
-
-			err := errors.Wrapf(err, "error in background function %s", name)
-			return h.runner.testFailure(ctx, err, bgLogger, nil)
+			errWrapped := errors.Wrapf(err, "error in background function %s", name)
+			return h.runner.testFailure(ctx, errWrapped, l, nil)
 		}
-
 		return nil
 	})
+	return h.runner.background.GoWithCancel(
+		fn, task.OptionList(opts...), loggerFuncOpt, panicOpt, errHandlerOpt,
+	)
+}
+
+// Go implements the Tasker interface.
+func (h *Helper) Go(fn task.Func, opts ...task.Option) {
+	h.GoWithCancel(fn, opts...)
+}
+
+// Background allows test authors to create functions that run in the
+// background in mixed-version hooks.
+func (h *Helper) Background(name string, fn task.Func, opts ...task.Option) context.CancelFunc {
+	return h.GoWithCancel(fn, task.Name(name), task.OptionList(opts...))
 }
 
 // BackgroundCommand has the same semantics of `Background()`; the
