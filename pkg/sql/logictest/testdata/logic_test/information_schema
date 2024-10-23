@@ -6394,6 +6394,7 @@ transaction_timeout                                        0
 troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
+unsafe_allow_triggers_modifying_cascades                   off
 variable_inequality_lookup_join_enabled                    on
 xmloption                                                  content
 

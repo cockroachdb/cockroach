@@ -3892,6 +3892,10 @@ func (m *sessionDataMutator) SetBypassPCRReaderCatalogAOST(val bool) {
 	m.data.BypassPCRReaderCatalogAOST = val
 }
 
+func (m *sessionDataMutator) SetUnsafeAllowTriggersModifyingCascades(val bool) {
+	m.data.UnsafeAllowTriggersModifyingCascades = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -108,7 +108,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	mb.addUpdateCols(upd.Exprs)
 
 	// Project row-level BEFORE triggers for UPDATE.
-	mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate)
+	mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
