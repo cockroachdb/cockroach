@@ -3665,6 +3665,8 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | write_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | write_bytes_per_second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | read_bytes_per_second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
 | cpu_time_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | CPU time (ns) per second is the recent cpu usage per second on this range. | [reserved](#support-status) |
+| table_names | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | table_names indicates which tables exist in this range | [reserved](#support-status) |
+| index_names | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | index_names indicates which indicies exist in this range | [reserved](#support-status) |
 
 
 
