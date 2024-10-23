@@ -2912,10 +2912,13 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 	}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
+	eng := setupMVCCInMemPebble(b, "")
+	defer eng.Close()
+	batch := eng.NewBatch()
+
 	b.ResetTimer()
 
 	const batchSize = 1000
-	var batch pebble.Batch
 	for i := 0; i < b.N; i += batchSize {
 		end := i + batchSize
 		if end > b.N {
@@ -2925,9 +2928,13 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j)}
-			require.NoError(b, batch.Set(EncodeMVCCKey(MVCCKey{key, ts}), value, nil /* WriteOptions */))
+			err := batch.PutMVCC(MVCCKey{key, ts}, MVCCValue{Value: roachpb.MakeValueFromBytes(value)})
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
-		batch.Reset()
+		batch.Close()
+		batch = eng.NewBatch()
 	}
 
 	b.StopTimer()
