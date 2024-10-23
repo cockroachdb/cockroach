@@ -10,7 +10,7 @@ import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { Tooltip, Anchor } from "src/components";
+import { Anchor, Tooltip } from "src/components";
 import { nodeStatusesSelector, nodeSumsSelector } from "src/redux/nodes";
 import { howAreCapacityMetricsCalculated } from "src/util/docs";
 import { EventBox } from "src/views/cluster/containers/events";
@@ -18,11 +18,11 @@ import { Metric } from "src/views/shared/components/metricQuery";
 import {
   SummaryBar,
   SummaryLabel,
+  SummaryMetricsAggregator,
   SummaryMetricStat,
   SummaryStat,
   SummaryStatBreakdown,
   SummaryStatMessage,
-  SummaryMetricsAggregator,
 } from "src/views/shared/components/summaryBar";
 
 /**
@@ -145,28 +145,7 @@ export default function (props: ClusterSummaryProps) {
         >
           <Metric
             sources={props.nodeSources}
-            name="cr.node.sql.select.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.insert.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.update.count"
-            title="Queries/Sec"
-            tenantSource={props.tenantSource}
-            nonNegativeRate
-          />
-          <Metric
-            sources={props.nodeSources}
-            name="cr.node.sql.delete.count"
+            name="cr.node.sql.crud_query.count"
             title="Queries/Sec"
             tenantSource={props.tenantSource}
             nonNegativeRate
