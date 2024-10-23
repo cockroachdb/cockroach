@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "24.3.0-prerelease.3",
+  "version": "24.3.0-prerelease.4",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -33,7 +33,6 @@
   "dependencies": {
     "@ant-design/icons": "^5.3.6",
     "@babel/runtime": "^7.12.13",
-    "@cockroachlabs/crdb-protobuf-client": "workspace:../db-console/src/js",
     "@cockroachlabs/design-tokens": "0.4.5",
     "@cockroachlabs/icons": "0.5.2",
     "@cockroachlabs/ui-components": "0.4.3",
@@ -90,6 +89,7 @@
     "@babel/preset-typescript": "^7.8.0",
     "@bazel/typescript": "5.5.0",
     "@bazel/worker": "5.5.0",
+    "@cockroachlabs/crdb-protobuf-client": "workspace:../db-console/src/js",
     "@cockroachlabs/eslint-config": "1.0.7",
     "@cockroachlabs/eslint-plugin-crdb": "workspace:../eslint-plugin-crdb",
     "@storybook/addon-actions": "^6.5.16",
