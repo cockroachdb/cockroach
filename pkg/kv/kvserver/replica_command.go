@@ -2919,9 +2919,13 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
+	var term uint64
 	r.mu.RLock()
 	sender, err := r.getReplicaDescriptorRLocked()
 	_, destPaused := r.mu.pausedFollowers[recipient.ReplicaID]
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		term = rg.Term()
+	}
 	r.mu.RUnlock()
 
 	if err != nil {
@@ -2939,8 +2943,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		)
 	}
 
-	status := r.RaftBasicStatus()
-	if status.Empty() {
+	if term == 0 {
 		// This code path is sometimes hit during scatter for replicas that haven't
 		// woken up yet.
 		return benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
@@ -2966,7 +2969,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		RecipientReplica:     recipient,
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
-		Term:                 kvpb.RaftTerm(status.Term),
+		Term:                 kvpb.RaftTerm(term),
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
 		DescriptorGeneration: r.Desc().Generation,
