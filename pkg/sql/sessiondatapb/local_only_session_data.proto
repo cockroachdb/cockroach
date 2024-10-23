@@ -548,6 +548,11 @@ message LocalOnlySessionData {
   // written in this session were originally written with before being
   // replicated via Logical Data Replication.
   util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
+  // UnsafeAllowTriggersModifyingCascades, when true, allows row-level BEFORE
+  // triggers to modify or filter rows that are being updated or deleted as
+  // part of a cascading foreign key action. This is unsafe because it can
+  // lead to constraint violations.
+  bool unsafe_allow_triggers_modifying_cascades = 141;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
