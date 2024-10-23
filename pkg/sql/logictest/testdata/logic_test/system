@@ -1428,3 +1428,57 @@ ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
   num_replicas = 5,
   constraints = '[]',
   lease_preferences = '[]'
+
+# Regression test for 133278, that clusters with sql.defaults.vectorize set to
+# old value '1' can still start new connections.
+
+statement ok
+UPSERT INTO system.settings (name, value, "valueType") VALUES ('sql.defaults.vectorize', '1', 'e')
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
+----
+sql.defaults.vectorize  1
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
+
+statement ok
+SET vectorize = DEFAULT
+
+query T
+SHOW vectorize
+----
+on
+
+# Make sure we can open a new connection.
+user testuser newsession
+
+user root
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.vectorize
+
+statement ok
+RESET vectorize
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
+----
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
+
+query T
+SHOW vectorize
+----
+on
+
+user testuser
+
+statement ok
+RESET vectorize
