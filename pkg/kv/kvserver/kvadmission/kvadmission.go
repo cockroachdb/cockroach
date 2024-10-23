@@ -334,36 +334,41 @@ func (n *controllerImpl) AdmitKVWork(
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
+		var foundFlowHandle bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
 		if attemptFlowControl && !bypassAdmission {
-			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
-			if !found {
-				return Handle{}, nil
-			}
-			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
-			if err != nil {
-				return Handle{}, err
-			} else if admitted {
-				// NB: It's possible for us to be waiting for available flow tokens
-				// for a different set of streams that the ones we'll eventually
-				// deduct tokens from, if the range experiences a split between now
-				// and the point of deduction. That's ok, there's no strong
-				// synchronization needed between these two points.
-				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-					// NOTE: The priority is identical for v1 and v2, a
-					// admissionpb.WorkPriority,  until we encode the command in
-					// replica_raft, where if the range is using racv2 encoding we will
-					// convert the priority to a raftpb.Priority.
-					AdmissionPriority:   int32(admissionInfo.Priority),
-					AdmissionCreateTime: admissionInfo.CreateTime,
-					AdmissionOriginNode: n.nodeID.Get(),
+			var kvflowHandle kvflowcontrol.ReplicationAdmissionHandle
+			kvflowHandle, foundFlowHandle = n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
+			if foundFlowHandle {
+				var err error
+				admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+				if err != nil {
+					return Handle{}, err
+				} else if admitted {
+					// NB: It's possible for us to be waiting for available flow tokens
+					// for a different set of streams that the ones we'll eventually
+					// deduct tokens from, if the range experiences a split between now
+					// and the point of deduction. That's ok, there's no strong
+					// synchronization needed between these two points.
+					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+						// NOTE: The priority is identical for v1 and v2, a
+						// admissionpb.WorkPriority,  until we encode the command in
+						// replica_raft, where if the range is using racv2 encoding we will
+						// convert the priority to a raftpb.Priority.
+						AdmissionPriority:   int32(admissionInfo.Priority),
+						AdmissionCreateTime: admissionInfo.CreateTime,
+						AdmissionOriginNode: n.nodeID.Get(),
+					}
 				}
 			}
 		}
-		// If flow control is disabled or if work bypasses flow control, we still
-		// subject it above-raft, leaseholder-only IO admission control.
-		if !attemptFlowControl || !admitted {
+		// We still subject work to above-raft, leaseholder-only IO admission
+		// control in certain cases. These cases are:
+		// 1. Flow control is disabled.
+		// 2. Work bypasses flow control.
+		// 3. Flow handle was not found, when the leaseholder is no longer the
+		// leader.
+		if !attemptFlowControl || !admitted || !foundFlowHandle {
 			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(ba.Replica.StoreID)
 			if storeAdmissionQ != nil {
 				//  NB: Even though we would know here we're bypassing admission (via
