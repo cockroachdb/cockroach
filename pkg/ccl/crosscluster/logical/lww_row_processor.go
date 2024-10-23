@@ -92,6 +92,9 @@ func (q *queryBuilder) AddRow(row cdcevent.Row) error {
 	}
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		if dEnum, ok := d.(*tree.DEnum); ok {
+			// Override the type to Unknown to avoid a mismatched type OID error
+			// during execution. Note that Unknown is the type used by default
+			// when a SQL statement is executed without type hints.
 			dEnum.EnumTyp = types.Unknown
 		}
 		q.scratchDatums = append(q.scratchDatums, d)
@@ -121,6 +124,9 @@ func (q *queryBuilder) AddRowDefaultNull(row *cdcevent.Row) error {
 		}
 		if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 			if dEnum, ok := d.(*tree.DEnum); ok {
+				// Override the type to Unknown to avoid a mismatched type OID error
+				// during execution. Note that Unknown is the type used by default
+				// when a SQL statement is executed without type hints.
 				dEnum.EnumTyp = types.Unknown
 			}
 			q.scratchDatums = append(q.scratchDatums, d)
