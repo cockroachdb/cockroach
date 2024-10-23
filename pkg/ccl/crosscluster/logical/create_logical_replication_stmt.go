@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -213,9 +212,7 @@ func createLogicalReplicationStreamPlanHook(
 		for i, desc := range spec.TypeDescriptors {
 			sourceTypes[i] = &desc
 		}
-		// TODO(rafi): do we need a different type resolver?
-		// See https://github.com/cockroachdb/cockroach/issues/132164.
-		importResolver := importer.MakeImportTypeResolver(sourceTypes)
+		crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(sourceTypes)
 
 		// If the user asked to ignore "ttl-deletes", make sure that at least one of
 		// the source tables actually has a TTL job which sets the omit bit that
@@ -225,7 +222,7 @@ func createLogicalReplicationStreamPlanHook(
 		for i, name := range srcTableNames {
 			td := spec.TableDescriptors[name]
 			cpy := tabledesc.NewBuilder(&td).BuildCreatedMutableTable()
-			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
 				return err
 			}
 			srcTableDescs[i] = cpy.TableDesc()
