@@ -135,6 +135,18 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					remainingTicks = ticker.remainingTicks()
 				}
 
+				if ticker.shouldAdjustForError() {
+					metrics := pebbleMetricsProvider.GetPebbleMetrics()
+					for _, m := range metrics {
+						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
+							gc.adjustDiskTokenError(m)
+						} else {
+							log.Warningf(ctx,
+								"seeing metrics for unknown storeID %d", m.StoreID)
+						}
+					}
+				}
+
 				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
 					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
@@ -707,6 +719,12 @@ func (coord *GrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
 	}
 	// Else, let the grant chain finish. NB: we turn off grant chains on the
 	// GrantCoordinators used for IO, so the if-condition is always true.
+}
+
+func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
+	coord.mu.Lock()
+	defer coord.mu.Unlock()
+	coord.granters[KVWork].(*kvStoreTokenGranter).adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesRead)
 }
 
 // testingTryGrant is only for unit tests, since they sometimes cut out

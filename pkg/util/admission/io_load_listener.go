@@ -399,6 +399,7 @@ const loadedDuration = tickDuration(1 * time.Millisecond)
 type tokenAllocationTicker struct {
 	expectedTickDuration        time.Duration
 	adjustmentIntervalStartTime time.Time
+	lastErrorAdjustmentTime     time.Time
 	ticker                      *time.Ticker
 }
 
@@ -439,6 +440,14 @@ func (t *tokenAllocationTicker) remainingTicks() uint64 {
 	}
 	remainingTime := adjustmentInterval*time.Second - timePassed
 	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
+}
+
+func (t *tokenAllocationTicker) shouldAdjustForError() bool {
+	if timeutil.Since(t.lastErrorAdjustmentTime) < time.Second {
+		return false
+	}
+	t.lastErrorAdjustmentTime = timeutil.Now()
+	return true
 }
 
 func (t *tokenAllocationTicker) stop() {

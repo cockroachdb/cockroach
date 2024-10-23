@@ -302,7 +302,13 @@ type kvStoreTokenGranter struct {
 		// TODO(aaditya): add support for read/IOPS tokens.
 		// Disk bandwidth tokens.
 		diskTokensAvailable diskTokens
-		diskTokensUsed      [admissionpb.NumStoreWorkTypes]diskTokens
+		diskTokensError     struct {
+			prevObservedWrites             uint64
+			prevObservedReads              uint64
+			diskWriteTokensAlreadyDeducted int64
+			diskReadTokensAlreadyDeducted  int64
+		}
+		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 	}
 
 	ioTokensExhaustedDurationMetric [admissionpb.NumWorkClasses]*metric.Counter
@@ -477,13 +483,48 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	case admissionpb.RegularStoreWorkType, admissionpb.ElasticStoreWorkType:
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskTokenCount
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += count
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
 	}
+}
+
+func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
+	intWrites := int64(writeBytes - sg.coordMu.diskTokensError.prevObservedWrites)
+	intReads := int64(readBytes - sg.coordMu.diskTokensError.prevObservedReads)
+
+	// TODO(aaditya): This seems problematic since we could deduct too much in
+	// error if the previous term had extra headroom. Consider a different
+	// approach and track "real" writes that compensate for error and headroom.
+
+	// Compensate for writes.
+	writeError := intWrites - sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted
+	if writeError > 0 {
+		if sg.coordMu.diskTokensAvailable.writeByteTokens < 0 {
+			sg.coordMu.diskTokensAvailable.writeByteTokens = 0
+		}
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeError
+	}
+	// We have compensated for error, if any, in this interval, so we reset the
+	// deducted count for the next compensation interval.
+	sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
+
+	// Compensate for reads.
+	var readError int64
+	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted -= intReads
+	if sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted < 0 {
+		readError = -(sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted)
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= readError
+		sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = 0
+	}
+
+	sg.coordMu.diskTokensError.prevObservedWrites = writeBytes
+	sg.coordMu.diskTokensError.prevObservedReads = readBytes
 }
 
 func (sg *kvStoreTokenGranter) tookWithoutPermission(
