@@ -40,10 +40,23 @@ var MaxConcurrentRaftTraces = settings.RegisterIntSetting(
 	settings.IntInRange(0, 1000),
 )
 
+// LogRaftTracesToCockroachLog controls whether we log raft traces to the
+// cockroach.log in addition to adding the event to the trace. Traces are only
+// created on the leaseholder but logging is done on both leaders and followers
+// if the setting is enabled and the trace is registered. The potential downside
+// of enabling this setting is the churn it can cause in cockroach.log.
+var LogRaftTracesToCockroachLog = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft.trace_to_cockroach_log.enabled",
+	"when true, log raft traces to the cockroach log in addition to the trace",
+	true,
+)
+
 // traceValue represents the trace information for a single registration.
 type traceValue struct {
 	traced kvserverpb.TracedEntry
-	// ctx is a trace specific context used to log events on this trace.
+	// ctx is the ambient context for the replica tagged with a unique trace ID.
+	// It is set to nil if LogRaftTracesToCockroachLog is false.
 	ctx context.Context
 
 	mu struct {
@@ -73,7 +86,9 @@ type traceValue struct {
 // proposal context is populated on the leaseholder and is attached to the SQL
 // trace.
 func (t *traceValue) logf(depth int, format string, args ...interface{}) {
-	log.InfofDepth(t.ctx, depth+1, format, args...)
+	if t.ctx != nil {
+		log.InfofDepth(t.ctx, depth+1, format, args...)
+	}
 
 	t.mu.Lock()
 	propCtx := t.mu.propCtx
@@ -253,7 +268,11 @@ func (r *RaftTracer) newTraceValue(
 	te kvserverpb.TracedEntry, propCtx context.Context, propSpan *tracing.Span,
 ) *traceValue {
 	tv := &traceValue{traced: te}
-	tv.ctx = logtags.AddTag(r.ctx, "id", redact.Safe(tv.String()))
+	// If the setting is enabled, we set the ctx and log the trace to the
+	// cockroach log as well.
+	if LogRaftTracesToCockroachLog.Get(&r.st.SV) {
+		tv.ctx = logtags.AddTag(r.ctx, "id", redact.Safe(tv.String()))
+	}
 	tv.mu.seenMsgAppResp = make(map[raftpb.PeerID]bool)
 	tv.mu.propCtx = propCtx
 	tv.mu.propSpan = propSpan
