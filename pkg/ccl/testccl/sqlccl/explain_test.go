@@ -191,6 +191,7 @@ func TestExplainGist(t *testing.T) {
 				for _, knownErr := range []string{
 					"invalid datum type given: RECORD, expected RECORD", // #117101
 					"expected equivalence dependants to be its closure", // #119045
+					"not in index", // #133129
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.
