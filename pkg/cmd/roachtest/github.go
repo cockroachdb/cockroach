@@ -210,6 +210,9 @@ func (g *githubIssues) createPostRequest(
 	// error, redirect that to Test Eng with the corresponding label as
 	// title override.
 	errWithOwner := failuresAsErrorWithOwnership(failures)
+	if errWithOwner == nil {
+		errWithOwner = transientErrorOwnershipFallback(failures)
+	}
 	if errWithOwner != nil {
 		handleErrorWithOwnership(*errWithOwner)
 	}
