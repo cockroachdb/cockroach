@@ -1,4 +1,31 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "validator",
+    srcs = [
+        "config_validator.go",
+        "validator.go",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "validator_test",
+    srcs = ["validator_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":validator"],
+    deps = [
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/spanconfig/spanconfigtestutils",
+        "@com_github_stretchr_testify//require",
+    ],
+)
 
 go_library(
     name = "event",
@@ -13,6 +40,7 @@ go_library(
         "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/validator",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/util/log",
