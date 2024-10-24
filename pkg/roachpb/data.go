@@ -318,7 +318,7 @@ func (v *Value) InitChecksum(key []byte) {
 	}
 	// Should be uninitialized.
 	if v.checksum() != checksumUninitialized {
-		panic(fmt.Sprintf("initialized checksum = %x", v.checksum()))
+		panic(errors.Errorf("initialized checksum = %x", v.checksum()))
 	}
 	v.setChecksum(v.computeChecksum(key))
 }

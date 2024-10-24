@@ -230,6 +230,7 @@ const PrintableKeyAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
 func RandString(rng *rand.Rand, length int, alphabet string) string {
 	runes := []rune(alphabet)
 	buf := &strings.Builder{}
+	buf.Grow(length)
 	for i := 0; i < length; i++ {
 		buf.WriteRune(runes[rng.Intn(len(runes))])
 	}
