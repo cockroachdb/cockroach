@@ -126,6 +126,9 @@ type subscribeConfig struct {
 	// NB: Callers should note that initial scan results will not
 	// contain a diff.
 	withDiff bool
+
+	// batchByteSize requests the producer emit batches up to the specified size.
+	batchByteSize int64
 }
 
 type SubscribeOption func(*subscribeConfig)
@@ -147,6 +150,13 @@ func WithFiltering(filteringEnabled bool) SubscribeOption {
 func WithDiff(enableDiff bool) SubscribeOption {
 	return func(cfg *subscribeConfig) {
 		cfg.withDiff = enableDiff
+	}
+}
+
+// WithBatchSize requests the producer emit batches up to the specified size.
+func WithBatchSize(bytes int64) SubscribeOption {
+	return func(cfg *subscribeConfig) {
+		cfg.batchByteSize = bytes
 	}
 }
 
