@@ -668,7 +668,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	}
 
 	// Propose first entry.
-	blob := []byte(strings.Repeat("a", 1024))
+	blob := []byte(strings.Repeat("a", 1000)) // a little below 1024
 	require.NoError(t, rn.Propose(blob))
 
 	// Append first entry.
@@ -688,7 +688,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	// Append second entry. Don't apply first entry yet.
 	rd = rn.Ready()
 	require.Len(t, rd.Messages, 2)
-	var applyResps []raftpb.Message
+	var applyResp raftpb.Message
 	for _, m := range rd.Messages {
 		switch m.Type {
 		case raftpb.MsgStorageAppend:
@@ -699,36 +699,30 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 		case raftpb.MsgStorageApply:
 			require.Len(t, m.Entries, 1)
 			require.Len(t, m.Responses, 1)
-			applyResps = append(applyResps, m.Responses[0])
+			require.NotEqual(t, applyResp.Type, raftpb.MsgStorageApplyResp)
+			applyResp = m.Responses[0]
 		default:
 			t.Fatalf("unexpected: %v", m)
 		}
 	}
+	require.Equal(t, applyResp.Type, raftpb.MsgStorageApplyResp)
 
 	// Propose third entry.
 	require.NoError(t, rn.Propose(blob))
 
-	// Append third entry. Don't apply second entry yet.
+	// Append third entry. Don't apply first entry yet.
 	rd = rn.Ready()
-	require.Len(t, rd.Messages, 2)
-	for _, m := range rd.Messages {
-		switch m.Type {
-		case raftpb.MsgStorageAppend:
-			require.NoError(t, s.Append(m.Entries))
-			for _, resp := range m.Responses {
-				require.NoError(t, rn.Step(resp))
-			}
-		case raftpb.MsgStorageApply:
-			require.Len(t, m.Entries, 1)
-			require.Len(t, m.Responses, 1)
-			applyResps = append(applyResps, m.Responses[0])
-		default:
-			t.Fatalf("unexpected: %v", m)
-		}
+	require.Len(t, rd.Messages, 1)
+	m = rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Len(t, m.Entries, 1)
+	require.NoError(t, s.Append(m.Entries))
+	for _, resp := range m.Responses {
+		require.NoError(t, rn.Step(resp))
 	}
 
-	// Third entry should not be returned to be applied until first entry's
-	// application is acknowledged.
+	// Second and third entry should not be returned to be applied until first
+	// entry's application is acknowledged.
 	for rn.HasReady() { // drain the Ready-s
 		rd := rn.Ready()
 		for _, m := range rd.Messages {
@@ -737,22 +731,18 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	}
 
 	// Acknowledged first entry application.
-	require.NoError(t, rn.Step(applyResps[0]))
-	applyResps = applyResps[1:]
+	require.NoError(t, rn.Step(applyResp))
 
-	// Third entry now returned for application.
+	// Second and third entry now returned for application.
 	rd = rn.Ready()
 	require.Len(t, rd.Messages, 1)
 	m = rd.Messages[0]
 	require.Equal(t, raftpb.MsgStorageApply, m.Type)
-	require.Len(t, m.Entries, 1)
-	applyResps = append(applyResps, m.Responses[0])
+	require.Len(t, m.Entries, 2)
+	applyResp = m.Responses[0]
 
 	// Acknowledged second and third entry application.
-	for _, resp := range applyResps {
-		require.NoError(t, rn.Step(resp))
-	}
-	applyResps = nil
+	require.NoError(t, rn.Step(applyResp))
 }
 
 type ignoreSizeHintMemStorage struct {
