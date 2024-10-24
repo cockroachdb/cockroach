@@ -15,6 +15,7 @@ import (
 	"hash/crc32"
 	"math"
 	"math/rand"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -176,7 +177,15 @@ func (k Key) Clone() Key {
 // take a shallow copy of the Key, so both the receiver and the return
 // value should be treated as immutable after.
 func (k Key) Next() Key {
-	return Key(encoding.BytesNext(k))
+	return encoding.BytesNext(k)
+}
+
+// ClonedNext is like Next, but is guaranteed to return a deep copy of the Key.
+//
+// The method is more efficient than calling Clone().Next() or Next().Clone()
+// because it will never re-allocate the key's underlying byte slice twice.
+func (k Key) ClonedNext() Key {
+	return slices.Clip(k).Next()
 }
 
 // Prevish returns a previous key in lexicographic sort order. It is impossible
@@ -191,7 +200,7 @@ func (k Key) Next() Key {
 // The method may only take a shallow copy of the Key, so both the receiver and
 // the return value should be treated as immutable after.
 func (k Key) Prevish(length int) Key {
-	return Key(encoding.BytesPrevish(k, length))
+	return encoding.BytesPrevish(k, length)
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
@@ -205,7 +214,7 @@ func (k Key) IsPrev(m Key) bool {
 // is added to the final byte and the carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
-	return Key(keysbase.PrefixEnd(k))
+	return keysbase.PrefixEnd(k)
 }
 
 // Equal returns whether two keys are identical.
