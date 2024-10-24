@@ -93,6 +93,7 @@ go_library(
         "jepsen.go",
         "jobs.go",
         "jobs_util.go",
+        "kerberos_connection_stress.go",
         "knex.go",
         "kv.go",
         "kvbench.go",
