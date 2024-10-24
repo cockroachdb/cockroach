@@ -5944,6 +5944,146 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 	require.Equal(t, 1, rangeLookups)
 }
 
+// TestElideUnnecessaryAmbiguousErrors ensures the DistSender does not
+// unnecessarily wrap terminal errors resulting from successful request
+// evaluation when a previous evaluation attempt has caused ambiguity. We trip
+// the circuit breaker on a replica to cause ambiguity.
+//
+// Serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/122439.
+func TestElideUnnecessaryAmbiguousError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ns := &mockNodeStore{
+		nodes: []roachpb.NodeDescriptor{
+			{
+				NodeID:  1,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  2,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  3,
+				Address: util.UnresolvedAddr{},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	clock := hlc.NewClockForTesting(nil)
+	tr := tracing.NewTracer()
+	st := cluster.MakeTestingClusterSettings()
+	getRangeDescCacheSize := func() int64 {
+		return 1 << 20
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+		},
+	}
+	keyA := roachpb.Key("a")
+
+	rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper)
+	rc.Insert(ctx, roachpb.RangeInfo{
+		Desc: desc,
+		Lease: roachpb.Lease{
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID: 3, StoreID: 3, ReplicaID: 3,
+			},
+		},
+	})
+
+	reqSent := make(chan struct{})
+	ctxCancelled := make(chan struct{})
+	numCalled := 0
+	transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		numCalled++
+
+		br := &kvpb.BatchResponse{}
+		switch numCalled {
+		case 1:
+			require.Equal(t, roachpb.ReplicaID(3), ba.Replica.ReplicaID)
+			close(reqSent)
+			br.Error = kvpb.NewError(errors.New("inconsequential server side error"))
+			<-ctxCancelled
+		case 2:
+			require.Equal(t, ba.Replica.ReplicaID, roachpb.ReplicaID(1))
+			br.Error = kvpb.NewError(kvpb.NewIntentMissingError(keyA, nil))
+		default:
+			t.Fatal("unexpected call")
+		}
+		return br, nil
+	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	cfg := DistSenderConfig{
+		AmbientCtx: log.MakeTestingAmbientContext(tr),
+		Clock:      clock,
+		NodeDescs:  ns,
+		Stopper:    stopper,
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+			[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+		) {
+			// These tests only deal with the low-level sendToReplicas(). Nobody
+			// should be reading descriptor from the database, but the DistSender
+			// insists on having a non-nil one.
+			return nil, nil, errors.New("range desc db unexpectedly used")
+		}),
+		TransportFactory: adaptSimpleTransport(transportFn),
+		Settings:         st,
+		TestingKnobs: ClientTestingKnobs{
+			ReplicaCircuitBreakerTokenFilter: func(token *replicaCircuitBreakerToken) {
+				if token.r != nil && token.r.rangeID == desc.RangeID && token.r.desc.ReplicaID == 3 {
+					// First request; wait for the request to be sent before hijacking the
+					// cancelCtx and replacing it with a cancelled context.
+					go func() {
+						defer wg.Done()
+						<-reqSent
+						ctx, cancel := context.WithCancel(context.Background())
+						cancel()
+						token.cancelCtx = ctx
+						close(ctxCancelled)
+					}()
+				}
+			},
+			RouteToLeaseholderFirst: true,
+		},
+	}
+	ds := NewDistSender(cfg)
+	tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
+	require.NoError(t, err)
+
+	ba := &kvpb.BatchRequest{}
+	txn := roachpb.MakeTransaction(
+		"test", keyA, 0, 0, clock.Now(), 0, 0, 0, false, /* omitInRangefeeds */
+	)
+	ba.Add(&kvpb.QueryIntentRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: keyA,
+		},
+		Txn:            txn.TxnMeta,
+		Strength:       lock.Intent,
+		ErrorIfMissing: true,
+	})
+	br, err := ds.sendToReplicas(ctx, ba, tok, true /* withCommit */)
+	require.NoError(t, err)
+	require.NotNil(t, br.Error)
+	testutils.IsPError(br.Error, "intent missing")
+	wg.Wait()
+}
+
 // TestOptimisticRangeDescriptorLookups tests the integration of optimistic
 // range descriptor lookups with the DistSender. It uses rather low-level
 // dependency injection to validate the combined behavior of the DistSender,
