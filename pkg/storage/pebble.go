@@ -406,10 +406,10 @@ func ShouldUseEFOS(settings *settings.Values) bool {
 	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
 }
 
-// EngineSuffixCompare implements pebble.Comparer.CompareSuffixes. It compares
+// EngineRangeSuffixCompare implements pebble.Comparer.CompareSuffixes. It compares
 // cockroach suffixes (which are composed of the version and a trailing sentinel
 // byte); the version can be an MVCC timestamp or a lock key.
-func EngineSuffixCompare(a, b []byte) int {
+func EngineRangeSuffixCompare(a, b []byte) int {
 	if len(a) == 0 || len(b) == 0 {
 		// Empty suffixes sort before non-empty suffixes.
 		return cmp.Compare(len(a), len(b))
@@ -617,10 +617,12 @@ func normalizeEngineSuffixForCompare(a []byte) []byte {
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = &pebble.Comparer{
-	Split:           EngineKeySplit,
-	CompareSuffixes: EngineSuffixCompare,
-	Compare:         EngineKeyCompare,
-	Equal:           EngineKeyEqual,
+	Split:                EngineKeySplit,
+	CompareRangeSuffixes: EngineRangeSuffixCompare,
+	ComparePointSuffixes: EnginePointSuffixCompare,
+
+	Compare: EngineKeyCompare,
+	Equal:   EngineKeyEqual,
 
 	AbbreviatedKey: func(k []byte) uint64 {
 		key, ok := GetKeyPartFromEngineKey(k)
@@ -840,7 +842,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		Comparer:   EngineComparer,
 		FS:         vfs.Default,
 		KeySchema:  keySchema.Name,
-		KeySchemas: sstable.MakeKeySchemas(keySchema),
+		KeySchemas: sstable.MakeKeySchemas(&keySchema),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,

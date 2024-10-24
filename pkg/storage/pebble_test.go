@@ -92,10 +92,33 @@ func TestEngineComparer(t *testing.T) {
 	ts3a := appendBytesToTimestamp(ts3, zeroLogical[:])
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
 
-	// We group versions by equality and in the expected ordering.
-	orderedVersions := []any{
+	// We group versions by equality and in the expected point key ordering.
+	orderedVersions := [][]any{
+		{ts1}, // Empty version sorts first.
+		{ts2a, ts2},
+		{ts3b, ts3a, ts3},
+		{ts4},
+		{ts5},
+	}
+
+	// Compare range suffixes.
+	for i := range orderedVersions {
+		for j := range orderedVersions {
+			for _, v1 := range orderedVersions[i] {
+				for _, v2 := range orderedVersions[j] {
+					result := EngineComparer.ComparePointSuffixes(encodeVersion(v1), encodeVersion(v2))
+					if expected := cmp.Compare(i, j); result != expected {
+						t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
+					}
+				}
+			}
+		}
+	}
+
+	// CompareRangeSuffixes has a more strict ordering.
+	rangeOrderedVersions := []any{
 		ts1,  // Empty version sorts first.
-		ts2a, // Synthetic bit is not ignored when comparing suffixes.
+		ts2a, // Synthetic bit is not ignored when comparing range suffixes.
 		ts2,
 		ts3b, // Higher timestamps sort before lower timestamps.
 		ts3a,
@@ -104,10 +127,10 @@ func TestEngineComparer(t *testing.T) {
 		ts5,
 	}
 
-	// Compare suffixes.
-	for i, v1 := range orderedVersions {
-		for j, v2 := range orderedVersions {
-			result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
+	// Compare range suffixes.
+	for i, v1 := range rangeOrderedVersions {
+		for j, v2 := range rangeOrderedVersions {
+			result := EngineComparer.CompareRangeSuffixes(encodeVersion(v1), encodeVersion(v2))
 			if expected := cmp.Compare(i, j); result != expected {
 				t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
 			}
@@ -116,10 +139,15 @@ func TestEngineComparer(t *testing.T) {
 
 	lock1 := bytes.Repeat([]byte{1}, engineKeyVersionLockTableLen)
 	lock2 := bytes.Repeat([]byte{2}, engineKeyVersionLockTableLen)
-	require.Equal(t, 0, EngineComparer.CompareSuffixes(encodeVersion(lock1), encodeVersion(lock1)))
-	require.Equal(t, 0, EngineComparer.CompareSuffixes(encodeVersion(lock2), encodeVersion(lock2)))
-	require.Equal(t, +1, EngineComparer.CompareSuffixes(encodeVersion(lock1), encodeVersion(lock2)))
-	require.Equal(t, -1, EngineComparer.CompareSuffixes(encodeVersion(lock2), encodeVersion(lock1)))
+	require.Equal(t, 0, EngineComparer.CompareRangeSuffixes(encodeVersion(lock1), encodeVersion(lock1)))
+	require.Equal(t, 0, EngineComparer.CompareRangeSuffixes(encodeVersion(lock2), encodeVersion(lock2)))
+	require.Equal(t, +1, EngineComparer.CompareRangeSuffixes(encodeVersion(lock1), encodeVersion(lock2)))
+	require.Equal(t, -1, EngineComparer.CompareRangeSuffixes(encodeVersion(lock2), encodeVersion(lock1)))
+
+	require.Equal(t, 0, EngineComparer.ComparePointSuffixes(encodeVersion(lock1), encodeVersion(lock1)))
+	require.Equal(t, 0, EngineComparer.ComparePointSuffixes(encodeVersion(lock2), encodeVersion(lock2)))
+	require.Equal(t, +1, EngineComparer.ComparePointSuffixes(encodeVersion(lock1), encodeVersion(lock2)))
+	require.Equal(t, -1, EngineComparer.ComparePointSuffixes(encodeVersion(lock2), encodeVersion(lock1)))
 
 	keys := []roachpb.Key{
 		roachpb.Key(""),
@@ -128,7 +156,7 @@ func TestEngineComparer(t *testing.T) {
 		roachpb.Key("fg"),
 	}
 
-	// We group keys by equality and in the expected ordering.
+	// We group keys by equality and the groups are in the expected order.
 	var orderedKeys [][][]byte
 	for _, k := range keys {
 		orderedKeys = append(orderedKeys,

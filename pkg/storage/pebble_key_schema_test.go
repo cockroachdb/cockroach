@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -121,18 +122,12 @@ func TestKeySchema_KeySeeker(t *testing.T) {
 	var dec colblk.DataBlockDecoder
 	var ks colblk.KeySeeker
 	var maxKeyLen int
-	enc.Init(keySchema)
+	enc.Init(&keySchema)
 
 	initKeySeeker := func() {
-		if ks == nil || rand.Intn(2) == 1 {
-			if ks != nil {
-				ks.Release()
-			}
-			ks = keySchema.NewKeySeeker()
-		}
-		if err := ks.Init(&dec); err != nil {
-			t.Fatal(err)
-		}
+		ksPointer := &cockroachKeySeeker{}
+		keySchema.InitKeySeekerMetadata((*colblk.KeySeekerMetadata)(unsafe.Pointer(ksPointer)), &dec)
+		ks = keySchema.KeySeeker((*colblk.KeySeekerMetadata)(unsafe.Pointer(ksPointer)))
 	}
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "key_schema_key_seeker"), func(t *testing.T, td *datadriven.TestData) string {
@@ -158,7 +153,7 @@ func TestKeySchema_KeySeeker(t *testing.T) {
 				rows++
 			}
 			blk, _ := enc.Finish(rows, enc.Size())
-			dec.Init(keySchema, blk)
+			dec.Init(&keySchema, blk)
 			return buf.String()
 		case "is-lower-bound":
 			initKeySeeker()

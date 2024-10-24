@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -47,15 +46,14 @@ var keySchema = colblk.KeySchema{
 		cockroachColUntypedVersion: colblk.DataTypeBytes,
 	},
 	NewKeyWriter: func() colblk.KeyWriter {
-		kw := &cockroachKeyWriter{}
-		kw.roachKeys.Init(16)
-		kw.wallTimes.Init()
-		kw.logicalTimes.InitWithDefault()
-		kw.untypedVersions.Init()
-		return kw
+		return makeCockroachKeyWriter()
 	},
-	NewKeySeeker: func() colblk.KeySeeker {
-		return &cockroachKeySeeker{}
+	InitKeySeekerMetadata: func(meta *colblk.KeySeekerMetadata, d *colblk.DataBlockDecoder) {
+		ks := (*cockroachKeySeeker)(unsafe.Pointer(meta))
+		ks.init(d)
+	},
+	KeySeeker: func(meta *colblk.KeySeekerMetadata) colblk.KeySeeker {
+		return (*cockroachKeySeeker)(unsafe.Pointer(meta))
 	},
 }
 
@@ -69,6 +67,15 @@ type cockroachKeyWriter struct {
 
 // Assert *cockroachKeyWriter implements colblk.KeyWriter.
 var _ colblk.KeyWriter = (*cockroachKeyWriter)(nil)
+
+func makeCockroachKeyWriter() *cockroachKeyWriter {
+	kw := &cockroachKeyWriter{}
+	kw.roachKeys.Init(16)
+	kw.wallTimes.Init()
+	kw.logicalTimes.InitWithDefault()
+	kw.untypedVersions.Init()
+	return kw
+}
 
 func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
 	var cmpv colblk.KeyComparison
@@ -223,9 +230,7 @@ func (kw *cockroachKeyWriter) Finish(
 	}
 }
 
-var cockroachKeySeekerPool = sync.Pool{
-	New: func() interface{} { return &cockroachKeySeeker{} },
-}
+func (kw *cockroachKeyWriter) FinishHeader(buf []byte) {}
 
 type cockroachKeySeeker struct {
 	roachKeys       colblk.PrefixBytes
@@ -235,17 +240,18 @@ type cockroachKeySeeker struct {
 	untypedVersions colblk.RawBytes
 }
 
+// Assert that the cockroachKeySeeker fits inside KeySeekerMetadata.
+var _ uint = colblk.KeySeekerMetadataSize - uint(unsafe.Sizeof(cockroachKeySeeker{}))
+
 var _ colblk.KeySeeker = (*cockroachKeySeeker)(nil)
 
-// Init is part of the KeySeeker interface.
-func (ks *cockroachKeySeeker) Init(d *colblk.DataBlockDecoder) error {
+func (ks *cockroachKeySeeker) init(d *colblk.DataBlockDecoder) {
 	bd := d.BlockDecoder()
 	ks.roachKeys = bd.PrefixBytes(cockroachColRoachKey)
 	ks.roachKeyChanged = d.PrefixChanged()
 	ks.mvccWallTimes = bd.Uints(cockroachColMVCCWallTime)
 	ks.mvccLogical = bd.Uints(cockroachColMVCCLogical)
 	ks.untypedVersions = bd.RawBytes(cockroachColUntypedVersion)
-	return nil
 }
 
 // IsLowerBound compares the provided key to the first user key
@@ -458,12 +464,6 @@ func (ks *cockroachKeySeeker) MaterializeUserKeyWithSyntheticSuffix(
 	*(*byte)(ptr) = 0
 	memmove(unsafe.Pointer(uintptr(ptr)+1), unsafe.Pointer(unsafe.SliceData(suffix)), uintptr(len(suffix)))
 	return res
-}
-
-// Release is part of the KeySeeker interface.
-func (ks *cockroachKeySeeker) Release() {
-	*ks = cockroachKeySeeker{}
-	cockroachKeySeekerPool.Put(ks)
 }
 
 //go:linkname memmove runtime.memmove
