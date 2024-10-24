@@ -396,6 +396,8 @@ type raft struct {
 	// electionTimeout. Tracked by both leaders and followers alike. Additionally,
 	// followers also reset this field whenever they receive a valid message from
 	// the current leader or if the leader is fortified when ticked.
+	//
+	// Invariant: electionElapsed = 0 when r.leadEpoch != 0 on a follower.
 	electionElapsed int
 
 	// heartbeatElapsed is the number of ticks since we last reached the
@@ -1095,10 +1097,9 @@ func (r *raft) tickElection() {
 	}
 
 	if r.leadEpoch != 0 {
+		assertTrue(r.electionElapsed == 0, "fortifying followers don't set electionElapsed")
 		if r.supportingFortifiedLeader() {
-			// There's a fortified leader and we're supporting it. Reset the
-			// electionElapsed ticker and early return.
-			r.electionElapsed = 0
+			// There's a fortified leader and we're supporting it.
 			return
 		}
 		// We're no longer supporting the fortified leader. Let's make this
@@ -1107,23 +1108,22 @@ func (r *raft) tickElection() {
 		// re-fortified, which means we'll only ever skip the initial part of the
 		// election timeout once per fortified -> no longer fortified transition.
 		r.deFortify(r.id, r.Term)
-		if r.electionElapsed == 0 {
-			// NB: The peer was supporting a leader who had fortified until the last
-			// tick, but that support has now expired. As a result:
-			// 1. We don't want to wait out an entire election timeout before
-			// campaigning.
-			// 2. But we do want to take advantage of randomized election timeouts
-			// built into raft to prevent hung elections.
-			// We achieve both of these goals by "forwarding" electionElapsed to begin
-			// at r.electionTimeout. Also see pastElectionTimeout.
-			r.logger.Debugf(
-				"%d setting election elapsed to start from %d ticks after store liveness support expired",
-				r.id, r.electionTimeout,
-			)
-			r.electionElapsed = r.electionTimeout - 1 // -1 because we'll add one below.
-		}
+		// The peer was supporting a leader who had fortified until now, but that
+		// support has been withdrawn. As a result:
+		// 1. We don't want to wait out an entire election timeout before
+		//    campaigning.
+		// 2. But we do want to take advantage of randomized election timeouts built
+		//    into raft to prevent hung elections.
+		// We achieve both of these goals by "forwarding" electionElapsed to begin
+		// at r.electionTimeout. Also see pastElectionTimeout.
+		r.logger.Debugf(
+			"%d setting election elapsed to start from %d ticks after store liveness support expired",
+			r.id, r.electionTimeout,
+		)
+		r.electionElapsed = r.electionTimeout
+	} else {
+		r.electionElapsed++
 	}
-	r.electionElapsed++
 
 	if r.promotable() && r.pastElectionTimeout() {
 		r.electionElapsed = 0
