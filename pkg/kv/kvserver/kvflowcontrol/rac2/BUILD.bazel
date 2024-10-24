@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/queue",

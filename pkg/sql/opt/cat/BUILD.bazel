@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
+        "//pkg/util/encoding",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
