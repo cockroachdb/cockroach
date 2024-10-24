@@ -44,7 +44,7 @@ while true; do
       --max-rate=$MAX_RATE \
       --duration=$RUN_DURATION \
       --wait=false \
-      --partitions$NUM_REGIONS \
+      --partitions=$NUM_REGIONS \
       --partition-affinity=$(($NODE-1)) \
       --tolerate-errors \
       $PGURLS_REGION \
