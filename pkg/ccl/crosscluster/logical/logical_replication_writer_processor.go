@@ -107,6 +107,13 @@ var (
 
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
+var batchSizeSetting = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"logical_replication.stream_batch_size",
+	"target batch size for logical replication stream",
+	1<<20,
+)
+
 func newLogicalReplicationWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -315,6 +322,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 			lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes ||
 				lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes),
 		streamclient.WithDiff(true),
+		streamclient.WithBatchSize(batchSizeSetting.Get(&lrw.FlowCtx.Cfg.Settings.SV)),
 	)
 	if err != nil {
 		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))

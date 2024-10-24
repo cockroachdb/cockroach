@@ -253,6 +253,7 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.WithDiff = cfg.withDiff
 	sps.WithFiltering = cfg.withFiltering
 	sps.Type = streampb.ReplicationType_PHYSICAL
+	sps.Config.BatchByteSize = cfg.batchByteSize
 	if p.logical {
 		sps.Type = streampb.ReplicationType_LOGICAL
 	}
