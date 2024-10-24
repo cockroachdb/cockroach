@@ -1373,8 +1373,8 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 
 func (t *typeSchemaChanger) logTags() *logtags.Buffer {
 	buf := &logtags.Buffer{}
-	buf.Add("typeChangeExec", nil)
-	buf.Add("type", t.typeID)
+	buf = buf.Add("typeChangeExec", nil)
+	buf = buf.Add("type", t.typeID)
 	return buf
 }
 
