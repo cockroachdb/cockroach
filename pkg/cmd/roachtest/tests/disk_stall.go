@@ -44,14 +44,12 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runDiskStalledWALFailover(ctx, t, c, "among-stores")
+			runDiskStalledWALFailover(ctx, t, c)
 		},
 	})
 }
 
-func runDiskStalledWALFailover(
-	ctx context.Context, t test.Test, c cluster.Cluster, failoverFlag string,
-) {
+func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startSettings := install.MakeClusterSettings()
 	// Set a high value for the max sync durations to avoid the disk
 	// stall detector fataling the node.
@@ -68,12 +66,8 @@ func runDiskStalledWALFailover(
 
 	t.Status("starting cluster")
 	startOpts := option.DefaultStartOpts()
-	if failoverFlag == "among-stores" {
-		startOpts.RoachprodOpts.StoreCount = 2
-	}
-	startOpts.RoachprodOpts.ExtraArgs = []string{
-		"--wal-failover=" + failoverFlag,
-	}
+	startOpts.RoachprodOpts.WALFailover = "among-stores"
+	startOpts.RoachprodOpts.StoreCount = 2
 	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
 	// Open a SQL connection to n1, the node that will be stalled.
