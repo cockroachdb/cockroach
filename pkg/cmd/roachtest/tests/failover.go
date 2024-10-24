@@ -59,10 +59,20 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 // requests are successful with nominal latencies. See also:
 // https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
-	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
+	leaseTypes := []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases, registry.LeaderLeases}
+	for _, leases := range leaseTypes {
 		var leasesStr string
-		if leases == registry.ExpirationLeases {
+		switch leases {
+		case registry.EpochLeases:
+			// TODO(nvanbenschoten): when leader leases become the default, we should
+			// change this to "/lease=epoch" and change leader leases to "".
+			leasesStr = ""
+		case registry.ExpirationLeases:
 			leasesStr = "/lease=expiration"
+		case registry.LeaderLeases:
+			leasesStr = "/lease=leader"
+		default:
+			panic(errors.AssertionFailedf("unknown lease type: %v", leases))
 		}
 
 		for _, readOnly := range []bool{false, true} {
@@ -538,6 +548,18 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// since we'll have to disable the replicate queue shortly.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+
+	// DistSender circuit breakers are useful in this test to avoid artificially
+	// inflated latencies due to the way the test measures failover time. Without
+	// circuit breakers, a request stuck on the partitioned leaseholder will get
+	// blocked indefinitely, despite the range recovering on the other side of the
+	// partition. As a result, the test won't differentiate between temporary and
+	// permanent range unavailability. We have other tests which demonstrate the
+	// benefit of DistSender circuit breakers (especially when applications do not
+	// use statement timeouts), so we don't need to test them here.
+	// TODO(arul): this can be removed if/when we turn on DistSender circuit
+	// breakers for all ranges by default.
+	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
