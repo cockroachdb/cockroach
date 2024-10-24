@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -74,13 +76,11 @@ func runC2CMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster, sp
 func InitC2CMixed(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp replicationSpec,
 ) *c2cMixed {
-	// TODO(msbutler): allow for version skipping and multiple upgrades.
 	sourceMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(1, sp.srcNodes),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SharedProcessDeployment),
 		mixedversion.WithTag("source"),
-		mixedversion.DisableSkipVersionUpgrades,
 		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
@@ -89,7 +89,6 @@ func InitC2CMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.WithTag("dest"),
-		mixedversion.DisableSkipVersionUpgrades,
 		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
@@ -262,7 +261,7 @@ func (cm *c2cMixed) LatencyHook(ctx context.Context) {
 // - The source will also run a fingerprint command using the same timestamps
 // and ensure the fingerprints are the same.
 func (cm *c2cMixed) UpdateHook(ctx context.Context) {
-	destFinalized := make(chan struct{}, 1)
+	destFinalized := make(chan struct{})
 
 	cm.destMvt.InMixedVersion("maybe wait for replicated time",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -277,7 +276,6 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 	cm.sourceMvt.InMixedVersion(
 		"wait for dest to finalize if source is ready to finalize upgrade",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-
 			// If we have to wait for the lock, that implies the destination is
 			// waiting for the replication time to catch up in some mixed version
 			// state.
@@ -296,7 +294,10 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 			cm.midUpgradeCatchupMu.Unlock()
 			if h.Context().Stage == mixedversion.LastUpgradeStage {
 				l.Printf("waiting for destination cluster to finalize upgrade")
-				chanReadCtx(ctx, destFinalized)
+				select {
+				case <-destFinalized:
+				case <-ctx.Done():
+				}
 			} else {
 				l.Printf("no need to wait for dest: not ready to finalize")
 			}
@@ -304,27 +305,25 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 		},
 	)
 
-	destMajorUpgradeCount := 0
 	cm.destMvt.AfterUpgradeFinalized(
 		"cutover and allow source to finalize",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-			// Ensure the source always waits to finalize until after the dest finalizes.
-			// NB: the cutover may happen while the source is still in some mixed version state.
-			destFinalized <- struct{}{}
-			destMajorUpgradeCount++
-			if destMajorUpgradeCount == expectedMajorUpgrades {
+			version := h.Context().ToVersion
+			final := clusterupgrade.CurrentVersion()
+			if version.Equal(final) {
+				close(destFinalized)
 				return cm.destCutoverAndFingerprint(ctx, l, r, h)
 			}
 			return nil
 		},
 	)
 
-	sourceMajorUpgradeCount := 0
 	cm.sourceMvt.AfterUpgradeFinalized(
 		"fingerprint source",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-			sourceMajorUpgradeCount++
-			if sourceMajorUpgradeCount == expectedMajorUpgrades {
+			version := h.Context().ToVersion
+			final := clusterupgrade.CurrentVersion()
+			if version.Equal(final) {
 				return cm.sourceFingerprintAndCompare(ctx, l, r, h)
 			}
 			return nil
@@ -444,12 +443,12 @@ func (cm *c2cMixed) WaitForReplicatedTime(
 	cm.t.L().Printf("waiting for replicated time to advance past %s", targetTime)
 	return testutils.SucceedsWithinError(func() error {
 		query := "SELECT replicated_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]"
-		var replicatedTime time.Time
+		var replicatedTime gosql.NullTime
 		_, db := h.RandomDB(r)
 		if err := db.QueryRowContext(ctx, query, destTenantName).Scan(&replicatedTime); err != nil {
 			return err
 		}
-		if !replicatedTime.After(targetTime) {
+		if !(replicatedTime.Valid && replicatedTime.Time.After(targetTime)) {
 			return errors.Newf("replicated time %s not yet at %s", replicatedTime, targetTime)
 		}
 		cm.t.L().Printf("replicated time is now %s, past %s", replicatedTime, targetTime)
