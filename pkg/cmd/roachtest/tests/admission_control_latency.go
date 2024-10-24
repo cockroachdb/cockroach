@@ -234,8 +234,15 @@ func registerLatencyTests(r registry.Registry) {
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	// TODO(baptist): Allow the non-disk tests to reuse the cluster.
-	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem), spec.ReuseNone())
+	opts := []spec.Option{spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem)}
+	// TODO(baptist): This is ugly to use reflection here. The better change
+	// would be to have the perturbation expose the options it wants to add to
+	// the cluster spec. If there is any additional instances where we need to
+	// differentiate the tests, convert to that.
+	if reflect.TypeOf(v.perturbation) == reflect.TypeOf(&slowDisk{}) {
+		opts = append(opts, spec.ReuseNone())
+	}
+	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
 func (v variations) perturbationName() string {
