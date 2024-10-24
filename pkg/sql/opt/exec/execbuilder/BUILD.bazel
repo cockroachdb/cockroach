@@ -4,10 +4,10 @@ go_library(
     name = "execbuilder",
     srcs = [
         "builder.go",
-        "cascades.go",
         "col_ord_map.go",
         "format.go",
         "mutation.go",
+        "post_queries.go",
         "relational.go",
         "scalar.go",
         "statement.go",

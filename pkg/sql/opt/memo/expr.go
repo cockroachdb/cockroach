@@ -1337,43 +1337,49 @@ type FKCascade struct {
 
 	// Builder is an object that can be used as the "optbuilder" for the cascading
 	// query.
-	Builder CascadeBuilder
+	Builder PostQueryBuilder
 
 	// WithID identifies the buffer for the mutation input in the original
 	// expression tree. 0 if the cascade does not require input.
 	WithID opt.WithID
-
-	// OldValues are column IDs from the mutation input that correspond to the
-	// old values of the modified rows. The list maps 1-to-1 to foreign key
-	// columns. Empty if the cascade does not require input.
-	OldValues opt.ColList
-
-	// NewValues are column IDs from the mutation input that correspond to the
-	// new values of the modified rows. The list maps 1-to-1 to foreign key columns.
-	// It is empty if the mutation is a deletion. Empty if the cascade does not
-	// require input.
-	NewValues opt.ColList
 }
 
-// CascadeBuilder is an interface used to construct a cascading query for a
-// specific FK relation. For example: if we are deleting rows from a parent
-// table, after deleting the rows from the parent table this interface will be
-// used to build the corresponding deletion in the child table.
-type CascadeBuilder interface {
-	// Build constructs a cascading query that mutates the child table. The input
-	// is scanned using WithScan with the given WithID; oldValues and newValues
-	// columns correspond 1-to-1 to foreign key columns. For deletes, newValues is
-	// empty.
+// AfterTriggers stores metadata necessary for building a set of AFTER triggers.
+// AFTER triggers are built as needed, after the original query is executed.
+type AfterTriggers struct {
+	Triggers []cat.Trigger
+
+	// Builder is an object that can be used as the "optbuilder" for the cascading
+	// query.
+	Builder PostQueryBuilder
+
+	// WithID identifies the buffer for the mutation input in the original
+	// expression tree. It is always nonzero.
+	WithID opt.WithID
+}
+
+// PostQueryBuilder is an interface used to construct either a cascading query
+// for a specific FK relation, or an AFTER trigger action. For example: if we
+// are deleting rows from a parent table, after deleting the rows from the
+// parent table this interface will be used to build the corresponding deletion
+// in the child table.
+type PostQueryBuilder interface {
+	// Build constructs the plan for the cascading query or AFTER trigger action.
+	// The input is scanned using WithScan with the given WithID; colMap is
+	// provided to map from columns in the original memo to those in the new memo
+	// that is used for the With binding.
 	//
 	// The query does not need to be built in the same memo as the original query;
 	// the only requirement is that the mutation input columns
-	// (oldValues/newValues) are valid in the metadata.
+	// (oldValues/newValues, canaryCol) are valid in the metadata and have entries
+	// in the ColMap.
 	//
 	// The method does not mutate any captured state; it is ok to call Build
 	// concurrently (e.g. if the plan it originates from is cached and reused).
 	//
 	// Some cascades (delete fast path) don't require an input binding. In that
-	// case binding is 0, bindingProps is nil, and oldValues/newValues are empty.
+	// case binding is 0, bindingProps is nil, and colMap is empty. Triggers
+	// always require an input binding.
 	//
 	// Note: factory is always *norm.Factory; it is an interface{} only to avoid
 	// circular package dependencies.
@@ -1385,7 +1391,7 @@ type CascadeBuilder interface {
 		factory interface{},
 		binding opt.WithID,
 		bindingProps *props.Relational,
-		oldValues, newValues opt.ColList,
+		colMap opt.ColMap,
 	) (RelExpr, error)
 }
 

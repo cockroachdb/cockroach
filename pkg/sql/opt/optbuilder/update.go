@@ -350,6 +350,8 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 
 	mb.buildFKChecksForUpdate()
 
+	mb.buildRowLevelAfterTriggers(opt.UpdateOp)
+
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {
 		if col.id != 0 {

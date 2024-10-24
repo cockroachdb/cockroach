@@ -169,6 +169,12 @@ define MutationPrivate {
     # those referenced columns from its input.
     PassthroughCols ColList
 
+    # TriggerCols is the set of columns needed for building AFTER triggers, and
+    # which cannot be pruned from the mutation input. Note that TriggerCols may
+    # intersect with the other sets above, and it may also contain columns that
+    # are not part of the above sets.
+    TriggerCols ColSet
+
     # Mutation operators can act similarly to a With operator: they buffer their
     # input, making it accessible to FK queries. If this is not required, WithID
     # is zero.
@@ -180,6 +186,9 @@ define MutationPrivate {
     # Unique indexes where uniqueness will be ensured by writing tombstones to
     # all partitions.
     UniqueWithTombstoneIndexes IndexOrdinals
+
+    # AfterTriggers stores metadata necessary for building AFTER triggers.
+    AfterTriggers AfterTriggers
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

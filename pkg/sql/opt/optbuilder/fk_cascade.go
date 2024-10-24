@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// onDeleteCascadeBuilder is a memo.CascadeBuilder implementation for
+// onDeleteCascadeBuilder is a memo.PostQueryBuilder implementation for
 // ON DELETE CASCADE.
 //
 // It provides a method to build the cascading delete in the child table,
@@ -55,21 +55,28 @@ type onDeleteCascadeBuilder struct {
 	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
 	fkInboundOrdinal int
 	childTable       cat.Table
+
+	// oldValues is the list of columns from the mutation input that correspond to
+	// old values of the modified rows. The list maps 1-to-1 to FK columns.
+	// Note that the columns must be remapped to the new memo when the cascade is
+	// built.
+	oldValues opt.ColList
 }
 
-var _ memo.CascadeBuilder = &onDeleteCascadeBuilder{}
+var _ memo.PostQueryBuilder = &onDeleteCascadeBuilder{}
 
 func newOnDeleteCascadeBuilder(
-	mutatedTable cat.Table, fkInboundOrdinal int, childTable cat.Table,
+	mutatedTable cat.Table, fkInboundOrdinal int, childTable cat.Table, oldValues opt.ColList,
 ) *onDeleteCascadeBuilder {
 	return &onDeleteCascadeBuilder{
 		mutatedTable:     mutatedTable,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
+		oldValues:        oldValues,
 	}
 }
 
-// Build is part of the memo.CascadeBuilder interface.
+// Build is part of the memo.PostQueryBuilder interface.
 func (cb *onDeleteCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -78,9 +85,9 @@ func (cb *onDeleteCascadeBuilder) Build(
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
-	oldValues, newValues opt.ColList,
+	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -97,6 +104,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 		// The scope returned by buildDeleteCascadeMutationInput has one column
 		// for each public table column, making it appropriate to set it as
 		// mb.fetchScope.
+		oldValues := cb.oldValues.RemapColumns(colMap)
 		mb.fetchScope = b.buildDeleteCascadeMutationInput(
 			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
 		)
@@ -109,7 +117,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 	})
 }
 
-// onDeleteFastCascadeBuilder is a memo.CascadeBuilder implementation for
+// onDeleteFastCascadeBuilder is a memo.PostQueryBuilder implementation for
 // certain cases of ON DELETE CASCADE where we are deleting the entire table or
 // where we can transfer a filter from the original statement instead of
 // buffering the deleted rows.
@@ -145,7 +153,7 @@ type onDeleteFastCascadeBuilder struct {
 	origFKCols  opt.ColList
 }
 
-var _ memo.CascadeBuilder = &onDeleteFastCascadeBuilder{}
+var _ memo.PostQueryBuilder = &onDeleteFastCascadeBuilder{}
 
 // tryNewOnDeleteFastCascadeBuilder checks if the fast path cascade is
 // applicable to the given mutation, and if yes it returns an instance of
@@ -262,7 +270,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 	}, true
 }
 
-// Build is part of the memo.CascadeBuilder interface.
+// Build is part of the memo.PostQueryBuilder interface.
 func (cb *onDeleteFastCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -271,9 +279,9 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	factoryI interface{},
 	_ opt.WithID,
 	_ *props.Relational,
-	_, _ opt.ColList,
+	_ opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -351,7 +359,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	})
 }
 
-// onDeleteSetBuilder is a memo.CascadeBuilder implementation for
+// onDeleteSetBuilder is a memo.PostQueryBuilder implementation for
 // ON DELETE SET NULL and ON DELETE SET DEFAULT.
 //
 // It provides a method to build the cascading delete in the child table,
@@ -398,22 +406,33 @@ type onDeleteSetBuilder struct {
 
 	// action is either SetNull or SetDefault.
 	action tree.ReferenceAction
+
+	// oldValues is the list of columns from the mutation input that correspond to
+	// old values of the modified rows. The list maps 1-to-1 to FK columns.
+	// Note that the columns must be remapped to the new memo when the cascade is
+	// built.
+	oldValues opt.ColList
 }
 
-var _ memo.CascadeBuilder = &onDeleteSetBuilder{}
+var _ memo.PostQueryBuilder = &onDeleteSetBuilder{}
 
 func newOnDeleteSetBuilder(
-	mutatedTable cat.Table, fkInboundOrdinal int, childTable cat.Table, action tree.ReferenceAction,
+	mutatedTable cat.Table,
+	fkInboundOrdinal int,
+	childTable cat.Table,
+	action tree.ReferenceAction,
+	oldValues opt.ColList,
 ) *onDeleteSetBuilder {
 	return &onDeleteSetBuilder{
 		mutatedTable:     mutatedTable,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		action:           action,
+		oldValues:        oldValues,
 	}
 }
 
-// Build is part of the memo.CascadeBuilder interface.
+// Build is part of the memo.PostQueryBuilder interface.
 func (cb *onDeleteSetBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -422,9 +441,9 @@ func (cb *onDeleteSetBuilder) Build(
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
-	oldValues, newValues opt.ColList,
+	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -441,6 +460,7 @@ func (cb *onDeleteSetBuilder) Build(
 		// The scope returned by buildDeleteCascadeMutationInput has one column
 		// for each public table column, making it appropriate to set it as
 		// mb.fetchScope.
+		oldValues := cb.oldValues.RemapColumns(colMap)
 		mb.fetchScope = b.buildDeleteCascadeMutationInput(
 			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
 		)
@@ -562,7 +582,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	return outScope
 }
 
-// onUpdateCascadeBuilder is a memo.CascadeBuilder implementation for
+// onUpdateCascadeBuilder is a memo.PostQueryBuilder implementation for
 // ON UPDATE CASCADE / SET NULL / SET DEFAULT.
 //
 // It provides a method to build the cascading update in the child table,
@@ -613,22 +633,40 @@ type onUpdateCascadeBuilder struct {
 	childTable       cat.Table
 
 	action tree.ReferenceAction
+
+	// oldValues is the list of columns from the mutation input that correspond to
+	// old values of the modified rows. There is one entry per column in the
+	// table. Note that the columns must be remapped to the new memo when the
+	// cascade is built.
+	oldValues opt.ColList
+
+	// newValues is the list of columns from the mutation input that correspond to
+	// new values of the modified rows. There is one entry per column in the
+	// table. Note that the columns must be remapped to the new memo when the
+	// cascade is built.
+	newValues opt.ColList
 }
 
-var _ memo.CascadeBuilder = &onUpdateCascadeBuilder{}
+var _ memo.PostQueryBuilder = &onUpdateCascadeBuilder{}
 
 func newOnUpdateCascadeBuilder(
-	mutatedTable cat.Table, fkInboundOrdinal int, childTable cat.Table, action tree.ReferenceAction,
+	mutatedTable cat.Table,
+	fkInboundOrdinal int,
+	childTable cat.Table,
+	action tree.ReferenceAction,
+	oldValues, newValues opt.ColList,
 ) *onUpdateCascadeBuilder {
 	return &onUpdateCascadeBuilder{
 		mutatedTable:     mutatedTable,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		action:           action,
+		oldValues:        oldValues,
+		newValues:        newValues,
 	}
 }
 
-// Build is part of the memo.CascadeBuilder interface.
+// Build is part of the memo.PostQueryBuilder interface.
 func (cb *onUpdateCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -637,9 +675,9 @@ func (cb *onUpdateCascadeBuilder) Build(
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
-	oldValues, newValues opt.ColList,
+	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
@@ -652,6 +690,8 @@ func (cb *onUpdateCascadeBuilder) Build(
 		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
 		// Build a join of the table with the mutation input.
+		oldValues := cb.oldValues.RemapColumns(colMap)
+		newValues := cb.newValues.RemapColumns(colMap)
 		mb.outScope = b.buildUpdateCascadeMutationInput(
 			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
 		)
@@ -882,10 +922,10 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	return outScope
 }
 
-// buildCascadeHelper contains boilerplate for CascadeBuilder.Build
+// buildTriggerCascadeHelper contains boilerplate for PostQueryBuilder.Build
 // implementations. It creates a Builder, sets up panic-to-error conversion,
 // and executes the given function.
-func buildCascadeHelper(
+func buildTriggerCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,

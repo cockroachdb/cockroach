@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// cascadeBuilder is a helper that fills in exec.Cascade metadata; it also
-// contains the implementation of exec.Cascade.PlanFn.
+// postQueryBuilder is a helper that fills in exec.PostQuery metadata; it
+// also contains the implementation of exec.PostQuery.PlanFn.
 //
 // We walk through a simple example of a cascade to illustrate the flow around
-// executing cascades:
+// executing cascades and triggers:
 //
 //	CREATE TABLE parent (p INT PRIMARY KEY);
 //	CREATE TABLE child (
@@ -56,10 +56,10 @@ import (
 // mutation input (binding &1 above) and a cascadeBuilder object is constructed
 // for the cascade.
 //
-// The setupCascade method is called to fill in an exec.Cascade which is passed
-// to ConstructPlan. Note that we still did not build the cascading query; all
-// we did was provide some plumbing and an entry point (through PlanFn) for that
-// to happen later.
+// The setupCascade method is called to fill in an exec.PostQuery which is
+// passed to ConstructPlan. Note that we still did not build the cascading
+// query; all we did was provide some plumbing and an entry point
+// (through PlanFn) for that to happen later.
 //
 // The plan is constructed and processed by the execution engine. After the
 // plans for the subqueries and the main query are executed, the cascades are
@@ -101,9 +101,12 @@ import (
 //	   the "With" reference before starting.
 //
 // After PlanFn is called, the resulting plan is executed. Note that this plan
-// could itself have more exec.Cascades; these are queued and handled in the
+// could itself have more post-queries; these are queued and handled in the
 // same way.
-type cascadeBuilder struct {
+//
+// AFTER triggers are handled in much the same way as cascades, except that the
+// trigger plan invokes the trigger function instead of mutating a child table.
+type postQueryBuilder struct {
 	b              *Builder
 	mutationBuffer exec.Node
 	// mutationBufferCols maps With column IDs from the original memo to buffer
@@ -114,13 +117,13 @@ type cascadeBuilder struct {
 	colMeta []opt.ColumnMeta
 }
 
-// cascadeInputWithID is a special WithID that we use to refer to a cascade
+// postQueryInputWithID is a special WithID that we use to refer to a cascade
 // input. It should be large enough to never clash with "regular" WithIDs (which
 // are generated sequentially).
-const cascadeInputWithID opt.WithID = 1000000
+const postQueryInputWithID opt.WithID = 1000000
 
-func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder, error) {
-	cb := &cascadeBuilder{b: b}
+func makePostQueryBuilder(b *Builder, mutationWithID opt.WithID) (*postQueryBuilder, error) {
+	cb := &postQueryBuilder{b: b}
 	if mutationWithID == 0 {
 		// Cascade does not require the buffered input.
 		return cb, nil
@@ -145,9 +148,9 @@ func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder,
 	return cb, nil
 }
 
-// setupCascade fills in an exec.Cascade struct for the given cascade.
-func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
-	return exec.Cascade{
+// setupCascade fills in an exec.PostQuery struct for the given cascade.
+func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery {
+	return exec.PostQuery{
 		FKConstraint: cascade.FKConstraint,
 		Buffer:       cb.mutationBuffer,
 		PlanFn: func(
@@ -159,30 +162,57 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 			numBufferedRows int,
 			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			return cb.planCascade(
-				ctx, semaCtx, evalCtx, execFactory, cascade, bufferRef, numBufferedRows, allowAutoCommit,
+			const actionName = "cascade"
+			return cb.planPostQuery(
+				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
+				cascade.Builder, actionName,
 			)
 		},
 	}
 }
 
-// planCascade is used to plan a cascade query. It is NOT run while
-// planning the query; it is run by the execution logic (through
-// exec.Cascade.PlanFn) after the main query was executed.
+// setupTriggers fills in an exec.PostQuery struct for the given triggers.
+func (cb *postQueryBuilder) setupTriggers(triggers *memo.AfterTriggers) exec.PostQuery {
+	return exec.PostQuery{
+		Triggers: triggers.Triggers,
+		Buffer:   cb.mutationBuffer,
+		PlanFn: func(
+			ctx context.Context,
+			semaCtx *tree.SemaContext,
+			evalCtx *eval.Context,
+			execFactory exec.Factory,
+			bufferRef exec.Node,
+			numBufferedRows int,
+			allowAutoCommit bool,
+		) (exec.Plan, error) {
+			const actionName = "trigger"
+			return cb.planPostQuery(
+				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
+				triggers.Builder, actionName,
+			)
+		},
+	}
+}
+
+// planPostQuery is used to plan a cascade query or AFTER-trigger. It is NOT run
+// while planning the query; it is run by the execution logic (through
+// exec.PostQuery.PlanFn) after the main query was executed.
 //
-// See the comment for cascadeBuilder for a detailed explanation of the
+// See the comment for postQueryBuilder for a detailed explanation of the
 // process.
-func (cb *cascadeBuilder) planCascade(
+func (cb *postQueryBuilder) planPostQuery(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	execFactory exec.Factory,
-	cascade *memo.FKCascade,
 	bufferRef exec.Node,
 	numBufferedRows int,
 	allowAutoCommit bool,
+	builder memo.PostQueryBuilder,
+	actionName string,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
+	var err error
 	var o xform.Optimizer
 	o.Init(ctx, evalCtx, cb.b.catalog)
 	factory := o.Factory()
@@ -195,20 +225,18 @@ func (cb *cascadeBuilder) planCascade(
 	var bufferColMap colOrdMap
 	if bufferRef == nil {
 		// No input buffering.
-		var err error
-		relExpr, err = cascade.Builder.Build(
+		relExpr, err = builder.Build(
 			ctx,
 			semaCtx,
 			evalCtx,
 			cb.b.catalog,
 			factory,
-			0,   /* binding */
-			nil, /* bindingProps */
-			nil, /* oldValues */
-			nil, /* newValues */
+			0,            /* binding */
+			nil,          /* bindingProps */
+			opt.ColMap{}, /* colMap */
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "while building cascade expression")
+			return nil, errors.Wrapf(err, "while building %s expression", actionName)
 		}
 	} else {
 		// Set up metadata for the buffer columns.
@@ -244,29 +272,18 @@ func (cb *cascadeBuilder) planCascade(
 			RowCount:  float64(numBufferedRows),
 		}
 
-		// Remap the cascade columns.
-		oldVals, err := remapColumns(cascade.OldValues, withColRemap)
-		if err != nil {
-			return nil, err
-		}
-		newVals, err := remapColumns(cascade.NewValues, withColRemap)
-		if err != nil {
-			return nil, err
-		}
-
-		relExpr, err = cascade.Builder.Build(
+		relExpr, err = builder.Build(
 			ctx,
 			semaCtx,
 			evalCtx,
 			cb.b.catalog,
 			factory,
-			cascadeInputWithID,
+			postQueryInputWithID,
 			&bindingProps,
-			oldVals,
-			newVals,
+			withColRemap,
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "while building cascade expression")
+			return nil, errors.Wrapf(err, "while building %s expression", actionName)
 		}
 	}
 
@@ -280,14 +297,14 @@ func (cb *cascadeBuilder) planCascade(
 		preparedMemo := o.DetachMemo(ctx)
 		factory.FoldingControl().AllowStableFolds()
 		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
-			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")
+			return nil, errors.Wrapf(err, "while assigning placeholders in %s expression", actionName)
 		}
 	}
 
 	// 4. Optimize the expression.
 	optimizedExpr, err := o.Optimize()
 	if err != nil {
-		return nil, errors.Wrap(err, "while optimizing cascade expression")
+		return nil, errors.Wrapf(err, "while optimizing %s expression", actionName)
 	}
 
 	// 5. Execbuild the optimized expression.
@@ -297,24 +314,11 @@ func (cb *cascadeBuilder) planCascade(
 	)
 	if bufferRef != nil {
 		// Set up the With binding.
-		eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
+		eb.addBuiltWithExpr(postQueryInputWithID, bufferColMap, bufferRef)
 	}
 	plan, err := eb.Build()
 	if err != nil {
-		return nil, errors.Wrap(err, "while building cascade plan")
+		return nil, errors.Wrapf(err, "while building %s plan", actionName)
 	}
 	return plan, nil
-}
-
-// Remap columns according to a ColMap.
-func remapColumns(cols opt.ColList, m opt.ColMap) (opt.ColList, error) {
-	res := make(opt.ColList, len(cols))
-	for i := range cols {
-		val, ok := m.Get(int(cols[i]))
-		if !ok {
-			return nil, errors.AssertionFailedf("column %d not in mapping %s\n", cols[i], m.String())
-		}
-		res[i] = opt.ColumnID(val)
-	}
-	return res, nil
 }

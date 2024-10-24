@@ -24,7 +24,7 @@ func constructPlan(
 	planner *planner,
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
@@ -66,15 +66,21 @@ func constructPlan(
 		}
 	}
 	if len(cascades) > 0 {
-		res.cascades = make([]cascadeMetadata, len(cascades))
+		res.cascades = make([]postQueryMetadata, len(cascades))
 		for i := range cascades {
-			res.cascades[i].Cascade = cascades[i]
+			res.cascades[i].PostQuery = cascades[i]
 		}
 	}
 	if len(checks) > 0 {
 		res.checkPlans = make([]checkPlan, len(checks))
 		for i := range checks {
 			assignPlan(&res.checkPlans[i].plan, checks[i])
+		}
+	}
+	if len(triggers) > 0 {
+		res.triggers = make([]postQueryMetadata, len(triggers))
+		for i := range triggers {
+			res.triggers[i].PostQuery = triggers[i]
 		}
 	}
 	if flags.IsSet(exec.PlanFlagIsDDL) {

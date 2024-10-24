@@ -223,6 +223,10 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		); err != nil {
 			return err
 		}
+	}
+
+	if len(rowVals) > len(r.insertCols) {
+		// Remove extra columns for check constraints and AFTER triggers.
 		rowVals = rowVals[:len(r.insertCols)]
 	}
 

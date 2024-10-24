@@ -159,21 +159,26 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		rowVals = rowVals[:offset]
 	}
 
+	upsertCols := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
+	if n.run.tw.canaryOrdinal != -1 {
+		upsertCols++
+	}
+
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
 	if !n.run.checkOrds.Empty() {
-		ord := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
-		if n.run.tw.canaryOrdinal != -1 {
-			ord++
-		}
-		checkVals := rowVals[ord:]
+		checkVals := rowVals[upsertCols:]
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			n.run.tw.tableDesc(), n.run.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
-		rowVals = rowVals[:ord]
+	}
+
+	if len(rowVals) > upsertCols {
+		// Remove extra columns for check constraints and AFTER triggers.
+		rowVals = rowVals[:upsertCols]
 	}
 
 	if buildutil.CrdbTestBuild {

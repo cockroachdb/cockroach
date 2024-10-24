@@ -87,8 +87,9 @@ func (tc *Catalog) DropTrigger(n *tree.DropTrigger) {
 	if n.DropBehavior != tree.DropDefault {
 		panic(errors.Newf("test catalog does not support DROP TRIGGER with CASCADE or RESTRICT"))
 	}
+	ctx := context.Background()
 	tableName := n.Table.ToTableName()
-	ds, err := tc.resolveDataSource(&tableName)
+	ds, _, err := tc.ResolveDataSource(ctx, cat.Flags{}, &tableName)
 	if err != nil {
 		panic(err)
 	}
