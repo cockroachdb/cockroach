@@ -675,7 +675,20 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCannotCommitWithoutNewTermEntry(t, storeLivenessEnabled)
+		})
+}
+
+func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
+	var cfg func(c *Config) = nil
+	if !storeLivenessEnabled {
+		cfg = fortificationDisabledConfig
+	}
+
+	tt := newNetworkWithConfig(cfg, nil, nil, nil, nil, nil)
+
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -694,8 +707,23 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	// avoid committing ChangeTerm proposal
 	tt.ignore(pb.MsgApp)
 
-	// elect 2 as the new leader with term 2
+	// Elect 2 as the new leader with term 2.
+	if storeLivenessEnabled {
+		// We need to withdraw support of the current leader. This will prevent it
+		// from attempting to refortify the peers.
+		tt.withdrawSupportForAndFromAllPeers(1)
+
+		// Bumping all epochs will make all followers stop supporting the current
+		// fortified leader.
+		tt.bumpSupportEpochForAndFromAllPeers()
+	}
+
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// Revert the support state to normal.
+		tt.grantSupportForAndFromAllPeers(1)
+	}
 
 	// no log entries from previous term should be committed
 	sm = tt.peers[2].(*raft)
@@ -4285,6 +4313,37 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 	return mm
 }
 
+// withdrawSupportForAndFromAllPeers makes all nodes withdraw support for and
+// from the given peer.
+func (nw *network) withdrawSupportForAndFromAllPeers(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).WithdrawSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).WithdrawSupportFor(id)
+	}
+}
+
+// grantSupportForAndFromAllPeers makes all nodes grant support for and from the
+// given peer.
+func (nw *network) grantSupportForAndFromAllPeers(id pb.PeerID) {
+	for p := range nw.peers {
+		nw.peers[id].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).GrantSupportFrom(p)
+		nw.peers[p].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).GrantSupportFor(id)
+	}
+}
+
+// bumpSupportEpochForAndFromAllPeers bumps the supportFor and supportFrom
+// epochs for all peers.
+func (nw *network) bumpSupportEpochForAndFromAllPeers() {
+	for p1 := range nw.peers {
+		for p2 := range nw.peers {
+			nw.peers[p1].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).
+				BumpSupportForEpoch(p2)
+			nw.peers[p2].(*raft).storeLiveness.(*raftstoreliveness.MockStoreLiveness).
+				BumpSupportFromEpoch(p1)
+		}
+	}
+}
+
 type connem struct {
 	from, to pb.PeerID
 }
@@ -4350,7 +4409,7 @@ func newTestConfig(
 	if modifiers.testingDisableFortification {
 		storeLiveness = raftstoreliveness.Disabled{}
 	} else {
-		storeLiveness = raftstoreliveness.AlwaysLive{}
+		storeLiveness = raftstoreliveness.NewMockStoreLiveness()
 	}
 	return &Config{
 		ID:              id,
