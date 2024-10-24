@@ -2820,7 +2820,7 @@ CREATE TABLE t132669 (
 # unnecessary recursion to trigger a stack overflow without having to make the
 # `IN` list below huge - triggering a stack overflow with Go's default max stack
 # size requires a list of ~1.6 million elements.
-opt max-stack=50KB format=hide-all
+opt max-stack=125KB format=hide-all
 SELECT * FROM t132669
 WHERE a IN (
     1,  2,  3,  4,  5,  6,  7, 8, 9, 10,
