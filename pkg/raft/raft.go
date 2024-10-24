@@ -1146,6 +1146,24 @@ func (r *raft) tickElection() {
 	}
 
 	if r.promotable() && r.pastElectionTimeout() {
+		// If we are not supported by a quorum of voters, we shouldn't campaign.
+		if !r.supportedByQuorum() {
+			r.logger.Warningf("%x cannot campaign since there are not enough supported peers", r.id)
+			// NB: The peer is not supported by a quorum of voters, which means that
+			// there is no need to attempt to campaign right now, but we will attempt
+			// to campaign again in the future. This might be because this is the very
+			// first store liveness check. As a result:
+			// 1. We don't want to wait out an entire election timeout before
+			// campaigning again.
+			// 2. But we do want to take advantage of randomized election timeouts
+			// built into raft to prevent hung elections.
+			// 3. We want to be able to vote for other candidates during this time.
+			// We achieve all of these goals by "rewinding" electionElapsed to begin
+			// at r.electionTimeout. Also see pastElectionTimeout.
+			r.electionElapsed = r.electionTimeout
+			return
+		}
+
 		r.electionElapsed = 0
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
@@ -1340,6 +1358,38 @@ func (r *raft) supportingFortifiedLeader() bool {
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
 	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
 	return live && epoch == r.leadEpoch
+}
+
+// getSupportingVoters returns a slice of the voter ids that are providing us
+// store liveness support according to our view.
+func (r *raft) getSupportingVoters() []pb.PeerID {
+	supportingVoterIDs := []pb.PeerID{}
+	voterIDs := maps.Keys(r.config.Voters.IDs())
+	for _, p := range voterIDs {
+		if _, supported := r.fortificationTracker.IsFortifiedBy(p); supported {
+			supportingVoterIDs = append(supportingVoterIDs, p)
+		}
+	}
+	return supportingVoterIDs
+}
+
+// supportedByQuorum returns true if we are supported by a quorum of voters.
+func (r *raft) supportedByQuorum() bool {
+	if !r.fortificationTracker.FortificationEnabledForTerm() {
+		// If fortification is not enabled, this check should be a no-op.
+		return true
+	}
+
+	supportingVoters := r.getSupportingVoters()
+
+	// Mark all supporting voters as if they would vote for us in an election.
+	votes := map[pb.PeerID]bool{}
+	for _, p := range supportingVoters {
+		votes[p] = true
+	}
+
+	// Only return true if we have a quorum of supporting voters.
+	return r.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
