@@ -8,6 +8,7 @@ package scdeps
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,6 +56,7 @@ func NewBuilderDependencies(
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
 	semaCtx *tree.SemaContext,
+	defaultZoneConfig *zonepb.ZoneConfig,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -78,6 +80,7 @@ func NewBuilderDependencies(
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
 		semaCtx:                  semaCtx,
+		defaultZoneConfig:        defaultZoneConfig,
 	}
 }
 
@@ -101,6 +104,7 @@ type buildDeps struct {
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
 	semaCtx                  *tree.SemaContext
+	defaultZoneConfig        *zonepb.ZoneConfig
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -511,4 +515,8 @@ func (d *buildDeps) NodesStatusInfo() scbuild.NodesStatusInfo {
 
 func (d *buildDeps) RegionProvider() scbuild.RegionProvider {
 	return d.regionProvider
+}
+
+func (d *buildDeps) GetDefaultZoneConfig() *zonepb.ZoneConfig {
+	return d.defaultZoneConfig
 }
