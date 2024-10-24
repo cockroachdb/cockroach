@@ -118,9 +118,9 @@ func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 
 // cleanup is called when the sender is stopped. It is expected to free up
 // buffer queue and no new events should be buffered after this.
-func (bs *BufferedSender) cleanup() {
+func (bs *BufferedSender) cleanup(ctx context.Context) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	bs.queueMu.stopped = true
-	bs.queueMu.buffer.free()
+	bs.queueMu.buffer.drain(ctx)
 }

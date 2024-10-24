@@ -204,5 +204,5 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
-func (ubs *UnbufferedSender) cleanup() {
+func (ubs *UnbufferedSender) cleanup(context.Context) {
 }
