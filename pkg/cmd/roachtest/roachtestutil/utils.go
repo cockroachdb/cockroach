@@ -6,9 +6,16 @@
 package roachtestutil
 
 import (
+	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 )
 
 // SystemInterfaceSystemdUnitName is a convenience function that
@@ -31,4 +38,62 @@ func SetDefaultAdminUIPort(c cluster.Cluster, opts *install.StartOpts) {
 	if !c.IsLocal() {
 		opts.AdminUIPort = config.DefaultAdminUIPort
 	}
+}
+
+func GetWorkloadHistogramArgsString(
+	t test.Test, c cluster.Cluster, labels map[string]string,
+) string {
+	var histogramArgs string
+	if t.ExportOpenmetrics() {
+		histogramArgs += " --histogram-export-format='openmetrics' " +
+			"--histograms=" + t.PerfArtifactsDir() + "/stats.om " +
+			fmt.Sprintf("--openmetrics-labels='%s'", clusterstats.GetDefaultOpenmetricsLabelString(t, c, labels))
+	} else {
+		histogramArgs = " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+	}
+
+	return histogramArgs
+}
+
+func CreaterWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	var metricsExporter exporter.Exporter
+	if t.ExportOpenmetrics() {
+		labels := clusterstats.GetDefaultOpenmetricsLabelMap(t, c, nil)
+		openMetricsExporter := &exporter.OpenMetricsExporter{}
+		openMetricsExporter.SetLabels(&labels)
+		metricsExporter = openMetricsExporter
+
+	} else {
+		metricsExporter = &exporter.HdrJsonExporter{}
+	}
+
+	return metricsExporter
+}
+
+func GetLabelMapFromStruct(opts interface{}) map[string]string {
+	result := make(map[string]string)
+	val := reflect.ValueOf(opts)
+	typ := reflect.TypeOf(opts)
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldName := typ.Field(i).Name
+		var fieldValue string
+
+		switch field.Kind() {
+		case reflect.String:
+			fieldValue = field.String()
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			fieldValue = strconv.FormatInt(field.Int(), 10)
+		case reflect.Float32, reflect.Float64:
+			fieldValue = strconv.FormatFloat(field.Float(), 'f', -1, 64)
+		case reflect.Bool:
+			fieldValue = strconv.FormatBool(field.Bool())
+		default:
+		}
+
+		result[fieldName] = fieldValue
+	}
+
+	return result
 }

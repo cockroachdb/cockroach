@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -53,7 +54,10 @@ func registerMultiStoreOverload(r registry.Registry) {
 		t.Status("running workload")
 		dur := 20 * time.Minute
 		duration := " --duration=" + ifLocal(c, "10s", dur.String())
-		histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+		labels := map[string]string{
+			"duration": dur.String(),
+		}
+		histograms := " " + roachtestutil.GetWorkloadHistogramArgsString(t, c, labels)
 		m1 := c.NewMonitor(ctx, c.CRDBNodes())
 		m1.Go(func(ctx context.Context) error {
 			dbRegular := " --db=db1"
