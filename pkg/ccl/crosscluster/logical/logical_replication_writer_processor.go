@@ -677,6 +677,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
 		if len(todo) == 0 {
+			perChunkStats = perChunkStats[:worker]
 			break
 		}
 		// The chunk should end after the first new key after chunk size.
@@ -685,6 +686,9 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			chunkEnd++
 		}
 		chunk := todo[0:chunkEnd]
+		if len(chunk) > chunkSize*2 {
+			lrw.debug.LogOversizedChunk()
+		}
 		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
@@ -797,6 +801,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
 ) (flushStats, error) {
 	batchSize := lrw.getBatchSize()
+
+	lrw.debug.RecordChunkStart()
+	defer lrw.debug.RecordChunkComplete()
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
