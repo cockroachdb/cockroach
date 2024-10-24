@@ -524,7 +524,7 @@ type RaftConfig struct {
 	// an election. The actual election timeout is randomized by each replica to
 	// between 1-2 election timeouts. This value is inherited by individual stores
 	// unless overridden.
-	RaftElectionTimeoutTicks int
+	RaftElectionTimeoutTicks uint64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
@@ -532,7 +532,7 @@ type RaftConfig struct {
 	RaftReproposalTimeoutTicks int
 
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
-	RaftHeartbeatIntervalTicks int
+	RaftHeartbeatIntervalTicks uint64
 
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies the range lease duration.
 	RangeLeaseDuration time.Duration
@@ -633,10 +633,10 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RaftTickInterval = defaultRaftTickInterval
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
-		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+		cfg.RaftElectionTimeoutTicks = uint64(defaultRaftElectionTimeoutTicks)
 	}
 	if cfg.RaftHeartbeatIntervalTicks == 0 {
-		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
+		cfg.RaftHeartbeatIntervalTicks = uint64(defaultRaftHeartbeatIntervalTicks)
 	}
 	if cfg.RangeLeaseDuration == 0 {
 		cfg.RangeLeaseDuration = defaultRangeLeaseDuration
