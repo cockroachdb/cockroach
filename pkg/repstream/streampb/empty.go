@@ -180,12 +180,12 @@ type DebugLogicalConsumerStats struct {
 
 	Flushes struct {
 		Count, Nanos, KVs, Bytes, Batches int64
-
-		Last struct {
-			CurFlushStart                                                      time.Time
-			LastFlushNanos, ProcessedKVs, TotalKVs, Batches, SlowestBatchNanos int64
-			// TODO(dt):  BatchErrors atomic.Int64
-			// TODO(dt): LastBatchErr atomic.Value
+		OversizedChunks                   int64
+		Last                              struct {
+			ProcessedKVs, TotalKVs, Batches   int64
+			CurFlushStart                     time.Time
+			LastFlushNanos, SlowestBatchNanos int64
+			ChunksRunning, ChunksDone         int64
 		}
 	}
 	Checkpoints struct {
@@ -247,8 +247,19 @@ func (d *DebugLogicalConsumerStatus) RecordFlushStart(start time.Time, keyCount 
 	d.mu.stats.CurrentState = Flushing
 	d.mu.stats.Flushes.Last.CurFlushStart = start
 	d.mu.stats.Flushes.Last.TotalKVs = keyCount
+	d.mu.stats.Flushes.Last.ChunksRunning = 0
+	d.mu.stats.Flushes.Last.ChunksDone = 0
 	failPercent := d.mu.injectFailurePercent
 	return failPercent
+}
+
+func (d *DebugLogicalConsumerStatus) RecordChunkStart() {
+	atomic.AddInt64(&d.mu.stats.Flushes.Last.ChunksRunning, 1)
+}
+
+func (d *DebugLogicalConsumerStatus) RecordChunkComplete() {
+	atomic.AddInt64(&d.mu.stats.Flushes.Last.ChunksRunning, -1)
+	atomic.AddInt64(&d.mu.stats.Flushes.Last.ChunksDone, 1)
 }
 
 func (d *DebugLogicalConsumerStatus) RecordBatchApplied(t time.Duration, keyCount int64) {
@@ -287,4 +298,8 @@ func (d *DebugLogicalConsumerStatus) RecordPurgatory(netEvents int64) {
 	d.mu.Lock()
 	d.mu.stats.Purgatory.CurrentCount += netEvents
 	d.mu.Unlock()
+}
+
+func (d *DebugLogicalConsumerStatus) LogOversizedChunk() {
+	atomic.AddInt64(&d.mu.stats.Flushes.OversizedChunks, 1)
 }

@@ -8,6 +8,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"slices"
 	"time"
 
@@ -53,6 +54,22 @@ var flushBatchSize = settings.RegisterIntSetting(
 	"logical_replication.consumer.batch_size",
 	"the number of row updates to attempt in a single KV transaction",
 	32,
+	settings.NonNegativeInt,
+)
+
+var writerWorkers = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_worker_per_proc",
+	"the maximum number of workers per processor to use to flush each batch",
+	32,
+	settings.NonNegativeInt,
+)
+
+var minChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_size",
+	"the minimum number of row updates to pass to each flush worker",
+	64,
 	settings.NonNegativeInt,
 )
 
@@ -106,6 +123,13 @@ var (
 
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
+var batchSizeSetting = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"logical_replication.stream_batch_size",
+	"target batch size for logical replication stream",
+	1<<20,
+)
+
 func newLogicalReplicationWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -137,7 +161,7 @@ func newLogicalReplicationWriterProcessor(
 			tableID:  descpb.ID(dstTableID),
 		}
 	}
-	bhPool := make([]BatchHandler, maxWriterWorkers)
+	bhPool := make([]BatchHandler, writerWorkers.Get(&flowCtx.Cfg.Settings.SV))
 	for i := range bhPool {
 		var rp RowProcessor
 		var err error
@@ -314,6 +338,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 			lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes ||
 				lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes),
 		streamclient.WithDiff(true),
+		streamclient.WithBatchSize(batchSizeSetting.Get(&lrw.FlowCtx.Cfg.Settings.SV)),
 	)
 	if err != nil {
 		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))
@@ -335,10 +360,12 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
-		if err := lrw.consumeEvents(ctx); err != nil {
-			log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
-			lrw.sendError(errors.Wrap(err, "consume events"))
-		}
+		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", lrw.ProcessorID)), func(ctx context.Context) {
+			if err := lrw.consumeEvents(ctx); err != nil {
+				log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
+				lrw.sendError(errors.Wrap(err, "consume events"))
+			}
+		})
 		return nil
 	})
 }
@@ -590,8 +617,6 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 	return remaining[:j]
 }
 
-const maxWriterWorkers = 32
-
 // flushBuffer processes some or all of the events in the passed buffer, and
 // zeros out each event in the passed buffer for which it successfully completed
 // processing either by applying it or by sending it to a DLQ. If mustProcess is
@@ -644,8 +669,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	const minChunkSize = 64
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+	chunkSize := max((len(kvs)/len(lrw.bh))+1, int(minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)))
 
 	perChunkStats := make([]flushStats, len(lrw.bh))
 
@@ -653,6 +677,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
 		if len(todo) == 0 {
+			perChunkStats = perChunkStats[:worker]
 			break
 		}
 		// The chunk should end after the first new key after chunk size.
@@ -661,6 +686,9 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			chunkEnd++
 		}
 		chunk := todo[0:chunkEnd]
+		if len(chunk) > chunkSize*2 {
+			lrw.debug.LogOversizedChunk()
+		}
 		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
@@ -773,6 +801,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
 ) (flushStats, error) {
 	batchSize := lrw.getBatchSize()
+
+	lrw.debug.RecordChunkStart()
+	defer lrw.debug.RecordChunkComplete()
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
