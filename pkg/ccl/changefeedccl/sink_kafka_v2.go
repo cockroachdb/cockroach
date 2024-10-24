@@ -379,7 +379,7 @@ func makeKafkaSinkV2(
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
-		parallelism, topicNamer, pacerFactory, timeSource, mb(true)), nil
+		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
 
 func buildKgoConfig(
