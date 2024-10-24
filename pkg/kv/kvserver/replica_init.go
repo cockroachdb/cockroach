@@ -238,7 +238,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		RangeID:           r.RangeID,
 		ReplicaID:         r.replicaID,
 		ReplicaForTesting: (*replicaForRACv2)(r),
-		ReplicaMutexAsserter: replica_rac2.MakeReplicaMutexAsserter(
+		ReplicaMutexAsserter: rac2.MakeReplicaMutexAsserter(
 			&r.raftMu.Mutex, (*syncutil.RWMutex)(&r.mu.ReplicaMutex)),
 		RaftScheduler:          r.store.scheduler,
 		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
