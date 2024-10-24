@@ -1,0 +1,35 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data STRING
+) PARTITION BY LIST (id) (
+    PARTITION p1 VALUES IN (1, 2, 3),
+    PARTITION p2 VALUES IN (4, 5, 6)
+);
+
+/* test */
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+ALTER PARTITION p2 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 10;
+EXPLAIN (DDL) ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE DISCARD;
+----
+Schema change plan for ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE DISCARD; following ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›; ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›; ALTER PARTITION ‹p2› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹10›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1, PartitionName: "p1"}
+ │         │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2, PartitionName: "p1"}
+ │         └── 2 Mutation operations
+ │              ├── DiscardSubzoneConfig {"TableID":104}
+ │              └── DiscardSubzoneConfig {"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1, PartitionName: "p2"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1, PartitionName: "p2"}
+           └── 1 Mutation operation
+                └── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}

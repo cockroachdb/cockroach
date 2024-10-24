@@ -792,6 +792,7 @@ message IndexZoneConfig {
   // our solution is to drop the existing element and add a new element, with
   // different `seq_num`.
   uint32 seq_num = 6;
+  int32 old_idx_ref = 7;
   // In v24.3, we deprecated this field ID (previously: partition_name) in favor
   // of creating a new element that represents partitions --
   // PartitionZoneConfig.
@@ -809,6 +810,7 @@ message PartitionZoneConfig {
   // config, our solution is to drop the existing element and add a new element,
   // with different `seq_num`.
   uint32 seq_num = 6;
+  int32 old_idx_ref = 7;
 }
 
 // DatabaseData models what needs to be GCed when a database is dropped.

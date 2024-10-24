@@ -1,0 +1,33 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data)
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+ALTER INDEX t@idx CONFIGURE ZONE USING num_replicas = 10;
+EXPLAIN (DDL) ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD;
+----
+Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE DISCARD; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›; ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›; ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹num_replicas› = ‹10›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+ │         │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2}
+ │         └── 2 Mutation operations
+ │              ├── DiscardSubzoneConfig {"TableID":104}
+ │              └── DiscardSubzoneConfig {"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (idx), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (idx), SeqNum: 1}
+           └── 1 Mutation operation
+                └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
