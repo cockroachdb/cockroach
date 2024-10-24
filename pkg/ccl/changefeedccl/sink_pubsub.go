@@ -520,6 +520,8 @@ func (p *deprecatedGcpPubsubClient) close() error {
 
 // sendMessage sends a message to the topic
 func (p *deprecatedGcpPubsubClient) sendMessage(m []byte, topic string, key string) error {
+	defer p.metrics.timers().DownstreamClientSend.Start()()
+
 	t, err := p.getTopicClient(topic)
 	if err != nil {
 		return err
