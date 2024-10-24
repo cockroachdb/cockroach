@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Row, Skeleton } from "antd";
+import { Row } from "antd";
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -99,9 +99,10 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     hideIfTenant: true,
     width: "fit-content",
     render: (db: DatabaseRow) => (
-      <Skeleton loading={db.nodesByRegion.isLoading}>
-        <RegionNodesLabel nodesByRegion={db.nodesByRegion?.data} />
-      </Skeleton>
+      <RegionNodesLabel
+        loading={db.nodesByRegion.isLoading}
+        nodesByRegion={db.nodesByRegion?.data}
+      />
     ),
   },
 ];
@@ -205,13 +206,13 @@ export const DatabasesPageV2 = () => {
       <PageHeader
         title="Databases"
         actions={
-          <Skeleton loading={settingsLoading}>
+          !settingsLoading && (
             <BooleanSetting
               text={"Auto stats collection"}
               enabled={settingValues[AUTO_STATS_ENABLED_CS].value === "true"}
               tooltipText={AUTO_STATS_COLLECTION_HELP}
             />
-          </Skeleton>
+          )
         }
       />
       <PageConfig>
