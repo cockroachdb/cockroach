@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Copyright 2024 The Cockroach Authors.
 #
 # Use of this software is governed by the CockroachDB Software License
@@ -9,7 +10,7 @@
 # NOTE - This uses CLUSTER and WORKLOAD_CLUSTER environment variable, if not set the script fails
 
 # The first argument is the name suffix that is added to the script as tpch_init_<suffix>.sh
-if [ "$#" -lt 4 ]; then
+if [ "$#" -lt 3 ]; then
   echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--scale-factor,--db>"
   exit 1
 fi
