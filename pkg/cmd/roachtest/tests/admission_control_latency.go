@@ -68,8 +68,6 @@ import (
 // baseline. In some variations there is a small window immediately after the
 // perturbation is started where we don't measure the latency since we expect an
 // impact (such as after a network partition or unexpected node crash)
-//
-// TODO(baptist): Add a timeline describing the test in more detail.
 type variations struct {
 	// cluster is set up at the start of the test run.
 	cluster.Cluster
@@ -254,8 +252,6 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
 	v.acceptableChange = acceptableChange
-	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
-	// a given seed.
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -612,7 +608,9 @@ func (addNode) endPerturbation(ctx context.Context, t test.Test, v variations) t
 	return v.validationDuration
 }
 
-// restart will gracefully stop and then restart a node after a custom duration.
+// decommission will decommission the target node during the start phase. It
+// allows optionally calling drain first. Draining first is the best practice
+// recommendation, however it should not cause a latency impact either way.
 type decommission struct {
 	drain bool
 }
@@ -899,8 +897,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 // trackedStat is a collection of the relevant values from the histogram. The
-// score is a unitless composite measure representing the throughput and latency
-// of a histogram. Lower scores are better.
+// score is a geometric mean of time per operation per core and blended latency
+// of P50 and P99. Lower scores are better.
 type trackedStat struct {
 	cli.Tick
 	score time.Duration
