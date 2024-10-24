@@ -7,6 +7,10 @@ CREATE TABLE child (k INT PRIMARY KEY, x INT REFERENCES xy(x) ON UPDATE CASCADE 
 ----
 
 exec-ddl
+CREATE TABLE computed (k INT PRIMARY KEY, v INT AS (k + 1) STORED, w INT AS (k + 2) VIRTUAL);
+----
+
+exec-ddl
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
     RETURN COALESCE(NEW, OLD);
@@ -539,6 +543,98 @@ root
                           └── filters
                                └── x:76 = xy.x:77
 
+# Show interaction with computed columns.
+exec-ddl
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON computed FOR EACH ROW
+WHEN ((NEW).v IS NULL AND (NEW).w IS NULL) EXECUTE FUNCTION f();
+----
+
+norm format=(hide-all,show-columns)
+INSERT INTO computed (k) VALUES (1);
+----
+insert computed
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── k_new:24 => k:1
+ │    ├── v_comp:25 => v:2
+ │    └── w_comp:26 => w:3
+ └── project
+      ├── columns: v_comp:25 w_comp:26 column1:6 v_comp:7 w_comp:8 new:9 f:23 k_new:24
+      ├── project
+      │    ├── columns: k_new:24 column1:6 v_comp:7 w_comp:8 new:9 f:23
+      │    ├── barrier
+      │    │    ├── columns: column1:6 v_comp:7 w_comp:8 new:9 f:23
+      │    │    └── select
+      │    │         ├── columns: column1:6 v_comp:7 w_comp:8 new:9 f:23
+      │    │         ├── project
+      │    │         │    ├── columns: f:23 column1:6 v_comp:7 w_comp:8 new:9
+      │    │         │    ├── barrier
+      │    │         │    │    ├── columns: column1:6 v_comp:7 w_comp:8 new:9
+      │    │         │    │    └── values
+      │    │         │    │         ├── columns: column1:6 v_comp:7 w_comp:8 new:9
+      │    │         │    │         └── (1, 2, 3, ((1, NULL, NULL) AS k, v, w))
+      │    │         │    └── projections
+      │    │         │         └── CASE WHEN ((new:9).v IS NULL) AND ((new:9).w IS NULL) THEN f(new:9, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 55, 'computed', 'computed', 'public', 0, ARRAY[]) ELSE new:9 END [as=f:23]
+      │    │         └── filters
+      │    │              └── f:23 IS DISTINCT FROM NULL
+      │    └── projections
+      │         └── (f:23).k [as=k_new:24]
+      └── projections
+           ├── k_new:24 + 1 [as=v_comp:25]
+           └── k_new:24 + 2 [as=w_comp:26]
+
+norm format=(hide-all,show-columns)
+UPDATE computed SET k = 2 WHERE k = 1;
+----
+update computed
+ ├── columns: <none>
+ ├── fetch columns: k:6 v:7 w:8
+ ├── update-mapping:
+ │    ├── k_new:30 => k:1
+ │    ├── v_comp:31 => v:2
+ │    └── w_comp:32 => w:3
+ └── project
+      ├── columns: v_comp:31 w_comp:32 k:6 v:7 w:8 k_new:30
+      ├── project
+      │    ├── columns: k_new:30 k:6 v:7 w:8
+      │    ├── barrier
+      │    │    ├── columns: k:6 v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 k_new:11 v_comp:12 w_comp:13 old:14 new:15 f:29
+      │    │    └── select
+      │    │         ├── columns: k:6 v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 k_new:11 v_comp:12 w_comp:13 old:14 new:15 f:29
+      │    │         ├── project
+      │    │         │    ├── columns: f:29 k:6 v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 k_new:11 v_comp:12 w_comp:13 old:14 new:15
+      │    │         │    ├── barrier
+      │    │         │    │    ├── columns: k:6 v:7 w:8 crdb_internal_mvcc_timestamp:9 tableoid:10 k_new:11 v_comp:12 w_comp:13 old:14 new:15
+      │    │         │    │    └── project
+      │    │         │    │         ├── columns: new:15 old:14 v_comp:12 w_comp:13 k_new:11 w:8 k:6 v:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │         │    │         ├── select
+      │    │         │    │         │    ├── columns: k:6 v:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │         │    │         │    ├── scan computed
+      │    │         │    │         │    │    ├── columns: k:6 v:7 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │         │    │         │    │    └── computed column expressions
+      │    │         │    │         │    │         ├── v:7
+      │    │         │    │         │    │         │    └── k:6 + 1
+      │    │         │    │         │    │         └── w:8
+      │    │         │    │         │    │              └── k:6 + 2
+      │    │         │    │         │    └── filters
+      │    │         │    │         │         └── k:6 = 1
+      │    │         │    │         └── projections
+      │    │         │    │              ├── ((2, NULL, NULL) AS k, v, w) [as=new:15]
+      │    │         │    │              ├── ((k:6, CAST(NULL AS INT8), CAST(NULL AS INT8)) AS k, v, w) [as=old:14]
+      │    │         │    │              ├── 3 [as=v_comp:12]
+      │    │         │    │              ├── 4 [as=w_comp:13]
+      │    │         │    │              ├── 2 [as=k_new:11]
+      │    │         │    │              └── k:6 + 2 [as=w:8]
+      │    │         │    └── projections
+      │    │         │         └── CASE WHEN ((new:15).v IS NULL) AND ((new:15).w IS NULL) THEN f(new:15, old:14, 'tr', 'BEFORE', 'ROW', 'UPDATE', 55, 'computed', 'computed', 'public', 0, ARRAY[]) ELSE new:15 END [as=f:29]
+      │    │         └── filters
+      │    │              └── f:29 IS DISTINCT FROM NULL
+      │    └── projections
+      │         └── (f:29).k [as=k_new:30]
+      └── projections
+           ├── k_new:30 + 1 [as=v_comp:31]
+           └── k_new:30 + 2 [as=w_comp:32]
+
 # ------------------------------------------------------------------------------
 # Row-level AFTER triggers.
 # ------------------------------------------------------------------------------
@@ -942,7 +1038,7 @@ insert t133329
  │    │         │    │         └── projections
  │    │         │    │              └── ((column1, column2) AS k, a)
  │    │         │    └── projections
- │    │         │         └── f(new, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 56, 't133329', 't133329', 'public', 0, ARRAY[])
+ │    │         │         └── f(new, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 57, 't133329', 't133329', 'public', 0, ARRAY[])
  │    │         └── filters
  │    │              └── f IS DISTINCT FROM NULL
  │    └── projections
