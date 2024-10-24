@@ -284,7 +284,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	// Set insertExpr. This expression is used when building uniqueness checks.
 	// See mutationBuilder.buildCheckInputScan.
-	mb.insertExpr = mb.outScope.expr
+	//
+	// Avoid this optimization when there are row-level BEFORE INSERT triggers,
+	// since they can modify the set of inserted rows.
+	if !mb.hasRowLevelTriggers(tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
+		mb.insertExpr = mb.outScope.expr
+	}
 
 	var returning *tree.ReturningExprs
 	if resultsNeeded(ins.Returning) {

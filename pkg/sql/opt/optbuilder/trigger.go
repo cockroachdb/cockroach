@@ -793,3 +793,23 @@ func (mb *mutationBuilder) getRowLevelTriggers(
 	sort.Slice(triggers, less)
 	return triggers
 }
+
+// hasRowLevelTriggers returns true if the table has any row-level triggers that
+// match the given action time and event type.
+func (mb *mutationBuilder) hasRowLevelTriggers(
+	actionTime tree.TriggerActionTime, eventToMatch tree.TriggerEventType,
+) bool {
+	for i := 0; i < mb.tab.TriggerCount(); i++ {
+		trigger := mb.tab.Trigger(i)
+		if !trigger.Enabled() || !trigger.ForEachRow() ||
+			trigger.ActionTime() != actionTime {
+			continue
+		}
+		for j := 0; j < trigger.EventCount(); j++ {
+			if eventToMatch == trigger.Event(j).EventType {
+				return true
+			}
+		}
+	}
+	return false
+}

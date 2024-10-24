@@ -61,6 +61,8 @@ type mutationBuilder struct {
 	// inserted into the target table. It is only populated for INSERT
 	// expressions. It is currently used to inline constant insert values into
 	// uniqueness checks.
+	//
+	// insertExpr may not be set (e.g. if there are INSERT triggers).
 	insertExpr memo.RelExpr
 
 	// targetColList is an ordered list of IDs of the table columns into which
