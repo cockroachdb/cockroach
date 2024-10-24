@@ -605,6 +605,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	}
 	logResolveIntent(ctx, resolve)
 	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
+	emptyHeader := kvpb.AdmissionHeader{}
+	if req.AdmissionHeader == emptyHeader {
+		panic("empty admission error")
+	}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
