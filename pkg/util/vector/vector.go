@@ -63,6 +63,15 @@ func ParseVector(input string) (T, error) {
 	return vector, nil
 }
 
+// AsSet returns this vector a set of one vector.
+func (v T) AsSet() Set {
+	return Set{
+		Dims:  len(v),
+		Count: 1,
+		Data:  v[:len(v):len(v)],
+	}
+}
+
 // String implements the fmt.Stringer interface.
 func (v T) String() string {
 	var sb strings.Builder
