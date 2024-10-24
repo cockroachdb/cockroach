@@ -268,7 +268,7 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
+	return catchUpIter.CatchUpScan(ctx, br.streamCtx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 
 // Wait for this registration to completely process its internal buffer.
