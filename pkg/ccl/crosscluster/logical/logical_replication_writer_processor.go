@@ -56,6 +56,22 @@ var flushBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var writerWorkers = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_worker_per_proc",
+	"the maximum number of workers per processor to use to flush each batch",
+	32,
+	settings.NonNegativeInt,
+)
+
+var minChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_size",
+	"the minimum number of row updates to pass to each flush worker",
+	64,
+	settings.NonNegativeInt,
+)
+
 // logicalReplicationWriterProcessor consumes a cross-cluster replication stream
 // by decoding kvs in it to logical changes and applying them by executing DMLs.
 type logicalReplicationWriterProcessor struct {
@@ -144,7 +160,7 @@ func newLogicalReplicationWriterProcessor(
 			tableID:  descpb.ID(dstTableID),
 		}
 	}
-	bhPool := make([]BatchHandler, maxWriterWorkers)
+	bhPool := make([]BatchHandler, writerWorkers.Get(&flowCtx.Cfg.Settings.SV))
 	for i := range bhPool {
 		var rp RowProcessor
 		var err error
@@ -598,8 +614,6 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 	return remaining[:j]
 }
 
-const maxWriterWorkers = 32
-
 // flushBuffer processes some or all of the events in the passed buffer, and
 // zeros out each event in the passed buffer for which it successfully completed
 // processing either by applying it or by sending it to a DLQ. If mustProcess is
@@ -652,8 +666,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	const minChunkSize = 64
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+	chunkSize := max((len(kvs)/len(lrw.bh))+1, int(minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)))
 
 	perChunkStats := make([]flushStats, len(lrw.bh))
 
