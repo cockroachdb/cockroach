@@ -295,7 +295,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.use_declarative_schema_changer	enumeration	on	"default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
+sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 1, on = 2, experimental_always = 3, off = 4]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.zigzag_join.enabled	boolean	false	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default

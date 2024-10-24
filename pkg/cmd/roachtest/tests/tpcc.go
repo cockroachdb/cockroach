@@ -1280,7 +1280,8 @@ type tpccBenchSpec struct {
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
 	// ExpirationLeases enables use of expiration-based leases.
-	ExpirationLeases             bool
+	ExpirationLeases bool
+	// TODO(nvanbenschoten): add a leader lease variant.
 	EnableDefaultScheduledBackup bool
 	// SharedProcessMT, if true, indicates that the cluster should run in
 	// shared-process mode of multi-tenancy.
