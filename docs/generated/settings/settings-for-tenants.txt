@@ -400,5 +400,6 @@ trace.opentelemetry.collector	string		address of an OpenTelemetry trace collecto
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	application
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
+ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
 version	version	1000024.2-upgrading-to-1000024.3-step-022	set the active cluster version in the format '<major>.<minor>'	application
