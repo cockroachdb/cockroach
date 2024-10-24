@@ -224,6 +224,8 @@ func (l LeaseType) String() string {
 		return "epoch"
 	case ExpirationLeases:
 		return "expiration"
+	case LeaderLeases:
+		return "leader"
 	case MetamorphicLeases:
 		return "metamorphic"
 	default:
@@ -238,10 +240,17 @@ const (
 	EpochLeases
 	// ExpirationLeases uses expiration leases for all ranges.
 	ExpirationLeases
+	// LeaderLeases uses leader leases where possible.
+	LeaderLeases
 	// MetamorphicLeases randomly chooses epoch or expiration
-	// leases (across the entire cluster)
+	// leases (across the entire cluster).
 	MetamorphicLeases
 )
+
+// LeaseTypes contains all lease types.
+//
+// The list does not contain aliases like "default" and "metamorphic".
+var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
 
 // CloudSet represents a set of clouds.
 //
