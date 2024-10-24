@@ -195,7 +195,7 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 func checkIfDescriptorHasGCDependents(_ descpb.ID, md *opGenContext) bool {
 	for _, t := range md.Targets {
 		switch t.Element().(type) {
-		case *scpb.IndexData, *scpb.TableData:
+		case *scpb.TableData:
 			return true
 		}
 	}

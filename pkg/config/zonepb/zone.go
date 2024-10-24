@@ -1210,11 +1210,11 @@ func (z *ZoneConfig) MergeSubzoneSpans(subzoneSpans []SubzoneSpan) {
 }
 
 // FilterSubzoneSpansByIdx retrieves all subzone spans with the given
-// SubzoneIndex.
-func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIdx int32) []SubzoneSpan {
+// subzoneIndex.
+func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIndex int32) []SubzoneSpan {
 	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
 	for _, s := range z.SubzoneSpans {
-		if s.SubzoneIndex == subzoneIdx {
+		if s.SubzoneIndex == subzoneIndex {
 			filteredSpans = append(filteredSpans, s)
 		}
 	}
