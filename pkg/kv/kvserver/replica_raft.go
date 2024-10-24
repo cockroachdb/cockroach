@@ -1321,7 +1321,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			raftStatus := raftGroup.BasicStatus()
 			if shouldCampaignAfterConfChange(ctx, r.store.ClusterSettings(), r.store.StoreID(),
 				r.descRLocked(), raftStatus, leaseStatus) {
-				r.forceCampaignLocked(ctx)
+				r.forceCampaignLocked(ctx, raftStatus.Lead)
 			}
 		}
 
@@ -2615,9 +2615,14 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // TODO(nvanbenschoten): this is the remaining logic which needs work in order
 // to complete #125254. See the comment in raft.go about how even a local
 // fortification check is not enough to make MsgTimeoutNow safe.
-func (r *Replica) forceCampaignLocked(ctx context.Context) {
+func (r *Replica) forceCampaignLocked(ctx context.Context, lead raftpb.PeerID) {
 	log.VEventf(ctx, 3, "force campaigning")
-	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	msg := raftpb.Message{
+		To: raftpb.PeerID(r.replicaID),
+		// We pretend that the message was sent from the leader.
+		From: lead,
+		Type: raftpb.MsgTimeoutNow,
+	}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}

@@ -165,7 +165,7 @@ func TestMsgFromLeader(t *testing.T) {
 		{pb.MsgAppResp, false},
 		{pb.MsgVote, false},
 		{pb.MsgVoteResp, false},
-		{pb.MsgSnap, true},
+		{pb.MsgSnap, false},
 		{pb.MsgHeartbeat, true},
 		{pb.MsgHeartbeatResp, false},
 		{pb.MsgTimeoutNow, true},
