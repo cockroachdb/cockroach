@@ -45,6 +45,9 @@ func (tzo *tableZoneConfigObj) getZoneConfigElemForDrop(
 	b BuildCtx,
 ) ([]scpb.Element, []scpb.Element) {
 	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this table. This becomes
+	// more relevant in explicit txns -- where there could be multiple zone config
+	// elements associated with this table with increasing seqNums.
 	b.QueryByID(tzo.getTargetID()).FilterTableZoneConfig().
 		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
 			e.ZoneConfig.DeleteTableConfig()
@@ -104,7 +107,7 @@ func (tzo *tableZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, tzo, options)
+	return maybeMultiregionErrorWithHint(b, tzo, zs, options)
 }
 
 func (tzo *tableZoneConfigObj) getTargetID() catid.DescID {

@@ -1,0 +1,80 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data)
+);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+ALTER INDEX t@idx CONFIGURE ZONE USING num_replicas = 10;
+ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 11
+    target: INDEX defaultdb.public.t@t_pkey
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 12
+    target: INDEX defaultdb.public.t@t_pkey
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:11 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 10
+    target: INDEX defaultdb.public.t@idx
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false subzones:<index_id:1 partition_name:"" config:<range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:11 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false > > '
+  sql:
+    descriptorId: 104
+    statement: ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.RemoveZoneConfig to event log:
+  config:
+    target: INDEX defaultdb.public.t@t_pkey
+  sql:
+    descriptorId: 104
+    statement: ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE DISCARD
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+upsert zone config for #104
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

@@ -186,13 +186,6 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		return &tzo, nil
 	}
 
-	// TODO(annie): remove this when we add support for discarding subzone
-	// configs.
-	if n.Discard {
-		return nil, scerrors.NotImplementedErrorf(n, "discarding zone configurations on "+
-			"subzones are not supported in the DSC")
-	}
-
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
 	// We are an index object. Determine the index ID and fill this
 	// information out in our zoneConfigObject.

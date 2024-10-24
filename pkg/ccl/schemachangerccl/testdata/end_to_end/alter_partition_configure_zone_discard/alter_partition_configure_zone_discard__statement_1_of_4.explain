@@ -8,9 +8,9 @@ CREATE TABLE t (
 );
 
 /* test */
-EXPLAIN (DDL) ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+EXPLAIN (DDL) ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
 ----
-Schema change plan for ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›;
+Schema change plan for ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC

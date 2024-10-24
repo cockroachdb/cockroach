@@ -1355,6 +1355,7 @@ ElementState:
   Status: PUBLIC
 - PartitionZoneConfig:
     indexId: 1
+    oldIdxRef: -1
     partitionName: us-east1
     seqNum: 0
     subzone:
@@ -1392,6 +1393,7 @@ ElementState:
   Status: PUBLIC
 - PartitionZoneConfig:
     indexId: 1
+    oldIdxRef: -1
     partitionName: us-east2
     seqNum: 0
     subzone:
@@ -1429,6 +1431,7 @@ ElementState:
   Status: PUBLIC
 - PartitionZoneConfig:
     indexId: 1
+    oldIdxRef: -1
     partitionName: us-east3
     seqNum: 0
     subzone:

@@ -263,6 +263,7 @@ IndexZoneConfig :  IndexID
 IndexZoneConfig :  Subzone
 IndexZoneConfig : []SubzoneSpans
 IndexZoneConfig :  SeqNum
+IndexZoneConfig :  OldIdxRef
 
 object LDRJobIDs
 
@@ -295,6 +296,7 @@ PartitionZoneConfig :  PartitionName
 PartitionZoneConfig :  Subzone
 PartitionZoneConfig : []SubzoneSpans
 PartitionZoneConfig :  SeqNum
+PartitionZoneConfig :  OldIdxRef
 
 object PrimaryIndex
 

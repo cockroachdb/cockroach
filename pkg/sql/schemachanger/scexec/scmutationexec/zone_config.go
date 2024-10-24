@@ -27,3 +27,10 @@ func (i *immediateVisitor) DiscardTableZoneConfig(
 	}
 	return nil
 }
+
+func (i *immediateVisitor) DiscardSubzoneConfig(
+	ctx context.Context, op scop.DiscardSubzoneConfig,
+) error {
+	i.ImmediateMutationStateUpdater.DeleteSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
+	return nil
+}
