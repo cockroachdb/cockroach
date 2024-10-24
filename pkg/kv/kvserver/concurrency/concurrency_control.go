@@ -505,6 +505,7 @@ type latchManager interface {
 	// CheckOptimisticNoConflicts returns true iff the spans in the provided
 	// spanset do not conflict with existing latches.
 	CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool
+	CheckOptimisticNoConflictsCtx(ctx context.Context, lg latchGuard, spans *spanset.SpanSet) bool
 
 	// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts
 	// returned false, or some other occurrence (like conflicting locks) is
