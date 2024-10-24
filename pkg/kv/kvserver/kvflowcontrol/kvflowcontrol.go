@@ -114,6 +114,23 @@ var validateTokenRange = settings.WithValidateInt(func(b int64) error {
 	return nil
 })
 
+// TokenCounterResetEpoch is an escape hatch for administrators that should
+// never be needed. By incrementing this epoch (or changing it to a value
+// different than before), an administrator can restore all RACv2 token
+// counters to their default (full) state. This can be used to counteract a
+// token leakage bug, but note that if there is indeed a bug, the leakage may
+// resume, and tokens may again be exhausted. So it is expected that this will
+// be used together with disabling replication admission control by setting
+// kvadmission.flow_control.enabled=false. Note that disabling replication
+// admission control should be sufficient, since it should unblock work that
+// is waiting-for-eval. But in case there is another bug that is preventing
+// such work from unblocking, this setting may be useful.
+var TokenCounterResetEpoch = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller.token_reset_epoch",
+	"escape hatch for administrators to reset all token counters to their default (full) state",
+	0)
+
 // V2EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
 // this replica is the leader.
 //
