@@ -229,13 +229,13 @@ func registerLatencyTests(r registry.Registry) {
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
-	addDev(r, &restart{cleanRestart: true}, math.Inf(1))
-	addDev(r, &partition{partitionSite: true}, math.Inf(1))
-	addDev(r, addNode{}, math.Inf(1))
-	addDev(r, &decommission{drain: true}, math.Inf(1))
-	addDev(r, backfill{}, math.Inf(1))
-	addDev(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
-	addDev(r, elasticWorkload{}, math.Inf(1))
+	addDev(r, &restart{cleanRestart: true})
+	addDev(r, &partition{partitionSite: true})
+	addDev(r, addNode{})
+	addDev(r, &decommission{drain: true})
+	addDev(r, backfill{})
+	addDev(r, &slowDisk{slowLiveness: true, walFailover: true})
+	addDev(r, elasticWorkload{})
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -283,9 +283,10 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 	})
 }
 
-func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
+func addDev(r registry.Registry, p perturbation) {
 	v := setupDev(p)
-	v.acceptableChange = acceptableChange
+	// Dev tests never fail on latency increases.
+	v.acceptableChange = math.Inf(1)
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
