@@ -52,9 +52,6 @@ type bufferedRegistration struct {
 		// This will cause the registration to exit with an error once the buffer
 		// has been emptied.
 		overflowed bool
-		// Boolean indicating if all events have been output to stream. Used only
-		// for testing.
-		caughtUp bool
 		// Management of the output loop goroutine, used to ensure proper teardown.
 		outputLoopCancelFn func()
 		disconnected       bool
@@ -99,7 +96,6 @@ func newBufferedRegistration(
 		blockWhenFull: blockWhenFull,
 	}
 	br.mu.Locker = &syncutil.Mutex{}
-	br.mu.caughtUp = true
 	br.mu.catchUpIter = catchUpIter
 	return br
 }
@@ -123,7 +119,6 @@ func (br *bufferedRegistration) publish(
 	alloc.Use(ctx)
 	select {
 	case br.buf <- e:
-		br.mu.caughtUp = false
 	default:
 		// If we're asked to block (in tests), do a blocking send after releasing
 		// the mutex -- otherwise, the output loop won't be able to consume from the
@@ -134,7 +129,6 @@ func (br *bufferedRegistration) publish(
 			select {
 			case br.buf <- e:
 				br.mu.Lock()
-				br.mu.caughtUp = false
 			case <-ctx.Done():
 				br.mu.Lock()
 				alloc.Release(ctx)
@@ -194,7 +188,6 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 		br.mu.Lock()
 		if len(br.buf) == 0 {
 			overflowed = br.mu.overflowed
-			br.mu.caughtUp = true
 		}
 		br.mu.Unlock()
 		if overflowed {
@@ -281,7 +274,7 @@ func (br *bufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	}
 	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
 		br.mu.Lock()
-		caughtUp := len(br.buf) == 0 && br.mu.caughtUp
+		caughtUp := len(br.buf) == 0
 		br.mu.Unlock()
 		if caughtUp {
 			return nil
