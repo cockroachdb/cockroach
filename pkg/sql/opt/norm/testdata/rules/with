@@ -1856,7 +1856,7 @@ project
  │         │    ├── columns: i:5!null sum:7
  │         │    ├── cardinality: [0 - 1]
  │         │    ├── key: ()
- │         │    ├── fd: ()-->(5)
+ │         │    ├── fd: ()-->(5,7)
  │         │    ├── select
  │         │    │    ├── columns: i:5!null
  │         │    │    ├── cardinality: [0 - 1]
