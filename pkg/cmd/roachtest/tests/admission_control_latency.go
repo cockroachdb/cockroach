@@ -204,28 +204,28 @@ func registerLatencyTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
-	addMetamorphic(r, &restart{}, math.Inf(1))
-	addMetamorphic(r, &partition{}, math.Inf(1))
+	addMetamorphic(r, restart{}, math.Inf(1))
+	addMetamorphic(r, partition{}, math.Inf(1))
 	addMetamorphic(r, addNode{}, 5.0)
-	addMetamorphic(r, &decommission{}, 5.0)
+	addMetamorphic(r, decommission{}, 5.0)
 	addMetamorphic(r, backfill{}, 40.0)
 	addMetamorphic(r, &slowDisk{}, math.Inf(1))
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
-	addFull(r, &restart{cleanRestart: true}, math.Inf(1))
-	addFull(r, &partition{partitionSite: true}, math.Inf(1))
+	addFull(r, restart{cleanRestart: true}, math.Inf(1))
+	addFull(r, partition{partitionSite: true}, math.Inf(1))
 	addFull(r, addNode{}, 5.0)
-	addFull(r, &decommission{drain: true}, 5.0)
+	addFull(r, decommission{drain: true}, 5.0)
 	addFull(r, backfill{}, 40.0)
 	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
-	addDev(r, &restart{cleanRestart: true})
-	addDev(r, &partition{partitionSite: true})
+	addDev(r, restart{cleanRestart: true})
+	addDev(r, partition{partitionSite: true})
 	addDev(r, addNode{})
-	addDev(r, &decommission{drain: true})
+	addDev(r, decommission{drain: true})
 	addDev(r, backfill{})
 	addDev(r, &slowDisk{slowLiveness: true, walFailover: true})
 }
