@@ -93,6 +93,11 @@ SET enable_experimental_alter_column_type_general = true;
 statement error pq: job \d+ was paused before it completed with reason: pause point
 ALTER TABLE t5 ALTER COLUMN b TYPE STRING;
 
+# The ALTER COLUMN TYPE operation is now managed by the declarative schema
+# changer. As a result, we no longer perform the computed column swap mutation,
+# which truncate was waiting on. Therefore, we only need to test this in the legacy
+# schema changer.
+onlyif config local-legacy-schema-changer
 statement error pq: unimplemented: cannot perform TRUNCATE on "t5" which has an ongoing column type change
 TRUNCATE TABLE t5;
 
