@@ -48,6 +48,16 @@ message RaftHeartbeat {
   bool lagging_followers_on_quiesce_accurate = 10;
 }
 
+// The traced entry from the leader along with the trace and span ID.
+message TracedEntry {
+  uint64 index = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  uint64 trace_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+  uint64 span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.SpanID"];
+}
+
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec. If a RaftMessageRequest has a non-empty number of
 // heartbeats or heartbeat_resps, the contents of the message field is treated
@@ -102,6 +112,12 @@ message RaftMessageRequest {
   // AdmittedState annotates a MsgAppResp message with a vector of admitted log
   // indices. Used only with RACv2.
   kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedState admitted_state = 14 [(gogoproto.nullable) = false];
+
+  // TracedEntry is a mapping from Raft index to trace and span ids for this
+  // request. They are set by the leaseholder and begin tracing on all
+  // replicas. Currently, traces are not returned to the leaseholder, but
+  // instead logged to a local log file.
+  repeated TracedEntry traced_entries = 15 [(gogoproto.nullable) = false];
 
   reserved 10;
 }
