@@ -114,6 +114,20 @@ func (mr *MockCatalogMockRecorder) DeleteName(arg0, arg1, arg2 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteName", reflect.TypeOf((*MockCatalog)(nil).DeleteName), arg0, arg1, arg2)
 }
 
+// DeleteSubzoneConfig mocks base method.
+func (m *MockCatalog) DeleteSubzoneConfig(arg0 context.Context, arg1 catid.DescID, arg2 zonepb.Subzone, arg3 []zonepb.SubzoneSpan) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSubzoneConfig", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteSubzoneConfig indicates an expected call of DeleteSubzoneConfig.
+func (mr *MockCatalogMockRecorder) DeleteSubzoneConfig(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSubzoneConfig", reflect.TypeOf((*MockCatalog)(nil).DeleteSubzoneConfig), arg0, arg1, arg2, arg3)
+}
+
 // DeleteZoneConfig mocks base method.
 func (m *MockCatalog) DeleteZoneConfig(arg0 context.Context, arg1 catid.DescID) error {
 	m.ctrl.T.Helper()
@@ -260,18 +274,18 @@ func (mr *MockCatalogMockRecorder) UpdateComment(arg0, arg1, arg2 interface{}) *
 }
 
 // UpdateSubzoneConfig mocks base method.
-func (m *MockCatalog) UpdateSubzoneConfig(arg0 context.Context, arg1 catalog.ZoneConfig, arg2 zonepb.Subzone, arg3 []zonepb.SubzoneSpan) (catalog.ZoneConfig, error) {
+func (m *MockCatalog) UpdateSubzoneConfig(arg0 context.Context, arg1 catalog.ZoneConfig, arg2 zonepb.Subzone, arg3 []zonepb.SubzoneSpan, arg4 int32) (catalog.ZoneConfig, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateSubzoneConfig", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "UpdateSubzoneConfig", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(catalog.ZoneConfig)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateSubzoneConfig indicates an expected call of UpdateSubzoneConfig.
-func (mr *MockCatalogMockRecorder) UpdateSubzoneConfig(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockCatalogMockRecorder) UpdateSubzoneConfig(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSubzoneConfig", reflect.TypeOf((*MockCatalog)(nil).UpdateSubzoneConfig), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSubzoneConfig", reflect.TypeOf((*MockCatalog)(nil).UpdateSubzoneConfig), arg0, arg1, arg2, arg3, arg4)
 }
 
 // UpdateZoneConfig mocks base method.

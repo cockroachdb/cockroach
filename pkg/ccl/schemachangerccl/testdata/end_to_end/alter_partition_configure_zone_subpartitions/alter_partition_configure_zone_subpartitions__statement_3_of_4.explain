@@ -35,7 +35,7 @@ Schema change plan for ALTER PARTITION ‹yung_au› OF INDEX ‹defaultdb›.�
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "yung_au"}
  │         └── 1 Mutation operation
- │              └── AddPartitionZoneConfig {"TableID":104}
+ │              └── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 3 elements transitioning toward PUBLIC
@@ -50,6 +50,6 @@ Schema change plan for ALTER PARTITION ‹yung_au› OF INDEX ‹defaultdb›.�
            │    ├── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "old_au"}
            │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "yung_au"}
            └── 3 Mutation operations
-                ├── AddPartitionZoneConfig {"TableID":104}
-                ├── AddPartitionZoneConfig {"TableID":104}
-                └── AddPartitionZoneConfig {"TableID":104}
+                ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+                ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+                └── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}

@@ -102,7 +102,7 @@ func (dzo *databaseZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, dzo, options)
+	return maybeMultiregionErrorWithHint(b, dzo, zs, options)
 }
 
 func (dzo *databaseZoneConfigObj) getTargetID() catid.DescID {
