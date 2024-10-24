@@ -111,10 +111,10 @@ func TestAlterBackupRestore(t *testing.T) {
 	// Tests to see that show backup correctly recognizes the new encryption-info
 	// file when SHOW BACKUP is called on an altered encrypted backup.
 	t.Run("alter-backup-show-backup", func(t *testing.T) {
-		query = fmt.Sprintf("SHOW BACKUP LATEST IN %s WITH KMS = %s", userfile, newURI)
+		query = fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH KMS = %s", userfile, newURI)
 		sqlDB.Exec(t, query)
 
-		query = fmt.Sprintf("SHOW BACKUP LATEST IN %s WITH KMS = %s", userfile, oldURI)
+		query = fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH KMS = %s", userfile, oldURI)
 		sqlDB.Exec(t, query)
 	})
 
