@@ -31,9 +31,7 @@ export const RegionLabel: React.FC<Props> = ({
         <div className={styles["label-body"]}>
           <Text strong>{region.label || "Unknown Region"}</Text>
           {showCode && <Text>({region.code})</Text>}
-          <div>
-            <Badge count={nodes.length} className={styles.badge} />
-          </div>
+          <Badge count={nodes.length} className={styles.badge} />
         </div>
       </Tooltip>
     </div>

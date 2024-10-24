@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Skeleton } from "antd";
+import { Row, Skeleton } from "antd";
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
@@ -18,6 +18,8 @@ import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegi
 import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
+import { AUTO_STATS_COLLECTION_HELP } from "src/components/tooltipMessages";
+import { ClusterDetailsContext } from "src/contexts";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { BooleanSetting } from "src/settings";
@@ -33,9 +35,6 @@ import {
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
-
-import { AUTO_STATS_COLLECTION_HELP } from "../constants/tooltipMessages";
-import { ClusterDetailsContext } from "../contexts";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
@@ -71,6 +70,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     ),
     sortKey: DatabaseSortOptions.REPLICATION_SIZE,
     sorter: (a, b) => a.approximateDiskSizeBytes - b.approximateDiskSizeBytes,
+    align: "right",
     render: (db: DatabaseRow) => {
       return Bytes(db.approximateDiskSizeBytes);
     },
@@ -83,6 +83,7 @@ const COLUMNS: (TableColumnProps<DatabaseRow> & {
     ),
     sortKey: DatabaseSortOptions.TABLE_COUNT,
     sorter: true,
+    align: "right",
     render: (db: DatabaseRow) => {
       return db.tableCount;
     },
@@ -213,34 +214,32 @@ export const DatabasesPageV2 = () => {
           </Skeleton>
         }
       />
-      <PageSection>
-        <PageConfig>
-          <PageConfigItem>
-            <Search placeholder="Search databases" onSubmit={setSearch} />
+      <PageConfig>
+        <PageConfigItem>
+          <Search placeholder="Search databases" onSubmit={setSearch} />
+        </PageConfigItem>
+        {!isTenant && (
+          <PageConfigItem minWidth={"200px"}>
+            <NodeRegionsSelector
+              value={nodeRegionsValue}
+              onChange={onNodeRegionsChange}
+            />
           </PageConfigItem>
-          {!isTenant && (
-            <PageConfigItem minWidth={"200px"}>
-              <NodeRegionsSelector
-                value={nodeRegionsValue}
-                onChange={onNodeRegionsChange}
-              />
-            </PageConfigItem>
-          )}
-        </PageConfig>
-      </PageSection>
+        )}
+      </PageConfig>
       <PageSection>
-        <PageCount
-          page={params.pagination.page}
-          pageSize={params.pagination.pageSize}
-          total={data?.pagination.totalResults ?? 0}
-          entity="databases"
-        />
+        <Row align={"middle"} justify={"space-between"}>
+          <PageCount
+            page={params.pagination.page}
+            pageSize={params.pagination.pageSize}
+            total={data?.pagination.totalResults ?? 0}
+            entity="databases"
+          />
+          <TableMetadataJobControl onJobComplete={refreshDatabases} />
+        </Row>
         <Table
           loading={isLoading}
           error={error}
-          actionButton={
-            <TableMetadataJobControl onJobComplete={refreshDatabases} />
-          }
           columns={colsWithSort}
           dataSource={tableData}
           pagination={{

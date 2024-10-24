@@ -3,8 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { RedoOutlined } from "@ant-design/icons";
-import { Skeleton } from "antd";
+import { LoadingOutlined, RedoOutlined } from "@ant-design/icons";
+import { Skeleton, Spin } from "antd";
 import React, { useCallback, useEffect } from "react";
 
 import {
@@ -12,15 +12,14 @@ import {
   triggerUpdateTableMetaJobApi,
   useTableMetaUpdateJob,
 } from "src/api/databases/tableMetaUpdateJobApi";
-import { TABLE_METADATA_LAST_UPDATED_HELP } from "src/constants/tooltipMessages";
 import Button from "src/sharedFromCloud/button";
-import { Timestamp } from "src/timestamp";
-import { DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 import { usePrevious } from "src/util/hooks";
 
 import { Tooltip } from "../tooltip";
+import { TableMetadataLastUpdatedTooltip } from "../tooltipMessages";
 
 import styles from "./tableMetadataJobControl.module.scss";
+import { TableMetadataJobProgress } from "./tableMetadataJobProgress";
 
 type TableMetadataJobControlProps = {
   // Callback for when the job has updated the metadata, i.e. the
@@ -80,34 +79,40 @@ export const TableMetadataJobControl: React.FC<
     triggerUpdateTableMetaJob(false);
   };
 
-  const durationText = jobStatus?.lastCompletedTime?.fromNow();
   const isRunning = jobStatus?.currentStatus === TableMetadataJobStatus.RUNNING;
-  const refreshButtonTooltip = isRunning
-    ? "Data is currently refreshing"
-    : "Refresh data";
+  const refreshButtonTooltip = isRunning ? (
+    <TableMetadataJobProgress
+      jobStartedTime={jobStatus?.lastStartTime}
+      jobProgressFraction={jobStatus?.progress}
+    />
+  ) : (
+    "Refresh data"
+  );
 
   return (
     <div className={styles["controls-container"]}>
       <Skeleton loading={isLoading}>
-        <Tooltip title={TABLE_METADATA_LAST_UPDATED_HELP}>
-          Last refreshed:{" "}
-          <Timestamp
-            format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-            time={jobStatus?.lastCompletedTime}
-            fallback={"Never"}
-          />{" "}
-          {durationText && `(${durationText})`}
-        </Tooltip>
+        <TableMetadataLastUpdatedTooltip
+          timestamp={jobStatus?.lastCompletedTime}
+        >
+          {durationText => <div>Last refreshed: {durationText}</div>}
+        </TableMetadataLastUpdatedTooltip>
       </Skeleton>
-      <Tooltip placement="top" title={refreshButtonTooltip}>
-        <div>
+      <Tooltip noUnderline placement="top" title={refreshButtonTooltip}>
+        <>
           <Button
             disabled={isRunning}
             category={"icon-container"}
-            icon={<RedoOutlined />}
+            icon={
+              isRunning ? (
+                <Spin indicator={<LoadingOutlined spin />} size={"small"} />
+              ) : (
+                <RedoOutlined />
+              )
+            }
             onClick={onRefreshClick}
           />
-        </div>
+        </>
       </Tooltip>
     </div>
   );

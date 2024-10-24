@@ -8,6 +8,10 @@
 .container {
   margin: 0.5rem;
   width: fit-content;
+  min-width: 100px;
+  &:hover {
+    cursor: pointer;
+  }
 }
 
 
