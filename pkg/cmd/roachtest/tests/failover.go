@@ -539,6 +539,18 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
+	// DistSender circuit breakers are useful in this test to avoid artificially
+	// inflated latencies due to the way the test measures failover time. Without
+	// circuit breakers, a request stuck on the partitioned leaseholder will get
+	// blocked indefinitely, despite the range recovering on the other side of the
+	// partition. As a result, the test won't differentiate between temporary and
+	// permanent range unavailability. We have other tests which demonstrate the
+	// benefit of DistSender circuit breakers (especially when applications do not
+	// use statement timeouts), so we don't need to test them here.
+	// TODO(arul): this can be removed if/when we turn on DistSender circuit
+	// breakers for all ranges by default.
+	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
+
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
