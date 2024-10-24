@@ -420,53 +420,6 @@ func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent
 	}
 }
 
-type checkpointPacer struct {
-	pace    time.Duration
-	next    time.Time
-	skipped bool
-}
-
-func makeCheckpointPacer(frequency time.Duration) checkpointPacer {
-	return checkpointPacer{
-		pace:    frequency,
-		next:    timeutil.Now().Add(frequency),
-		skipped: false,
-	}
-}
-
-func (p *checkpointPacer) shouldCheckpoint(
-	currentFrontier hlc.Timestamp, frontierAdvanced bool,
-) bool {
-	now := timeutil.Now()
-	enoughTimeElapsed := p.next.Before(now)
-
-	// Handle previously skipped updates.
-	// Normally, we want to emit checkpoint records when frontier advances.
-	// However, checkpoints could be skipped if the frontier advanced too rapidly
-	// (i.e. more rapid than MinCheckpointFrequency).  In those cases, we skip emitting
-	// the checkpoint, but we will emit it at a later time.
-	if p.skipped {
-		if enoughTimeElapsed {
-			p.skipped = false
-			p.next = now.Add(p.pace)
-			return true
-		}
-		return false
-	}
-
-	isInitialScanCheckpoint := currentFrontier.IsEmpty()
-	// Handle updates when frontier advances.
-	if frontierAdvanced || isInitialScanCheckpoint {
-		if enoughTimeElapsed {
-			p.next = now.Add(p.pace)
-			return true
-		}
-		p.skipped = true
-		return false
-	}
-	return false
-}
-
 // Add a RangeFeedSSTable into current batch.
 func (s *eventStream) addSST(sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span) error {
 	// We send over the whole SSTable if the sst span is within
