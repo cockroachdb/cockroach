@@ -128,11 +128,8 @@ const numNodesPerWorker = 20
 // setup sets up the parameters that can be manually set up without having the
 // cluster spec. finishSetup below sets up the remainder after the cluster is
 // defined.
-func setupMetamorphic(p perturbation) variations {
-	rng, seed := randutil.NewPseudoRand()
-
-	v := variations{}
-	v.seed = seed
+func newMetamorphic(p perturbation, rng *rand.Rand) variations {
+	v := variations{perturbation: p}
 	v.workload = kvWorkload{}
 	v.fillDuration = 10 * time.Minute
 	v.validationDuration = 5 * time.Minute
@@ -150,8 +147,6 @@ func setupMetamorphic(p perturbation) variations {
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
-	p.setupMetamorphic(rng)
-	v.perturbation = p
 	return v
 }
 
@@ -249,7 +244,9 @@ func (v variations) perturbationName() string {
 }
 
 func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
-	v := setupMetamorphic(p)
+	rng, seed := randutil.NewPseudoRand()
+	v := p.setupMetamorphic(rng)
+	v.seed = seed
 	v.acceptableChange = acceptableChange
 	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
 	// a given seed.
@@ -297,7 +294,7 @@ func addDev(r registry.Registry, p perturbation) {
 
 type perturbation interface {
 	// setupMetamorphic is called at the start of the test to randomize the perturbation.
-	setupMetamorphic(rng *rand.Rand)
+	setupMetamorphic(rng *rand.Rand) variations
 
 	// startTargetNode is called for custom logic starting the target node(s).
 	// Some of the perturbations need special logic for starting the target
@@ -322,7 +319,9 @@ type backfill struct{}
 
 var _ perturbation = backfill{}
 
-func (b backfill) setupMetamorphic(rng *rand.Rand) {}
+func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
+	return newMetamorphic(b, rng)
+}
 
 // startTargetNode starts the target node and creates the backfill table.
 func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -386,11 +385,14 @@ type slowDisk struct {
 	staller     roachtestutil.DiskStaller
 }
 
+// NB: slowData is an unusual perturbation since the staller is initialized
+// later (in startTargetNode) instead of here.
 var _ perturbation = &slowDisk{}
 
-func (s *slowDisk) setupMetamorphic(rng *rand.Rand) {
+func (s *slowDisk) setupMetamorphic(rng *rand.Rand) variations {
 	s.slowLiveness = rng.Intn(2) == 0
 	s.walFailover = rng.Intn(2) == 0
+	return newMetamorphic(s, rng)
 }
 
 func (s *slowDisk) String() string {
@@ -442,22 +444,23 @@ type restart struct {
 	cleanRestart bool
 }
 
-var _ perturbation = &restart{}
+var _ perturbation = restart{}
 
-func (r *restart) String() string {
+func (r restart) String() string {
 	return fmt.Sprintf("restart{cleanRestart: %t}", r.cleanRestart)
 }
 
-func (r *restart) setupMetamorphic(rng *rand.Rand) {
+func (r restart) setupMetamorphic(rng *rand.Rand) variations {
 	r.cleanRestart = rng.Intn(2) == 0
+	return newMetamorphic(r, rng)
 }
 
-func (r *restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (r restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
 // startPerturbation stops the target node with a graceful shutdown.
-func (r *restart) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+func (r restart) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	gracefulOpts := option.DefaultStopOpts()
 	// SIGTERM for clean shutdown
@@ -499,21 +502,22 @@ type partition struct {
 	partitionSite bool
 }
 
-var _ perturbation = &partition{}
+var _ perturbation = partition{}
 
-func (p *partition) String() string {
+func (p partition) String() string {
 	return fmt.Sprintf("partition{partitionSite: %t}", p.partitionSite)
 }
 
-func (p *partition) setupMetamorphic(rng *rand.Rand) {
+func (p partition) setupMetamorphic(rng *rand.Rand) variations {
 	p.partitionSite = rng.Intn(2) == 0
+	return newMetamorphic(p, rng)
 }
 
-func (p *partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
-func (p *partition) startPerturbation(
+func (p partition) startPerturbation(
 	ctx context.Context, t test.Test, v variations,
 ) time.Duration {
 	targetIPs, err := v.InternalIP(ctx, t.L(), v.targetNodes())
@@ -532,7 +536,7 @@ func (p *partition) startPerturbation(
 	return v.perturbationDuration - 20*time.Second
 }
 
-func (p *partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
+func (p partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	if !v.IsLocal() {
 		v.Run(ctx, v.withPartitionedNodes(v, p.partitionSite), `sudo iptables -F`)
@@ -547,7 +551,9 @@ type addNode struct{}
 
 var _ perturbation = addNode{}
 
-func (addNode) setupMetamorphic(rng *rand.Rand) {}
+func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
+	return newMetamorphic(a, rng)
+}
 
 func (addNode) startTargetNode(ctx context.Context, t test.Test, v variations) {
 }
@@ -575,21 +581,22 @@ type decommission struct {
 	drain bool
 }
 
-var _ perturbation = &decommission{}
+var _ perturbation = decommission{}
 
-func (d *decommission) String() string {
+func (d decommission) String() string {
 	return fmt.Sprintf("decommission{drain: %t}", d.drain)
 }
 
-func (d *decommission) setupMetamorphic(rng *rand.Rand) {
+func (d decommission) setupMetamorphic(rng *rand.Rand) variations {
 	d.drain = rng.Intn(2) == 0
+	return newMetamorphic(d, rng)
 }
 
-func (d *decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
+func (d decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	v.startNoBackup(ctx, t, v.targetNodes())
 }
 
-func (d *decommission) startPerturbation(
+func (d decommission) startPerturbation(
 	ctx context.Context, t test.Test, v variations,
 ) time.Duration {
 	startTime := timeutil.Now()
@@ -626,7 +633,7 @@ func (d *decommission) startPerturbation(
 
 // endPerturbation already waited for completion as part of start, so it doesn't
 // need to wait again here.
-func (d *decommission) endPerturbation(
+func (d decommission) endPerturbation(
 	ctx context.Context, t test.Test, v variations,
 ) time.Duration {
 	waitDuration(ctx, v.validationDuration)
