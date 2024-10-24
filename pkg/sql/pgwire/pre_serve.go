@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -447,6 +448,10 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		// non-TLS SQL conns.
 		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal && connType != hba.ConnInternalLoopback {
 			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+			// Extra logs under test to debug TestAuthenticationAndHBARules.
+			if buildutil.CrdbTestBuild {
+				log.Warningf(ctx, "client cannot connect since version=%d AcceptSQLWithoutTLS=false and connType=%s", version, connType)
+			}
 		}
 		return
 	}
@@ -458,6 +463,10 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		// we don't want it.
 		clientErr = pgerror.New(pgcode.ProtocolViolation,
 			"cannot use SSL/TLS over local connections")
+		// Extra logs under test to debug TestAuthenticationAndHBARules.
+		if buildutil.CrdbTestBuild {
+			log.Warningf(ctx, "client cannot connect since version=%d and connType=%s", version, connType)
+		}
 		return
 	}
 
@@ -479,6 +488,10 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 	if tlsConfig == nil {
 		// We don't have a TLS configuration available, so we can't honor
 		// the client's request.
+		// Extra logs under test to debug TestAuthenticationAndHBARules.
+		if buildutil.CrdbTestBuild {
+			log.Infof(ctx, "sending sslUnsupported message to client")
+		}
 		n, serverErr = conn.Write(sslUnsupported)
 		if serverErr != nil {
 			return
