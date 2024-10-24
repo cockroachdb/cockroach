@@ -171,7 +171,10 @@ enum VectorizeExecMode {
   // the first enum value as zero is required by proto3. This is mapped to
   // VectorizeOn.
   unset = 0 [(gogoproto.enumvalue_customname) = "VectorizeUnset"];
-  reserved 1;
+  // DeprecatedVectorized201Auto is only possible for clusters that have been
+  // upgraded from v21.1 or older and had the old setting of "201auto" which
+  // was mapped to "on" in v21.1. It is now an alias for "on".
+  deprecated201auto = 1 [(gogoproto.enumvalue_customname) = "DeprecatedVectorize201Auto"];
   // VectorizeOn means that any supported queries will be run using the
   // columnar execution.
   on = 2 [(gogoproto.enumvalue_customname) = "VectorizeOn"];
