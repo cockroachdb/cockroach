@@ -226,7 +226,7 @@ func TestCatchUpBufDrain(t *testing.T) {
 		catchUpReg := newTestRegistration(s, withRSpan(spAB), withRegistrationType(unbuffered), withDiff(false),
 			withCatchUpIter(iter)).(*unbufferedRegistration)
 		catchUpReg.publish(ctx, ev1, nil /* alloc */)
-		go catchUpReg.runOutputLoop(ctx, 0)
+		go catchUpReg.runOutputLoop(ctx, ctx, 0)
 		regs[i] = catchUpReg
 	}
 
@@ -293,7 +293,7 @@ func TestUnbufferedRegistration(t *testing.T) {
 		catchUpReg.Disconnect(kvpb.NewError(nil))
 		require.Nil(t, catchUpReg.mu.catchUpIter)
 		// Catch up scan should not be initiated.
-		go catchUpReg.runOutputLoop(ctx, 0)
+		go catchUpReg.runOutputLoop(ctx, ctx, 0)
 		require.NoError(t, catchUpReg.waitForCaughtUp(ctx))
 		require.Nil(t, catchUpReg.mu.catchUpIter)
 		// No events should be sent since the registration has catch up buffer and
@@ -338,7 +338,7 @@ func TestUnbufferedRegistration(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.runOutputLoop(ctx, 0)
+			r.runOutputLoop(ctx, ctx, 0)
 		}()
 		capOfBuf := cap(r.mu.catchUpBuf)
 		r.publish(ctx, ev1, &SharedBudgetAllocation{refCount: 1})

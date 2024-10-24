@@ -218,7 +218,9 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 // The contract is that it will empty catch-up buffer and set it to nil when
 // this goroutine ends. Once set to nil, no more events should be put in
 // catch-up buffer.
-func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks roachpb.RangeID) {
+func (ubr *unbufferedRegistration) runOutputLoop(
+	ctx context.Context, streamCtx context.Context, forStacks roachpb.RangeID,
+) {
 	ubr.mu.Lock()
 	defer ubr.discardCatchUpBuffer(ctx)
 	if ubr.mu.disconnected {

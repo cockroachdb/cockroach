@@ -334,6 +334,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 	switch cfg.withRegistrationTestTypes {
 	case buffered:
 		return newBufferedRegistration(
+
 			cfg.span,
 			cfg.ts,
 			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),

@@ -365,11 +365,11 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(_ context.Context) {
+		runOutputLoop := func(ctx context.Context) {
 			// This ctx is passed in solely for annotation purposes. We want the
 			// output loop to inherit the context passed from p.Register in case it is
 			// cancelled.
-			r.runOutputLoop(p.AnnotateCtx(streamCtx), p.RangeID)
+			r.runOutputLoop(ctx, streamCtx, p.RangeID)
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
