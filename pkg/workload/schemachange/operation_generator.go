@@ -2407,6 +2407,29 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 	}
 
+	// If the cluster is not finalized, certain column types, such as PGLSN
+	// and RefCursor, are not yet supported.
+	isNotFinalized, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	if isNotFinalized {
+		isPGLSN := datumTyp != nil && (datumTyp.Family() == types.PGLSNFamily ||
+			(datumTyp.Family() == types.ArrayFamily &&
+				datumTyp.ArrayContents().Family() == types.PGLSNFamily))
+		isRefCursor := datumTyp != nil && (datumTyp.Family() == types.RefCursorFamily ||
+			(datumTyp.Family() == types.ArrayFamily &&
+				datumTyp.ArrayContents().Family() == types.RefCursorFamily))
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.Syntax, condition: isPGLSN || isRefCursor},
+			{code: pgcode.FeatureNotSupported, condition: isPGLSN || isRefCursor},
+			{code: pgcode.UndefinedObject, condition: isPGLSN || isRefCursor},
+		})
+	}
+
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName,
 		lexbase.EscapeSQLIdent(columnForDefault.name), strDefault)
