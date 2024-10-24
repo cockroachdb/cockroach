@@ -1,17 +1,16 @@
 #!/bin/bash
-
 # Copyright 2024 The Cockroach Authors.
 #
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
 
-# This script sets up the tpcc import workload script in the workload node and starts the same in nohup
-# The --warehouses and other flags for import are passed as argument to this script
+# This script sets up the tpch import workload script in the workload node
+# The --scale-factor and other flags for import are passed as argument to this script
 # NOTE - This uses CLUSTER and WORKLOAD_CLUSTER environment variable, if not set the script fails
 
-# The first argument is the name suffix that is added to the script as tpcc_init_<suffix>.sh
+# The first argument is the name suffix that is added to the script as tpch_init_<suffix>.sh
 if [ "$#" -lt 4 ]; then
-  echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--warehouses,--db>"
+  echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--scale-factor,--db>"
   exit 1
 fi
 suffix=$1
@@ -32,22 +31,22 @@ if [ -z "${CLUSTER}" ]; then
 fi
 
 if [ -z "${WORKLOAD_CLUSTER}" ]; then
-  echo "environment CLUSTER is not set"
+  echo "environment WORKLOAD_CLUSTER is not set"
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./tpcc_init_${suffix}.sh")
+absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./tpch_init_${suffix}.sh")
 pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 PGURLS=$(roachprod pgurl "${CLUSTER}":1)
 
-# script is responsible for importing the tpcc database for workload
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init_${suffix}.sh > /dev/null << 'EOF'
+# script is responsible for importing the tpch database for workload
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpch_init_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
-${pwd}/cockroach workload fixtures import tpcc $PGURLS $@ --checks=false
+${pwd}/cockroach workload init tpch $@ $PGURLS
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
+roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpch_init_${suffix}.sh"
 
 if [ "$execute_script" = "true" ]; then
-  roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
+  roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpch_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpch_init_${suffix}.sh"
 fi
