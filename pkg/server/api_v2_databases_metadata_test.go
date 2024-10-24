@@ -341,7 +341,7 @@ func TestGetTableMetadataForId(t *testing.T) {
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 	createTableStatement1 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db1Name, myTable1)
-	createTableStatement2 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db1Name, myTable11)
+	createTableStatement2 := fmt.Sprintf(`CREATE TABLE %s."%s" (col1 int)`, db2Name, myTable11)
 	runner.Exec(t, createTableStatement1)
 	runner.Exec(t, createTableStatement2)
 
@@ -399,6 +399,16 @@ func TestGetTableMetadataForId(t *testing.T) {
 		failed := makeApiRequest[string](
 			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/1000000000/").String(), http.MethodGet)
 		require.Equal(t, TableNotFound, failed)
+	})
+
+	t.Run("error fetching create statement", func(t *testing.T) {
+		// Since we never actually created the table 'myTable2', this request will result in an error
+		// fetching the create statement for it.
+		resp := makeApiRequest[tableMetadataWithDetailsResponse](
+			t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/2/").String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, "Unable to retrieve create statement")
+		require.Contains(t, resp.CreateStatement, "myTable2")
 	})
 }
 

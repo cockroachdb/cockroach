@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -323,7 +324,9 @@ func (a *apiV2Server) getTableCreateStatement(
 	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-table-create-statement", nil,
 		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
 	if err != nil {
-		return "", err
+		statementError := fmt.Sprintf("Unable to retrieve create statement for %s.%s", escDbName, escTableName)
+		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", statementError))
+		return statementError, nil
 	}
 	scanner := makeResultScanner(types)
 	var createStatement string
