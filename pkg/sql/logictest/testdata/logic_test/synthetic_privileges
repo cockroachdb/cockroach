@@ -296,8 +296,9 @@ SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 false
 
+# Use a high priority transaction to avoid this transaction being aborted.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 GRANT SELECT ON crdb_internal.feature_usage TO testuser4
