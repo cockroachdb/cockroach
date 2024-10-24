@@ -7,6 +7,19 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-large
   WORKLOAD_CLUSTER: workload-large
+  STORE_COUNT: 8
+
+  # variables used by tpcc_run_multiregion.sh
+  NUM_REGIONS: 3
+  NODES_PER_REGION: 5
+  REGIONS: northamerica-northeast2,us-east5,us-east1
+  TPCC_WAREHOUSES: 150000
+  DB_NAME: cct_tpcc
+  SURVIVAL_GOAL: region
+  RUN_DURATION: 12h
+  NUM_CONNECTIONS: 500
+  NUM_WORKERS: 500
+  MAX_RATE: 1000
 
 targets:
   - target_name: $CLUSTER
@@ -23,7 +36,7 @@ targets:
           nodes: 15
           gce-machine-type: n2-standard-16
           local-ssd: true
-          gce-local-ssd-count: 4
+          gce-local-ssd-count: $STORE_COUNT
           os-volume-size: 100
           username: drt
           lifetime: 8760h
@@ -46,7 +59,7 @@ targets:
           - "./cockroach"
         flags:
           enable-fluent-sink: true
-          store-count: 4
+          store-count: $STORE_COUNT
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
@@ -79,7 +92,7 @@ targets:
         flags:
           clouds: gce
           gce-zones: "northamerica-northeast2-a,us-east5-a,us-east1-b"
-          nodes: 3
+          nodes: $NUM_REGIONS
           gce-machine-type: n2d-standard-4
           os-volume-size: 100
           username: workload
@@ -105,5 +118,9 @@ targets:
           - cct_tpcc # suffix added to script name tpcc_init_cct_tpcc.sh
           - true # determines whether to execute the script immediately on workload node
         flags:
-          warehouses: 15000
-          db: cct_tpcc
+          warehouses: $TPCC_WAREHOUSES
+          partitions: $NUM_REGIONS
+          db: $DB_NAME
+          survival-goal: $SURVIVAL_GOAL
+          regions: $REGIONS
+      - script: "pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh"
