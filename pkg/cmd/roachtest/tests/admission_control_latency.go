@@ -563,7 +563,9 @@ func (addNode) endPerturbation(ctx context.Context, t test.Test, v variations) t
 	return v.validationDuration
 }
 
-// restart will gracefully stop and then restart a node after a custom duration.
+// decommission will decommission the target node during the start phase. It
+// allows optionally calling drain first. Draining first is the best practice
+// recommendation, however it should not cause a latency impact either way.
 type decommission struct {
 	drain bool
 }
