@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -835,6 +836,7 @@ func (r *testRunner) runWorker(
 			debug:                  clustersOpt.debugMode.IsDebug(),
 			goCoverEnabled:         topt.goCoverEnabled,
 			exportOpenmetrics:      topt.exportOpenMetrics,
+			taskManager:            task.NewManager(ctx, testL),
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
@@ -1287,6 +1289,26 @@ func (r *testRunner) runTest(
 		s.Run(runCtx, t, c)
 	}()
 
+	// Monitor the task manager for completed events, or failure events and log
+	// them. A failure will call t.Errorf which cancels the test's context.
+	go func() {
+		for {
+			select {
+			case event := <-t.taskManager.CompletedEvents():
+				if event.Err == nil {
+					t.L().Printf("task finished: %s", event.Name)
+					continue
+				} else if event.ExpectedCancel {
+					t.L().Printf("task canceled by test: %s", event.Name)
+					continue
+				}
+				t.Errorf("task `%s` returned error: %v", event.Name, event.Err)
+			case <-runCtx.Done():
+				return
+			}
+		}
+	}()
+
 	var timedOut bool
 	timeout := testTimeout(t.spec)
 
@@ -1562,6 +1584,10 @@ func (r *testRunner) teardownTest(
 		t.L().Printf("Retrieving go cover artifacts")
 		getGoCoverArtifacts(ctx, c, t)
 	}
+
+	// Terminate tasks to ensure that any stray tasks are cleaned up.
+	t.L().Printf("terminating tasks")
+	t.taskManager.Terminate(t.L())
 
 	return "", nil
 }
