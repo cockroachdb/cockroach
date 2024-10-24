@@ -8,6 +8,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"slices"
 	"time"
 
@@ -360,10 +361,12 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
-		if err := lrw.consumeEvents(ctx); err != nil {
-			log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
-			lrw.sendError(errors.Wrap(err, "consume events"))
-		}
+		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", lrw.ProcessorID)), func(ctx context.Context) {
+			if err := lrw.consumeEvents(ctx); err != nil {
+				log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
+				lrw.sendError(errors.Wrap(err, "consume events"))
+			}
+		})
 		return nil
 	})
 }
