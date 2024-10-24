@@ -743,6 +743,13 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetDescriptorsInSpans returns all descriptors within a given span.
+func (tc *Collection) GetDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.

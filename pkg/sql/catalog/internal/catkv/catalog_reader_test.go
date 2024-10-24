@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -203,6 +205,24 @@ func TestDataDriven(t *testing.T) {
 						return cr.GetByNames(ctx, txn, nis)
 					}
 					return h.doCatalogQuery(ctx, q)
+				case "scan_descriptors_in_span":
+					{
+						start := h.parseKeyFromArgKey("start")
+						end := h.parseKeyFromArgKey("end")
+						q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
+							return cr.ScanDescriptorsInSpans(ctx, txn, []roachpb.Span{{Key: start, EndKey: end}})
+						}
+						return h.doCatalogQuery(ctx, q)
+					}
+				case "scan_descriptors_in_multiple_spans":
+					{
+						first := h.parseSpanFromArgKey("first")
+						second := h.parseSpanFromArgKey("second")
+						q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
+							return cr.ScanDescriptorsInSpans(ctx, txn, []roachpb.Span{first, second})
+						}
+						return h.doCatalogQuery(ctx, q)
+					}
 				}
 				return fmt.Sprintf("%s: unknown command: %s", d.Pos, d.Cmd)
 			})
@@ -215,6 +235,58 @@ type testHelper struct {
 	d        *datadriven.TestData
 	execCfg  *sql.ExecutorConfig
 	ucr, ccr catkv.CatalogReader
+}
+
+func (h testHelper) parseSpanFromArgKey(argkey string) roachpb.Span {
+	arg, exists := h.d.Arg(argkey)
+	if !exists {
+		h.t.Fatalf("scan_descriptors_in_span requires '%s' arg", argkey)
+	}
+	start, end := arg.TwoVals(h.t)
+	return roachpb.Span{
+		Key:    h.parseKeyFromArgStr(start),
+		EndKey: h.parseKeyFromArgStr(end),
+	}
+}
+
+func (h testHelper) parseKeyFromArgKey(argkey string) roachpb.Key {
+	arg, exists := h.d.Arg(argkey)
+	if !exists {
+		h.t.Fatalf("scan_descriptors_in_span requires '%s' arg", argkey)
+	}
+	return h.parseKeyFromArgStr(arg.SingleVal(h.t))
+}
+
+func (h testHelper) parseKeyFromArgStr(argstr string) roachpb.Key {
+	parts := strings.Split(argstr, "/")
+	if len(parts) == 0 {
+		h.t.Fatal("cannot parse key without at least one key part")
+	} else if len(parts) > 4 {
+		h.t.Fatal("key argument has too many parts")
+	}
+
+	tableId, err := strconv.Atoi(parts[0])
+	require.NoError(h.t, err)
+	if len(parts) == 1 {
+		return h.execCfg.Codec.TablePrefix(uint32(tableId))
+	}
+
+	indexId, err := strconv.Atoi(parts[1])
+	require.NoError(h.t, err)
+
+	key := h.execCfg.Codec.IndexPrefix(uint32(tableId), uint32(indexId))
+	if len(parts) == 3 && parts[2] != "" {
+		// only supports integer and string key values
+		if encoding.PeekType([]byte(parts[2])) == encoding.Int {
+			pkey, err := strconv.Atoi(parts[1])
+			require.NoError(h.t, err)
+			return encoding.EncodeVarintAscending(key, int64(pkey))
+		} else {
+			return encoding.EncodeStringAscending(key, parts[2])
+		}
+	}
+
+	return key
 }
 
 func (h testHelper) argDesc(
