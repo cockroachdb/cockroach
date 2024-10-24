@@ -41,6 +41,11 @@ type FortificationTracker struct {
 	// raft leader attempted to fortify its term, and save this state.
 	fortificationEnabledForTerm bool
 
+	// needsDefortification tracks whether the node should broadcast
+	// MsgDeFortifyLeader to all followers to de-fortify the term being tracked in
+	// the tracker or not.
+	needsDefortification bool
+
 	// fortification contains a map of nodes which have fortified the leader
 	// through fortification handshakes, and the corresponding Store Liveness
 	// epochs that they have supported the leader in.
@@ -109,6 +114,10 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 func (ft *FortificationTracker) Reset(term uint64) {
 	ft.term = term
 	ft.fortificationEnabledForTerm = false
+	// Whether we need to de-fortify or not is first contingent on whether
+	// fortification was enabled for the term being tracked or not. If
+	// fortification was attempted, though, we'll need to de-fortify.
+	ft.needsDefortification = true
 	clear(ft.fortification)
 	ft.leaderMaxSupported.Reset()
 }
@@ -205,6 +214,48 @@ func (ft *FortificationTracker) CanDefortify() bool {
 		ft.logger.Debugf("leaderMaxSupported is empty when computing whether we can de-fortify or not")
 	}
 	return ft.storeLiveness.SupportExpired(leaderMaxSupported)
+}
+
+// NeedsDefortify returns whether the node should still continue to broadcast
+// MsgDeFortifyLeader to all followers to de-fortify the term being tracked in
+// the tracker or not.
+func (ft *FortificationTracker) NeedsDefortify() bool {
+	if !ft.fortificationEnabledForTerm {
+		// We never attempted to fortify this term, so we don't need to de-fortify.
+		return false
+	}
+	return ft.needsDefortification
+}
+
+// InformCommittedTerm informs the fortification tracker that an entry proposed
+// in the supplied term has been committed.
+func (ft *FortificationTracker) InformCommittedTerm(committedTerm uint64) {
+	if committedTerm > ft.term {
+		// The committed term (T+1) has advanced beyond the term being tracked in
+		// the fortification tracker (T). This means that not only was a new leader
+		// elected at term T+1, but it was also able to commit a log entry. This
+		// means that a majority of followers are no longer supporting the old
+		// leader at term T. This allows us to stop de-fortifying term T.
+		//
+		// Note that even if a minority of followers are still supporting the old
+		// leader at term T, and they never hear from the new leader at term T+1,
+		// this shouldn't prevent us from electing a new leader at term T+2 in the
+		// future. That's because when campaigning for term T+2, candidates will
+		// include their most recent log entry. This must be at term T+1 for any
+		// viable candidate. Then, even if a candidate needs a vote from a follower
+		// in the minority that is still supporting the leader at term T, the
+		// follower will grant its vote when it notices the candidate is
+		// campaigning with a log entry that was committed at term T+1.
+		//
+		// To reiterate, it's safe to stop de-fortifying once a new leader has been
+		// elected at term T' > T, and the new leader has commited a log entry at
+		// term T'[1]. We're in this case -- save some state, so we can safely say no
+		// the next time we're asked whether we need to de-fortify or not.
+		//
+		// [1] Note that the leader doesn't need to have this log entry committed at
+		// T' in its log, it just needs to know such an entry exists.
+		ft.needsDefortification = false
+	}
 }
 
 // ConfigChangeSafe returns whether it is safe to propose a configuration change
