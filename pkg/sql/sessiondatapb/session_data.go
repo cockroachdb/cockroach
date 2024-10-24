@@ -50,7 +50,7 @@ func (c DataConversionConfig) GetFloatPrec(typ *types.T) int {
 }
 
 func (m VectorizeExecMode) String() string {
-	if m == VectorizeUnset {
+	if m == VectorizeUnset || m == DeprecatedVectorize201Auto {
 		m = VectorizeOn
 	}
 	name, ok := VectorizeExecMode_name[int32(m)]
@@ -71,6 +71,9 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	m := VectorizeExecMode(mInt)
 	if m == VectorizeUnset {
 		return 0, false
+	}
+	if m == DeprecatedVectorize201Auto {
+		m = VectorizeOn
 	}
 	return m, true
 }
