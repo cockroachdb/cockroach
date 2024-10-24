@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1428,11 +1427,11 @@ func TestPartitionSpans(t *testing.T) {
 				gossip:               gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
-					connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
-						return connHealth(node)
+					connHealth: func(id base.SQLInstanceID, addr string, locality roachpb.Locality) error {
+						return connHealth(roachpb.NodeID(id))
 					},
-					connHealthInstance: func(sqlInstance base.SQLInstanceID, _ string) error {
-						return connHealth(roachpb.NodeID(sqlInstance))
+					connHealthWithResolve: func(id base.SQLInstanceID) error {
+						return connHealth(roachpb.NodeID(id))
 					},
 					isAvailable: func(base.SQLInstanceID) bool {
 						return true
@@ -1793,8 +1792,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		gossip:               gw,
 		nodeHealth: distSQLNodeHealth{
 			gossip: gw,
-			connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
-				_, _, err := mockGossip.GetNodeIDAddress(node)
+			connHealthWithResolve: func(id base.SQLInstanceID) error {
+				_, _, err := mockGossip.GetNodeIDAddress(roachpb.NodeID(id))
 				return err
 			},
 			isAvailable: func(base.SQLInstanceID) bool {
@@ -1868,10 +1867,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		return true
 	}
 
-	connHealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
+	connHealthy := func(id base.SQLInstanceID) error {
 		return nil
 	}
-	connUnhealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
+	connUnhealthy := func(id base.SQLInstanceID) error {
 		return errors.New("injected conn health error")
 	}
 	_ = connUnhealthy
@@ -1888,9 +1887,9 @@ func TestCheckNodeHealth(t *testing.T) {
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:           gw,
-				connHealthSystem: connHealthy,
-				isAvailable:      test.isAvailable,
+				gossip:                gw,
+				connHealthWithResolve: connHealthy,
+				isAvailable:           test.isAvailable,
 			}
 			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
@@ -1899,7 +1898,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	}
 
 	connHealthTests := []struct {
-		connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
+		connHealth func(id base.SQLInstanceID) error
 		exp        string
 	}{
 		{connHealthy, ""},
@@ -1909,9 +1908,9 @@ func TestCheckNodeHealth(t *testing.T) {
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
 			h := distSQLNodeHealth{
-				gossip:           gw,
-				connHealthSystem: test.connHealth,
-				isAvailable:      available,
+				gossip:                gw,
+				connHealthWithResolve: test.connHealth,
+				isAvailable:           available,
 			}
 			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
