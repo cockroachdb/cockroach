@@ -89,7 +89,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	mb.buildInputForDelete(inScope, del.Table, del.Where, del.Using, del.Limit, del.OrderBy)
 
 	// Project row-level BEFORE triggers for DELETE.
-	mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete)
+	mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, false /* cascade */)
 
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {

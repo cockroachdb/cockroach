@@ -3491,6 +3491,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`unsafe_allow_triggers_modifying_cascades`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`unsafe_allow_triggers_modifying_cascades`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("unsafe_allow_triggers_modifying_cascades", s)
+			if err != nil {
+				return err
+			}
+			m.SetUnsafeAllowTriggersModifyingCascades(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

@@ -112,6 +112,10 @@ func (cb *onDeleteCascadeBuilder) Build(
 
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
+
+		// Cascades can fire triggers on the child table.
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+
 		mb.buildDelete(nil /* returning */)
 		return mb.outScope.expr
 	})
@@ -354,6 +358,10 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 
 		// Set list of columns that will be fetched by the input expression.
 		mb.setFetchColIDs(mb.outScope.cols)
+
+		// Cascades can fire triggers on the child table.
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, true /* cascade */)
+
 		mb.buildDelete(nil /* returning */)
 		return mb.outScope.expr
 	})
@@ -486,6 +494,9 @@ func (cb *onDeleteSetBuilder) Build(
 			}
 		}
 		mb.addUpdateCols(updateExprs)
+
+		// Cascades can fire triggers on the child table.
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
 
 		// TODO(radu): consider plumbing a flag to prevent building the FK check
 		// against the parent we are cascading from. Need to investigate in which
@@ -728,6 +739,9 @@ func (cb *onUpdateCascadeBuilder) Build(
 			}
 		}
 		mb.addUpdateCols(updateExprs)
+
+		// Cascades can fire triggers on the child table.
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
 
 		mb.buildUpdate(nil /* returning */)
 		return mb.outScope.expr
