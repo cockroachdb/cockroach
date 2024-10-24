@@ -115,6 +115,7 @@ import (
 // | FLOAT4            | FLOAT          | T_float4      | 0         | 0     |
 // |                   |                |               |           |       |
 // | BIT               | BIT            | T_bit         | 0         | 1     |
+// | BIT(0)            | BIT            | T_bit         | 0         | 0     |
 // | BIT(N)            | BIT            | T_bit         | 0         | N     |
 // | VARBIT            | BIT            | T_varbit      | 0         | 0     |
 // | VARBIT(N)         | BIT            | T_varbit      | 0         | N     |
@@ -716,9 +717,10 @@ var (
 
 // Unexported wrapper types.
 var (
-	// typeBit is the SQL BIT type. It is not exported to avoid confusion with
-	// the VarBit type, and confusion over whether its default Width is
-	// unspecified or is 1. More commonly used instead is the VarBit type.
+	// typeBit is the SQL BIT type with an unspecified width. It is not exported
+	// to avoid confusion with the VarBit type, and confusion over whether its
+	// default Width is unspecified or is 1. More commonly used instead is the
+	// VarBit type.
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
 
@@ -1928,17 +1930,27 @@ func (t *T) InformationSchemaName() string {
 func (t *T) SQLString() string {
 	switch t.Family() {
 	case BitFamily:
-		o := t.Oid()
-		typName := "BIT"
-		if o == oid.T_varbit {
-			typName = "VARBIT"
+		switch t.Oid() {
+		case oid.T_bit:
+			typName := "BIT"
+			// BIT(1) pretty-prints as just BIT.
+			// BIT(0) represents a BIT type with unspecified length. This is a
+			// divergence from Postgres which does not allow this type and has
+			// no way to represent it in SQL. It is required in order for it to
+			// be correctly serialized into SQL and evaluated during distributed
+			// query execution. VARBIT cannot be used because it has a different
+			// OID.
+			if t.Width() != 1 {
+				typName = fmt.Sprintf("%s(%d)", typName, t.Width())
+			}
+			return typName
+		default:
+			typName := "VARBIT"
+			if t.Width() > 0 {
+				typName = fmt.Sprintf("%s(%d)", typName, t.Width())
+			}
+			return typName
 		}
-		// BIT(1) pretty-prints as just BIT.
-		if (o != oid.T_varbit && t.Width() > 1) ||
-			(o == oid.T_varbit && t.Width() > 0) {
-			typName = fmt.Sprintf("%s(%d)", typName, t.Width())
-		}
-		return typName
 	case IntFamily:
 		switch t.Width() {
 		case 16:
