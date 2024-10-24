@@ -233,18 +233,20 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType struct{}
+type rangefeedTestType bool
 
 var (
-	scheduledProcessorWithBufferedReg = rangefeedTestType{}
+	scheduledProcessorWithUnbufferedSender rangefeedTestType
 )
 
-var testTypes = []rangefeedTestType{}
+var testTypes = []rangefeedTestType{
+	scheduledProcessorWithUnbufferedSender,
+}
 
 // NB: When adding new types, please keep make sure existing
 // benchmarks will keep their old name.
 func (t rangefeedTestType) String() string {
-	return "scheduled"
+	return "scheduled processor with unbuffered sender + buffered registration"
 }
 
 type testConfig struct {
