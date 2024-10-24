@@ -116,7 +116,7 @@ var leases = []registry.LeaseType{
 func (v variations) String() string {
 	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
 		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, perturbation: %s",
+		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, perturbation: %+v",
 		v.seed, v.fillDuration, v.maxBlockBytes,
 		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
 		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.perturbation)
@@ -439,10 +439,6 @@ func (s *slowDisk) setupMetamorphic(rng *rand.Rand) {
 	s.walFailover = rng.Intn(2) == 0
 }
 
-func (s *slowDisk) String() string {
-	return fmt.Sprintf("slowDisk{slowLiveness: %t, walFailover: %t}", s.slowLiveness, s.walFailover)
-}
-
 // startTargetNode implements perturbation.
 func (s *slowDisk) startTargetNode(ctx context.Context, t test.Test, v variations) {
 	extraArgs := []string{}
@@ -490,9 +486,6 @@ type restart struct {
 
 var _ perturbation = &restart{}
 
-func (r *restart) String() string {
-	return fmt.Sprintf("restart{cleanRestart: %t}", r.cleanRestart)
-}
 
 func (r *restart) setupMetamorphic(rng *rand.Rand) {
 	r.cleanRestart = rng.Intn(2) == 0
@@ -546,10 +539,6 @@ type partition struct {
 }
 
 var _ perturbation = &partition{}
-
-func (p *partition) String() string {
-	return fmt.Sprintf("partition{partitionSite: %t}", p.partitionSite)
-}
 
 func (p *partition) setupMetamorphic(rng *rand.Rand) {
 	p.partitionSite = rng.Intn(2) == 0
@@ -622,10 +611,6 @@ type decommission struct {
 }
 
 var _ perturbation = &decommission{}
-
-func (d *decommission) String() string {
-	return fmt.Sprintf("decommission{drain: %t}", d.drain)
-}
 
 func (d *decommission) setupMetamorphic(rng *rand.Rand) {
 	d.drain = rng.Intn(2) == 0
