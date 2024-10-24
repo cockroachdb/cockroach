@@ -7,6 +7,7 @@ package producer
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -210,6 +212,27 @@ func (s *spanConfigEventStream) flushEvent(ctx context.Context, event *streampb.
 	}
 }
 
+type checkpointPacer struct {
+	pace time.Duration
+	next time.Time
+}
+
+func makeCheckpointPacer(frequency time.Duration) checkpointPacer {
+	return checkpointPacer{
+		pace: frequency,
+		next: timeutil.Now().Add(frequency),
+	}
+}
+
+func (p *checkpointPacer) shouldCheckpoint() bool {
+	now := timeutil.Now()
+	if p.next.Before(now) {
+		p.next = now.Add(p.pace)
+		return true
+	}
+	return false
+}
+
 // streamLoop is the main processing loop responsible for reading buffered rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
@@ -271,7 +294,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 			}
 			batcher.addSpanConfigs(bufferedEvents, update.Timestamp)
 			bufferedEvents = bufferedEvents[:0]
-			if pacer.shouldCheckpoint(update.Timestamp, true) || fromFullScan {
+			if pacer.shouldCheckpoint() || fromFullScan {
 				log.VEventf(ctx, 2, "checkpointing span config stream at %s", update.Timestamp.GoTime())
 				if batcher.getSize() > 0 {
 					log.VEventf(ctx, 2, "sending %d span config events", len(batcher.batch.SpanConfigs))
