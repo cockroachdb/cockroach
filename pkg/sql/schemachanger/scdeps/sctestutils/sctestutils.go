@@ -103,6 +103,7 @@ func WithBuilderDependenciesFromTestServer(
 		planner, /* nodesStatusInfo */
 		planner, /* regionProvider */
 		planner.SemaCtx(),
+		execCfg.DefaultZoneConfig,
 	))
 }
 
