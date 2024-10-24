@@ -99,11 +99,10 @@ func (vs *Set) AddZero(count int) {
 	}
 }
 
-// Remove removes the vector at the given offset from the set. This is an O(1)
-// operation.
-// NB: This operation changes the ordering of vectors in the set, with the last
-// vector moved to the removed vector's offset.
-func (vs *Set) Remove(offset int) {
+// ReplaceWithLast removes the vector at the given offset from the set,
+// replacing it with the last vector in the set. The modified set has one less
+// element and the last vector's position changes.
+func (vs *Set) ReplaceWithLast(offset int) {
 	targetStart := offset * vs.Dims
 	sourceEnd := len(vs.Data)
 	copy(vs.Data[targetStart:targetStart+vs.Dims], vs.Data[sourceEnd-vs.Dims:sourceEnd])

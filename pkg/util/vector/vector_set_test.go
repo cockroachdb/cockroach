@@ -35,10 +35,10 @@ func TestVectorSet(t *testing.T) {
 	require.Equal(t, 8, vs.Count)
 	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 0, 0, 0, 0}, vs.Data)
 
-	// Remove.
-	vs.Remove(1)
-	vs.Remove(4)
-	vs.Remove(5)
+	// ReplaceWithLast.
+	vs.ReplaceWithLast(1)
+	vs.ReplaceWithLast(4)
+	vs.ReplaceWithLast(5)
 	require.Equal(t, 5, vs.Count)
 	require.Equal(t, []float32{1, 2, 0, 0, 6, 6, 1, 2, 0, 0}, vs.Data)
 
@@ -95,12 +95,12 @@ func TestVectorSet(t *testing.T) {
 	require.Panics(t, func() { vs11.SplitAt(-1) })
 	require.Panics(t, func() { vs11.AddZero(-1) })
 	require.Panics(t, func() { vs11.AddSet(nil) })
-	require.Panics(t, func() { vs11.Remove(-1) })
+	require.Panics(t, func() { vs11.ReplaceWithLast(-1) })
 
 	vs12 := MakeSet(2)
 	require.Panics(t, func() { vs12.At(0) })
 	require.Panics(t, func() { vs12.SplitAt(1) })
-	require.Panics(t, func() { vs12.Remove(0) })
+	require.Panics(t, func() { vs12.ReplaceWithLast(0) })
 
 	vs13 := MakeSet(-1)
 	require.Panics(t, func() { vs13.Add(v1) })
