@@ -34,3 +34,4 @@ util/admission
 util/hlc
 util/intsets
 util/mon
+util/vector
