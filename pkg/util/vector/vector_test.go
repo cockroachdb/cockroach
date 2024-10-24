@@ -12,7 +12,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+var NaN32 = float32(math.NaN())
+var Inf32 = float32(math.Inf(1))
 
 func TestParseVector(t *testing.T) {
 	testCases := []struct {
@@ -74,75 +78,32 @@ func TestRoundtripRandomPGVector(t *testing.T) {
 	}
 }
 
-func TestDistances(t *testing.T) {
+func TestCosDistance(t *testing.T) {
 	// Test L1, L2, Cosine distance.
 	testCases := []struct {
-		v1  T
-		v2  T
-		l1  float64
-		l2  float64
+		v1  []float32
+		v2  []float32
 		cos float64
 		err bool
 	}{
-		{v1: T{1, 2, 3}, v2: T{4, 5, 6}, l1: 9, l2: 5.196152422, cos: 0.02536815, err: false},
-		{v1: T{-1, -2, -3}, v2: T{-4, -5, -6}, l1: 9, l2: 5.196152422, cos: 0.02536815, err: false},
-		{v1: T{0, 0, 0}, v2: T{0, 0, 0}, l1: 0, l2: 0, cos: math.NaN(), err: false},
-		{v1: T{1, 2, 3}, v2: T{1, 2, 3}, l1: 0, l2: 0, cos: 0, err: false},
-		{v1: T{1, 2, 3}, v2: T{1, 2, 4}, l1: 1, l2: 1, cos: 0.008539, err: false},
+		{v1: []float32{}, v2: []float32{}, cos: math.NaN(), err: false},
+		{v1: []float32{1, 2, 3}, v2: []float32{4, 5, 6}, cos: 0.02536815, err: false},
+		{v1: []float32{-1, -2, -3}, v2: []float32{-4, -5, -6}, cos: 0.02536815, err: false},
+		{v1: []float32{1, 2, 3}, v2: []float32{1, 2, 3}, cos: 0, err: false},
+		{v1: []float32{1, 2, 3}, v2: []float32{1, 2, 4}, cos: 0.008539, err: false},
+		{v1: []float32{NaN32}, v2: []float32{1}, cos: math.NaN(), err: false},
+		{v1: []float32{Inf32}, v2: []float32{1}, cos: math.NaN(), err: false},
 		// Different vector sizes errors.
 		{v1: T{1, 2, 3}, v2: T{4, 5}, err: true},
 	}
 
 	for _, tc := range testCases {
-		l1, l1Err := L1Distance(tc.v1, tc.v2)
-		l2, l2Err := L2Distance(tc.v1, tc.v2)
 		cos, cosErr := CosDistance(tc.v1, tc.v2)
-
 		if tc.err {
-			assert.Error(t, l1Err)
-			assert.Error(t, l2Err)
 			assert.Error(t, cosErr)
 		} else {
-			assert.NoError(t, l1Err)
-			assert.NoError(t, l2Err)
 			assert.NoError(t, cosErr)
-			assert.InDelta(t, tc.l1, l1, 0.000001)
-			assert.InDelta(t, tc.l2, l2, 0.000001)
 			assert.InDelta(t, tc.cos, cos, 0.000001)
-		}
-	}
-}
-
-func TestProducts(t *testing.T) {
-	// Test inner product and negative inner product
-	testCases := []struct {
-		v1    T
-		v2    T
-		ip    float64
-		negIp float64
-		err   bool
-	}{
-		{v1: T{1, 2, 3}, v2: T{4, 5, 6}, ip: 32, negIp: -32, err: false},
-		{v1: T{-1, -2, -3}, v2: T{-4, -5, -6}, ip: 32, negIp: -32, err: false},
-		{v1: T{0, 0, 0}, v2: T{0, 0, 0}, ip: 0, negIp: 0, err: false},
-		{v1: T{1, 2, 3}, v2: T{1, 2, 3}, ip: 14, negIp: -14, err: false},
-		{v1: T{1, 2, 3}, v2: T{1, 2, 4}, ip: 17, negIp: -17, err: false},
-		// Different vector sizes errors.
-		{v1: T{1, 2, 3}, v2: T{4, 5}, err: true},
-	}
-
-	for _, tc := range testCases {
-		ip, ipErr := InnerProduct(tc.v1, tc.v2)
-		negIp, negIpErr := NegInnerProduct(tc.v1, tc.v2)
-
-		if tc.err {
-			assert.Error(t, ipErr)
-			assert.Error(t, negIpErr)
-		} else {
-			assert.NoError(t, ipErr)
-			assert.NoError(t, negIpErr)
-			assert.InDelta(t, tc.ip, ip, 0.000001)
-			assert.InDelta(t, tc.negIp, negIp, 0.000001)
 		}
 	}
 }
@@ -152,6 +113,7 @@ func TestNorm(t *testing.T) {
 		v    T
 		norm float64
 	}{
+		{v: T{}, norm: 0},
 		{v: T{1, 2, 3}, norm: 3.7416573867739413},
 		{v: T{0, 0, 0}, norm: 0},
 		{v: T{-1, -2, -3}, norm: 3.7416573867739413},
@@ -161,6 +123,34 @@ func TestNorm(t *testing.T) {
 		norm := Norm(tc.v)
 		assert.InDelta(t, tc.norm, norm, 0.000001)
 	}
+}
+
+// While the real work of these functions is done by the num32 package, test
+// that the wrapper functions are working.
+func TestNum32Functions(t *testing.T) {
+	_, err := L1Distance(T{1, 2}, T{3, 4, 5})
+	require.Error(t, err)
+	res, err := L1Distance(T{1, 2, 3}, T{4, 5, 6})
+	require.NoError(t, err)
+	require.Equal(t, float64(9), res)
+
+	_, err = L2Distance(T{1, 2}, T{3, 4, 5})
+	require.Error(t, err)
+	res, err = L2Distance(T{1, 2, 3}, T{4, 5, 6})
+	require.NoError(t, err)
+	require.InDelta(t, float64(5.196152422), res, 0.000001)
+
+	_, err = InnerProduct(T{1, 2}, T{3, 4, 5})
+	require.Error(t, err)
+	res, err = InnerProduct(T{1, 2, 3}, T{4, 5, 6})
+	require.NoError(t, err)
+	require.Equal(t, float64(32), res)
+
+	_, err = NegInnerProduct(T{1, 2}, T{3, 4, 5})
+	require.Error(t, err)
+	res, err = NegInnerProduct(T{1, 2, 3}, T{4, 5, 6})
+	require.NoError(t, err)
+	require.Equal(t, float64(-32), res)
 }
 
 func TestPointwiseOps(t *testing.T) {

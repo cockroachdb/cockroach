@@ -9,6 +9,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
+        "//pkg/util/num32",
     ],
 )
 
@@ -19,5 +20,6 @@ go_test(
     deps = [
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
