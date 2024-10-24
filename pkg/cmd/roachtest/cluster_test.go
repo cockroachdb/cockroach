@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -119,6 +121,14 @@ func (t testWrapper) WorkerProgress(f float64) {
 
 func (t testWrapper) IsDebug() bool {
 	return false
+}
+
+func (t testWrapper) GoWithCancel(_ task.Func, _ ...task.Option) context.CancelFunc {
+	panic("implement me")
+}
+
+func (t testWrapper) Go(_ task.Func, _ ...task.Option) {
+	panic("implement me")
 }
 
 var _ test2.Test = testWrapper{}

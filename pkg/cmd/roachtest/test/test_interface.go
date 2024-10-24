@@ -6,6 +6,9 @@
 package test
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -76,6 +79,9 @@ type Test interface {
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
 	IsDebug() bool
+
+	Go(task.Func, ...task.Option)
+	GoWithCancel(task.Func, ...task.Option) context.CancelFunc
 
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
