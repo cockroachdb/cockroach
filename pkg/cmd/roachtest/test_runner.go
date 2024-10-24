@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -1259,6 +1260,8 @@ func (r *testRunner) runTest(
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	t.taskManager = task.NewManager(runCtx, t.L())
 	t.mu.Lock()
 	// t.Fatal() will cancel this context.
 	t.mu.cancel = cancel
@@ -1285,6 +1288,26 @@ func (r *testRunner) runTest(
 		grafanaAnnotateTestStart(runCtx, t, c)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
+	}()
+
+	// Monitor the task manager for completed events, or failure events and log
+	// them. A failure will call t.Errorf which cancels the test's context.
+	go func() {
+		for {
+			select {
+			case event := <-t.taskManager.CompletedEvents():
+				if event.Err == nil {
+					t.L().Printf("task finished: %s", event.Name)
+					continue
+				} else if event.ExpectedCancel {
+					t.L().Printf("task canceled by test: %s", event.Name)
+					continue
+				}
+				t.Errorf("task `%s` returned error: %v", event.Name, event.Err)
+			case <-runCtx.Done():
+				return
+			}
+		}
 	}()
 
 	var timedOut bool
@@ -1522,6 +1545,12 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) (string, error) {
+	defer func() {
+		// Terminate tasks to ensure that any stray tasks are cleaned up.
+		t.L().Printf("terminating tasks")
+		t.taskManager.Terminate(t.L())
+	}()
+
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		snapURL := ""
 		if timedOut {
@@ -1562,7 +1591,6 @@ func (r *testRunner) teardownTest(
 		t.L().Printf("Retrieving go cover artifacts")
 		getGoCoverArtifacts(ctx, c, t)
 	}
-
 	return "", nil
 }
 
