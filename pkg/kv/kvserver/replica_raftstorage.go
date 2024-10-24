@@ -586,7 +586,10 @@ func (r *Replica) applySnapshot(
 	// TODO: separate ingestions for log and statemachine engine. See:
 	//
 	// https://github.com/cockroachdb/cockroach/issues/93251
-	if inSnap.doExcise {
+	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
+		if !inSnap.doExcise {
+			return errors.AssertionFailedf("expected snapshot with remote files to have excise=true")
+		}
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
 			ctx,
@@ -601,9 +604,24 @@ func (r *Replica) applySnapshot(
 		}
 	} else {
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
-			if ingestStats, err =
-				r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
-				return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+			if inSnap.doExcise {
+				exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+				if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+					ctx,
+					inSnap.SSTStorageScratch.SSTs(),
+					nil, /* sharedSSTs */
+					nil, /* externalSSTs */
+					exciseSpan,
+					inSnap.includesRangeDelForLastSpan,
+				); err != nil {
+					return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
+						inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
+				}
+			} else {
+				if ingestStats, err =
+					r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+					return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+				}
 			}
 		} else {
 			appliedAsWrite = true
