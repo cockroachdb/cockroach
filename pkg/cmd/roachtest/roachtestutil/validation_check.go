@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -63,7 +62,7 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 	}
 	defer rows.Close()
 
-	logEvery := log.Every(time.Minute)
+	logEvery := Every(time.Minute)
 	logEvery.ShouldLog() // don't immediately log
 
 	var ranges int

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -241,7 +240,7 @@ func (cmvt *cdcMixedVersionTester) setupValidator(
 func (cmvt *cdcMixedVersionTester) runKafkaConsumer(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
-	everyN := log.Every(30 * time.Second)
+	everyN := roachtestutil.Every(30 * time.Second)
 
 	// This runs until the test finishes, which will be signaled via
 	// context cancellation. We rely on consumer.Next() to check

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -107,7 +106,7 @@ func runDiskStalledWALFailover(
 	nextStallAt := workloadStartAt.Add(pauseBetweenStalls)
 	defer ticker.Stop()
 
-	progressEvery := log.Every(time.Minute)
+	progressEvery := roachtestutil.Every(time.Minute)
 	for timeutil.Since(workloadStartAt) < time.Hour+5*time.Minute {
 		select {
 		case <-ctx.Done():
