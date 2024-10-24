@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -314,6 +315,8 @@ func TestRunnerTestTimeout(t *testing.T) {
 		cpuQuota:  1000,
 		debugMode: NoDebug,
 	}
+	numTasks := 3
+	var tasksDone atomic.Uint32
 	test := registry.TestSpec{
 		Name:             `timeout`,
 		Owner:            OwnerUnitTest,
@@ -323,6 +326,15 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			for i := 0; i < numTasks; i++ {
+				t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+					defer func() {
+						tasksDone.Add(1)
+					}()
+					<-taskCtx.Done()
+					return nil
+				})
+			}
 			<-ctx.Done()
 		},
 	}
@@ -337,6 +349,9 @@ func TestRunnerTestTimeout(t *testing.T) {
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
 	}
+
+	// Ensure tasks are also canceled.
+	require.Equal(t, uint32(numTasks), tasksDone.Load())
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
@@ -593,4 +608,111 @@ func TestTransientErrorFallback(t *testing.T) {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
 	})
+}
+
+func TestRunnerTasks(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          logger.NoTee,
+		stdout:       &buf,
+		stderr:       &buf,
+		artifactsDir: "",
+	}
+	copt := clustersOpt{
+		typ:       roachprodCluster,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
+	}
+	mockTest := registry.TestSpec{
+		Name:             `mock test`,
+		Owner:            OwnerUnitTest,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+				return errors.New("task error")
+			}, task.Name("task"))
+			<-ctx.Done()
+		},
+	}
+
+	// If a task fails, the test runner should return an error.
+	t.Run("Task Error", func(t *testing.T) {
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+				return errors.New("task error")
+			}, task.Name("task"))
+			<-ctx.Done()
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		if !testutils.IsError(err, "some tests failed") {
+			t.Fatalf("expected error \"some tests failed\", got: %v", err)
+		}
+	})
+
+	// If a task panics, the test runner should return an error.
+	t.Run("Task Panic", func(t *testing.T) {
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+				panic("task panic")
+			}, task.Name("task"))
+			<-ctx.Done()
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		if !testutils.IsError(err, "some tests failed") {
+			t.Fatalf("expected error \"some tests failed\", got: %v", err)
+		}
+	})
+
+	// Test task termination if a test fails.
+	t.Run("Terminate Failure", func(t *testing.T) {
+		var tasksDone atomic.Uint32
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+				defer func() {
+					tasksDone.Add(1)
+				}()
+				<-taskCtx.Done()
+				return nil
+			}, task.Name("task"))
+			t.Fatalf("test failed")
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		if !testutils.IsError(err, "some tests failed") {
+			t.Fatalf("expected error \"some tests failed\", got: %v", err)
+		}
+		require.Equal(t, uint32(1), tasksDone.Load())
+	})
+
+	// Test task termination if a test fails.
+	t.Run("Terminate Success", func(t *testing.T) {
+		var tasksDone atomic.Uint32
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+				defer func() {
+					tasksDone.Add(1)
+				}()
+				<-taskCtx.Done()
+				return nil
+			}, task.Name("task"))
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		require.NoError(t, err)
+		require.Equal(t, uint32(1), tasksDone.Load())
+	})
+
 }

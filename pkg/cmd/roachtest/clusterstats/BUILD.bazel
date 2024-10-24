@@ -53,6 +53,8 @@ go_test(
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/registry",
+        # Required for generated mocks
+        "//pkg/cmd/roachtest/roachtestutil/task",  #keep
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/logger",
