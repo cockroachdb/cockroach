@@ -264,6 +264,7 @@ func (d *txnDeps) UpdateSubzoneConfig(
 	parentZone catalog.ZoneConfig,
 	subzone zonepb.Subzone,
 	subzoneSpans []zonepb.SubzoneSpan,
+	idxRefToDelete int32,
 ) (catalog.ZoneConfig, error) {
 	var rawBytes []byte
 	var zc *zonepb.ZoneConfig
@@ -279,17 +280,19 @@ func (d *txnDeps) UpdateSubzoneConfig(
 		zc.DeleteTableConfig()
 	}
 
+	if idxRefToDelete == -1 {
+		idxRefToDelete = zc.GetSubzoneIndex(subzone.IndexID, subzone.PartitionName)
+	}
+
 	// Update the subzone in the zone config.
 	zc.SetSubzone(subzone)
-	subzoneIdx := zc.GetSubzoneIndex(subzone.IndexID, subzone.PartitionName)
-
 	// Update the subzone spans.
 	subzoneSpansToWrite := subzoneSpans
 	// If there are subzone spans that currently exist, merge those with the new
 	// spans we are updating. Otherwise, the zone config's set of subzone spans
 	// will be our input subzoneSpans.
 	if len(zc.SubzoneSpans) != 0 {
-		zc.DeleteSubzoneSpansForSubzoneIndex(subzoneIdx)
+		zc.DeleteSubzoneSpansForSubzoneIndex(idxRefToDelete)
 		zc.MergeSubzoneSpans(subzoneSpansToWrite)
 		subzoneSpansToWrite = zc.SubzoneSpans
 	}
@@ -302,6 +305,41 @@ func (d *txnDeps) UpdateSubzoneConfig(
 // DeleteZoneConfig implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
 	return d.descsCollection.DeleteZoneConfigInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id)
+}
+
+// DeleteSubzoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteSubzoneConfig(
+	ctx context.Context, tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+) error {
+	var newZc catalog.ZoneConfig
+	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), tableID)
+	if err != nil {
+		return err
+	}
+
+	var rawBytes []byte
+	var zc *zonepb.ZoneConfig
+	if oldZc != nil {
+		rawBytes = oldZc.GetRawBytesInStorage()
+		zc = oldZc.ZoneConfigProto()
+	} else {
+		// No-op if nothing is there for us to discard.
+		return nil
+	}
+
+	// Delete the subzone in the zone config.
+	zc.DeleteSubzone(subzone.IndexID, subzone.PartitionName)
+	// If there are no more subzones after our delete and this table is a
+	// placeholder, we can just delete the table zone config.
+	if len(zc.Subzones) == 0 && zc.IsSubzonePlaceholder() {
+		return d.DeleteZoneConfig(ctx, tableID)
+	}
+	// Delete the subzone spans.
+	zc.DeleteSubzoneSpans(subzoneSpans)
+
+	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
+	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(),
+		tableID, newZc)
 }
 
 // Validate implements the scexec.Catalog interface.

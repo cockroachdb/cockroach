@@ -792,6 +792,9 @@ message IndexZoneConfig {
   // our solution is to drop the existing element and add a new element, with
   // different `seq_num`.
   uint32 seq_num = 5;
+  // TODO(before ready for review): would this make more sense as a separate
+  // element?
+  int32 old_idx_ref = 6;
 }
 
 message PartitionZoneConfig {
@@ -805,6 +808,9 @@ message PartitionZoneConfig {
   // config, our solution is to drop the existing element and add a new element,
   // with different `seq_num`.
   uint32 seq_num = 6;
+  // TODO(before ready for review): would this make more sense as a separate
+  // element?
+  int32 old_idx_ref = 7;
 }
 
 // DatabaseData models what needs to be GCed when a database is dropped.

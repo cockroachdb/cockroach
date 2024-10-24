@@ -84,10 +84,20 @@ type Catalog interface {
 		parentZone catalog.ZoneConfig,
 		subzone zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
+		idxRefToDelete int32,
 	) (catalog.ZoneConfig, error)
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+
+	// DeleteSubzoneConfig deletes a subzone config from the zone config for a
+	// table.
+	DeleteSubzoneConfig(
+		ctx context.Context,
+		tableID descpb.ID,
+		subzone zonepb.Subzone,
+		subzoneSpans []zonepb.SubzoneSpan,
+	) error
 
 	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
 	UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error
