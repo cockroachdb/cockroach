@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { LoadingOutlined, RedoOutlined } from "@ant-design/icons";
-import { Skeleton, Spin } from "antd";
+import { Spin } from "antd";
 import React, { useCallback, useEffect } from "react";
 
 import {
@@ -91,13 +91,12 @@ export const TableMetadataJobControl: React.FC<
 
   return (
     <div className={styles["controls-container"]}>
-      <Skeleton loading={isLoading}>
-        <TableMetadataLastUpdatedTooltip
-          timestamp={jobStatus?.lastCompletedTime}
-        >
-          {durationText => <div>Last refreshed: {durationText}</div>}
-        </TableMetadataLastUpdatedTooltip>
-      </Skeleton>
+      <TableMetadataLastUpdatedTooltip
+        loading={isLoading}
+        timestamp={jobStatus?.lastCompletedTime}
+      >
+        {durationText => <>Last refreshed: {durationText}</>}
+      </TableMetadataLastUpdatedTooltip>
       <Tooltip noUnderline placement="top" title={refreshButtonTooltip}>
         <>
           <Button

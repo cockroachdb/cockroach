@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 import { Icon } from "@cockroachlabs/ui-components";
-import { Row } from "antd";
+import { Row, Skeleton } from "antd";
 import moment from "moment-timezone";
 import React from "react";
 
@@ -15,15 +15,6 @@ import styles from "./tableMetadataLastUpdatedTooltip.module.scss";
 
 const TABLE_METADATA_LAST_UPDATED_HELP =
   "Data was last refreshed automatically (per cluster setting) or manually.";
-
-type Props = {
-  timestamp?: moment.Moment | null;
-  children: (
-    formattedRelativeTime: string,
-    icon?: JSX.Element,
-  ) => React.ReactNode;
-  errorMessage?: string;
-};
 
 const formatErrorMessage = (
   errorMessage: string | null,
@@ -49,12 +40,35 @@ const formatErrorMessage = (
   );
 };
 
+type Props = {
+  timestamp?: moment.Moment | null;
+  children: (
+    formattedRelativeTime: React.ReactNode,
+    icon?: JSX.Element,
+  ) => React.ReactNode;
+  errorMessage?: string;
+  loading?: boolean;
+};
+
 export const TableMetadataLastUpdatedTooltip = ({
   timestamp,
   errorMessage,
   children,
+  loading,
 }: Props) => {
-  const durationText = timestamp?.fromNow() ?? "Never";
+  const duration = (
+    <span>
+      <Skeleton
+        paragraph={false}
+        title={{ width: 80 }}
+        active
+        loading={loading}
+      >
+        {timestamp?.fromNow() ?? "Never"}
+      </Skeleton>
+    </span>
+  );
+
   const icon = errorMessage ? (
     <Icon fill={"warning"} iconName={"Caution"} />
   ) : (
@@ -83,7 +97,7 @@ export const TableMetadataLastUpdatedTooltip = ({
       }
     >
       <Row className={styles["table-metadata-tooltip-content"]} align="middle">
-        {children(durationText, icon)}
+        {children(duration, icon)}
       </Row>
     </Tooltip>
   );

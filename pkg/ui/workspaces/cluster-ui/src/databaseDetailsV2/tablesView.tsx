@@ -123,7 +123,10 @@ const COLUMNS: (TableColumnProps<TableRow> & {
     hideIfTenant: true,
     width: "fit-content",
     render: (t: TableRow) => (
-      <RegionNodesLabel nodesByRegion={t.nodesByRegion} />
+      <RegionNodesLabel
+        loading={t.nodesByRegion.isLoading}
+        nodesByRegion={t.nodesByRegion.data}
+      />
     ),
   },
   {

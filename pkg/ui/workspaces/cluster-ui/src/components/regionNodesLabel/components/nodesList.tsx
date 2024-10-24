@@ -16,6 +16,10 @@ type Props = {
 };
 
 export const NodesList: React.FC<Props> = ({ nodes = [] }) => {
+  if (!nodes.length) {
+    return null;
+  }
+
   const displayedNodes = nodes.slice(0, 4);
   const hiddenNodes = nodes.length > 4 ? nodes.slice(4) : [];
   return (
