@@ -61,6 +61,8 @@ type mutationBuilder struct {
 	// inserted into the target table. It is only populated for INSERT
 	// expressions. It is currently used to inline constant insert values into
 	// uniqueness checks.
+	//
+	// insertExpr may not be set (e.g. if there are INSERT triggers).
 	insertExpr memo.RelExpr
 
 	// targetColList is an ordered list of IDs of the table columns into which
@@ -1554,7 +1556,11 @@ func (mb *mutationBuilder) buildCheckInputScan(
 	// TODO(mgartner): We do not currently inline constants for FK checks
 	// because this would break the insert fast path. The fast path can
 	// currently only be planned when FK checks are built with WithScans.
-	if !isFK && mb.insertExpr != nil {
+	//
+	// We also do not inline constants for checks that have row-level triggers
+	// because the triggers may modify the values that are being checked.
+	if !isFK && mb.insertExpr != nil &&
+		!mb.hasRowLevelTriggers(tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
 		// Find the constant columns produced by the insert expression. All
 		// input columns must be constant in order to inline them.
 		constCols := memo.FindInlinableConstants(mb.insertExpr)
