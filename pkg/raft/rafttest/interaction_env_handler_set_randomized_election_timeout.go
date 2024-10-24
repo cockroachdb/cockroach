@@ -25,7 +25,7 @@ func (env *InteractionEnv) handleSetRandomizedElectionTimeout(
 	t *testing.T, d datadriven.TestData,
 ) error {
 	idx := firstAsNodeIdx(t, d)
-	var timeout int
+	var timeout uint64
 	d.ScanArgs(t, "timeout", &timeout)
 	require.NotZero(t, timeout)
 

@@ -31,8 +31,8 @@ func (env *InteractionEnv) handleTickHeartbeat(t *testing.T, d datadriven.TestDa
 }
 
 // Tick the node at the given index the given number of times.
-func (env *InteractionEnv) Tick(idx int, num int) error {
-	for i := 0; i < num; i++ {
+func (env *InteractionEnv) Tick(idx int, num uint64) error {
+	for i := uint64(0); i < num; i++ {
 		env.Nodes[idx].Tick()
 	}
 	return nil
