@@ -712,15 +712,19 @@ func registerKVSplits(r registry.Registry) {
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300000, registry.EpochLeases, 2 * time.Hour},
+		{true, 300_000, registry.EpochLeases, 2 * time.Hour},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30000, registry.EpochLeases, 2 * time.Hour},
+		{false, 30_000, registry.EpochLeases, 2 * time.Hour},
 		// Expiration-based leases prevent quiescence, and are also more expensive
 		// to keep alive. Again, just verify that 30k ranges is ok.
-		{false, 30000, registry.ExpirationLeases, 2 * time.Hour},
+		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour},
+		// Leader leases don't need quiescence, as they use store liveness for
+		// failure detection and lease extension. They should be able to support
+		// 300k ranges.
+		{false, 300_000, registry.LeaderLeases, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
