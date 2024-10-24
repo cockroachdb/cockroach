@@ -73,9 +73,9 @@ func isIndexInRange(
 ) bool {
 	indexStart := codec.IndexPrefix(uint32(table.GetID()), uint32(index.GetID()))
 	indexEnd := indexStart.Next()
-	// index end must be less than range start
+	// range start must be less than index end
 	rStartBeforeEnd := rangeDesc.StartKey.AsRawKey().Compare(indexStart) == -1
-	// index start must be more than range end
+	// range end must be more than index start
 	rEndAfterStart := rangeDesc.EndKey.AsRawKey().Compare(indexEnd) == 1
 	return rStartBeforeEnd && rEndAfterStart
 }
