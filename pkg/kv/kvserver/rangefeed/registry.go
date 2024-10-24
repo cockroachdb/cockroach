@@ -29,7 +29,7 @@ type registration interface {
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
-	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
+	runOutputLoop(ctx context.Context, streamCtx context.Context, forStacks roachpb.RangeID)
 	// drainAllocations drains all pending allocations when being unregistered
 	// from processor if any.
 	drainAllocations(ctx context.Context)

@@ -41,7 +41,7 @@ func TestRegistrationBasic(t *testing.T) {
 			if noCatchupReg, ok := noCatchupReg.(*unbufferedRegistration); ok {
 				require.Nil(t, noCatchupReg.mu.catchUpBuf)
 			}
-			go noCatchupReg.runOutputLoop(ctx, 0)
+			go noCatchupReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 			require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, s.Events())
 			noCatchupReg.Disconnect(nil)
@@ -67,7 +67,7 @@ func TestRegistrationBasic(t *testing.T) {
 			if r, ok := catchupReg.(*unbufferedRegistration); ok {
 				require.Equal(t, len(r.mu.catchUpBuf), 2)
 			}
-			go catchupReg.runOutputLoop(ctx, 0)
+			go catchupReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, catchupReg.waitForCaughtUp(ctx))
 			events := s.Events()
 			require.Equal(t, 5, len(events))
@@ -83,7 +83,7 @@ func TestRegistrationBasic(t *testing.T) {
 			disconnectReg := newTestRegistration(s, withRSpan(spAB), withRegistrationType(rt))
 			disconnectReg.publish(ctx, ev1, nil /* alloc */)
 			disconnectReg.publish(ctx, ev2, nil /* alloc */)
-			go disconnectReg.runOutputLoop(ctx, 0)
+			go disconnectReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, disconnectReg.waitForCaughtUp(ctx))
 			discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 			disconnectReg.Disconnect(discErr)
@@ -102,7 +102,7 @@ func TestRegistrationBasic(t *testing.T) {
 			disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
 			discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 			disconnectEarlyReg.Disconnect(discErr)
-			go disconnectEarlyReg.runOutputLoop(ctx, 0)
+			go disconnectEarlyReg.runOutputLoop(ctx, ctx, 0)
 			require.Equal(t, discErr.GoError(), s.WaitForError(t))
 			if rt == buffered {
 				require.Equal(t, 0, len(s.Events()))
@@ -136,7 +136,7 @@ func TestRegistrationBasic(t *testing.T) {
 			for i := 0; i < capOfBuf+3; i++ {
 				overflowReg.publish(ctx, ev1, nil /* alloc */)
 			}
-			go overflowReg.runOutputLoop(ctx, 0)
+			go overflowReg.runOutputLoop(ctx, ctx, 0)
 			require.Equal(t, kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER), s.WaitForError(t))
 			require.Equal(t, capOfBuf, len(s.Events()))
 			require.NoError(t, overflowReg.waitForCaughtUp(ctx))
@@ -150,7 +150,7 @@ func TestRegistrationBasic(t *testing.T) {
 			streamErrReg := newTestRegistration(s, withRSpan(spAB), withRegistrationType(rt))
 			streamErr := fmt.Errorf("stream error")
 			s.SetSendErr(streamErr)
-			go streamErrReg.runOutputLoop(ctx, 0)
+			go streamErrReg.runOutputLoop(ctx, ctx, 0)
 			streamErrReg.publish(ctx, ev1, nil /* alloc */)
 			require.Equal(t, streamErr, s.WaitForError(t))
 		})
@@ -158,7 +158,7 @@ func TestRegistrationBasic(t *testing.T) {
 			s := newTestStream()
 			streamCancelReg := newTestRegistration(s, withRSpan(spAB), withRegistrationType(rt))
 			streamCancelReg.Disconnect(kvpb.NewError(context.Canceled))
-			go streamCancelReg.runOutputLoop(ctx, 0)
+			go streamCancelReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
 			require.Equal(t, context.Canceled, s.WaitForError(t))
 		})
@@ -221,8 +221,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 		originFiltering := newTestRegistration(originFilteringStream, withRSpan(spAC),
 			withOmitRemote(true), withRegistrationType(rt))
 
-		go rAC.runOutputLoop(ctx, 0)
-		go originFiltering.runOutputLoop(ctx, 0)
+		go rAC.runOutputLoop(ctx, ctx, 0)
+		go originFiltering.runOutputLoop(ctx, ctx, 0)
 
 		defer rAC.Disconnect(nil)
 		defer originFiltering.Disconnect(nil)
@@ -278,11 +278,11 @@ func TestRegistryBasic(t *testing.T) {
 		rAC := newTestRegistration(sAC, withRSpan(spAC), withRegistrationType(rt))
 		sACFiltering := newTestStream()
 		rACFiltering := newTestRegistration(sACFiltering, withRSpan(spAC), withFiltering(true), withRegistrationType(rt))
-		go rAB.runOutputLoop(ctx, 0)
-		go rBC.runOutputLoop(ctx, 0)
-		go rCD.runOutputLoop(ctx, 0)
-		go rAC.runOutputLoop(ctx, 0)
-		go rACFiltering.runOutputLoop(ctx, 0)
+		go rAB.runOutputLoop(ctx, ctx, 0)
+		go rBC.runOutputLoop(ctx, ctx, 0)
+		go rCD.runOutputLoop(ctx, ctx, 0)
+		go rAC.runOutputLoop(ctx, ctx, 0)
+		go rACFiltering.runOutputLoop(ctx, ctx, 0)
 		defer rAB.Disconnect(nil)
 		defer rBC.Disconnect(nil)
 		defer rCD.Disconnect(nil)
@@ -401,7 +401,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 		reg := makeRegistry(NewMetrics())
 		s := newTestStream()
 		r := newTestRegistration(s, withRSpan(spAB), withStartTs(hlc.Timestamp{WallTime: 10}), withRegistrationType(rt))
-		go r.runOutputLoop(ctx, 0)
+		go r.runOutputLoop(ctx, ctx, 0)
 		reg.Register(ctx, r)
 
 		// Publish a value with a timestamp beneath the registration's start
@@ -486,7 +486,7 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 		r := newTestRegistration(newTestStream(), withRSpan(spAB),
 			withStartTs(hlc.Timestamp{WallTime: 10}), withRegistrationType(rt))
 		go func() {
-			r.runOutputLoop(ctx, 0)
+			r.runOutputLoop(ctx, ctx, 0)
 			close(regDoneC)
 		}()
 		reg.Register(ctx, r)
@@ -534,7 +534,7 @@ func TestPublishStrippedEvents(t *testing.T) {
 			if r, ok := noCatchupReg.(*unbufferedRegistration); ok {
 				require.Nil(t, r.mu.catchUpBuf)
 			}
-			go noCatchupReg.runOutputLoop(ctx, 0)
+			go noCatchupReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 			require.Equal(t, []*kvpb.RangeFeedEvent{expectedEv}, s.Events())
 			noCatchupReg.Disconnect(nil)
@@ -550,7 +550,7 @@ func TestPublishStrippedEvents(t *testing.T) {
 			if r, ok := catchupReg.(*unbufferedRegistration); ok {
 				require.Equal(t, len(r.mu.catchUpBuf), 1)
 			}
-			go catchupReg.runOutputLoop(ctx, 0)
+			go catchupReg.runOutputLoop(ctx, ctx, 0)
 			require.NoError(t, catchupReg.waitForCaughtUp(ctx))
 			require.Equal(t, []*kvpb.RangeFeedEvent{expectedEv}, s.Events())
 			catchupReg.Disconnect(nil)
