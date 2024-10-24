@@ -165,14 +165,14 @@ func (sa SteadyStateAssertion) String() string {
 //
 //	zone config (all ranges)
 //	  num_replicas      = 3
-//	  constraints       = [{+zone=au-east-2a: 1}, {+zone=au-east-2b: 1},
-//	                       {+zone=au-east-2c: 1}]
-//	  lease_preferences = [[+zone=au-east-2c]]
+//	  constraints       = [{+zone=a1: 1}, {+zone=a2: 1},
+//	                       {+zone=a3: 1}]
+//	  lease_preferences = [[+zone=a3]]
 //
 //	localities
-//	  s1-s2 zone = au-east-2a
-//	  s3-s4 zone = au-east-2b
-//	  s5-s6 zone = au-east-2c
+//	  s1-s2 zone = a1
+//	  s3-s4 zone = a2
+//	  s5-s6 zone = a3
 //
 // Then in this configuration, the lease for each range should be on either
 // s5 or s6 and there should be a replica in each zone. Asserting on the
