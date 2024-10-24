@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -172,6 +173,13 @@ func getUDTs(
 	return typeDescriptors, nil, nil
 }
 
+var useStreaksInLDR = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.group_adjacent_spans.enabled",
+	"controls whether to attempt adjacent spans in the same stream",
+	true,
+)
+
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (*streampb.ReplicationStreamSpec, error) {
@@ -199,7 +207,7 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 			return nil, err
 		}
 	}
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
