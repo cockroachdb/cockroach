@@ -1821,7 +1821,7 @@ func doRestorePlan(
 		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
+			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(), false,
 		)
 	} else {
 		// Incremental layers are specified explicitly.
