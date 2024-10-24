@@ -3743,7 +3743,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 // catalog reader, then this function will return an non-zero timestamp
 // to use for all read operations.
 func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
-	if ex.isPCRReaderCatalog {
+	if ex.isPCRReaderCatalog && !ex.sessionData().BypassPCRReaderCatalogAOST {
 		return ex.server.cfg.LeaseManager.GetSafeReplicationTS()
 	}
 	return hlc.Timestamp{}
