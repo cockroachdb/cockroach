@@ -53,6 +53,25 @@ func (quietStderrOption) apply(cfg *Config) {
 	cfg.Stderr = io.Discard
 }
 
+// safeWriter is a thread-safe wrapper for an io.Writer. The Logger's Stdout and
+// Stderr are used directly in some cases, hence the need for this.
+type safeWriter struct {
+	mu     syncutil.Mutex
+	writer io.Writer
+}
+
+// newSafeWriter creates a new SafeWriter.
+func newSafeWriter(w io.Writer) *safeWriter {
+	return &safeWriter{writer: w}
+}
+
+// Write writes data to the underlying writer in a thread-safe manner.
+func (w *safeWriter) Write(buf []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writer.Write(buf)
+}
+
 // QuietStdout is a logger option that suppresses Stdout.
 var QuietStdout quietStdoutOption
 
@@ -76,9 +95,9 @@ type Logger struct {
 	// synchronization so that concurrent Printf()/Error() calls don't step over
 	// each other.
 	stdoutL, stderrL *log.Logger
-	// Stdout, Stderr are the raw Writers used by the loggers.
-	// If path/file is set, then they might Multiwriters, outputting to both a
-	// file and os.Stdout.
+	// Stdout, Stderr are the raw Writers used by the loggers. If path/file is
+	// set, then they might be MultiWriter(s), outputting to both a file and
+	// os.Stdout.
 	// They can be used directly by clients when a writer is required (e.g. when
 	// piping output from a subcommand).
 	Stdout, Stderr io.Writer
@@ -105,8 +124,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 			stderr = os.Stderr
 		}
 		return &Logger{
-			Stdout:  stdout,
-			Stderr:  stderr,
+			Stdout:  newSafeWriter(stdout),
+			Stderr:  newSafeWriter(stderr),
 			stdoutL: log.New(os.Stdout, cfg.Prefix, logFlags),
 			stderrL: log.New(os.Stderr, cfg.Prefix, logFlags),
 		}, nil
@@ -140,8 +159,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 	return &Logger{
 		path:    path,
 		File:    f,
-		Stdout:  stdout,
-		Stderr:  stderr,
+		Stdout:  newSafeWriter(stdout),
+		Stderr:  newSafeWriter(stderr),
 		stdoutL: stdoutL,
 		stderrL: stderrL,
 	}, nil
