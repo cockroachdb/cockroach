@@ -3749,3 +3749,19 @@ func BytesPrevish(b []byte, length int) []byte {
 	copy(buf[bLen:], bytes.Repeat([]byte{0xff}, length-bLen))
 	return buf
 }
+
+// unsafeWrapper is implementation of SafeFormatter. This is used to mark
+// arguments as unsafe for redaction. This would make sure that redact.Unsafe() is implementing SafeFormatter interface
+// without affecting invocations.
+// TODO(aa-joshi): This is a temporary solution to mark arguments as unsafe. We should move/update this into cockroachdb/redact package.
+type unsafeWrapper struct {
+	a any
+}
+
+func (uw unsafeWrapper) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(redact.Unsafe(uw.a))
+}
+
+func Unsafe(args any) any {
+	return unsafeWrapper{a: args}
+}
