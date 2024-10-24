@@ -233,41 +233,38 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type procType bool
+type rangefeedTestType struct{}
 
-const (
-	legacyProcessor    procType = false
-	schedulerProcessor          = true
+var (
+	scheduledProcessorWithBufferedReg = rangefeedTestType{}
 )
 
-var testTypes = []procType{legacyProcessor, schedulerProcessor}
+var testTypes = []rangefeedTestType{}
 
-func (t procType) String() string {
-	if t {
-		return "scheduler"
-	}
-	return "legacy"
+// NB: When adding new types, please keep make sure existing
+// benchmarks will keep their old name.
+func (t rangefeedTestType) String() string {
+	return "scheduled"
 }
 
 type testConfig struct {
 	Config
-	useScheduler bool
-	isc          IntentScannerConstructor
+	isc      IntentScannerConstructor
+	feedType rangefeedTestType
 }
 
 type option func(*testConfig)
 
 func withPusher(txnPusher TxnPusher) option {
 	return func(config *testConfig) {
-		config.PushTxnsInterval = 10 * time.Millisecond
 		config.PushTxnsAge = 50 * time.Millisecond
 		config.TxnPusher = txnPusher
 	}
 }
 
-func withProcType(t procType) option {
+func withRangefeedTestType(t rangefeedTestType) option {
 	return func(config *testConfig) {
-		config.useScheduler = bool(t)
+		config.feedType = t
 	}
 }
 
@@ -325,7 +322,6 @@ func withSettings(st *cluster.Settings) option {
 
 func withPushTxnsIntervalAge(interval, age time.Duration) option {
 	return func(config *testConfig) {
-		config.PushTxnsInterval = interval
 		config.PushTxnsAge = age
 	}
 }
@@ -401,34 +397,25 @@ func newTestProcessor(
 	for _, o := range opts {
 		o(&cfg)
 	}
-	if cfg.useScheduler {
-		sch := NewScheduler(SchedulerConfig{
-			Workers:         1,
-			PriorityWorkers: 1,
-			Metrics:         NewSchedulerMetrics(time.Second),
-		})
-		require.NoError(t, sch.Start(context.Background(), stopper))
-		cfg.Scheduler = sch
-		// Also create a dummy priority processor to populate priorityIDs for
-		// BenchmarkRangefeed. It should never be called.
-		noop := func(e processorEventType) processorEventType {
-			if e != Stopped {
-				t.Errorf("unexpected event %s for noop priority processor", e)
-			}
-			return 0
+	sch := NewScheduler(SchedulerConfig{
+		Workers:         1,
+		PriorityWorkers: 1,
+		Metrics:         NewSchedulerMetrics(time.Second),
+	})
+	require.NoError(t, sch.Start(context.Background(), stopper))
+	cfg.Scheduler = sch
+	// Also create a dummy priority processor to populate priorityIDs for
+	// BenchmarkRangefeed. It should never be called.
+	noop := func(e processorEventType) processorEventType {
+		if e != Stopped {
+			t.Errorf("unexpected event %s for noop priority processor", e)
 		}
-		require.NoError(t, sch.register(9, noop, true /* priority */))
+		return 0
 	}
+	require.NoError(t, sch.register(9, noop, true /* priority */))
 	s := NewProcessor(cfg.Config)
 	h := processorTestHelper{}
 	switch p := s.(type) {
-	case *LegacyProcessor:
-		h.rts = &p.rts
-		h.span = p.Span
-		h.syncEventC = p.syncEventC
-		h.sendSpanSync = func(span *roachpb.Span) {
-			p.syncEventCWithEvent(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
-		}
 	case *ScheduledProcessor:
 		h.rts = &p.rts
 		h.span = p.Span
