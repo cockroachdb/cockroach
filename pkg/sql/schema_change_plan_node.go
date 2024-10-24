@@ -124,6 +124,7 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		p, /* nodesStatusInfo */
 		p, /* regionProvider */
 		p.SemaCtx(),
+		p.execCfg.DefaultZoneConfig,
 	)
 }
 

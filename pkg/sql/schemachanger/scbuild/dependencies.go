@@ -8,6 +8,7 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -75,6 +76,10 @@ type Dependencies interface {
 
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() scdecomp.ZoneConfigGetter
+
+	// GetDefaultZoneConfig is used to get the default zone config inside the
+	// server.
+	GetDefaultZoneConfig() *zonepb.ZoneConfig
 
 	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
