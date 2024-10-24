@@ -551,13 +551,13 @@ ORDER BY "timestamp", info
 
 skipif config 3node-tenant-default-configs
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'Statement'
 FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "remove_zone_config", "Statement": "ALTER DATABASE test CONFIGURE ZONE DISCARD", "Tag": "CONFIGURE ZONE", "Target": "DATABASE test", "User": "root"}
-1  {"EventType": "remove_zone_config", "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE DISCARD", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
+1  {"EventType": "remove_zone_config", "Tag": "CONFIGURE ZONE", "Target": "DATABASE test", "User": "root"}
+1  {"EventType": "remove_zone_config", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
 statement ok
 DROP TABLE a
