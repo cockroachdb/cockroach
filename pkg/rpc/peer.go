@@ -553,11 +553,11 @@ func (p *peer) runHeartbeatUntilFailure(
 
 func logOnHealthy(ctx context.Context, disconnected, now time.Time) {
 	var buf redact.StringBuilder
-	_, _ = redact.Fprintf(&buf, "connection is now healthy")
+	buf.SafeString("connection is now healthy")
 	// When the breaker was first created, we tripped it but disconnected will
 	// have been zero, so don't log a bogus duration in that case.
 	if !disconnected.IsZero() {
-		_, _ = redact.Fprintf(&buf, " (after %s)", now.Sub(disconnected).Round(time.Second))
+		buf.Printf(" (after %s)", redact.Safe(now.Sub(disconnected).Round(time.Second)))
 	}
 	log.Health.InfofDepth(ctx, 1, "%s", buf)
 }
@@ -656,9 +656,9 @@ func maybeLogOnFailedHeartbeat(
 			var buf redact.StringBuilder
 			buf.SafeString("failed connection attempt")
 			if !snap.disconnected.IsZero() {
-				_, _ = redact.Fprintf(&buf, " (last connected %s ago)", now.Sub(snap.disconnected).Round(time.Millisecond))
+				buf.Printf(" (last connected %s ago)", redact.Safe(now.Sub(snap.disconnected).Round(time.Millisecond)))
 			} else {
-				_, _ = redact.Fprintf(&buf, " (never connected)")
+				buf.SafeString(" (never connected)")
 			}
 			log.Health.Errorf(ctx, "%v: %v", buf, err)
 		}
