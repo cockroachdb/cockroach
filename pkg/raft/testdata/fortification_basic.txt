@@ -120,6 +120,9 @@ stabilize 1
   INFO 1 received MsgVoteResp from 3 at term 1
   INFO 1 has received 3 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
+  INFO 1 sending MsgFortifyLeader to 1
+  INFO 1 sending MsgFortifyLeader to 2
+  INFO 1 sending MsgFortifyLeader to 4
   4->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:

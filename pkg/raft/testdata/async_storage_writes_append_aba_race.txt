@@ -186,6 +186,13 @@ INFO 3 has received 3 MsgVoteResp votes and 0 vote rejections
 INFO 3 received MsgVoteResp from 6 at term 2
 INFO 3 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 3 became leader at term 2
+INFO 3 sending MsgFortifyLeader to 1
+INFO 3 sending MsgFortifyLeader to 2
+INFO 3 sending MsgFortifyLeader to 3
+INFO 3 sending MsgFortifyLeader to 4
+INFO 3 sending MsgFortifyLeader to 5
+INFO 3 sending MsgFortifyLeader to 6
+INFO 3 sending MsgFortifyLeader to 7
 
 # Step 5: node 3 proposes some log entries and node 1 receives these entries,
 # overwriting the previous unstable log entries that are in the process of being
@@ -361,6 +368,13 @@ INFO 4 has received 3 MsgVoteResp votes and 0 vote rejections
 INFO 4 received MsgVoteResp from 7 at term 3
 INFO 4 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 4 became leader at term 3
+INFO 4 sending MsgFortifyLeader to 1
+INFO 4 sending MsgFortifyLeader to 2
+INFO 4 sending MsgFortifyLeader to 3
+INFO 4 sending MsgFortifyLeader to 4
+INFO 4 sending MsgFortifyLeader to 5
+INFO 4 sending MsgFortifyLeader to 6
+INFO 4 sending MsgFortifyLeader to 7
 
 process-ready 4
 ----
@@ -402,7 +416,13 @@ dropped: 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 
 tick-heartbeat 4
 ----
-ok
+INFO 4 sending MsgFortifyLeader to 1
+INFO 4 sending MsgFortifyLeader to 2
+INFO 4 sending MsgFortifyLeader to 3
+INFO 4 sending MsgFortifyLeader to 4
+INFO 4 sending MsgFortifyLeader to 5
+INFO 4 sending MsgFortifyLeader to 6
+INFO 4 sending MsgFortifyLeader to 7
 
 process-ready 4
 ----

@@ -84,6 +84,8 @@ stabilize
   INFO 1 received MsgVoteResp from 2 at term 1
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
+  INFO 1 sending MsgFortifyLeader to 1
+  INFO 1 sending MsgFortifyLeader to 2
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
@@ -174,7 +176,7 @@ grant-support 3 1
 # leader will try to fortify it on the next heartbeat.
 tick-heartbeat 1
 ----
-ok
+INFO 1 sending MsgFortifyLeader to 3
 
 stabilize
 ----
@@ -203,7 +205,9 @@ bump-epoch 1
 
 tick-heartbeat 1
 ----
-ok
+INFO 1 sending MsgFortifyLeader to 1
+INFO 1 sending MsgFortifyLeader to 2
+INFO 1 sending MsgFortifyLeader to 3
 
 stabilize
 ----

@@ -90,6 +90,8 @@ stabilize
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
   INFO 1 leader at term 1 does not support itself in the liveness fabric
+  INFO 1 sending MsgFortifyLeader to 2
+  INFO 1 sending MsgFortifyLeader to 3
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:

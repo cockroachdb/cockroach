@@ -145,7 +145,8 @@ grant-support 3 1
 
 tick-heartbeat 1
 ----
-ok
+INFO 1 sending MsgFortifyLeader to 1
+INFO 1 sending MsgFortifyLeader to 3
 
 process-ready 1
 ----

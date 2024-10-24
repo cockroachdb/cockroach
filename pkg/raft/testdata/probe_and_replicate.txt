@@ -499,6 +499,13 @@ stabilize 1
   INFO 1 received MsgVoteResp from 6 at term 8
   INFO 1 has received 4 MsgVoteResp votes and 2 vote rejections
   INFO 1 became leader at term 8
+  INFO 1 sending MsgFortifyLeader to 1
+  INFO 1 sending MsgFortifyLeader to 2
+  INFO 1 sending MsgFortifyLeader to 3
+  INFO 1 sending MsgFortifyLeader to 4
+  INFO 1 sending MsgFortifyLeader to 5
+  INFO 1 sending MsgFortifyLeader to 6
+  INFO 1 sending MsgFortifyLeader to 7
   7->1 MsgVoteResp Term:8 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
