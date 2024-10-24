@@ -129,6 +129,12 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(eventType tree.TriggerEve
 		mb.applyChangesFromTriggers(triggerScope, eventType, tableTyp, visibleColOrds, newColID)
 	}
 	mb.outScope = triggerScope
+
+	// Since INSERT and UPDATE triggers can modify the row, we need to recompute
+	// the computed columns.
+	if eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate {
+		mb.recomputeComputedColsForTrigger(eventType)
+	}
 	return true
 }
 
@@ -143,6 +149,11 @@ func (mb *mutationBuilder) buildOldAndNewCols(
 	makeTuple := func(colIDs opt.OptionalColList, name string) opt.ColumnID {
 		elems := make(memo.ScalarListExpr, 0, len(visibleColOrds))
 		for _, i := range visibleColOrds {
+			if mb.tab.Column(i).IsComputed() {
+				// Row-level triggers should not observe computed columns.
+				elems = append(elems, f.ConstructNull(mb.tab.Column(i).DatumType()))
+				continue
+			}
 			if colIDs[i] == 0 {
 				panic(errors.AssertionFailedf("missing column for trigger"))
 			}
@@ -250,10 +261,14 @@ func (mb *mutationBuilder) applyChangesFromTriggers(
 	}
 	f := mb.b.factory
 	passThroughCols := triggerScope.colSet()
-	projections := make(memo.ProjectionsExpr, len(tableTyp.TupleContents()))
+	projections := make(memo.ProjectionsExpr, 0, len(tableTyp.TupleContents()))
 	for i, colTyp := range tableTyp.TupleContents() {
-		colName := mb.tab.Column(visibleColOrds[i]).ColName()
-		colNameForScope := scopeColName(colName).WithMetadataName(string(colName) + "_new")
+		c := mb.tab.Column(visibleColOrds[i])
+		if c.IsComputed() {
+			// Computed columns are not modified by triggers.
+			continue
+		}
+		colNameForScope := scopeColName(c.ColName()).WithMetadataName(string(c.ColName()) + "_new")
 		elem := f.ConstructColumnAccess(f.ConstructVariable(newColID), memo.TupleOrdinal(i))
 		elemCol := mb.b.synthesizeColumn(triggerScope, colNameForScope, colTyp, nil /* expr */, elem)
 		if eventType == tree.TriggerEventInsert {
@@ -268,9 +283,25 @@ func (mb *mutationBuilder) applyChangesFromTriggers(
 		} else {
 			mb.updateColIDs[visibleColOrds[i]] = elemCol.id
 		}
-		projections[i] = f.ConstructProjectionsItem(elem, elemCol.id)
+		projections = append(projections, f.ConstructProjectionsItem(elem, elemCol.id))
 	}
 	triggerScope.expr = f.ConstructProject(triggerScope.expr, projections, passThroughCols)
+}
+
+// recomputeComputedColsForTrigger resets all computed columns and builds new
+// expressions for them using the remaining columns. this is used for
+// re-computing computed columns after a row-level trigger has modified the row.
+func (mb *mutationBuilder) recomputeComputedColsForTrigger(eventType tree.TriggerEventType) {
+	colIDs := mb.insertColIDs
+	if eventType == tree.TriggerEventUpdate {
+		colIDs = mb.updateColIDs
+	}
+	for i := range colIDs {
+		if mb.tab.Column(i).IsComputed() {
+			colIDs[i] = 0
+		}
+	}
+	mb.addSynthesizedComputedCols(colIDs, false /* restrict */)
 }
 
 // ============================================================================
