@@ -11,12 +11,14 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -71,6 +73,9 @@ type testImpl struct {
 
 	// l is the logger that the test will use for its output.
 	l *logger.Logger
+
+	// taskManager manages tasks (goroutines) for tests.
+	taskManager task.Manager
 
 	runner string
 	// runnerID is the test's main goroutine ID.
@@ -581,6 +586,22 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	// greater than "v2.1.0-alpha.x".
 	vers = version.MustParse(minVersion + "-0")
 	return t.BuildVersion().AtLeast(vers)
+}
+
+func panicHandler(_ context.Context, l *logger.Logger, r interface{}) error {
+	l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+	return fmt.Errorf("panic (stack trace above): %v", r)
+}
+
+// GoWithCancel runs the given function in a goroutine and returns a
+// CancelFunc that can be used to cancel the function.
+func (t *testImpl) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
+	return t.taskManager.GoWithCancel(fn, task.PanicHandler(panicHandler), task.OptionList(opts...))
+}
+
+// Go is like GoWithCancel but without a cancel function.
+func (t *testImpl) Go(fn task.Func, opts ...task.Option) {
+	_ = t.GoWithCancel(fn, task.OptionList(opts...))
 }
 
 // TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
