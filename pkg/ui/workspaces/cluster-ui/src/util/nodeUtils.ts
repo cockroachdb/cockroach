@@ -21,7 +21,7 @@ export const mapStoreIDsToNodeRegions = (
 
   const nodesByRegion: Record<string, NodeID[]> = {};
   nodes.forEach(nodeID => {
-    const region = clusterNodeIDToRegion[nodeID].region;
+    const region = clusterNodeIDToRegion[nodeID]?.region;
     if (!nodesByRegion[region]) {
       nodesByRegion[region] = [];
     }

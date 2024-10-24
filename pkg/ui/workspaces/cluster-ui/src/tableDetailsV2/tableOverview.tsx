@@ -89,7 +89,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 <SummaryCardItem
                   label="Regions / Nodes"
                   value={
-                    <Skeleton loading={nodesLoading}>
+                    <Skeleton paragraph={false} loading={nodesLoading}>
                       {getNodesByRegionDisplayStr()}
                     </Skeleton>
                   }
