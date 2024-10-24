@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -142,8 +143,100 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
-		opts := cloud.ClusterCreateOpts{Nodes: numNodes, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
-		return roachprod.Create(context.Background(), config.Logger, username, &opts)
+		var opts []*cloud.ClusterCreateOpts
+
+		if overrideMachineTypes == nil {
+			// Common case: no override machine types, the cluster is created as
+			// specified.
+			opts = append(opts, &cloud.ClusterCreateOpts{
+				Nodes:                 numNodes,
+				CreateOpts:            createVMOpts,
+				ProviderOptsContainer: providerOptsContainer,
+			})
+		} else if awsOpts, ok := providerOptsContainer[aws.ProviderName]; ok {
+			// AWS machine type override case: when the cloud is AWS and more than
+			// one override machine type is set, we create len(overrideMachineTypes)
+			// clusters with each cluster using one of the override machine types,
+			// otherwise when one machine type override is set, duplicating identical
+			// options (including node count). e.g.,
+			//
+			// roachprod create $USER-aws-hetero-multi-zone
+			//   --nodes 9
+			//   --aws-machine-type=m6g.large,m7g.large,m7g.large
+			//   --aws-zones=eu-west-2b,us-east-1b,us-east-2b
+			//
+			//
+			// Would result in 9 nodes being created, 3 in each of the specified
+			// zones, with the first 3 using m6g.large, the next 3 using m7g.large,
+			// and the last 3 using m7g.large. e.g.,
+			//
+			//   eu-west-2b: [m6g.large, m6g.large, m6g.large]
+			//   us-east-1b: [m7g.large, m7g.large, m7g.large]
+			//   us-east-2b: [m7g.large, m7g.large, m7g.large]
+			//
+			// The single-zone case:
+			//
+			// roachprod create $USER-aws-hetero-single-zone
+			//   --nodes 9
+			//   --aws-machine-type=m6g.large,m7g.large,m7g.large
+			//   --aws-zones=eu-west-2b
+			//
+			// Results in:
+			//
+			//   eu-west-2b: [m6g.large, m6g.large, m6g.large,
+			//                m7g.large, m7g.large, m7g.large,
+			//                m7g.large, m7g.large, m7g.large]
+			//
+			// HACK: to support multiple machine types in AWS for experimentation.
+			// See todo below.
+			intAWSOpts := awsOpts.(*aws.ProviderOpts)
+			ogCreateZones := intAWSOpts.CreateZones
+
+			var usePerZoneMachineType bool
+			var remainingNumNodes int
+			machineNumNodes := numNodes / len(overrideMachineTypes)
+			if len(intAWSOpts.CreateZones) > 1 {
+				if len(overrideMachineTypes) != len(intAWSOpts.CreateZones) {
+					return errors.New("number of override machine types must match number of zones")
+				}
+				usePerZoneMachineType = true
+				// We will use the same machine type per-zone.
+			} else {
+				// Otherwise, we will round-robin through the machine types as there is
+				// just one zone.
+				remainingNumNodes = numNodes % len(overrideMachineTypes)
+			}
+			for i, machineType := range overrideMachineTypes {
+				awsProviderOpts := *intAWSOpts
+				awsProviderOpts.MachineType = machineType
+				if usePerZoneMachineType {
+					awsProviderOpts.CreateZones = []string{ogCreateZones[i%len(ogCreateZones)]}
+				}
+				curMachineNumNodes := machineNumNodes
+				if remainingNumNodes > 0 {
+					if i == len(overrideMachineTypes)-1 && remainingNumNodes > 0 {
+						// Fill the last machine type with the remaining nodes.
+						curMachineNumNodes += remainingNumNodes
+					} else {
+						// Otherwise, we add one to each until running out.
+						curMachineNumNodes++
+						remainingNumNodes--
+					}
+				}
+				opts = append(opts,
+					&cloud.ClusterCreateOpts{
+						Nodes:                 curMachineNumNodes,
+						CreateOpts:            createVMOpts,
+						ProviderOptsContainer: map[string]vm.ProviderOpts{aws.ProviderName: &awsProviderOpts},
+					})
+			}
+		} else {
+			// TODO(test-eng,kvoli): Add support for override machine types generally.
+			// Also, we likely want to make this a provider-specific option, unlike
+			// what was done here.
+			return errors.New("override machine types are only supported for AWS clusters")
+		}
+		return roachprod.Create(context.Background(), config.Logger, username, opts...)
 	}),
 }
 

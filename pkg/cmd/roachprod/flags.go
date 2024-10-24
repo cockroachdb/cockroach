@@ -82,6 +82,7 @@ var (
 	logsInterval          time.Duration
 	volumeCreateOpts      vm.VolumeCreateOpts
 	listOpts              vm.ListOptions
+	overrideMachineTypes  []string
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -152,6 +153,11 @@ func initFlags() {
 			"and value can't be empty string after trimming space, a value that has space must be quoted by single "+
 			"quotes, gce label name only allows hyphens (-), underscores (_), lowercase characters, numbers and "+
 			"international characters. Examples: usage=cloud-report-2021, namewithspaceinvalue='s o s'")
+	createCmd.Flags().StringSliceVar(&overrideMachineTypes,
+		"override-machine-types", nil,
+		"Override the default machine types for the given cloud provider(s). "+
+			"Format: <machine-type>,<machine-type>,...",
+	)
 
 	// Allow each Provider to inject additional configuration flags
 	for _, providerName := range vm.AllProviderNames() {
