@@ -6,6 +6,7 @@
 package memo
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"reflect"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -182,6 +184,9 @@ func TestInterner(t *testing.T) {
 	invSpans4 := inverted.Spans{invSpan1, invSpan2}
 	invSpans5 := inverted.Spans{invSpan2, invSpan1}
 	invSpans6 := inverted.Spans{invSpan1, invSpan3}
+
+	postQueryBuilder1 := &testingPostQueryBuilder{id: 1}
+	postQueryBuilder2 := &testingPostQueryBuilder{id: 2}
 
 	type testVariation struct {
 		val1  interface{}
@@ -875,6 +880,12 @@ func TestInterner(t *testing.T) {
 			{val1: tree.PersistencePermanent, val2: tree.PersistencePermanent, equal: true},
 			{val1: tree.PersistencePermanent, val2: tree.PersistenceTemporary, equal: false},
 		}},
+
+		{hashFn: in.hasher.HashAfterTriggers, eqFn: in.hasher.IsAfterTriggersEqual, variations: []testVariation{
+			{val1: (*AfterTriggers)(nil), val2: (*AfterTriggers)(nil), equal: true},
+			{val1: &AfterTriggers{Builder: postQueryBuilder1}, val2: &AfterTriggers{Builder: postQueryBuilder1}, equal: true},
+			{val1: &AfterTriggers{Builder: postQueryBuilder1}, val2: &AfterTriggers{Builder: postQueryBuilder2}, equal: false},
+		}},
 	}
 
 	computeHashValue := func(hashFn reflect.Value, val interface{}) internHash {
@@ -1071,4 +1082,23 @@ func BenchmarkIsDatumEqual(b *testing.B) {
 			h.IsDatumEqual(d, d)
 		}
 	}
+}
+
+type testingPostQueryBuilder struct {
+	id int
+}
+
+var _ PostQueryBuilder = &testingPostQueryBuilder{}
+
+func (*testingPostQueryBuilder) Build(
+	_ context.Context,
+	_ *tree.SemaContext,
+	_ *eval.Context,
+	_ cat.Catalog,
+	_ interface{},
+	_ opt.WithID,
+	_ *props.Relational,
+	_ opt.ColMap,
+) (RelExpr, error) {
+	return nil, nil
 }

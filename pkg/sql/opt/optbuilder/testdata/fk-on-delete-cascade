@@ -15,7 +15,7 @@ CREATE FUNCTION one_immutable() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1'
 ----
 
 # Simple cascade; fast path (the filter gets transferred over to the cascade).
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -43,7 +43,7 @@ root
                      └── child.p:12 > 1
 
 # Simple cascade; no fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1 AND random() < 0.5
 ----
 root
@@ -76,7 +76,7 @@ root
                      └── child.p:12 = p:15
 
 # Delete with subquery; no fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE EXISTS (SELECT p FROM parent)
 ----
 root
@@ -113,7 +113,7 @@ root
                      └── child.p:16 = p:19
 
 # Delete with volatile UDF; no fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > one_volatile()
 ----
 root
@@ -146,7 +146,7 @@ root
                      └── child.p:13 = p:16
 
 # Delete with immutable UDF; fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > one_immutable()
 ----
 root
@@ -174,7 +174,7 @@ root
                      └── child.p:13 > one_immutable()
 
 # Delete everything.
-build-cascades
+build-post-queries
 DELETE FROM parent
 ----
 root
@@ -198,7 +198,7 @@ CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE 
 ----
 
 # Two-level cascade; fast path for the first cascade.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -244,7 +244,7 @@ root
                           └── grandchild.c:20 = c:23
 
 # Two-level cascade; no fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1 AND random() < 0.5
 ----
 root
@@ -295,7 +295,7 @@ root
                           └── grandchild.c:21 = c:24
 
 # Delete everything.
-build-cascades
+build-post-queries
 DELETE FROM parent
 ----
 root
@@ -336,7 +336,7 @@ exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c))
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -377,7 +377,7 @@ root
                           └── filters
                                └── c:15 = grandchild.c:17
 
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1 AND random() < 0.5
 ----
 root
@@ -428,7 +428,7 @@ exec-ddl
 CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
 ----
 
-build-cascades cascade-levels=3
+build-post-queries post-query-levels=3
 DELETE FROM self WHERE a=1
 ----
 root
@@ -525,7 +525,7 @@ ALTER TABLE ef ADD CONSTRAINT ef_ab FOREIGN KEY (f) REFERENCES ab(a) ON DELETE C
 ----
 
 # Fast path should not be used when there are cycles.
-build-cascades cascade-levels=3
+build-post-queries post-query-levels=3
 DELETE FROM ab WHERE a = 1
 ----
 root
@@ -620,7 +620,7 @@ CREATE TABLE f3 (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM f1 WHERE a >= 1 AND a <= 4
 ----
 root
@@ -661,7 +661,7 @@ root
                           └── (f3.a:25 >= 1) AND (f3.a:25 <= 4)
 
 # No fast path possible (filter references other columns).
-build-cascades
+build-post-queries
 DELETE FROM f1 WHERE a = 1 AND data = 1
 ----
 root
@@ -726,7 +726,7 @@ exec-ddl
 CREATE TABLE g2b (b INT REFERENCES g1(b) ON DELETE CASCADE, data INT)
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM g1 WHERE a = 1
 ----
 root
@@ -771,7 +771,7 @@ root
                 └── filters
                      └── g2b.b:26 = b:31
 
-build-cascades
+build-post-queries
 DELETE FROM g1 WHERE b = 1
 ----
 root
@@ -827,7 +827,7 @@ CREATE TABLE h2 (c INT PRIMARY KEY, p DECIMAL REFERENCES h1(p) ON DELETE CASCADE
 
 # Fast path cannot be used: it would be incorrect to transfer this
 # condition to the child column.
-build-cascades
+build-post-queries
 DELETE FROM h1 WHERE p::STRING = '1.0'
 ----
 root
@@ -860,7 +860,7 @@ root
                      └── h2.p:12 = p:15
 
 # It is ok to use the fast path if the expression is not composite-sensitive.
-build-cascades
+build-post-queries
 DELETE FROM h1 WHERE p = 1
 ----
 root
@@ -907,7 +907,7 @@ CREATE TABLE m2 (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM m1 WHERE a+b+c=1
 ----
 root
@@ -937,7 +937,7 @@ root
                      └── m2.c:21 IS DISTINCT FROM CAST(NULL AS INT8)
 
 # The filter will end up being a contradiction, so the cascade is a no-op.
-build-cascades
+build-post-queries
 DELETE FROM m1 WHERE a IS NULL
 ----
 root
@@ -982,7 +982,7 @@ CREATE TABLE child_partial (
 ----
 
 # Test a cascade to a child with a partial index; fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent_partial WHERE p > 1
 ----
 root
@@ -1022,7 +1022,7 @@ root
                      └── child_partial.p:13 > 0 [as=partial_index_del2:18]
 
 # Test a cascade to a child with a partial index; no fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent_partial WHERE p > 1 AND random() < 0.5
 ----
 root
@@ -1066,7 +1066,7 @@ root
                      └── child_partial.p:13 > 0 [as=partial_index_del2:19]
 
 # Test a cascade to a child with a partial index; delete everything.
-build-cascades
+build-post-queries
 DELETE FROM parent_partial
 ----
 root
@@ -1115,7 +1115,7 @@ CREATE TABLE child_virt (
 ----
 
 # Fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent_virt WHERE p > 1
 ----
 root
@@ -1154,7 +1154,7 @@ root
                      └── child_virt.p:14 IS DISTINCT FROM CAST(NULL AS INT8)
 
 # No fast path.
-build-cascades
+build-post-queries
 DELETE FROM parent_virt WHERE p > 1 AND random() < 0.5
 ----
 root

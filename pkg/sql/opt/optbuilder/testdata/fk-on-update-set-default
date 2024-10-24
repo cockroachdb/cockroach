@@ -6,7 +6,7 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT DEFAULT 0 NOT NULL REFERENCES parent(p) ON UPDATE SET DEFAULT)
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent SET p = p * 10 WHERE p > 1
 ----
 root
@@ -90,7 +90,7 @@ CREATE TABLE child_multi (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_multi SET p = p * 10, q = q + 1 WHERE pk > 1
 ----
 root
@@ -164,7 +164,7 @@ root
 
 # Update only one of the two FK columns. The "before" and "after" values of q
 # come from the same column in the mutation input.
-build-cascades
+build-post-queries
 UPDATE parent_multi SET p = p * 10 WHERE p > 1
 ----
 root
@@ -243,7 +243,7 @@ CREATE TABLE grandchild (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_multi SET q = q * 10 WHERE p > 1
 ----
 root
@@ -362,7 +362,7 @@ root
                                     ├── c:51 = child_multi.c:53
                                     └── q:52 = child_multi.q:55
 
-build-cascades
+build-post-queries
 UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 ----
 root
@@ -502,7 +502,7 @@ root
                                     └── q:55 = child_multi.q:58
 
 # Upsert that only touches one of the FK columns.
-build-cascades
+build-post-queries
 UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 ----
 root
@@ -645,7 +645,7 @@ root
                                     ├── c:55 = child_multi.c:57
                                     └── q:56 = child_multi.q:59
 
-build-cascades
+build-post-queries
 INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UPDATE SET p = 100
 ----
 root
@@ -802,7 +802,7 @@ CREATE TABLE child_assn_cast (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_assn_cast SET p = 1 WHERE p > 1
 ----
 root
@@ -877,7 +877,7 @@ CREATE TABLE child_assn_cast_p2 (
 )
 ----
 
-build-cascades
+build-post-queries
 UPSERT INTO parent_assn_cast (p, p2) VALUES (1, 2)
 ----
 root
@@ -960,7 +960,7 @@ root
                           └── filters
                                └── p2:24 = parent_assn_cast.p2:26
 
-build-cascades
+build-post-queries
 INSERT INTO parent_assn_cast (p, p2) VALUES (1, 2) ON CONFLICT (p) DO UPDATE SET p2 = 3
 ----
 root
@@ -1063,7 +1063,7 @@ CREATE TABLE child_partial (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_partial SET p = p * 10 WHERE p > 1
 ----
 root
@@ -1152,7 +1152,7 @@ CREATE TABLE child_virt (
 )
 ----
 
-build-cascades
+build-post-queries
 UPDATE parent_virt SET p = p * 10 WHERE p > 1
 ----
 root

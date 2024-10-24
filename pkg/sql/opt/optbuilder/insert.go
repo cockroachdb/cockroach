@@ -752,6 +752,8 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 
 	mb.buildFKChecksForInsert()
 
+	mb.buildRowLevelAfterTriggers(opt.InsertOp)
+
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(
 		mb.outScope.expr, mb.uniqueChecks, mb.fastPathUniqueChecks, mb.fkChecks, private,
@@ -966,6 +968,8 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	mb.buildUniqueChecksForUpsert()
 
 	mb.buildFKChecksForUpsert()
+
+	mb.buildRowLevelAfterTriggers(opt.InsertOp)
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructUpsert(

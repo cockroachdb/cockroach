@@ -1904,7 +1904,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if planner.pausablePortal != nil {
 		if len(planner.curPlan.subqueryPlans) == 0 &&
 			len(planner.curPlan.cascades) == 0 &&
-			len(planner.curPlan.checkPlans) == 0 {
+			len(planner.curPlan.checkPlans) == 0 &&
+			len(planner.curPlan.triggers) == 0 {
 			// We only allow non-distributed plan for pausable portals.
 			distSQLMode = sessiondatapb.DistSQLOff
 		} else {
@@ -2413,7 +2414,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
 			len(planner.curPlan.cascades) != 0 ||
-			len(planner.curPlan.checkPlans) != 0 {
+			len(planner.curPlan.checkPlans) != 0 ||
+			len(planner.curPlan.triggers) != 0 {
 			var serialEvalCtx extendedEvalContext
 			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
 			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {

@@ -223,8 +223,9 @@ type Flags struct {
 	// the import command.
 	File string
 
-	// CascadeLevels limits the depth of recursive cascades for build-cascades.
-	CascadeLevels int
+	// PostQueryLevels limits the depth of recursive post-queries for
+	// build-post-queries.
+	PostQueryLevels int
 
 	// NoStableFolds controls whether constant folding for normalization includes
 	// stable operators.
@@ -353,10 +354,10 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     attempts to use the placeholder fast path to obtain a fully optimized
 //     expression with placeholders.
 //
-//   - build-cascades [flags]
+//   - build-post-queries [flags]
 //
-//     Builds a query and then recursively builds cascading queries. Outputs all
-//     unoptimized plans.
+//     Builds a query and then recursively builds cascading queries and AFTER
+//     triggers. Outputs all unoptimized plans.
 //
 //   - optsteps [flags]
 //
@@ -527,8 +528,8 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //   - inject-stats: the file path is relative to the test file.
 //
-//   - cascade-levels: used to limit the depth of recursive cascades for
-//     build-cascades.
+//   - post-query-levels: used to limit the depth of recursive cascades for
+//     build-post-queries.
 //
 //   - index-version: controls the version of the index descriptor created in
 //     the test catalog. This is used by the exec-ddl command for CREATE INDEX
@@ -675,7 +676,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		return ot.FormatExpr(e)
 
-	case "build-cascades":
+	case "build-post-queries":
 		o := ot.makeOptimizer()
 		o.DisableOptimizations()
 		if err := ot.buildExpr(o.Factory()); err != nil {
@@ -683,13 +684,22 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		e := o.Memo().RootExpr()
 
-		var buildCascades func(e opt.Expr, tp treeprinter.Node, level int)
-		buildCascades = func(e opt.Expr, tp treeprinter.Node, level int) {
-			if ot.Flags.CascadeLevels != 0 && level > ot.Flags.CascadeLevels {
+		var buildPostQueries func(e opt.Expr, tp treeprinter.Node, level int)
+		buildPostQueries = func(e opt.Expr, tp treeprinter.Node, level int) {
+			if ot.Flags.PostQueryLevels != 0 && level > ot.Flags.PostQueryLevels {
 				return
 			}
 			if opt.IsMutationOp(e) {
 				p := e.Private().(*memo.MutationPrivate)
+				inputRel := e.Child(0).(memo.RelExpr).Relational()
+
+				// Cascades need a map from the original memo to the one they are being
+				// built from. Since we're using the same memo to build the cascades, we
+				// build an identity map for the mutation's input columns.
+				var colMap opt.ColMap
+				inputRel.OutputCols.ForEach(func(col opt.ColumnID) {
+					colMap.Set(int(col), int(col))
+				})
 
 				for _, c := range p.FKCascades {
 					// We use the same memo to build the cascade. This makes the entire
@@ -701,26 +711,45 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 						ot.catalog,
 						o.Factory(),
 						c.WithID,
-						e.Child(0).(memo.RelExpr).Relational(),
-						c.OldValues,
-						c.NewValues,
+						inputRel,
+						colMap,
 					)
 					if err != nil {
 						d.Fatalf(tb, "error building cascade: %+v", err)
 					}
 					n := tp.Child("cascade")
 					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
-					buildCascades(cascade, n, level+1)
+					buildPostQueries(cascade, n, level+1)
+				}
+				if t := p.AfterTriggers; t != nil {
+					// We use the same memo to build the triggers. This makes the entire
+					// tree easier to read (e.g. the column IDs won't overlap).
+					triggers, err := t.Builder.Build(
+						context.Background(),
+						&ot.semaCtx,
+						&ot.evalCtx,
+						ot.catalog,
+						o.Factory(),
+						t.WithID,
+						inputRel,
+						colMap,
+					)
+					if err != nil {
+						d.Fatalf(tb, "error building triggers: %+v", err)
+					}
+					n := tp.Child("after-triggers")
+					n.Child(strings.TrimRight(ot.FormatExpr(triggers), "\n"))
+					buildPostQueries(triggers, n, level+1)
 				}
 			}
 			for i := 0; i < e.ChildCount(); i++ {
-				buildCascades(e.Child(i), tp, level)
+				buildPostQueries(e.Child(i), tp, level)
 			}
 		}
 		tp := treeprinter.New()
 		root := tp.Child("root")
 		root.Child(strings.TrimRight(ot.FormatExpr(e), "\n"))
-		buildCascades(e, root, 1)
+		buildPostQueries(e, root, 1)
 
 		return tp.String()
 
@@ -1114,15 +1143,15 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		}
 		f.File = arg.Vals[0]
 
-	case "cascade-levels":
+	case "post-query-levels":
 		if len(arg.Vals) != 1 {
-			return fmt.Errorf("cascade-levels requires a single argument")
+			return fmt.Errorf("post-query-levels requires a single argument")
 		}
 		levels, err := strconv.ParseInt(arg.Vals[0], 10, 64)
 		if err != nil {
-			return errors.Wrap(err, "cascade-levels")
+			return errors.Wrap(err, "post-query-levels")
 		}
-		f.CascadeLevels = int(levels)
+		f.PostQueryLevels = int(levels)
 
 	case "index-version":
 		if len(arg.Vals) != 1 {

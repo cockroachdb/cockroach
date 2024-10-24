@@ -522,30 +522,6 @@ func (g *routineGenerator) SendDeferredRoutine(nestedRoutine *tree.RoutineExpr, 
 	g.deferredRoutine.args = args
 }
 
-// droppingResultWriter drops all rows that are added to it. It only tracks
-// errors with the SetError and Err functions.
-type droppingResultWriter struct {
-	err error
-}
-
-// AddRow is part of the rowResultWriter interface.
-func (d *droppingResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return nil
-}
-
-// SetRowsAffected is part of the rowResultWriter interface.
-func (d *droppingResultWriter) SetRowsAffected(ctx context.Context, n int) {}
-
-// SetError is part of the rowResultWriter interface.
-func (d *droppingResultWriter) SetError(err error) {
-	d.err = err
-}
-
-// Err is part of the rowResultWriter interface.
-func (d *droppingResultWriter) Err() error {
-	return d.err
-}
-
 func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursorHelper, error) {
 	open := g.expr.CursorDeclaration
 	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {

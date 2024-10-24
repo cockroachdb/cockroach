@@ -6,7 +6,7 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT DEFAULT 0 REFERENCES parent(p) ON DELETE SET DEFAULT)
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -68,7 +68,7 @@ CREATE TABLE child_null (c INT PRIMARY KEY, p INT REFERENCES parent(p) ON DELETE
 
 # Verify that no FK check is issued when updating the child, just like ON
 # DELETE SET NULL.
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -125,7 +125,7 @@ CREATE TABLE child_multicol (
 #  - non-trivial default expressions are projected correctly;
 #  - we recalculate the stored column;
 #  - we verify the CHECK expression.
-build-cascades
+build-post-queries
 DELETE FROM parent_multicol WHERE p > 1
 ----
 root
@@ -221,7 +221,7 @@ CREATE TABLE child_partial (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent_partial WHERE p > 1
 ----
 root
@@ -299,7 +299,7 @@ CREATE TABLE child_virt (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent_virt WHERE p > 1
 ----
 root

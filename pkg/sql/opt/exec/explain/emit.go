@@ -167,6 +167,7 @@ func emitInternal(
 		}
 		ob.LeaveNode()
 	}
+	// TODO(drewk): handle triggers as well.
 	ob.LeaveNode()
 	return nil
 }

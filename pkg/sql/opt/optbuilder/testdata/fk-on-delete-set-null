@@ -6,7 +6,7 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p) ON DELETE SET NULL)
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent WHERE p > 1
 ----
 root
@@ -62,7 +62,7 @@ CREATE TABLE child_multicol (
 #  - multiple FK columns are handled correctly;
 #  - we recalculate the stored column;
 #  - we verify the CHECK expression.
-build-cascades
+build-post-queries
 DELETE FROM parent_multicol WHERE p > 1
 ----
 root
@@ -136,7 +136,7 @@ CREATE TABLE child_partial (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent_partial WHERE p > 1
 ----
 root
@@ -200,7 +200,7 @@ CREATE TABLE child_virt (
 )
 ----
 
-build-cascades
+build-post-queries
 DELETE FROM parent_virt WHERE p > 1
 ----
 root
