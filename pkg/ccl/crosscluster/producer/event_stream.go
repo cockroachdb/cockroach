@@ -508,7 +508,9 @@ func streamPartition(
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
-	spec.Config.BatchByteSize = defaultBatchSize
+	if spec.Config.BatchByteSize == 0 {
+		spec.Config.BatchByteSize = defaultBatchSize
+	}
 	spec.Config.MinCheckpointFrequency = crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
