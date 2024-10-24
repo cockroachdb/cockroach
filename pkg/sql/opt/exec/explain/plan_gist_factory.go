@@ -139,12 +139,12 @@ func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 func (f *PlanGistFactory) ConstructPlan(
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount, flags)
+	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 	return plan, err
 }
 

@@ -271,11 +271,17 @@ type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 // rightColumns passed to ConstructApplyJoin (in order).
 type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree.Datums) (Plan, error)
 
-// Cascade describes a cascading query. The query uses a node created by
-// ConstructBuffer as an input; it should only be triggered if this buffer is
-// not empty.
-type Cascade struct {
+// PostQuery describes a cascading query or an AFTER trigger action. The query
+// uses a node created by ConstructBuffer as an input; it should only be
+// triggered if this buffer is not empty.
+type PostQuery struct {
+	// FKConstraint is used for logging and EXPLAIN purposes. It is nil if this
+	// PostQuery describes a set of AFTER triggers.
 	FKConstraint cat.ForeignKeyConstraint
+
+	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
+	// PostQuery describes a foreign-key cascade action.
+	Triggers []cat.Trigger
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
 	// the mutation. It is nil if the cascade does not require a buffer.
