@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1792,7 +1791,7 @@ func (d *BackupRestoreTestDriver) computeTableContents(
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Errorf(ctx, "Error loading system table content %s", err)
+		l.ErrorfCtx(ctx, "Error loading system table content %s", err)
 		return nil, err
 	}
 
