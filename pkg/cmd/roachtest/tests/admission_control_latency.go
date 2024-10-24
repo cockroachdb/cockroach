@@ -574,7 +574,13 @@ var _ perturbation = decommission{}
 
 func (d decommission) setupMetamorphic(rng *rand.Rand) variations {
 	d.drain = rng.Intn(2) == 0
-	return newMetamorphic(d, rng)
+	// TODO(#133182): The heuristic for whether to apply a snapshot as a batch will
+	// cause this test to fail with small maxBlockBytes.
+	v := newMetamorphic(d, rng)
+	if v.maxBlockBytes == 1 {
+		v.maxBlockBytes = 1024
+	}
+	return v
 }
 
 func (d decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
