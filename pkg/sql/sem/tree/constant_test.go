@@ -44,6 +44,12 @@ func TestAvailTypesAreSets(t *testing.T) {
 	for i, test := range testCases {
 		seen := make(map[oid.Oid]struct{})
 		for _, newType := range test.availTypes {
+			// Collated strings have the same Oid as uncollated strings, but we need the
+			// ability to parse constants as collated strings when that is the desired
+			// type.
+			if newType.Family() == types.CollatedStringFamily {
+				continue
+			}
 			if _, ok := seen[newType.Oid()]; ok {
 				t.Errorf("%d: found duplicate type: %v", i, newType)
 			}
@@ -211,6 +217,13 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 			// resolve that exact type. In actual execution, the constant would be resolved
 			// as a hydrated enum type instead.
 			if availType.Family() == types.EnumFamily {
+				continue
+			}
+
+			// The collated string value in c.AvailableTypes() is AnyCollatedString, so we
+			// will not be able to resolve that exact type. In actual execution, the constant
+			// would be resolved with an actual desired locale.
+			if availType.Family() == types.CollatedStringFamily {
 				continue
 			}
 
@@ -677,6 +690,13 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				// resolve that exact type. In actual execution, the constant would be resolved
 				// as a hydrated enum type instead.
 				if availType.Family() == types.EnumFamily {
+					continue
+				}
+
+				// The collated string value in c.AvailableTypes() is AnyCollatedString, so we
+				// will not be able to resolve that exact type. In actual execution, the constant
+				// would be resolved with an actual desired locale.
+				if availType.Family() == types.CollatedStringFamily {
 					continue
 				}
 
