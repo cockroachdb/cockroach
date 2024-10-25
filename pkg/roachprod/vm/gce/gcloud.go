@@ -312,6 +312,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
+		PDVolumeCount:        1,
 		TerminateOnMigration: false,
 		UseSpot:              false,
 		preemptible:          false,
@@ -335,6 +336,7 @@ type ProviderOpts struct {
 	SSDCount         int
 	PDVolumeType     string
 	PDVolumeSize     int
+	PDVolumeCount    int
 	UseMultipleDisks bool
 	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
 	UseSpot bool
@@ -1054,6 +1056,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
+	flags.IntVar(&o.PDVolumeCount, ProviderName+"-pd-volume-count", 1,
+		"Number of persistent disk volumes, only used if local-ssd=false")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
 		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks.")
@@ -1388,15 +1392,18 @@ func (p *Provider) computeInstanceArgs(
 			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 		}
 	} else {
-		pdProps := []string{
-			fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
-			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
-			"auto-delete=yes",
+		// create the "PDVolumeCount" number of persistent disks with the same configuration
+		for i := 0; i < providerOpts.PDVolumeCount; i++ {
+			pdProps := []string{
+				fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+				fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
+				"auto-delete=yes",
+			}
+			// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
+			// option, such as Hyperdisk Throughput:
+			// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
+			args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		}
-		// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
-		// option, such as Hyperdisk Throughput:
-		// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
-		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		// Enable DISCARD commands for persistent disks, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
 		extraMountOpts = "discard"
@@ -1678,7 +1685,7 @@ func (p *Provider) Create(
 			return err
 		}
 	}
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD)
+	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
 }
 
 // computeGrowDistribution computes the distribution of new nodes across the
@@ -1800,7 +1807,8 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		}
 		labelsJoined += fmt.Sprintf("%s=%s", key, value)
 	}
-	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0)
+	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0,
+		len(vms[0].NonBootAttachedVolumes))
 }
 
 type jsonBackendService struct {
@@ -2283,6 +2291,7 @@ func propagateDiskLabels(
 	labels string,
 	zoneToHostNames map[string][]string,
 	useLocalSSD bool,
+	pdVolumeCount int,
 ) error {
 	var g errgroup.Group
 
@@ -2312,19 +2321,23 @@ func propagateDiskLabels(
 			})
 
 			if !useLocalSSD {
-				g.Go(func() error {
-					persistentDiskArgs := append([]string(nil), argsPrefix...)
-					persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
-					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
-					persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-1", hostName))
-					cmd := exec.Command("gcloud", persistentDiskArgs...)
+				// The persistent disks are already created. The disks are suffixed with an offset
+				// which starts from 1. A total of "pdVolumeCount" disks are created.
+				for offset := 1; offset <= pdVolumeCount; offset++ {
+					g.Go(func() error {
+						persistentDiskArgs := append([]string(nil), argsPrefix...)
+						persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
+						// N.B. additional persistent disks are suffixed with the offset, starting at 1.
+						persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-%d", hostName, offset))
+						cmd := exec.Command("gcloud", persistentDiskArgs...)
 
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
-					}
-					return nil
-				})
+						output, err := cmd.CombinedOutput()
+						if err != nil {
+							return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
+						}
+						return nil
+					})
+				}
 			}
 		}
 	}
