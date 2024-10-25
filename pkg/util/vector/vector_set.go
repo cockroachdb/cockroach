@@ -8,6 +8,7 @@ package vector
 import (
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +32,18 @@ func MakeSetFromRawData(data []float32, dims int) Set {
 		Dims:  dims,
 		Count: len(data) / dims,
 		Data:  data,
+	}
+}
+
+// AsMatrix returns this set as a matrix, to be used with the num32 package.
+// NB: The underlying float32 slice is shared by the resulting matrix, so any
+// changes will affect both the vector set and matrix.
+func (vs *Set) AsMatrix() num32.Matrix {
+	return num32.Matrix{
+		Rows:   vs.Count,
+		Cols:   vs.Dims,
+		Stride: vs.Dims,
+		Data:   vs.Data,
 	}
 }
 
@@ -94,9 +107,7 @@ func (vs *Set) AddZero(count int) {
 	start := len(vs.Data)
 	end := vs.Count * vs.Dims
 	vs.Data = vs.Data[:end]
-	for i := start; i < end; i++ {
-		vs.Data[i] = 0
-	}
+	num32.Zero(vs.Data[start:end])
 }
 
 // ReplaceWithLast removes the vector at the given offset from the set,

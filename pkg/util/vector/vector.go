@@ -152,6 +152,8 @@ func L2Distance(t T, t2 T) (float64, error) {
 		return 0, err
 	}
 	// TODO(queries): check for overflow and validate intermediate result if needed.
+	// NOTE: This does not use the num32.L2Distance function because it needs to
+	// return a float64 value.
 	return math.Sqrt(float64(num32.L2SquaredDistance(t, t2))), nil
 }
 
@@ -194,7 +196,7 @@ func InnerProduct(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
 	}
-	return float64(num32.InnerProduct(t, t2)), nil
+	return float64(num32.Dot(t, t2)), nil
 }
 
 // NegInnerProduct returns the negative inner product of t1 and t2.
@@ -210,6 +212,8 @@ func Norm(t T) float64 {
 		norm += float64(t[i]) * float64(t[i])
 	}
 	// TODO(queries): check for overflow and validate intermediate result if needed.
+	// NOTE: This does not use the num32.Norm function because it needs to return
+	// a float64 value.
 	return math.Sqrt(norm)
 }
 
