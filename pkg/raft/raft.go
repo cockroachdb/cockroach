@@ -392,10 +392,11 @@ type raft struct {
 	// term changes.
 	uncommittedSize entryPayloadSize
 
-	// electionElapsed is the number of ticks since we last reached the
-	// electionTimeout. Tracked by both leaders and followers alike. Additionally,
-	// followers also reset this field whenever they receive a valid message from
-	// the current leader or if the leader is fortified when ticked.
+	// electionElapsed is tracked by both leaders and followers. For followers, it
+	// is the number of ticks since they last received a valid message from the
+	// from the current leader, unless the follower is fortifying a leader
+	// (leadEpoch != 0), in which case it is always set to 0. For leaders, it is
+	// the number of ticks since the last time it performed a checkQuorum.
 	//
 	// Invariant: electionElapsed = 0 when r.leadEpoch != 0 on a follower.
 	electionElapsed int64
@@ -1135,7 +1136,7 @@ func (r *raft) tickElection() {
 		// 2. But we do want to take advantage of randomized election timeouts built
 		//    into raft to prevent hung elections.
 		// We achieve both of these goals by "forwarding" electionElapsed to begin
-		// at r.electionTimeout. Also see pastElectionTimeout.
+		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
 		r.logger.Debugf(
 			"%d setting election elapsed to start from %d ticks after store liveness support expired",
 			r.id, r.electionTimeout,
@@ -1145,8 +1146,7 @@ func (r *raft) tickElection() {
 		r.electionElapsed++
 	}
 
-	if r.pastElectionTimeout() {
-		r.electionElapsed = 0
+	if r.atRandomizedElectionTimeout() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
@@ -2590,11 +2590,11 @@ func (r *raft) loadState(state pb.HardState) {
 	r.leadEpoch = state.LeadEpoch
 }
 
-// pastElectionTimeout returns true if r.electionElapsed is greater
-// than or equal to the randomized election timeout in
-// [electiontimeout, 2 * electiontimeout - 1].
-func (r *raft) pastElectionTimeout() bool {
-	return r.electionElapsed >= r.randomizedElectionTimeout
+// atRandomizedElectionTimeout returns true if r.electionElapsed modulo the
+// r.randomizedElectionTimeout is equal to 0. This means that at every
+// r.randomizedElectionTimeout period, this method will return true once.
+func (r *raft) atRandomizedElectionTimeout() bool {
+	return r.electionElapsed != 0 && r.electionElapsed%r.randomizedElectionTimeout == 0
 }
 
 func (r *raft) resetRandomizedElectionTimeout() {
