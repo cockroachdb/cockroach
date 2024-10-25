@@ -3078,6 +3078,11 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Settings: settings,
+					RaftConfig: base.RaftConfig{
+						// Suppress timeout-based elections. This test doesn't want to deal
+						// with leadership changing hands unless intentional.
+						RaftElectionTimeoutTicks: 1000000,
+					},
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
