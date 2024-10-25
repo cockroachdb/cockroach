@@ -61,12 +61,6 @@ type PersistedSQLStats struct {
 
 	cfg *Config
 
-	// memoryPressureSignal is used by the persistedsqlstats.ApplicationStats to signal
-	// memory pressure during stats recording. A signal is emitted through this
-	// channel either if the fingerprint limit or the memory limit has been
-	// exceeded.
-	memoryPressureSignal chan struct{}
-
 	// Used to signal the flush completed.
 	flushDoneMu struct {
 		syncutil.Mutex
@@ -94,10 +88,9 @@ var _ sqlstats.Provider = &PersistedSQLStats{}
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 	p := &PersistedSQLStats{
-		SQLStats:             memSQLStats,
-		cfg:                  cfg,
-		memoryPressureSignal: make(chan struct{}),
-		drain:                make(chan struct{}),
+		SQLStats: memSQLStats,
+		cfg:      cfg,
+		drain:    make(chan struct{}),
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -175,10 +168,6 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			select {
 			case <-timer.C:
 				timer.Read = true
-			case <-s.memoryPressureSignal:
-				// We are experiencing memory pressure, so we flush SQL stats to disk
-				// immediately, rather than waiting the full flush interval, in an
-				// attempt to relieve some of that pressure.
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
