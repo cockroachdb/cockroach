@@ -564,10 +564,11 @@ SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
 1  foo
 
 # Backfill a partial index with a user defined type when a new table is created
-# in the same transaction.
+# in the same transaction. Use a high priority to make it less likely for the
+# transaction to be aborted.
 
 statement ok
-BEGIN
+BEGIN PRIORITY HIGH
 
 statement ok
 CREATE TABLE i (a INT, b enum)
