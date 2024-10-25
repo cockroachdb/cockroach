@@ -15,19 +15,9 @@ import {
   reducer as clusterSettings,
 } from "./clusterSettings/clusterSettings.reducer";
 import {
-  KeyedDatabaseDetailsState,
-  KeyedDatabaseDetailsSpanStatsState,
-  databaseDetailsReducer,
-  databaseDetailsSpanStatsReducer,
-} from "./databaseDetails";
-import {
   DatabasesListState,
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
-import {
-  KeyedTableDetailsState,
-  reducer as tableDetails,
-} from "./databaseTableDetails/tableDetails.reducer";
 import {
   IndexStatsReducerState,
   reducer as indexStats,
@@ -96,9 +86,6 @@ export type AdminUiState = {
   executionDetailFiles: JobProfilerExecutionDetailFilesState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
-  databaseDetails: KeyedDatabaseDetailsState;
-  databaseDetailsSpanStats: KeyedDatabaseDetailsSpanStatsState;
-  tableDetails: KeyedTableDetailsState;
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
@@ -131,9 +118,6 @@ export const reducers = combineReducers<AdminUiState>({
   executionDetailFiles,
   clusterLocks,
   databasesList,
-  databaseDetails: databaseDetailsReducer.reducer,
-  databaseDetailsSpanStats: databaseDetailsSpanStatsReducer.reducer,
-  tableDetails,
   schemaInsights,
   statementFingerprintInsights,
   clusterSettings,

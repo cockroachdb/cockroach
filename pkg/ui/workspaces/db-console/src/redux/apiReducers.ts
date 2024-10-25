@@ -108,33 +108,6 @@ const databasesReducerObj = new CachedDataReducer(
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
-export const databaseRequestPayloadToID = (
-  params: clusterUiApi.DatabaseDetailsReqParams,
-): string => params.database;
-
-const databaseDetailsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getDatabaseDetails,
-  "databaseDetails",
-  databaseRequestPayloadToID,
-  null,
-  moment.duration(10, "m"),
-);
-
-export const spanStatsRequestPayloadToID = (
-  params: clusterUiApi.DatabaseDetailsSpanStatsReqParams,
-): string => params.database;
-
-const databaseDetailsSpanStatsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getDatabaseDetailsSpanStats,
-  "databaseDetailsSpanStats",
-  spanStatsRequestPayloadToID,
-  null,
-  moment.duration(10, "m"),
-);
-
-export const refreshDatabaseDetailsSpanStats =
-  databaseDetailsSpanStatsReducerObj.refresh;
-
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
   req.page_token;
 
@@ -147,25 +120,10 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   moment.duration(30, "minutes"),
 );
 
-export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
-
 export const refreshHotRanges = hotRangesReducerObj.refresh;
 
-export const tableRequestToID = (
-  req:
-    | api.TableStatsRequestMessage
-    | api.IndexStatsRequestMessage
-    | clusterUiApi.TableDetailsReqParams,
-): string => generateTableID(req.database, req.table);
-
-const tableDetailsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getTableDetails,
-  "tableDetails",
-  tableRequestToID,
-  null,
-  moment.duration(10, "m"),
-);
-export const refreshTableDetails = tableDetailsReducerObj.refresh;
+export const tableRequestToID = (req: api.IndexStatsRequestMessage): string =>
+  generateTableID(req.database, req.table);
 
 const indexStatsReducerObj = new KeyedCachedDataReducer(
   api.getIndexStats,
@@ -583,15 +541,6 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
-  databaseDetails: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsResponse>
-  >;
-  databaseDetailsSpanStats: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsSpanStatsResponse>
-  >;
-  tableDetails: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.TableDetailsResponse>
-  >;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
@@ -652,11 +601,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
-  [databaseDetailsReducerObj.actionNamespace]:
-    databaseDetailsReducerObj.reducer,
-  [databaseDetailsSpanStatsReducerObj.actionNamespace]:
-    databaseDetailsSpanStatsReducerObj.reducer,
-  [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
