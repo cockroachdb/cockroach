@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -245,7 +244,9 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	// present at the start of the marshaled raft command. This could speed it
 	// up slightly.
 	var raftAdmissionMeta kvflowcontrolpb.RaftAdmissionMeta
-	if err := protoutil.Unmarshal(data[RaftCommandPrefixLen:], &raftAdmissionMeta); err != nil {
+	// NB: we don't use protoutil.Unmarshal to avoid passing raftAdmissionMeta
+	// through an interface, which would cause a heap allocation.
+	if err := raftAdmissionMeta.Unmarshal(data[RaftCommandPrefixLen:]); err != nil {
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
 	}
 	if buildutil.CrdbTestBuild {
