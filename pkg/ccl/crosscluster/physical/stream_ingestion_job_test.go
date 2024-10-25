@@ -56,10 +56,10 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	t.Run("destination cannot be system tenant", func(t *testing.T) {
-		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
-			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
+		sysSQL.ExpectErr(t, `pq: the destination tenant "" \(1\) cannot be the system tenant`,
+			"CREATE TENANT [1] FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
-	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
+	t.Run("cannot set expiration window on create tenant from replication", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
 	})
@@ -77,7 +77,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	})
 	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	require.Equal(t, int32(0), counts["physical_replication.started"])
-
 }
 
 func TestTenantStreamingFailback(t *testing.T) {
