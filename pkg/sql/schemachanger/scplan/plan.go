@@ -155,6 +155,7 @@ type rulesForRelease struct {
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
+	{activeVersion: clusterversion.V24_3, rulesRegistry: current.GetRegistry()},
 	{activeVersion: clusterversion.V24_2, rulesRegistry: release_24_2.GetRegistry()},
 	{activeVersion: clusterversion.V24_1, rulesRegistry: release_24_1.GetRegistry()},
 }
