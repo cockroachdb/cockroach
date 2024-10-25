@@ -11,7 +11,8 @@ when possible, since it offers assembly language implementations of various
 useful primitives.
 
 Using the same convention as gonum, when a slice is being modified in place, it
-has the name dst and the function does not return a value.
+has the name dst and the function does not return a value. In addition, many of
+the functions have the same name and semantics as those in gonum.
 
 Where possible, functions in this package are written with the assumption that
 the caller prevents bad input. They will panic with assertion errors if this is
