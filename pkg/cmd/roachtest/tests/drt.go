@@ -19,8 +19,6 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-//go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
-
 type tpccChaosEventProcessor struct {
 	workloadInstances []workloadInstance
 	workloadNodeIP    string
