@@ -8989,10 +8989,12 @@ var crdbInternalKVFlowHandlesV2 = virtualSchemaTable{
 	comment: `node-level view of active kv flow range controllers, their underlying streams, and tracked state`,
 	schema: `
 CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
-  range_id                 INT NOT NULL,
-  tenant_id                INT NOT NULL,
-  store_id                 INT NOT NULL,
-  total_tracked_tokens     INT NOT NULL,
+  range_id                   INT NOT NULL,
+  tenant_id                  INT NOT NULL,
+  store_id                   INT NOT NULL,
+  total_tracked_tokens       INT NOT NULL,
+  total_eval_deducted_tokens INT NOT NULL,
+  total_send_deducted_tokens INT NOT NULL,
   INDEX(range_id)
 );`,
 
@@ -9015,7 +9017,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
 				if err != nil {
 					return false, err
 				}
-				return true, populateFlowHandlesResponse(resp, addRow)
+				return true, populateFlowHandlesResponseV2(resp, addRow)
 			},
 		},
 	},
@@ -9032,7 +9034,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
 		if err != nil {
 			return err
 		}
-		return populateFlowHandlesResponse(resp, addRow)
+		return populateFlowHandlesResponseV2(resp, addRow)
 	},
 }
 
@@ -9050,6 +9052,30 @@ func populateFlowHandlesResponse(
 				tree.NewDInt(tree.DInt(connected.Stream.TenantID.ToUint64())),
 				tree.NewDInt(tree.DInt(connected.Stream.StoreID)),
 				tree.NewDInt(tree.DInt(totalTrackedTokens)),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func populateFlowHandlesResponseV2(
+	resp *kvflowinspectpb.HandlesResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, handle := range resp.Handles {
+		for _, connected := range handle.ConnectedStreams {
+			totalTrackedTokens := int64(0)
+			for _, tracked := range connected.TrackedDeductions {
+				totalTrackedTokens += tracked.Tokens
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(handle.RangeID)),
+				tree.NewDInt(tree.DInt(connected.Stream.TenantID.ToUint64())),
+				tree.NewDInt(tree.DInt(connected.Stream.StoreID)),
+				tree.NewDInt(tree.DInt(totalTrackedTokens)),
+				tree.NewDInt(tree.DInt(connected.TotalEvalDeductedTokens)),
+				tree.NewDInt(tree.DInt(connected.TotalSendDeductedTokens)),
 			); err != nil {
 				return err
 			}
