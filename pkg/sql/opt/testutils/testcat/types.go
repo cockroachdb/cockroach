@@ -65,7 +65,7 @@ func (tc *Catalog) ResolveType(
 			labels := make([]string, 0, tab.ColumnCount())
 			for i, n := 0, tab.ColumnCount(); i < n; i++ {
 				col := tab.Column(i)
-				if col.Kind() == cat.Ordinary {
+				if col.Kind() == cat.Ordinary && col.Visibility() == cat.Visible {
 					contents = append(contents, col.DatumType())
 					labels = append(labels, string(col.ColName()))
 				}
