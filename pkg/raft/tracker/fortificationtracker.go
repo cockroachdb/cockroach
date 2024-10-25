@@ -51,7 +51,7 @@ type FortificationTracker struct {
 	// epochs that they have supported the leader in.
 	fortification map[pb.PeerID]pb.Epoch
 
-	// votersSupported is a map that hangs off the fortificationTracker to prevent
+	// votersSupport is a map that hangs off the fortificationTracker to prevent
 	// allocations on every call to QuorumSupported.
 	votersSupport map[pb.PeerID]bool
 
