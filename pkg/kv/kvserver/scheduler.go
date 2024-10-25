@@ -149,7 +149,7 @@ type raftScheduleState struct {
 	// TODO(pavelkalinnikov): add a node health metric for the ticks.
 	//
 	// INVARIANT: flags&stateRaftTick == 0 iff ticks == 0.
-	ticks int
+	ticks int64
 }
 
 var raftSchedulerBatchPool = sync.Pool{
@@ -230,7 +230,7 @@ type raftSchedulerShard struct {
 	queue      rangeIDQueue
 	state      map[roachpb.RangeID]raftScheduleState
 	numWorkers int
-	maxTicks   int
+	maxTicks   int64
 	stopped    bool
 }
 
@@ -241,7 +241,7 @@ func newRaftScheduler(
 	numWorkers int,
 	shardSize int,
 	priorityWorkers int,
-	maxTicks int,
+	maxTicks int64,
 ) *raftScheduler {
 	s := &raftScheduler{
 		ambientContext: ambient,
@@ -273,7 +273,7 @@ func newRaftScheduler(
 	return s
 }
 
-func newRaftSchedulerShard(numWorkers, maxTicks int) *raftSchedulerShard {
+func newRaftSchedulerShard(numWorkers int, maxTicks int64) *raftSchedulerShard {
 	shard := &raftSchedulerShard{
 		state:      map[roachpb.RangeID]raftScheduleState{},
 		numWorkers: numWorkers,
@@ -465,7 +465,7 @@ func (s *raftScheduler) NewEnqueueBatch() *raftSchedulerBatch {
 func (ss *raftSchedulerShard) enqueue1Locked(
 	addFlags raftScheduleFlags, id roachpb.RangeID, now int64,
 ) int {
-	ticks := int((addFlags & stateRaftTick) / stateRaftTick) // 0 or 1
+	ticks := int64((addFlags & stateRaftTick) / stateRaftTick) // 0 or 1
 
 	prevState := ss.state[id]
 	if prevState.flags&addFlags == addFlags && ticks == 0 {

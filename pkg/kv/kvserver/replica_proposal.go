@@ -138,11 +138,11 @@ type ProposalData struct {
 
 	// proposedAtTicks is the (logical) time at which this command was
 	// last (re-)proposed.
-	proposedAtTicks int
+	proposedAtTicks int64
 
 	// createdAtTicks is the (logical) time at which this command was
 	// *first* proposed.
-	createdAtTicks int
+	createdAtTicks int64
 
 	// command is the log entry that is encoded into encodedCommand and proposed
 	// to raft. Never mutated.

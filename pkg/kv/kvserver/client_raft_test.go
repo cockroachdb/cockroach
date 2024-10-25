@@ -2817,7 +2817,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	// Wait for several ticks to elapse.
 	ticksToWait := 2 * store.GetStoreConfig().RaftElectionTimeoutTicks
 	ticks := store.Metrics().RaftTicks.Count
-	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
+	for targetTicks := ticks() + ticksToWait; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -2872,7 +2872,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 
 	ticksToWait := 2 * leaderStore.GetStoreConfig().RaftElectionTimeoutTicks
 	ticks := leaderStore.Metrics().RaftTicks.Count
-	for targetTicks := ticks() + int64(ticksToWait); ticks() < targetTicks; {
+	for targetTicks := ticks() + ticksToWait; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -4390,7 +4390,7 @@ func TestRangeQuiescence(t *testing.T) {
 	// Wait for a bunch of ticks to occur which will allow the follower time to
 	// campaign.
 	ticks := tc.GetFirstStoreFromServer(t, followerIdx).Metrics().RaftTicks.Count
-	for targetTicks := ticks() + int64(2*tc.GetFirstStoreFromServer(t, followerIdx).GetStoreConfig().RaftElectionTimeoutTicks); ticks() < targetTicks; {
+	for targetTicks := ticks() + 2*tc.GetFirstStoreFromServer(t, followerIdx).GetStoreConfig().RaftElectionTimeoutTicks; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
