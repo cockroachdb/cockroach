@@ -26,7 +26,8 @@ import (
 )
 
 func TestStorageTerm(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
+	prev3 := entryID{index: 3, term: 3}
+	ls := prev3.append(4, 5)
 	tests := []struct {
 		i uint64
 
@@ -43,8 +44,7 @@ func TestStorageTerm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			s := &MemoryStorage{ents: ents}
-
+			s := &MemoryStorage{ls: ls}
 			if tt.wpanic {
 				require.Panics(t, func() {
 					_, _ = s.Term(tt.i)
@@ -58,7 +58,9 @@ func TestStorageTerm(t *testing.T) {
 }
 
 func TestStorageEntries(t *testing.T) {
-	ents := index(3).terms(3, 4, 5, 6)
+	prev3 := entryID{index: 3, term: 3}
+	ls := prev3.append(4, 5, 6)
+	ents := ls.entries
 	tests := []struct {
 		lo, hi, maxsize uint64
 
@@ -73,17 +75,17 @@ func TestStorageEntries(t *testing.T) {
 		// even if maxsize is zero, the first entry should be returned
 		{4, 7, 0, nil, index(4).terms(4)},
 		// limit to 2
-		{4, 7, uint64(ents[1].Size() + ents[2].Size()), nil, index(4).terms(4, 5)},
+		{4, 7, uint64(ents[0].Size() + ents[1].Size()), nil, index(4).terms(4, 5)},
 		// limit to 2
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()/2), nil, index(4).terms(4, 5)},
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size() - 1), nil, index(4).terms(4, 5)},
+		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()/2), nil, index(4).terms(4, 5)},
+		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size() - 1), nil, index(4).terms(4, 5)},
 		// all
-		{4, 7, uint64(ents[1].Size() + ents[2].Size() + ents[3].Size()), nil, index(4).terms(4, 5, 6)},
+		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()), nil, index(4).terms(4, 5, 6)},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			s := &MemoryStorage{ents: ents}
+			s := &MemoryStorage{ls: ls}
 			entries, err := s.Entries(tt.lo, tt.hi, tt.maxsize)
 			require.Equal(t, tt.werr, err)
 			require.Equal(t, tt.wentries, entries)
@@ -92,23 +94,21 @@ func TestStorageEntries(t *testing.T) {
 }
 
 func TestStorageLastIndex(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
-	s := &MemoryStorage{ents: ents}
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
 	require.Equal(t, uint64(5), s.LastIndex())
 	require.NoError(t, s.Append(index(6).terms(5)))
 	require.Equal(t, uint64(6), s.LastIndex())
 }
 
 func TestStorageFirstIndex(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
-	s := &MemoryStorage{ents: ents}
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
 	require.Equal(t, uint64(4), s.FirstIndex())
 	require.NoError(t, s.Compact(4))
 	require.Equal(t, uint64(5), s.FirstIndex())
 }
 
 func TestStorageCompact(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	tests := []struct {
 		i uint64
 
@@ -117,25 +117,25 @@ func TestStorageCompact(t *testing.T) {
 		wterm  uint64
 		wlen   int
 	}{
-		{2, ErrCompacted, 3, 3, 3},
-		{3, ErrCompacted, 3, 3, 3},
-		{4, nil, 4, 4, 2},
-		{5, nil, 5, 5, 1},
+		{2, ErrCompacted, 3, 3, 2},
+		{3, ErrCompacted, 3, 3, 2},
+		{4, nil, 4, 4, 1},
+		{5, nil, 5, 5, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			s := &MemoryStorage{ents: ents}
+			s := &MemoryStorage{ls: ls}
 			require.Equal(t, tt.werr, s.Compact(tt.i))
-			require.Equal(t, tt.windex, s.ents[0].Index)
-			require.Equal(t, tt.wterm, s.ents[0].Term)
-			require.Equal(t, tt.wlen, len(s.ents))
+			require.Equal(t, tt.windex, s.ls.prev.index)
+			require.Equal(t, tt.wterm, s.ls.prev.term)
+			require.Equal(t, tt.wlen, len(s.ls.entries))
 		})
 	}
 }
 
 func TestStorageCreateSnapshot(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
 
@@ -151,7 +151,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			s := &MemoryStorage{ents: ents}
+			s := &MemoryStorage{ls: ls}
 			snap, err := s.CreateSnapshot(tt.i, cs, data)
 			require.Equal(t, tt.werr, err)
 			require.Equal(t, tt.wsnap, snap)
@@ -160,7 +160,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 }
 
 func TestStorageAppend(t *testing.T) {
-	ents := index(3).terms(3, 4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	tests := []struct {
 		entries []pb.Entry
 
@@ -169,49 +169,43 @@ func TestStorageAppend(t *testing.T) {
 	}{
 		{
 			index(1).terms(1, 2),
-			nil,
-			index(3).terms(3, 4, 5),
+			ErrCompacted,
+			index(4).terms(4, 5),
 		},
 		{
 			index(3).terms(3, 4, 5),
-			nil,
-			index(3).terms(3, 4, 5),
+			ErrCompacted,
+			index(4).terms(4, 5),
 		},
 		{
-			index(3).terms(3, 6, 6),
+			index(4).terms(6, 6),
 			nil,
-			index(3).terms(3, 6, 6),
+			index(4).terms(6, 6),
 		},
 		{
-			index(3).terms(3, 4, 5, 5),
+			index(4).terms(4, 5, 5),
 			nil,
-			index(3).terms(3, 4, 5, 5),
-		},
-		// Truncate incoming entries, truncate the existing entries and append.
-		{
-			index(2).terms(3, 3, 5),
-			nil,
-			index(3).terms(3, 5),
+			index(4).terms(4, 5, 5),
 		},
 		// Truncate the existing entries and append.
 		{
 			index(4).terms(5),
 			nil,
-			index(3).terms(3, 5),
+			index(4).terms(5),
 		},
 		// Direct append.
 		{
 			index(6).terms(5),
 			nil,
-			index(3).terms(3, 4, 5, 5),
+			index(4).terms(4, 5, 5),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			s := &MemoryStorage{ents: ents}
+			s := &MemoryStorage{ls: ls}
 			require.Equal(t, tt.werr, s.Append(tt.entries))
-			require.Equal(t, tt.wentries, s.ents)
+			require.Equal(t, tt.wentries, s.ls.entries)
 		})
 	}
 }
@@ -234,4 +228,25 @@ func TestStorageApplySnapshot(t *testing.T) {
 	i = 1
 	tt = tests[i]
 	require.Equal(t, ErrSnapOutOfDate, s.ApplySnapshot(tt))
+}
+
+func TestStorageLogSnapshot(t *testing.T) {
+	s := NewMemoryStorage()
+	require.NoError(t, s.Append(index(1).terms(1, 2, 3)))
+	snap := s.LogSnapshot()
+	// The snapshot must be immutable regardless of mutations on the storage.
+	check := func() {
+		require.Equal(t, uint64(1), snap.FirstIndex())
+		require.Equal(t, uint64(3), snap.LastIndex())
+		entries, err := snap.Entries(snap.FirstIndex(), snap.LastIndex()+1, math.MaxUint64)
+		require.NoError(t, err)
+		require.Equal(t, index(1).terms(1, 2, 3), entries)
+	}
+	check()
+	require.NoError(t, s.Append(index(4).terms(4, 5))) // regular append
+	check()
+	require.NoError(t, s.Append(index(2).terms(7, 7, 7))) // truncation and append
+	check()
+	require.NoError(t, s.Compact(4)) // compaction
+	check()
 }

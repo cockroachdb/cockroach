@@ -90,6 +90,10 @@ func (l LogMark) After(other LogMark) bool {
 // is sourced from a message that was received via transport, or from Storage,
 // or in a test code that manually hard-codes this struct. In these cases, the
 // invariants should be validated using the valid() method.
+//
+// The LogSlice is immutable. The entries slice must not be mutated, but it can
+// be appended to in some cases, when the callee protects its underlying slice
+// by capping the returned entries slice with a full slice expression.
 type LogSlice struct {
 	// term is the leader term containing the given entries in its log.
 	term uint64
@@ -97,15 +101,6 @@ type LogSlice struct {
 	prev entryID
 	// entries contains the consecutive entries representing this slice.
 	entries []pb.Entry
-}
-
-// MakeLogSlice creates a fake log slice containing the supplied entries. Only
-// for testing.
-//
-// TODO(pav-kv): this is not a correct LogSlice. Remove this function, and help
-// construct a correct one.
-func MakeLogSlice(entries []pb.Entry) LogSlice {
-	return LogSlice{entries: entries}
 }
 
 // Entries returns the log entries covered by this slice. The returned slice
