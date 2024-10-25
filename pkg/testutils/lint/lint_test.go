@@ -1458,6 +1458,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
 			":!util/hlc/timestamp.go",
+			":!kv/kvserver/raftlog/encoding.go",
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!storage/mvcc_value.go",
