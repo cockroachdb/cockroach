@@ -75,16 +75,16 @@ var ErrProposalDropped = errors.New("raft proposal dropped")
 
 // lockedRand is a small wrapper around rand.Rand to provide
 // synchronization among multiple raft groups. Only the methods needed
-// by the code are exposed (e.g. Intn).
+// by the code are exposed (e.g. Int63n).
 type lockedRand struct {
 	mu sync.Mutex
 }
 
-func (r *lockedRand) Intn(n int) int {
+func (r *lockedRand) Int63n(n int64) int64 {
 	r.mu.Lock()
-	v, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	v, _ := rand.Int(rand.Reader, big.NewInt(n))
 	r.mu.Unlock()
-	return int(v.Int64())
+	return v.Int64()
 }
 
 var globalRand = &lockedRand{}
@@ -105,11 +105,11 @@ type Config struct {
 	// candidate and start an election. ElectionTick must be greater than
 	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
 	// unnecessary leader switching.
-	ElectionTick int
+	ElectionTick int64
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
 	// leadership every HeartbeatTick ticks.
-	HeartbeatTick int
+	HeartbeatTick int64
 
 	// Storage is the storage for raft. raft generates entries and states to be
 	// stored in storage. raft reads the persisted entries and states out of
@@ -396,7 +396,7 @@ type raft struct {
 	// the current leader or if the leader is fortified when ticked.
 	//
 	// Invariant: electionElapsed = 0 when r.leadEpoch != 0 on a follower.
-	electionElapsed int
+	electionElapsed int64
 
 	// heartbeatElapsed is the number of ticks since we last reached the
 	// heartbeatTimeout. Leaders use this field to keep track of when they should
@@ -407,19 +407,19 @@ type raft struct {
 	// TODO(arul): consider renaming these to "fortifyElapsed" given heartbeats
 	// are no longer the first class concept they used to be pre-leader
 	// fortification.
-	heartbeatElapsed int
+	heartbeatElapsed int64
 
 	maxInflight      int
 	maxInflightBytes uint64
 	checkQuorum      bool
 	preVote          bool
 
-	heartbeatTimeout int
-	electionTimeout  int
+	heartbeatTimeout int64
+	electionTimeout  int64
 	// randomizedElectionTimeout is a random number between
 	// [electiontimeout, 2 * electiontimeout - 1]. It gets reset
 	// when raft changes its state to follower or candidate.
-	randomizedElectionTimeout int
+	randomizedElectionTimeout int64
 	disableProposalForwarding bool
 
 	tick func()
@@ -2655,7 +2655,7 @@ func (r *raft) pastElectionTimeout() bool {
 }
 
 func (r *raft) resetRandomizedElectionTimeout() {
-	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Intn(r.electionTimeout)
+	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Int63n(r.electionTimeout)
 }
 
 func (r *raft) transferLeader(to pb.PeerID) {

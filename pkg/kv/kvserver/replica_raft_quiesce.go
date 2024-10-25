@@ -27,7 +27,7 @@ import (
 // should quiesce. Unquiescing incurs a raft proposal which has a non-neglible
 // cost, and low-latency clusters may otherwise (un)quiesce very frequently,
 // e.g. on every tick.
-var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
+var quiesceAfterTicks = envutil.EnvOrDefaultInt64("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
 // raftDisableQuiescence disables raft quiescence.
 var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
@@ -213,7 +213,7 @@ type quiescer interface {
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
 	hasSendTokensRaftMuLockedReplicaMuLocked() bool
-	ticksSinceLastProposalRLocked() int
+	ticksSinceLastProposalRLocked() int64
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }

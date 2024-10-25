@@ -279,7 +279,7 @@ type StoreTestingKnobs struct {
 	// RefreshReasonTicksPeriod overrides the default period over which
 	// pending commands are refreshed. The period is specified as a multiple
 	// of Raft group ticks.
-	RefreshReasonTicksPeriod int
+	RefreshReasonTicksPeriod int64
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
