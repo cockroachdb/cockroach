@@ -27,7 +27,7 @@ const (
 	crossFlag          = "cross"
 	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
 	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
-	nogoDisableFlag    = "--//build/toolchains:nogo_disable_flag"
+	nogoDisableFlag    = "--norun_validations"
 	geosTarget         = "//c-deps:libgeos"
 	devTarget          = "//pkg/cmd/dev:dev"
 )
