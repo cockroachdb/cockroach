@@ -40,3 +40,4 @@ var prstmap = [...]string{
 }
 
 func (st StateType) String() string { return prstmap[st] }
+func (st StateType) SafeValue()     {}
