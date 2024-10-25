@@ -563,6 +563,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "very long-running test under deadlock")
+	skip.UnderRace(t, "can cause flakes due to queries failing because of aggressive GC TTL")
 
 	// protects backfillNotification
 	var mu syncutil.Mutex
@@ -630,10 +631,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatal(err)
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	// Disable strict GC TTL enforcement so that we can use AddImmediateGCZoneConfig.
+	// We are reducing the GC TTL to a low value and, as a precaution, disabling
+	// strict GC TTL enforcement. Previously, we made it immediate but occasionally
+	// encountered errors where the batch timestamp was before the replica GC threshold.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
-	// Add a zone config for the table so that garbage collection happens rapidly.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+	if _, err := sqltestutils.UpdateGCZoneConfig(sqlDB, tableDesc.GetID(), 1); err != nil {
 		t.Fatal(err)
 	}
 	// Bulk insert.
