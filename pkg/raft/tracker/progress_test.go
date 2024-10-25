@@ -20,10 +20,11 @@ package tracker
 import (
 	"testing"
 
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProgressString(t *testing.T) {
+func TestProgressStringAndSafeFormat(t *testing.T) {
 	ins := NewInflights(1, 0)
 	ins.Add(123, 1)
 	pr := &Progress{
@@ -40,7 +41,12 @@ func TestProgressString(t *testing.T) {
 	}
 	const exp = "StateSnapshot match=3 next=4 sentCommit=2 matchCommit=1 learner paused " +
 		"pendingSnap=123 inactive inflight=1[full]"
+	// String.
 	assert.Equal(t, exp, pr.String())
+	// Redactable string.
+	assert.EqualValues(t, exp, redact.Sprint(pr))
+	// Redacted string.
+	assert.EqualValues(t, exp, redact.Sprint(pr).Redact())
 }
 
 func TestProgressIsPaused(t *testing.T) {
