@@ -94,6 +94,10 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 func sortReplicas(r *testingRCRange) []roachpb.ReplicaDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return sortReplicasLocked(r)
+}
+
+func sortReplicasLocked(r *testingRCRange) []roachpb.ReplicaDescriptor {
 	return sortReplicaSet(r.mu.r.replicaSet)
 }
 
@@ -504,7 +508,9 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av AdmittedVector) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, replica := range r.mu.r.replicaSet {
+
+	for _, replDesc := range sortReplicasLocked(r) {
+		replica := r.mu.r.replicaSet[replDesc.ReplicaID]
 		if replica.desc.StoreID == storeID {
 			for _, v := range av.Admitted {
 				// Ensure that Match doesn't lag behind the highest index in the
@@ -918,11 +924,14 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 		}
 		timer.MarkRead()
 		func() {
-			rc := t.state.ranges[rangeID].rc
-			rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
-			defer rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+			r := t.state.ranges[rangeID]
+			event := r.makeRaftEventWithReplicasState()
+
+			r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+			defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+
 			require.NoError(t.state.t,
-				rc.HandleRaftEventRaftMuLocked(ctx, t.state.ranges[rangeID].makeRaftEventWithReplicasState()))
+				r.rc.HandleRaftEventRaftMuLocked(ctx, event))
 		}()
 	}()
 }
