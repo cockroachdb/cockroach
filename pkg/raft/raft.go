@@ -1357,6 +1357,13 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
+
+	// We shouldn't campaign if we don't have quorum support in store liveness.
+	if !r.fortificationTracker.QuorumSupported() {
+		r.logger.Debugf("%x cannot campaign since it's not supported by a quorum in store liveness", r.id)
+		return
+	}
+
 	if r.hasUnappliedConfChanges() {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
