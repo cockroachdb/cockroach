@@ -13063,7 +13063,7 @@ ALTER TABLE u85353 INJECT STATISTICS
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@b_idx USING (b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT *, a_b_hash, b_hash FROM t85353 INNER JOIN u85353@b_idx USING (b) WHERE u85353.a < 10;
 ----
 explain
  ├── columns: info:13
@@ -13105,7 +13105,7 @@ explain
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@a_b_idx USING (a,b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT *, a_b_hash, b_hash FROM t85353 INNER JOIN u85353@a_b_idx USING (a,b) WHERE u85353.a < 10;
 ----
 explain
  ├── columns: info:13
@@ -13509,57 +13509,73 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLocalityOptim
 SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2 id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2 id3:3 c_id:7!null c_p_id:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(1), (1)==(8)
+ ├── fd: ()-->(1-3,7,8), (8)==(1), (1)==(8)
  ├── distribution: east
- ├── locality-optimized-search
- │    ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
- │    ├── left columns: p_id:12 id2:13 id3:14 p.crdb_region:15 c_id:24 c_p_id:25 c.crdb_region:26
- │    ├── right columns: p_id:18 id2:19 id3:20 p.crdb_region:21 c_id:29 c_p_id:30 c.crdb_region:31
+ ├── project
+ │    ├── columns: p_id:1!null id2:2 id3:3 c_id:7!null c_p_id:8!null
  │    ├── key: (7)
- │    ├── fd: (1)-->(2-4), (2)~~>(1,3,4), (7)-->(8,9), (1)==(8), (8)==(1)
+ │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (7)-->(8), (1)==(8), (8)==(1)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
- │    ├── inner-join (lookup parent [as=p])
- │    │    ├── columns: p_id:12!null id2:13 id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
- │    │    ├── lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
- │    │    │         └── c_p_id:25 = p_id:12 [outer=(12,25), constraints=(/12: (/NULL - ]; /25: (/NULL - ]), fd=(12)==(25), (25)==(12)]
- │    │    ├── remote lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │    │    │         └── c_p_id:25 = p_id:12 [outer=(12,25), constraints=(/12: (/NULL - ]; /25: (/NULL - ]), fd=(12)==(25), (25)==(12)]
- │    │    ├── lookup columns are key
- │    │    ├── key: (24)
- │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)~~>(12,14,15), (12)==(25), (25)==(12)
- │    │    ├── limit hint: 1.00
- │    │    ├── scan child [as=c]
- │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
- │    │    │    ├── constraint: /26/24: [/'east' - /'east']
- │    │    │    ├── key: (24)
- │    │    │    └── fd: ()-->(26), (24)-->(25)
- │    │    └── filters (true)
- │    └── inner-join (lookup parent [as=p])
- │         ├── columns: p_id:18!null id2:19 id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
- │         ├── lookup expression
- │         │    └── filters
- │         │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │         │         └── c_p_id:30 = p_id:18 [outer=(18,30), constraints=(/18: (/NULL - ]; /30: (/NULL - ]), fd=(18)==(30), (30)==(18)]
- │         ├── lookup columns are key
- │         ├── key: (29)
- │         ├── fd: (29)-->(30,31), (18)-->(19-21), (19)~~>(18,20,21), (18)==(30), (30)==(18)
+ │    └── locality-optimized-search
+ │         ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null
+ │         ├── left columns: p_id:12 id2:13 id3:14 p.crdb_region:15 c_id:24 c_p_id:25
+ │         ├── right columns: p_id:18 id2:19 id3:20 p.crdb_region:21 c_id:29 c_p_id:30
+ │         ├── key: (7)
+ │         ├── fd: (7)-->(8), (1)-->(2-4), (2)~~>(1,3,4), (1)==(8), (8)==(1)
  │         ├── limit hint: 1.00
- │         ├── scan child [as=c]
- │         │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
- │         │    ├── constraint: /31/29
- │         │    │    ├── [/'central' - /'central']
- │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (29)
- │         │    └── fd: (29)-->(30,31)
- │         └── filters (true)
+ │         ├── distribution: east
+ │         ├── project
+ │         │    ├── columns: p_id:12!null id2:13 id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null
+ │         │    ├── key: (24)
+ │         │    ├── fd: (24)-->(25), (12)-->(13-15), (13)~~>(12,14,15), (12)==(25), (25)==(12)
+ │         │    ├── limit hint: 1.00
+ │         │    └── inner-join (lookup parent [as=p])
+ │         │         ├── columns: p_id:12!null id2:13 id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
+ │         │         ├── lookup expression
+ │         │         │    └── filters
+ │         │         │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
+ │         │         │         └── c_p_id:25 = p_id:12 [outer=(12,25), constraints=(/12: (/NULL - ]; /25: (/NULL - ]), fd=(12)==(25), (25)==(12)]
+ │         │         ├── remote lookup expression
+ │         │         │    └── filters
+ │         │         │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         │         │         └── c_p_id:25 = p_id:12 [outer=(12,25), constraints=(/12: (/NULL - ]; /25: (/NULL - ]), fd=(12)==(25), (25)==(12)]
+ │         │         ├── lookup columns are key
+ │         │         ├── key: (24)
+ │         │         ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)~~>(12,14,15), (12)==(25), (25)==(12)
+ │         │         ├── limit hint: 1.00
+ │         │         ├── scan child [as=c]
+ │         │         │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
+ │         │         │    ├── constraint: /26/24: [/'east' - /'east']
+ │         │         │    ├── key: (24)
+ │         │         │    └── fd: ()-->(26), (24)-->(25)
+ │         │         └── filters (true)
+ │         └── project
+ │              ├── columns: p_id:18!null id2:19 id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null
+ │              ├── key: (29)
+ │              ├── fd: (29)-->(18-21,30), (18)-->(19-21), (19)~~>(18,20,21), (18)==(30), (30)==(18)
+ │              ├── limit hint: 1.00
+ │              └── inner-join (lookup parent [as=p])
+ │                   ├── columns: p_id:18!null id2:19 id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │                   │         └── c_p_id:30 = p_id:18 [outer=(18,30), constraints=(/18: (/NULL - ]; /30: (/NULL - ]), fd=(18)==(30), (30)==(18)]
+ │                   ├── lookup columns are key
+ │                   ├── key: (29)
+ │                   ├── fd: (29)-->(30,31), (18)-->(19-21), (19)~~>(18,20,21), (18)==(30), (30)==(18)
+ │                   ├── limit hint: 1.00
+ │                   ├── scan child [as=c]
+ │                   │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
+ │                   │    ├── constraint: /31/29
+ │                   │    │    ├── [/'central' - /'central']
+ │                   │    │    └── [/'west' - /'west']
+ │                   │    ├── key: (29)
+ │                   │    └── fd: (29)-->(30,31)
+ │                   └── filters (true)
  └── 1
 
 # Join on unique covering index column `id2` should produce a
@@ -13568,57 +13584,73 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLocalityOptim
 SELECT * FROM parent3 p, child3 c WHERE id2 = c_p_id LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2!null id3:3 c_id:7!null c_p_id:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-3,7,8), (8)==(2), (2)==(8)
  ├── distribution: east
- ├── locality-optimized-search
- │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
- │    ├── left columns: p_id:12 id2:13 id3:14 p.crdb_region:15 c_id:24 c_p_id:25 c.crdb_region:26
- │    ├── right columns: p_id:18 id2:19 id3:20 p.crdb_region:21 c_id:29 c_p_id:30 c.crdb_region:31
+ ├── project
+ │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:7!null c_p_id:8!null
  │    ├── key: (7)
- │    ├── fd: (1)-->(2-4), (2)-->(1,3,4), (7)-->(8,9), (2)==(8), (8)==(2)
+ │    ├── fd: (1)-->(2,3), (2)-->(1,3), (7)-->(8), (2)==(8), (8)==(2)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
- │    ├── inner-join (lookup parent3@id2_idx [as=p])
- │    │    ├── columns: p_id:12!null id2:13!null id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
- │    │    ├── lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
- │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
- │    │    ├── remote lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
- │    │    ├── lookup columns are key
- │    │    ├── key: (24)
- │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)-->(12,14,15), (13)==(25), (25)==(13)
- │    │    ├── limit hint: 1.00
- │    │    ├── scan child3 [as=c]
- │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
- │    │    │    ├── constraint: /26/24: [/'east' - /'east']
- │    │    │    ├── key: (24)
- │    │    │    └── fd: ()-->(26), (24)-->(25)
- │    │    └── filters (true)
- │    └── inner-join (lookup parent3@id2_idx [as=p])
- │         ├── columns: p_id:18!null id2:19!null id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
- │         ├── lookup expression
- │         │    └── filters
- │         │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │         │         └── c_p_id:30 = id2:19 [outer=(19,30), constraints=(/19: (/NULL - ]; /30: (/NULL - ]), fd=(19)==(30), (30)==(19)]
- │         ├── lookup columns are key
- │         ├── key: (29)
- │         ├── fd: (29)-->(30,31), (18)-->(19-21), (19)-->(18,20,21), (19)==(30), (30)==(19)
+ │    └── locality-optimized-search
+ │         ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null
+ │         ├── left columns: p_id:12 id2:13 id3:14 p.crdb_region:15 c_id:24 c_p_id:25
+ │         ├── right columns: p_id:18 id2:19 id3:20 p.crdb_region:21 c_id:29 c_p_id:30
+ │         ├── key: (7)
+ │         ├── fd: (7)-->(8), (1)-->(2-4), (2)-->(1,3,4), (2)==(8), (8)==(2)
  │         ├── limit hint: 1.00
- │         ├── scan child3 [as=c]
- │         │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
- │         │    ├── constraint: /31/29
- │         │    │    ├── [/'central' - /'central']
- │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (29)
- │         │    └── fd: (29)-->(30,31)
- │         └── filters (true)
+ │         ├── distribution: east
+ │         ├── project
+ │         │    ├── columns: p_id:12!null id2:13!null id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null
+ │         │    ├── key: (24)
+ │         │    ├── fd: (24)-->(25), (12)-->(13-15), (13)-->(12,14,15), (13)==(25), (25)==(13)
+ │         │    ├── limit hint: 1.00
+ │         │    └── inner-join (lookup parent3@id2_idx [as=p])
+ │         │         ├── columns: p_id:12!null id2:13!null id3:14 p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
+ │         │         ├── lookup expression
+ │         │         │    └── filters
+ │         │         │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
+ │         │         │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
+ │         │         ├── remote lookup expression
+ │         │         │    └── filters
+ │         │         │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │         │         │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
+ │         │         ├── lookup columns are key
+ │         │         ├── key: (24)
+ │         │         ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)-->(12,14,15), (13)==(25), (25)==(13)
+ │         │         ├── limit hint: 1.00
+ │         │         ├── scan child3 [as=c]
+ │         │         │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
+ │         │         │    ├── constraint: /26/24: [/'east' - /'east']
+ │         │         │    ├── key: (24)
+ │         │         │    └── fd: ()-->(26), (24)-->(25)
+ │         │         └── filters (true)
+ │         └── project
+ │              ├── columns: p_id:18!null id2:19!null id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null
+ │              ├── key: (29)
+ │              ├── fd: (29)-->(18-21,30), (18)-->(19-21), (19)-->(18,20,21), (19)==(30), (30)==(19)
+ │              ├── limit hint: 1.00
+ │              └── inner-join (lookup parent3@id2_idx [as=p])
+ │                   ├── columns: p_id:18!null id2:19!null id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │                   │         └── c_p_id:30 = id2:19 [outer=(19,30), constraints=(/19: (/NULL - ]; /30: (/NULL - ]), fd=(19)==(30), (30)==(19)]
+ │                   ├── lookup columns are key
+ │                   ├── key: (29)
+ │                   ├── fd: (29)-->(30,31), (18)-->(19-21), (19)-->(18,20,21), (19)==(30), (30)==(19)
+ │                   ├── limit hint: 1.00
+ │                   ├── scan child3 [as=c]
+ │                   │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
+ │                   │    ├── constraint: /31/29
+ │                   │    │    ├── [/'central' - /'central']
+ │                   │    │    └── [/'west' - /'west']
+ │                   │    ├── key: (29)
+ │                   │    └── fd: (29)-->(30,31)
+ │                   └── filters (true)
  └── 1
 
 # Join on unique non-covering index column `id2` should produce a
@@ -13628,65 +13660,75 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLocalityOptim
 SELECT * FROM parent p, child c WHERE id2 = c_p_id LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2!null id3:3 c_id:7!null c_p_id:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-3,7,8), (8)==(2), (2)==(8)
  ├── distribution: east
  ├── inner-join (lookup parent [as=p])
- │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
+ │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:7!null c_p_id:8!null
  │    ├── key columns: [4 1] = [4 1]
  │    ├── lookup columns are key
  │    ├── key: (7)
- │    ├── fd: (1)-->(2-4), (2)-->(1,3,4), (7)-->(8,9), (2)==(8), (8)==(2)
+ │    ├── fd: (1)-->(2,3), (2)-->(1,3), (7)-->(8), (2)==(8), (8)==(2)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── locality-optimized-search
- │    │    ├── columns: p_id:1!null id2:2!null p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
- │    │    ├── left columns: p_id:12 id2:13 p.crdb_region:15 c_id:24 c_p_id:25 c.crdb_region:26
- │    │    ├── right columns: p_id:18 id2:19 p.crdb_region:21 c_id:29 c_p_id:30 c.crdb_region:31
+ │    │    ├── columns: p_id:1!null id2:2!null p.crdb_region:4!null c_id:7!null c_p_id:8!null
+ │    │    ├── left columns: p_id:12 id2:13 p.crdb_region:15 c_id:24 c_p_id:25
+ │    │    ├── right columns: p_id:18 id2:19 p.crdb_region:21 c_id:29 c_p_id:30
  │    │    ├── key: (7)
- │    │    ├── fd: (7)-->(8,9), (1)-->(2,4), (2)-->(1,4), (2)==(8), (8)==(2)
+ │    │    ├── fd: (7)-->(8), (1)-->(2,4), (2)-->(1,4), (2)==(8), (8)==(2)
  │    │    ├── limit hint: 29.67
  │    │    ├── distribution: east
- │    │    ├── inner-join (lookup parent@id2_idx [as=p])
- │    │    │    ├── columns: p_id:12!null id2:13!null p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
- │    │    │    ├── lookup expression
- │    │    │    │    └── filters
- │    │    │    │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
- │    │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
- │    │    │    ├── remote lookup expression
- │    │    │    │    └── filters
- │    │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │    │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
- │    │    │    ├── lookup columns are key
+ │    │    ├── project
+ │    │    │    ├── columns: p_id:12!null id2:13!null p.crdb_region:15!null c_id:24!null c_p_id:25!null
  │    │    │    ├── key: (24)
- │    │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13,15), (13)-->(12,15), (13)==(25), (25)==(13)
+ │    │    │    ├── fd: (24)-->(25), (12)-->(13,15), (13)-->(12,15), (13)==(25), (25)==(13)
  │    │    │    ├── limit hint: 29.67
- │    │    │    ├── scan child [as=c]
- │    │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
- │    │    │    │    ├── constraint: /26/24: [/'east' - /'east']
- │    │    │    │    ├── key: (24)
- │    │    │    │    └── fd: ()-->(26), (24)-->(25)
- │    │    │    └── filters (true)
- │    │    └── inner-join (lookup parent@id2_idx [as=p])
- │    │         ├── columns: p_id:18!null id2:19!null p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
- │    │         ├── lookup expression
- │    │         │    └── filters
- │    │         │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         │         └── c_p_id:30 = id2:19 [outer=(19,30), constraints=(/19: (/NULL - ]; /30: (/NULL - ]), fd=(19)==(30), (30)==(19)]
- │    │         ├── lookup columns are key
+ │    │    │    └── inner-join (lookup parent@id2_idx [as=p])
+ │    │    │         ├── columns: p_id:12!null id2:13!null p.crdb_region:15!null c_id:24!null c_p_id:25!null c.crdb_region:26!null
+ │    │    │         ├── lookup expression
+ │    │    │         │    └── filters
+ │    │    │         │         ├── p.crdb_region:15 = 'east' [outer=(15), constraints=(/15: [/'east' - /'east']; tight), fd=()-->(15)]
+ │    │    │         │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
+ │    │    │         ├── remote lookup expression
+ │    │    │         │    └── filters
+ │    │    │         │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │    │    │         │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
+ │    │    │         ├── lookup columns are key
+ │    │    │         ├── key: (24)
+ │    │    │         ├── fd: ()-->(26), (24)-->(25), (12)-->(13,15), (13)-->(12,15), (13)==(25), (25)==(13)
+ │    │    │         ├── limit hint: 29.67
+ │    │    │         ├── scan child [as=c]
+ │    │    │         │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
+ │    │    │         │    ├── constraint: /26/24: [/'east' - /'east']
+ │    │    │         │    ├── key: (24)
+ │    │    │         │    └── fd: ()-->(26), (24)-->(25)
+ │    │    │         └── filters (true)
+ │    │    └── project
+ │    │         ├── columns: p_id:18!null id2:19!null p.crdb_region:21!null c_id:29!null c_p_id:30!null
  │    │         ├── key: (29)
- │    │         ├── fd: (29)-->(30,31), (18)-->(19,21), (19)-->(18,21), (19)==(30), (30)==(19)
+ │    │         ├── fd: (29)-->(18,19,21,30), (18)-->(19,21), (19)-->(18,21), (19)==(30), (30)==(19)
  │    │         ├── limit hint: 29.67
- │    │         ├── scan child [as=c]
- │    │         │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
- │    │         │    ├── constraint: /31/29
- │    │         │    │    ├── [/'central' - /'central']
- │    │         │    │    └── [/'west' - /'west']
- │    │         │    ├── key: (29)
- │    │         │    └── fd: (29)-->(30,31)
- │    │         └── filters (true)
+ │    │         └── inner-join (lookup parent@id2_idx [as=p])
+ │    │              ├── columns: p_id:18!null id2:19!null p.crdb_region:21!null c_id:29!null c_p_id:30!null c.crdb_region:31!null
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── p.crdb_region:21 IN ('central', 'east', 'west') [outer=(21), constraints=(/21: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    │              │         └── c_p_id:30 = id2:19 [outer=(19,30), constraints=(/19: (/NULL - ]; /30: (/NULL - ]), fd=(19)==(30), (30)==(19)]
+ │    │              ├── lookup columns are key
+ │    │              ├── key: (29)
+ │    │              ├── fd: (29)-->(30,31), (18)-->(19,21), (19)-->(18,21), (19)==(30), (30)==(19)
+ │    │              ├── limit hint: 29.67
+ │    │              ├── scan child [as=c]
+ │    │              │    ├── columns: c_id:29!null c_p_id:30 c.crdb_region:31!null
+ │    │              │    ├── constraint: /31/29
+ │    │              │    │    ├── [/'central' - /'central']
+ │    │              │    │    └── [/'west' - /'west']
+ │    │              │    ├── key: (29)
+ │    │              │    └── fd: (29)-->(30,31)
+ │    │              └── filters (true)
  │    └── filters (true)
  └── 1
 
@@ -13697,34 +13739,34 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLocalityO
 SELECT * FROM parent3 p, child3 c WHERE id3 = c_p_id LIMIT 1
 ----
 distribute
- ├── columns: p_id:1!null id2:2 id3:3!null crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2 id3:3!null c_id:7!null c_p_id:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(3), (3)==(8)
+ ├── fd: ()-->(1-3,7,8), (8)==(3), (3)==(8)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
-      ├── columns: p_id:1!null id2:2 id3:3!null p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
+      ├── columns: p_id:1!null id2:2 id3:3!null c_id:7!null c_p_id:8!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-4,7-9), (8)==(3), (3)==(8)
+      ├── fd: ()-->(1-3,7,8), (8)==(3), (3)==(8)
       ├── inner-join (hash)
-      │    ├── columns: p_id:1!null id2:2 id3:3!null p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
+      │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:7!null c_p_id:8!null
       │    ├── key: (1,7)
-      │    ├── fd: (1)-->(2-4), (2)~~>(1,3,4), (7)-->(8,9), (3)==(8), (8)==(3)
+      │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (7)-->(8), (3)==(8), (8)==(3)
       │    ├── limit hint: 1.00
       │    ├── scan parent3 [as=p]
-      │    │    ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null
+      │    │    ├── columns: p_id:1!null id2:2 id3:3
       │    │    ├── check constraint expressions
       │    │    │    └── p.crdb_region:4 IN ('central', 'east', 'west') [outer=(4), constraints=(/4: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4), (2)~~>(1,3,4)
+      │    │    └── fd: (1)-->(2,3), (2)~~>(1,3)
       │    ├── scan child3 [as=c]
-      │    │    ├── columns: c_id:7!null c_p_id:8 c.crdb_region:9!null
+      │    │    ├── columns: c_id:7!null c_p_id:8
       │    │    ├── check constraint expressions
       │    │    │    └── c.crdb_region:9 IN ('central', 'east', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    ├── key: (7)
-      │    │    └── fd: (7)-->(8,9)
+      │    │    └── fd: (7)-->(8)
       │    └── filters
       │         └── id3:3 = c_p_id:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
       └── 1
@@ -13734,44 +13776,50 @@ distribute
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin
 SELECT * FROM child c LEFT OUTER JOIN parent p ON p_id = c_p_id LIMIT 1
 ----
-left-join (lookup parent [as=p])
- ├── columns: c_id:1!null c_p_id:2 crdb_region:3!null p_id:6 id2:7 id3:8 crdb_region:9
- ├── lookup expression
- │    └── filters
- │         ├── p.crdb_region:9 = 'east' [outer=(9), constraints=(/9: [/'east' - /'east']; tight), fd=()-->(9)]
- │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
- ├── remote lookup expression
- │    └── filters
- │         ├── p.crdb_region:9 IN ('central', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
- ├── lookup columns are key
+project
+ ├── columns: c_id:1!null c_p_id:2 p_id:6 id2:7 id3:8
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9)
+ ├── fd: ()-->(1,2,6-8)
  ├── distribution: east
- ├── locality-optimized-search
- │    ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
- │    ├── left columns: c_id:12 c_p_id:13 c.crdb_region:14
- │    ├── right columns: c_id:17 c_p_id:18 c.crdb_region:19
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(1-3)
- │    ├── distribution: east
- │    ├── scan child [as=c]
- │    │    ├── columns: c_id:12!null c_p_id:13 c.crdb_region:14!null
- │    │    ├── constraint: /14/12: [/'east' - /'east']
- │    │    ├── limit: 1
- │    │    ├── key: ()
- │    │    └── fd: ()-->(12-14)
- │    └── scan child [as=c]
- │         ├── columns: c_id:17!null c_p_id:18 c.crdb_region:19!null
- │         ├── constraint: /19/17
- │         │    ├── [/'central' - /'central']
- │         │    └── [/'west' - /'west']
- │         ├── limit: 1
- │         ├── key: ()
- │         └── fd: ()-->(17-19)
- └── filters (true)
+ └── left-join (lookup parent [as=p])
+      ├── columns: c_id:1!null c_p_id:2 p_id:6 id2:7 id3:8 p.crdb_region:9
+      ├── lookup expression
+      │    └── filters
+      │         ├── p.crdb_region:9 = 'east' [outer=(9), constraints=(/9: [/'east' - /'east']; tight), fd=()-->(9)]
+      │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      ├── remote lookup expression
+      │    └── filters
+      │         ├── p.crdb_region:9 IN ('central', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'west' - /'west']; tight)]
+      │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2,6-9)
+      ├── distribution: east
+      ├── locality-optimized-search
+      │    ├── columns: c_id:1!null c_p_id:2
+      │    ├── left columns: c_id:12 c_p_id:13
+      │    ├── right columns: c_id:17 c_p_id:18
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2)
+      │    ├── distribution: east
+      │    ├── scan child [as=c]
+      │    │    ├── columns: c_id:12!null c_p_id:13
+      │    │    ├── constraint: /14/12: [/'east' - /'east']
+      │    │    ├── limit: 1
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(12,13)
+      │    └── scan child [as=c]
+      │         ├── columns: c_id:17!null c_p_id:18
+      │         ├── constraint: /19/17
+      │         │    ├── [/'central' - /'central']
+      │         │    └── [/'west' - /'west']
+      │         ├── limit: 1
+      │         ├── key: ()
+      │         └── fd: ()-->(17,18)
+      └── filters (true)
 
 # Join on unique non-covering index column `id2` should produce a
 # locality-optimized-search with a locality-optimized semijoin.
@@ -13779,57 +13827,67 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLocalityOptim
 SELECT * FROM child c WHERE c_p_id IN (SELECT id2 FROM parent p) LIMIT 1
 ----
 limit
- ├── columns: c_id:1!null c_p_id:2 crdb_region:3!null
+ ├── columns: c_id:1!null c_p_id:2
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3)
+ ├── fd: ()-->(1,2)
  ├── distribution: east
  ├── locality-optimized-search
- │    ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
- │    ├── left columns: c_id:37 c_p_id:38 c.crdb_region:39
- │    ├── right columns: c_id:42 c_p_id:43 c.crdb_region:44
+ │    ├── columns: c_id:1!null c_p_id:2
+ │    ├── left columns: c_id:37 c_p_id:38
+ │    ├── right columns: c_id:42 c_p_id:43
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
- │    ├── semi-join (lookup parent@id2_idx [as=p])
- │    │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
- │    │    ├── lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:50 = 'east' [outer=(50), constraints=(/50: [/'east' - /'east']; tight), fd=()-->(50)]
- │    │    │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
- │    │    ├── remote lookup expression
- │    │    │    └── filters
- │    │    │         ├── p.crdb_region:50 IN ('central', 'west') [outer=(50), constraints=(/50: [/'central' - /'central'] [/'west' - /'west']; tight)]
- │    │    │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
- │    │    ├── lookup columns are key
+ │    ├── project
+ │    │    ├── columns: c_id:37!null c_p_id:38
  │    │    ├── key: (37)
- │    │    ├── fd: ()-->(39), (37)-->(38)
+ │    │    ├── fd: (37)-->(38)
  │    │    ├── limit hint: 1.00
- │    │    ├── scan child [as=c]
- │    │    │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
- │    │    │    ├── constraint: /39/37: [/'east' - /'east']
- │    │    │    ├── key: (37)
- │    │    │    └── fd: ()-->(39), (37)-->(38)
- │    │    └── filters (true)
- │    └── semi-join (lookup parent@id2_idx [as=p])
- │         ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
- │         ├── lookup expression
- │         │    └── filters
- │         │         ├── p.crdb_region:56 IN ('central', 'east', 'west') [outer=(56), constraints=(/56: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │         │         └── c_p_id:43 = id2:54 [outer=(43,54), constraints=(/43: (/NULL - ]; /54: (/NULL - ]), fd=(43)==(54), (54)==(43)]
- │         ├── lookup columns are key
+ │    │    └── semi-join (lookup parent@id2_idx [as=p])
+ │    │         ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
+ │    │         ├── lookup expression
+ │    │         │    └── filters
+ │    │         │         ├── p.crdb_region:50 = 'east' [outer=(50), constraints=(/50: [/'east' - /'east']; tight), fd=()-->(50)]
+ │    │         │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
+ │    │         ├── remote lookup expression
+ │    │         │    └── filters
+ │    │         │         ├── p.crdb_region:50 IN ('central', 'west') [outer=(50), constraints=(/50: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │    │         │         └── c_p_id:38 = id2:48 [outer=(38,48), constraints=(/38: (/NULL - ]; /48: (/NULL - ]), fd=(38)==(48), (48)==(38)]
+ │    │         ├── lookup columns are key
+ │    │         ├── key: (37)
+ │    │         ├── fd: ()-->(39), (37)-->(38)
+ │    │         ├── limit hint: 1.00
+ │    │         ├── scan child [as=c]
+ │    │         │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
+ │    │         │    ├── constraint: /39/37: [/'east' - /'east']
+ │    │         │    ├── key: (37)
+ │    │         │    └── fd: ()-->(39), (37)-->(38)
+ │    │         └── filters (true)
+ │    └── project
+ │         ├── columns: c_id:42!null c_p_id:43
  │         ├── key: (42)
- │         ├── fd: (42)-->(43,44)
+ │         ├── fd: (42)-->(43)
  │         ├── limit hint: 1.00
- │         ├── scan child [as=c]
- │         │    ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
- │         │    ├── constraint: /44/42
- │         │    │    ├── [/'central' - /'central']
- │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (42)
- │         │    └── fd: (42)-->(43,44)
- │         └── filters (true)
+ │         └── semi-join (lookup parent@id2_idx [as=p])
+ │              ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
+ │              ├── lookup expression
+ │              │    └── filters
+ │              │         ├── p.crdb_region:56 IN ('central', 'east', 'west') [outer=(56), constraints=(/56: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │              │         └── c_p_id:43 = id2:54 [outer=(43,54), constraints=(/43: (/NULL - ]; /54: (/NULL - ]), fd=(43)==(54), (54)==(43)]
+ │              ├── lookup columns are key
+ │              ├── key: (42)
+ │              ├── fd: (42)-->(43,44)
+ │              ├── limit hint: 1.00
+ │              ├── scan child [as=c]
+ │              │    ├── columns: c_id:42!null c_p_id:43 c.crdb_region:44!null
+ │              │    ├── constraint: /44/42
+ │              │    │    ├── [/'central' - /'central']
+ │              │    │    └── [/'west' - /'west']
+ │              │    ├── key: (42)
+ │              │    └── fd: (42)-->(43,44)
+ │              └── filters (true)
  └── 1
 
 # Join on unique non-covering index column `id2` should not produce a
@@ -13839,28 +13897,28 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLocalityO
 SELECT * FROM child c WHERE c_p_id NOT IN (SELECT id2 FROM parent p) LIMIT 1
 ----
 distribute
- ├── columns: c_id:1!null c_p_id:2 crdb_region:3!null
+ ├── columns: c_id:1!null c_p_id:2
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3)
+ ├── fd: ()-->(1,2)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
-      ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
+      ├── columns: c_id:1!null c_p_id:2
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-3)
+      ├── fd: ()-->(1,2)
       ├── anti-join (cross)
-      │    ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
+      │    ├── columns: c_id:1!null c_p_id:2
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3)
+      │    ├── fd: (1)-->(2)
       │    ├── limit hint: 1.00
       │    ├── scan child [as=c]
-      │    │    ├── columns: c_id:1!null c_p_id:2 c.crdb_region:3!null
+      │    │    ├── columns: c_id:1!null c_p_id:2
       │    │    ├── check constraint expressions
       │    │    │    └── c.crdb_region:3 IN ('central', 'east', 'west') [outer=(3), constraints=(/3: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,3)
+      │    │    └── fd: (1)-->(2)
       │    ├── scan parent@id2_idx [as=p]
       │    │    ├── columns: id2:7
       │    │    └── lax-key: (7)
@@ -13904,31 +13962,43 @@ CREATE TABLE "child2" (
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM parent p, child c WHERE id2 = c_p_id AND p.crdb_region = 'east' LIMIT 1
 ----
-limit
- ├── columns: p_id:1!null id2:2!null id3:3 crdb_region:4!null c_id:7!null c_p_id:8!null crdb_region:9!null
+project
+ ├── columns: p_id:1!null id2:2!null id3:3 c_id:7!null c_p_id:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,7-9), (8)==(2), (2)==(8)
+ ├── fd: ()-->(1-3,7,8), (2)==(8), (8)==(2)
  ├── distribution: east
- ├── inner-join (lookup child@child_crdb_region_c_p_id_idx [as=c])
- │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
- │    ├── lookup expression
- │    │    └── filters
- │    │         ├── c.crdb_region:9 IN ('central', 'east', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         └── id2:2 = c_p_id:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- │    ├── key: (7)
- │    ├── fd: ()-->(4), (1)-->(2,3), (2)-->(1,3), (7)-->(8,9), (2)==(8), (8)==(2)
- │    ├── limit hint: 1.00
- │    ├── distribution: east
- │    ├── scan parent [as=p]
- │    │    ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null
- │    │    ├── constraint: /4/1: [/'east' - /'east']
- │    │    ├── key: (1)
- │    │    ├── fd: ()-->(4), (1)-->(2,3), (2)~~>(1,3)
- │    │    ├── limit hint: 10.00
- │    │    └── distribution: east
- │    └── filters (true)
- └── 1
+ └── limit
+      ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-4,7,8), (8)==(2), (2)==(8)
+      ├── distribution: east
+      ├── project
+      │    ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null
+      │    ├── key: (7)
+      │    ├── fd: ()-->(4), (1)-->(2,3), (2)-->(1,3), (7)-->(8), (2)==(8), (8)==(2)
+      │    ├── limit hint: 1.00
+      │    ├── distribution: east
+      │    └── inner-join (lookup child@child_crdb_region_c_p_id_idx [as=c])
+      │         ├── columns: p_id:1!null id2:2!null id3:3 p.crdb_region:4!null c_id:7!null c_p_id:8!null c.crdb_region:9!null
+      │         ├── lookup expression
+      │         │    └── filters
+      │         │         ├── c.crdb_region:9 IN ('central', 'east', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+      │         │         └── id2:2 = c_p_id:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      │         ├── key: (7)
+      │         ├── fd: ()-->(4), (1)-->(2,3), (2)-->(1,3), (7)-->(8,9), (2)==(8), (8)==(2)
+      │         ├── limit hint: 1.00
+      │         ├── distribution: east
+      │         ├── scan parent [as=p]
+      │         │    ├── columns: p_id:1!null id2:2 id3:3 p.crdb_region:4!null
+      │         │    ├── constraint: /4/1: [/'east' - /'east']
+      │         │    ├── key: (1)
+      │         │    ├── fd: ()-->(4), (1)-->(2,3), (2)~~>(1,3)
+      │         │    ├── limit hint: 10.00
+      │         │    └── distribution: east
+      │         └── filters (true)
+      └── 1
 
 # Join on unique column `id2` should produce a locality-optimized-search of
 # lookup joins plus a lookup join to retrieve missing base table columns since
@@ -13937,55 +14007,65 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM parent2 p, child2 c WHERE id2 = c_p_id LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(2), (2)==(7)
+ ├── fd: ()-->(1-3,6-8), (7)==(2), (2)==(7)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
- │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── key: (6)
- │    ├── fd: (1)-->(2,3), (2)-->(1,3), (6)-->(7-9), (2)==(7), (7)==(2)
+ │    ├── fd: (1)-->(2,3), (2)-->(1,3), (6)-->(7,8), (2)==(7), (7)==(2)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── locality-optimized-search
- │    │    ├── columns: p_id:1!null id2:2!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
- │    │    ├── left columns: p_id:12 id2:13 c_id:22 c_p_id:23 v:24 crdb_region:25
- │    │    ├── right columns: p_id:17 id2:18 c_id:28 c_p_id:29 v:30 crdb_region:31
+ │    │    ├── columns: p_id:1!null id2:2!null c_id:6!null c_p_id:7!null v:8!null
+ │    │    ├── left columns: p_id:12 id2:13 c_id:22 c_p_id:23 v:24
+ │    │    ├── right columns: p_id:17 id2:18 c_id:28 c_p_id:29 v:30
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7-9), (1)-->(2), (2)-->(1), (2)==(7), (7)==(2)
+ │    │    ├── fd: (6)-->(7,8), (1)-->(2), (2)-->(1), (2)==(7), (7)==(2)
  │    │    ├── limit hint: 100.00
  │    │    ├── distribution: east
- │    │    ├── inner-join (lookup parent2@id2_idx [as=p])
- │    │    │    ├── columns: p_id:12!null id2:13!null c_id:22!null c_p_id:23!null v:24!null crdb_region:25!null
- │    │    │    ├── key columns: [23] = [13]
- │    │    │    ├── lookup columns are key
+ │    │    ├── project
+ │    │    │    ├── columns: p_id:12!null id2:13!null c_id:22!null c_p_id:23!null v:24!null
  │    │    │    ├── key: (22)
- │    │    │    ├── fd: ()-->(25), (22)-->(23,24), (12)-->(13), (13)-->(12), (13)==(23), (23)==(13)
+ │    │    │    ├── fd: (22)-->(23,24), (12)-->(13), (13)-->(12), (13)==(23), (23)==(13)
  │    │    │    ├── limit hint: 100.00
- │    │    │    ├── scan child2 [as=c]
- │    │    │    │    ├── columns: c_id:22!null c_p_id:23 v:24!null crdb_region:25!null
- │    │    │    │    ├── constraint: /25/22: [/'east' - /'east']
- │    │    │    │    ├── key: (22)
- │    │    │    │    └── fd: ()-->(25), (22)-->(23,24)
- │    │    │    └── filters (true)
- │    │    └── inner-join (lookup parent2@id2_idx [as=p])
- │    │         ├── columns: p_id:17!null id2:18!null c_id:28!null c_p_id:29!null v:30!null crdb_region:31!null
- │    │         ├── key columns: [29] = [18]
- │    │         ├── lookup columns are key
+ │    │    │    └── inner-join (lookup parent2@id2_idx [as=p])
+ │    │    │         ├── columns: p_id:12!null id2:13!null c_id:22!null c_p_id:23!null v:24!null crdb_region:25!null
+ │    │    │         ├── key columns: [23] = [13]
+ │    │    │         ├── lookup columns are key
+ │    │    │         ├── key: (22)
+ │    │    │         ├── fd: ()-->(25), (22)-->(23,24), (12)-->(13), (13)-->(12), (13)==(23), (23)==(13)
+ │    │    │         ├── limit hint: 100.00
+ │    │    │         ├── scan child2 [as=c]
+ │    │    │         │    ├── columns: c_id:22!null c_p_id:23 v:24!null crdb_region:25!null
+ │    │    │         │    ├── constraint: /25/22: [/'east' - /'east']
+ │    │    │         │    ├── key: (22)
+ │    │    │         │    └── fd: ()-->(25), (22)-->(23,24)
+ │    │    │         └── filters (true)
+ │    │    └── project
+ │    │         ├── columns: p_id:17!null id2:18!null c_id:28!null c_p_id:29!null v:30!null
  │    │         ├── key: (28)
- │    │         ├── fd: (28)-->(29-31), (17)-->(18), (18)-->(17), (18)==(29), (29)==(18)
+ │    │         ├── fd: (28)-->(17,18,29,30), (17)-->(18), (18)-->(17), (18)==(29), (29)==(18)
  │    │         ├── limit hint: 100.00
- │    │         ├── scan child2 [as=c]
- │    │         │    ├── columns: c_id:28!null c_p_id:29 v:30!null crdb_region:31!null
- │    │         │    ├── constraint: /31/28
- │    │         │    │    ├── [/'central' - /'central']
- │    │         │    │    └── [/'west' - /'west']
- │    │         │    ├── key: (28)
- │    │         │    └── fd: (28)-->(29-31)
- │    │         └── filters (true)
+ │    │         └── inner-join (lookup parent2@id2_idx [as=p])
+ │    │              ├── columns: p_id:17!null id2:18!null c_id:28!null c_p_id:29!null v:30!null crdb_region:31!null
+ │    │              ├── key columns: [29] = [18]
+ │    │              ├── lookup columns are key
+ │    │              ├── key: (28)
+ │    │              ├── fd: (28)-->(29-31), (17)-->(18), (18)-->(17), (18)==(29), (29)==(18)
+ │    │              ├── limit hint: 100.00
+ │    │              ├── scan child2 [as=c]
+ │    │              │    ├── columns: c_id:28!null c_p_id:29 v:30!null crdb_region:31!null
+ │    │              │    ├── constraint: /31/28
+ │    │              │    │    ├── [/'central' - /'central']
+ │    │              │    │    └── [/'west' - /'west']
+ │    │              │    ├── key: (28)
+ │    │              │    └── fd: (28)-->(29-31)
+ │    │              └── filters (true)
  │    └── filters (true)
  └── 1
 
@@ -13996,54 +14076,64 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM parent2 p, child2 c WHERE id3 = c_p_id LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(3), (3)==(7)
+ ├── fd: ()-->(1-3,6-8), (7)==(3), (3)==(7)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
- │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7!null v:8!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── key: (1,6)
- │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (6)-->(7-9), (3)==(7), (7)==(3)
+ │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (6)-->(7,8), (3)==(7), (7)==(3)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── locality-optimized-search
- │    │    ├── columns: p_id:1!null id3:3!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
- │    │    ├── left columns: p_id:12 id3:14 c_id:22 c_p_id:23 v:24 crdb_region:25
- │    │    ├── right columns: p_id:17 id3:19 c_id:28 c_p_id:29 v:30 crdb_region:31
+ │    │    ├── columns: p_id:1!null id3:3!null c_id:6!null c_p_id:7!null v:8!null
+ │    │    ├── left columns: p_id:12 id3:14 c_id:22 c_p_id:23 v:24
+ │    │    ├── right columns: p_id:17 id3:19 c_id:28 c_p_id:29 v:30
  │    │    ├── key: (1,6)
- │    │    ├── fd: (6)-->(7-9), (1)-->(3), (3)==(7), (7)==(3)
+ │    │    ├── fd: (6)-->(7,8), (1)-->(3), (3)==(7), (7)==(3)
  │    │    ├── limit hint: 100.00
  │    │    ├── distribution: east
- │    │    ├── inner-join (lookup parent2@id3_idx [as=p])
- │    │    │    ├── columns: p_id:12!null id3:14!null c_id:22!null c_p_id:23!null v:24!null crdb_region:25!null
- │    │    │    ├── key columns: [23] = [14]
+ │    │    ├── project
+ │    │    │    ├── columns: p_id:12!null id3:14!null c_id:22!null c_p_id:23!null v:24!null
  │    │    │    ├── key: (12,22)
- │    │    │    ├── fd: ()-->(25), (22)-->(23,24), (12)-->(14), (14)==(23), (23)==(14)
+ │    │    │    ├── fd: (22)-->(23,24), (12)-->(14), (14)==(23), (23)==(14)
  │    │    │    ├── limit hint: 100.00
- │    │    │    ├── scan child2 [as=c]
- │    │    │    │    ├── columns: c_id:22!null c_p_id:23 v:24!null crdb_region:25!null
- │    │    │    │    ├── constraint: /25/22: [/'east' - /'east']
- │    │    │    │    ├── key: (22)
- │    │    │    │    └── fd: ()-->(25), (22)-->(23,24)
- │    │    │    └── filters (true)
- │    │    └── inner-join (lookup parent2@id3_idx [as=p])
- │    │         ├── columns: p_id:17!null id3:19!null c_id:28!null c_p_id:29!null v:30!null crdb_region:31!null
- │    │         ├── key columns: [29] = [19]
+ │    │    │    └── inner-join (lookup parent2@id3_idx [as=p])
+ │    │    │         ├── columns: p_id:12!null id3:14!null c_id:22!null c_p_id:23!null v:24!null crdb_region:25!null
+ │    │    │         ├── key columns: [23] = [14]
+ │    │    │         ├── key: (12,22)
+ │    │    │         ├── fd: ()-->(25), (22)-->(23,24), (12)-->(14), (14)==(23), (23)==(14)
+ │    │    │         ├── limit hint: 100.00
+ │    │    │         ├── scan child2 [as=c]
+ │    │    │         │    ├── columns: c_id:22!null c_p_id:23 v:24!null crdb_region:25!null
+ │    │    │         │    ├── constraint: /25/22: [/'east' - /'east']
+ │    │    │         │    ├── key: (22)
+ │    │    │         │    └── fd: ()-->(25), (22)-->(23,24)
+ │    │    │         └── filters (true)
+ │    │    └── project
+ │    │         ├── columns: p_id:17!null id3:19!null c_id:28!null c_p_id:29!null v:30!null
  │    │         ├── key: (17,28)
- │    │         ├── fd: (28)-->(29-31), (17)-->(19), (19)==(29), (29)==(19)
+ │    │         ├── fd: (28)-->(19,29,30), (17)-->(19), (19)==(29), (29)==(19)
  │    │         ├── limit hint: 100.00
- │    │         ├── scan child2 [as=c]
- │    │         │    ├── columns: c_id:28!null c_p_id:29 v:30!null crdb_region:31!null
- │    │         │    ├── constraint: /31/28
- │    │         │    │    ├── [/'central' - /'central']
- │    │         │    │    └── [/'west' - /'west']
- │    │         │    ├── key: (28)
- │    │         │    ├── fd: (28)-->(29-31)
- │    │         │    └── limit hint: 20.00
- │    │         └── filters (true)
+ │    │         └── inner-join (lookup parent2@id3_idx [as=p])
+ │    │              ├── columns: p_id:17!null id3:19!null c_id:28!null c_p_id:29!null v:30!null crdb_region:31!null
+ │    │              ├── key columns: [29] = [19]
+ │    │              ├── key: (17,28)
+ │    │              ├── fd: (28)-->(29-31), (17)-->(19), (19)==(29), (29)==(19)
+ │    │              ├── limit hint: 100.00
+ │    │              ├── scan child2 [as=c]
+ │    │              │    ├── columns: c_id:28!null c_p_id:29 v:30!null crdb_region:31!null
+ │    │              │    ├── constraint: /31/28
+ │    │              │    │    ├── [/'central' - /'central']
+ │    │              │    │    └── [/'west' - /'west']
+ │    │              │    ├── key: (28)
+ │    │              │    ├── fd: (28)-->(29-31)
+ │    │              │    └── limit hint: 20.00
+ │    │              └── filters (true)
  │    └── filters (true)
  └── 1
 
@@ -14053,49 +14143,59 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM child2 c WHERE c_p_id IN (SELECT id2 FROM parent2 p) LIMIT 1
 ----
 limit
- ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+ ├── columns: c_id:1!null c_p_id:2 v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4)
+ ├── fd: ()-->(1-3)
  ├── distribution: east
  ├── locality-optimized-search
- │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
- │    ├── left columns: c_id:13 c_p_id:14 v:15 crdb_region:16
- │    ├── right columns: c_id:19 c_p_id:20 v:21 crdb_region:22
+ │    ├── columns: c_id:1!null c_p_id:2 v:3!null
+ │    ├── left columns: c_id:13 c_p_id:14 v:15
+ │    ├── right columns: c_id:19 c_p_id:20 v:21
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
- │    ├── semi-join (lookup parent2@id2_idx [as=p])
- │    │    ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
- │    │    ├── key columns: [14] = [26]
- │    │    ├── lookup columns are key
+ │    ├── project
+ │    │    ├── columns: c_id:13!null c_p_id:14 v:15!null
  │    │    ├── key: (13)
- │    │    ├── fd: ()-->(16), (13)-->(14,15)
+ │    │    ├── fd: (13)-->(14,15)
  │    │    ├── limit hint: 1.00
- │    │    ├── scan child2 [as=c]
- │    │    │    ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
- │    │    │    ├── constraint: /16/13: [/'east' - /'east']
- │    │    │    ├── key: (13)
- │    │    │    ├── fd: ()-->(16), (13)-->(14,15)
- │    │    │    └── limit hint: 10.00
- │    │    └── filters (true)
- │    └── semi-join (lookup parent2@id2_idx [as=p])
- │         ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
- │         ├── key columns: [20] = [31]
- │         ├── lookup columns are key
+ │    │    └── semi-join (lookup parent2@id2_idx [as=p])
+ │    │         ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
+ │    │         ├── key columns: [14] = [26]
+ │    │         ├── lookup columns are key
+ │    │         ├── key: (13)
+ │    │         ├── fd: ()-->(16), (13)-->(14,15)
+ │    │         ├── limit hint: 1.00
+ │    │         ├── scan child2 [as=c]
+ │    │         │    ├── columns: c_id:13!null c_p_id:14 v:15!null crdb_region:16!null
+ │    │         │    ├── constraint: /16/13: [/'east' - /'east']
+ │    │         │    ├── key: (13)
+ │    │         │    ├── fd: ()-->(16), (13)-->(14,15)
+ │    │         │    └── limit hint: 10.00
+ │    │         └── filters (true)
+ │    └── project
+ │         ├── columns: c_id:19!null c_p_id:20 v:21!null
  │         ├── key: (19)
- │         ├── fd: (19)-->(20-22)
+ │         ├── fd: (19)-->(20,21)
  │         ├── limit hint: 1.00
- │         ├── scan child2 [as=c]
- │         │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
- │         │    ├── constraint: /22/19
- │         │    │    ├── [/'central' - /'central']
- │         │    │    └── [/'west' - /'west']
- │         │    ├── key: (19)
- │         │    ├── fd: (19)-->(20-22)
- │         │    └── limit hint: 20.00
- │         └── filters (true)
+ │         └── semi-join (lookup parent2@id2_idx [as=p])
+ │              ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │              ├── key columns: [20] = [31]
+ │              ├── lookup columns are key
+ │              ├── key: (19)
+ │              ├── fd: (19)-->(20-22)
+ │              ├── limit hint: 1.00
+ │              ├── scan child2 [as=c]
+ │              │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │              │    ├── constraint: /22/19
+ │              │    │    ├── [/'central' - /'central']
+ │              │    │    └── [/'west' - /'west']
+ │              │    ├── key: (19)
+ │              │    ├── fd: (19)-->(20-22)
+ │              │    └── limit hint: 20.00
+ │              └── filters (true)
  └── 1
 
 # Join on unique non-covering index column `id2` should not produce a
@@ -14105,28 +14205,28 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLookupJoi
 SELECT * FROM child2 c WHERE c_p_id NOT IN (SELECT id2 FROM parent2 p) LIMIT 1
 ----
 distribute
- ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+ ├── columns: c_id:1!null c_p_id:2 v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4)
+ ├── fd: ()-->(1-3)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
-      ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      ├── columns: c_id:1!null c_p_id:2 v:3!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-4)
+      ├── fd: ()-->(1-3)
       ├── anti-join (cross)
-      │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      │    ├── columns: c_id:1!null c_p_id:2 v:3!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4)
+      │    ├── fd: (1)-->(2,3)
       │    ├── limit hint: 1.00
       │    ├── scan child2 [as=c]
-      │    │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      │    │    ├── columns: c_id:1!null c_p_id:2 v:3!null
       │    │    ├── check constraint expressions
       │    │    │    └── crdb_region:4 IN ('central', 'east', 'west') [outer=(4), constraints=(/4: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4)
+      │    │    └── fd: (1)-->(2,3)
       │    ├── scan parent2@id2_idx [as=p]
       │    │    ├── columns: id2:8
       │    │    └── lax-key: (8)
@@ -14141,39 +14241,39 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLookupJoi
 SELECT * FROM child2 c WHERE c_p_id IN (SELECT id2 FROM parent2 p WHERE c_id = id3) LIMIT 1
 ----
 distribute
- ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+ ├── columns: c_id:1!null c_p_id:2 v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4)
+ ├── fd: ()-->(1-3)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
-      ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      ├── columns: c_id:1!null c_p_id:2 v:3!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-4)
+      ├── fd: ()-->(1-3)
       ├── semi-join (lookup parent2 [as=p])
-      │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      │    ├── columns: c_id:1!null c_p_id:2 v:3!null
       │    ├── key columns: [13] = [7]
       │    ├── lookup columns are key
       │    ├── second join in paired joiner
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4)
+      │    ├── fd: (1)-->(2,3)
       │    ├── limit hint: 1.00
       │    ├── inner-join (lookup parent2@id2_idx [as=p])
-      │    │    ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null p_id:13!null id2:14!null continuation:18
+      │    │    ├── columns: c_id:1!null c_p_id:2!null v:3!null p_id:13!null id2:14!null continuation:18
       │    │    ├── key columns: [2] = [14]
       │    │    ├── lookup columns are key
       │    │    ├── first join in paired joiner; continuation column: continuation:18
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-4), (13)-->(14,18), (14)-->(13), (2)==(14), (14)==(2)
+      │    │    ├── fd: (1)-->(2,3), (13)-->(14,18), (14)-->(13), (2)==(14), (14)==(2)
       │    │    ├── limit hint: 100.00
       │    │    ├── scan child2 [as=c]
-      │    │    │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+      │    │    │    ├── columns: c_id:1!null c_p_id:2 v:3!null
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── crdb_region:4 IN ('central', 'east', 'west') [outer=(4), constraints=(/4: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-4)
+      │    │    │    ├── fd: (1)-->(2,3)
       │    │    │    └── limit hint: 200.00
       │    │    └── filters (true)
       │    └── filters
@@ -14188,46 +14288,46 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLookupJoi
 SELECT * FROM parent2 p, child2 c WHERE id3 = c_p_id+1 LIMIT 1
 ----
 distribute
- ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-3,6-9)
+ ├── fd: ()-->(1-3,6-8)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── project
-      ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null crdb_region:9!null
+      ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(1-3,6-9)
+      ├── fd: ()-->(1-3,6-8)
       └── limit
-           ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null crdb_region:9!null column12:12!null
+           ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null column12:12!null
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(1-3,6-9,12), (12)==(3), (3)==(12)
+           ├── fd: ()-->(1-3,6-8,12), (12)==(3), (3)==(12)
            ├── inner-join (hash)
-           │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null crdb_region:9!null column12:12!null
+           │    ├── columns: p_id:1!null id2:2 id3:3!null c_id:6!null c_p_id:7 v:8!null column12:12!null
            │    ├── immutable
            │    ├── key: (1,6)
-           │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (6)-->(7-9), (7)-->(12), (3)==(12), (12)==(3)
+           │    ├── fd: (1)-->(2,3), (2)~~>(1,3), (6)-->(7,8), (7)-->(12), (3)==(12), (12)==(3)
            │    ├── limit hint: 1.00
            │    ├── scan parent2 [as=p]
            │    │    ├── columns: p_id:1!null id2:2 id3:3
            │    │    ├── key: (1)
            │    │    └── fd: (1)-->(2,3), (2)~~>(1,3)
            │    ├── project
-           │    │    ├── columns: column12:12 c_id:6!null c_p_id:7 v:8!null crdb_region:9!null
+           │    │    ├── columns: column12:12 c_id:6!null c_p_id:7 v:8!null
            │    │    ├── immutable
            │    │    ├── key: (6)
-           │    │    ├── fd: (6)-->(7-9), (7)-->(12)
+           │    │    ├── fd: (6)-->(7,8), (7)-->(12)
            │    │    ├── scan child2 [as=c]
-           │    │    │    ├── columns: c_id:6!null c_p_id:7 v:8!null crdb_region:9!null
+           │    │    │    ├── columns: c_id:6!null c_p_id:7 v:8!null
            │    │    │    ├── check constraint expressions
            │    │    │    │    └── crdb_region:9 IN ('central', 'east', 'west') [outer=(9), constraints=(/9: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
            │    │    │    ├── key: (6)
-           │    │    │    └── fd: (6)-->(7-9)
+           │    │    │    └── fd: (6)-->(7,8)
            │    │    └── projections
            │    │         └── c_p_id:7 + 1 [as=column12:12, outer=(7), immutable]
            │    └── filters
@@ -14239,67 +14339,77 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM child2 c WHERE c_p_id IN (SELECT id2 FROM parent2 p WHERE c_id > id3) LIMIT 1
 ----
 limit
- ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+ ├── columns: c_id:1!null c_p_id:2 v:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4)
+ ├── fd: ()-->(1-3)
  ├── distribution: east
  ├── project
- │    ├── columns: c_id:1!null c_p_id:2 v:3!null crdb_region:4!null
+ │    ├── columns: c_id:1!null c_p_id:2 v:3!null
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
+ │    ├── fd: (1)-->(2,3)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    └── project
- │         ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null
+ │         ├── columns: c_id:1!null c_p_id:2!null v:3!null
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4)
+ │         ├── fd: (1)-->(2,3)
  │         ├── limit hint: 1.00
  │         ├── distribution: east
  │         └── inner-join (lookup parent2 [as=p])
- │              ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null id2:8!null id3:9!null
+ │              ├── columns: c_id:1!null c_p_id:2!null v:3!null id2:8!null id3:9!null
  │              ├── key columns: [7] = [7]
  │              ├── lookup columns are key
  │              ├── key: (1)
- │              ├── fd: (1)-->(2-4,8,9), (8)-->(9), (2)==(8), (8)==(2)
+ │              ├── fd: (1)-->(2,3,8,9), (8)-->(9), (2)==(8), (8)==(2)
  │              ├── limit hint: 1.00
  │              ├── distribution: east
  │              ├── locality-optimized-search
- │              │    ├── columns: c_id:1!null c_p_id:2!null v:3!null crdb_region:4!null p_id:7!null id2:8!null
- │              │    ├── left columns: c_id:19 c_p_id:20 v:21 crdb_region:22 p_id:31 id2:32
- │              │    ├── right columns: c_id:25 c_p_id:26 v:27 crdb_region:28 p_id:36 id2:37
+ │              │    ├── columns: c_id:1!null c_p_id:2!null v:3!null p_id:7!null id2:8!null
+ │              │    ├── left columns: c_id:19 c_p_id:20 v:21 p_id:31 id2:32
+ │              │    ├── right columns: c_id:25 c_p_id:26 v:27 p_id:36 id2:37
  │              │    ├── key: (1)
- │              │    ├── fd: (1)-->(2-4), (7)-->(8), (8)-->(7), (2)==(8), (8)==(2)
+ │              │    ├── fd: (1)-->(2,3), (7)-->(8), (8)-->(7), (2)==(8), (8)==(2)
  │              │    ├── limit hint: 100.00
  │              │    ├── distribution: east
- │              │    ├── inner-join (lookup parent2@id2_idx [as=p])
- │              │    │    ├── columns: c_id:19!null c_p_id:20!null v:21!null crdb_region:22!null p_id:31!null id2:32!null
- │              │    │    ├── key columns: [20] = [32]
- │              │    │    ├── lookup columns are key
+ │              │    ├── project
+ │              │    │    ├── columns: c_id:19!null c_p_id:20!null v:21!null p_id:31!null id2:32!null
  │              │    │    ├── key: (19)
- │              │    │    ├── fd: ()-->(22), (19)-->(20,21), (31)-->(32), (32)-->(31), (20)==(32), (32)==(20)
+ │              │    │    ├── fd: (19)-->(20,21), (31)-->(32), (32)-->(31), (20)==(32), (32)==(20)
  │              │    │    ├── limit hint: 100.00
- │              │    │    ├── scan child2 [as=c]
- │              │    │    │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
- │              │    │    │    ├── constraint: /22/19: [/'east' - /'east']
- │              │    │    │    ├── key: (19)
- │              │    │    │    └── fd: ()-->(22), (19)-->(20,21)
- │              │    │    └── filters (true)
- │              │    └── inner-join (lookup parent2@id2_idx [as=p])
- │              │         ├── columns: c_id:25!null c_p_id:26!null v:27!null crdb_region:28!null p_id:36!null id2:37!null
- │              │         ├── key columns: [26] = [37]
- │              │         ├── lookup columns are key
+ │              │    │    └── inner-join (lookup parent2@id2_idx [as=p])
+ │              │    │         ├── columns: c_id:19!null c_p_id:20!null v:21!null crdb_region:22!null p_id:31!null id2:32!null
+ │              │    │         ├── key columns: [20] = [32]
+ │              │    │         ├── lookup columns are key
+ │              │    │         ├── key: (19)
+ │              │    │         ├── fd: ()-->(22), (19)-->(20,21), (31)-->(32), (32)-->(31), (20)==(32), (32)==(20)
+ │              │    │         ├── limit hint: 100.00
+ │              │    │         ├── scan child2 [as=c]
+ │              │    │         │    ├── columns: c_id:19!null c_p_id:20 v:21!null crdb_region:22!null
+ │              │    │         │    ├── constraint: /22/19: [/'east' - /'east']
+ │              │    │         │    ├── key: (19)
+ │              │    │         │    └── fd: ()-->(22), (19)-->(20,21)
+ │              │    │         └── filters (true)
+ │              │    └── project
+ │              │         ├── columns: c_id:25!null c_p_id:26!null v:27!null p_id:36!null id2:37!null
  │              │         ├── key: (25)
- │              │         ├── fd: (25)-->(26-28), (36)-->(37), (37)-->(36), (26)==(37), (37)==(26)
+ │              │         ├── fd: (25)-->(26,27,36,37), (36)-->(37), (37)-->(36), (26)==(37), (37)==(26)
  │              │         ├── limit hint: 100.00
- │              │         ├── scan child2 [as=c]
- │              │         │    ├── columns: c_id:25!null c_p_id:26 v:27!null crdb_region:28!null
- │              │         │    ├── constraint: /28/25
- │              │         │    │    ├── [/'central' - /'central']
- │              │         │    │    └── [/'west' - /'west']
- │              │         │    ├── key: (25)
- │              │         │    └── fd: (25)-->(26-28)
- │              │         └── filters (true)
+ │              │         └── inner-join (lookup parent2@id2_idx [as=p])
+ │              │              ├── columns: c_id:25!null c_p_id:26!null v:27!null crdb_region:28!null p_id:36!null id2:37!null
+ │              │              ├── key columns: [26] = [37]
+ │              │              ├── lookup columns are key
+ │              │              ├── key: (25)
+ │              │              ├── fd: (25)-->(26-28), (36)-->(37), (37)-->(36), (26)==(37), (37)==(26)
+ │              │              ├── limit hint: 100.00
+ │              │              ├── scan child2 [as=c]
+ │              │              │    ├── columns: c_id:25!null c_p_id:26 v:27!null crdb_region:28!null
+ │              │              │    ├── constraint: /28/25
+ │              │              │    │    ├── [/'central' - /'central']
+ │              │              │    │    └── [/'west' - /'west']
+ │              │              │    ├── key: (25)
+ │              │              │    └── fd: (25)-->(26-28)
+ │              │              └── filters (true)
  │              └── filters
  │                   └── c_id:1 > id3:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
  └── 1
@@ -14332,40 +14442,40 @@ opt locality=(region=east) expect-not=GenerateLocalityOptimizedSearchOfLookupJoi
 SELECT * FROM child4 c, parent4 p WHERE ST_Intersects(p.geom, c.geom) LIMIT 1
 ----
 distribute
- ├── columns: c_id:1!null c_p_id:2 geom:3!null crdb_region:4!null p_id:8!null id2:9 id3:10 geom:11!null
+ ├── columns: c_id:1!null c_p_id:2 geom:3!null p_id:8!null id2:9 id3:10 geom:11!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(1-4,8-11)
+ ├── fd: ()-->(1-3,8-11)
  ├── distribution: east
  ├── input distribution: central,east,west
  └── limit
-      ├── columns: c_id:1!null c_p_id:2 c.geom:3!null crdb_region:4!null p_id:8!null id2:9 id3:10 p.geom:11!null
+      ├── columns: c_id:1!null c_p_id:2 c.geom:3!null p_id:8!null id2:9 id3:10 p.geom:11!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(1-4,8-11)
+      ├── fd: ()-->(1-3,8-11)
       ├── inner-join (lookup parent4 [as=p])
-      │    ├── columns: c_id:1!null c_p_id:2 c.geom:3!null crdb_region:4!null p_id:8!null id2:9 id3:10 p.geom:11!null
+      │    ├── columns: c_id:1!null c_p_id:2 c.geom:3!null p_id:8!null id2:9 id3:10 p.geom:11!null
       │    ├── key columns: [15] = [8]
       │    ├── lookup columns are key
       │    ├── immutable
       │    ├── key: (1,8)
-      │    ├── fd: (1)-->(2-4), (8)-->(9-11)
+      │    ├── fd: (1)-->(2,3), (8)-->(9-11)
       │    ├── limit hint: 1.00
       │    ├── inner-join (inverted parent4@nyc_census_blocks_geo_idx,inverted [as=p])
-      │    │    ├── columns: c_id:1!null c_p_id:2 c.geom:3 crdb_region:4!null p_id:15!null
+      │    │    ├── columns: c_id:1!null c_p_id:2 c.geom:3 p_id:15!null
       │    │    ├── inverted-expr
       │    │    │    └── st_intersects(c.geom:3, p.geom:18)
       │    │    ├── key: (1,15)
-      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── fd: (1)-->(2,3)
       │    │    ├── limit hint: 100.00
       │    │    ├── scan child4 [as=c]
-      │    │    │    ├── columns: c_id:1!null c_p_id:2 c.geom:3 crdb_region:4!null
+      │    │    │    ├── columns: c_id:1!null c_p_id:2 c.geom:3
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── crdb_region:4 IN ('central', 'east', 'west') [outer=(4), constraints=(/4: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
       │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-4)
+      │    │    │    └── fd: (1)-->(2,3)
       │    │    └── filters (true)
       │    └── filters
       │         └── st_intersects(p.geom:11, c.geom:3) [outer=(3,11), immutable, constraints=(/3: (/NULL - ]; /11: (/NULL - ])]
@@ -14376,54 +14486,64 @@ opt locality=(region=east) expect=GenerateLocalityOptimizedSearchOfLookupJoins
 SELECT * FROM parent2 p, child2 c WHERE id2 = c_p_id AND c.v = 1 LIMIT 1
 ----
 limit
- ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-3,6-9), (7)==(2), (2)==(7)
+ ├── fd: ()-->(1-3,6-8), (7)==(2), (2)==(7)
  ├── distribution: east
  ├── inner-join (lookup parent2 [as=p])
- │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
+ │    ├── columns: p_id:1!null id2:2!null id3:3 c_id:6!null c_p_id:7!null v:8!null
  │    ├── key columns: [1] = [1]
  │    ├── lookup columns are key
  │    ├── key: (6)
- │    ├── fd: ()-->(8), (1)-->(2,3), (2)-->(1,3), (6)-->(7,9), (2)==(7), (7)==(2)
+ │    ├── fd: ()-->(8), (1)-->(2,3), (2)-->(1,3), (6)-->(7), (2)==(7), (7)==(2)
  │    ├── limit hint: 1.00
  │    ├── distribution: east
  │    ├── locality-optimized-search
- │    │    ├── columns: p_id:1!null id2:2!null c_id:6!null c_p_id:7!null v:8!null crdb_region:9!null
- │    │    ├── left columns: p_id:13 id2:14 c_id:23 c_p_id:24 v:25 crdb_region:26
- │    │    ├── right columns: p_id:18 id2:19 c_id:29 c_p_id:30 v:31 crdb_region:32
+ │    │    ├── columns: p_id:1!null id2:2!null c_id:6!null c_p_id:7!null v:8!null
+ │    │    ├── left columns: p_id:13 id2:14 c_id:23 c_p_id:24 v:25
+ │    │    ├── right columns: p_id:18 id2:19 c_id:29 c_p_id:30 v:31
  │    │    ├── key: (6)
- │    │    ├── fd: ()-->(8), (6)-->(7,9), (1)-->(2), (2)-->(1), (2)==(7), (7)==(2)
+ │    │    ├── fd: ()-->(8), (6)-->(7), (1)-->(2), (2)-->(1), (2)==(7), (7)==(2)
  │    │    ├── limit hint: 9.89
  │    │    ├── distribution: east
- │    │    ├── inner-join (lookup parent2@id2_idx [as=p])
- │    │    │    ├── columns: p_id:13!null id2:14!null c_id:23!null c_p_id:24!null v:25!null crdb_region:26!null
- │    │    │    ├── key columns: [24] = [14]
- │    │    │    ├── lookup columns are key
+ │    │    ├── project
+ │    │    │    ├── columns: p_id:13!null id2:14!null c_id:23!null c_p_id:24!null v:25!null
  │    │    │    ├── key: (23)
- │    │    │    ├── fd: ()-->(25,26), (23)-->(24), (13)-->(14), (14)-->(13), (14)==(24), (24)==(14)
+ │    │    │    ├── fd: ()-->(25), (23)-->(24), (13)-->(14), (14)-->(13), (14)==(24), (24)==(14)
  │    │    │    ├── limit hint: 9.89
- │    │    │    ├── scan child2@child2_crdb_region_v_idx [as=c]
- │    │    │    │    ├── columns: c_id:23!null c_p_id:24 v:25!null crdb_region:26!null
- │    │    │    │    ├── constraint: /26/25/23: [/'east'/1 - /'east'/1]
- │    │    │    │    ├── key: (23)
- │    │    │    │    └── fd: ()-->(25,26), (23)-->(24)
- │    │    │    └── filters (true)
- │    │    └── inner-join (lookup parent2@id2_idx [as=p])
- │    │         ├── columns: p_id:18!null id2:19!null c_id:29!null c_p_id:30!null v:31!null crdb_region:32!null
- │    │         ├── key columns: [30] = [19]
- │    │         ├── lookup columns are key
+ │    │    │    └── inner-join (lookup parent2@id2_idx [as=p])
+ │    │    │         ├── columns: p_id:13!null id2:14!null c_id:23!null c_p_id:24!null v:25!null crdb_region:26!null
+ │    │    │         ├── key columns: [24] = [14]
+ │    │    │         ├── lookup columns are key
+ │    │    │         ├── key: (23)
+ │    │    │         ├── fd: ()-->(25,26), (23)-->(24), (13)-->(14), (14)-->(13), (14)==(24), (24)==(14)
+ │    │    │         ├── limit hint: 9.89
+ │    │    │         ├── scan child2@child2_crdb_region_v_idx [as=c]
+ │    │    │         │    ├── columns: c_id:23!null c_p_id:24 v:25!null crdb_region:26!null
+ │    │    │         │    ├── constraint: /26/25/23: [/'east'/1 - /'east'/1]
+ │    │    │         │    ├── key: (23)
+ │    │    │         │    └── fd: ()-->(25,26), (23)-->(24)
+ │    │    │         └── filters (true)
+ │    │    └── project
+ │    │         ├── columns: p_id:18!null id2:19!null c_id:29!null c_p_id:30!null v:31!null
  │    │         ├── key: (29)
- │    │         ├── fd: ()-->(31), (29)-->(30,32), (18)-->(19), (19)-->(18), (19)==(30), (30)==(19)
+ │    │         ├── fd: ()-->(31), (29)-->(18,19,30), (18)-->(19), (19)-->(18), (19)==(30), (30)==(19)
  │    │         ├── limit hint: 9.89
- │    │         ├── scan child2@child2_crdb_region_v_idx [as=c]
- │    │         │    ├── columns: c_id:29!null c_p_id:30 v:31!null crdb_region:32!null
- │    │         │    ├── constraint: /32/31/29
- │    │         │    │    ├── [/'central'/1 - /'central'/1]
- │    │         │    │    └── [/'west'/1 - /'west'/1]
- │    │         │    ├── key: (29)
- │    │         │    └── fd: ()-->(31), (29)-->(30,32)
- │    │         └── filters (true)
+ │    │         └── inner-join (lookup parent2@id2_idx [as=p])
+ │    │              ├── columns: p_id:18!null id2:19!null c_id:29!null c_p_id:30!null v:31!null crdb_region:32!null
+ │    │              ├── key columns: [30] = [19]
+ │    │              ├── lookup columns are key
+ │    │              ├── key: (29)
+ │    │              ├── fd: ()-->(31), (29)-->(30,32), (18)-->(19), (19)-->(18), (19)==(30), (30)==(19)
+ │    │              ├── limit hint: 9.89
+ │    │              ├── scan child2@child2_crdb_region_v_idx [as=c]
+ │    │              │    ├── columns: c_id:29!null c_p_id:30 v:31!null crdb_region:32!null
+ │    │              │    ├── constraint: /32/31/29
+ │    │              │    │    ├── [/'central'/1 - /'central'/1]
+ │    │              │    │    └── [/'west'/1 - /'west'/1]
+ │    │              │    ├── key: (29)
+ │    │              │    └── fd: ()-->(31), (29)-->(30,32)
+ │    │              └── filters (true)
  │    └── filters (true)
  └── 1
