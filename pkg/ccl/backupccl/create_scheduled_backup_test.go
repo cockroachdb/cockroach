@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -962,17 +959,10 @@ INSERT INTO t1 values (-1), (10), (-100);
 				}
 
 				// Verify backup.
-				execCfg := th.server.ExecutorConfig().(sql.ExecutorConfig)
-				ctx := context.Background()
-				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, username.RootUserName())
-				require.NoError(t, err)
-				r, err := backupdest.FindLatestFile(ctx, store)
-				require.NoError(t, err)
-				latest, err := ioctx.ReadAll(ctx, r)
-				require.NoError(t, err)
 				backedUp := th.sqlDB.QueryStr(t,
-					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
-					fmt.Sprintf("%s/%s", destination, string(latest)))
+					`SELECT database_name, object_name FROM [SHOW BACKUP FROM LATEST IN $1] WHERE object_type='table' ORDER BY database_name, object_name`,
+					destination,
+				)
 				require.Equal(t, tc.verifyTables, backedUp)
 			})
 		}

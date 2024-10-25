@@ -577,3 +577,16 @@ func requireRecoveryEvent(
 		return nil
 	})
 }
+
+// getFullBackupPaths finds all full backups in the given URI and returns their paths using SHOW BACKUPS IN
+func getFullBackupPaths(t *testing.T, sqlDB *sqlutils.SQLRunner, uri string) []string {
+	t.Helper()
+	var fullBackupPaths []string
+	rows := sqlDB.Query(t, `SELECT path FROM [SHOW BACKUPS IN $1]`, uri)
+	for rows.Next() {
+		var path string
+		require.NoError(t, rows.Scan(&path))
+		fullBackupPaths = append(fullBackupPaths, path)
+	}
+	return fullBackupPaths
+}
