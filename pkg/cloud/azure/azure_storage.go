@@ -22,6 +22,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -221,7 +222,15 @@ func makeAzureStorage(
 	}
 
 	options := args.ExternalStorageOptions()
-	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container, options.ClientName)
+	bucket := dest.AzureConfig.Container
+	if changefeedccl.EnableCloudBillingAccounting {
+		// Azure is special in that its bucket names are not unique. So for
+		// the moment, Cloud needs to track Account Name, since it is in fact
+		// unique. We may eventually choose bucket names derived from the
+		// account name to ensure uniqueness and bypass this hack.
+		bucket = dest.AzureConfig.AccountName
+	}
+	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", bucket, options.ClientName)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: unable to create transport")
 	}
