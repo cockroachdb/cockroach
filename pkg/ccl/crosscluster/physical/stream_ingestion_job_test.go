@@ -59,7 +59,11 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
-	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
+	t.Run("destination cannot be tenant with id 1", func(t *testing.T) {
+		sysSQL.ExpectErr(t, `pq: the destination tenant "" \(1\) cannot be the system tenant`,
+			"CREATE TENANT [1] FROM REPLICATION OF source ON $1", srcPgURL.String())
+	})
+	t.Run("cannot set expiration window on create tenant from replication", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
 	})
@@ -67,6 +71,11 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.Exec(t, "CREATE TENANT foo")
 		sysSQL.ExpectErr(t, "pq: tenant with name \"foo\" already exists",
 			"CREATE TENANT foo FROM REPLICATION OF source ON $1", srcPgURL.String())
+	})
+	t.Run("tenant id destination cannot exist without resume timestamp", func(t *testing.T) {
+		sysSQL.Exec(t, "CREATE TENANT [10]")
+		sysSQL.ExpectErr(t, "pq: a tenant with ID 10 or with name \"cluster-10\" already exists",
+			"CREATE TENANT [10] FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
 	t.Run("external connection must be reachable", func(t *testing.T) {
 		badPgURL := srcPgURL
@@ -77,7 +86,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	})
 	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	require.Equal(t, int32(0), counts["physical_replication.started"])
-
 }
 
 func TestTenantStreamingFailback(t *testing.T) {
@@ -101,22 +109,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 		},
 	})
 	defer serverB.Stopper().Stop(ctx)
-
-	newTenantConn := func(t *testing.T, srv serverutils.ApplicationLayerInterface, tenantName string) *gosql.DB {
-		var conn *gosql.DB
-		testutils.SucceedsSoon(t, func() error {
-			db, err := srv.SQLConnE(serverutils.DBName(fmt.Sprintf("cluster:%s", tenantName)))
-			if err != nil {
-				return err
-			}
-			if err := db.Ping(); err != nil {
-				return err
-			}
-			conn = db
-			return nil
-		})
-		return conn
-	}
 
 	sqlA := sqlutils.MakeSQLRunner(aDB)
 	sqlB := sqlutils.MakeSQLRunner(bDB)
@@ -154,7 +146,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	// The overall test plan looks like:
 	//
 	// SETUP
-	//   Create tenant f on severA
+	//   Create tenant f on serverA
 	//   Start service for tenant f
 	//   Write to tenant f
 	//   Replicate tenant f on serverA to tenant g on serverB
@@ -296,6 +288,113 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer tenF2DB.Close()
 	sqlTenF = sqlutils.MakeSQLRunner(tenF2DB)
 	sqlTenF.CheckQueryResults(t, "SELECT max(k) FROM test.t", [][]string{{"555"}})
+}
+
+func TestBasicTenantStreamingWithTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	skip.UnderRace(t, "test takes ~5 minutes under race")
+
+	serverA, aDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer serverA.Stopper().Stop(ctx)
+	serverB, bDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer serverB.Stopper().Stop(ctx)
+
+	sqlA := sqlutils.MakeSQLRunner(aDB)
+	sqlB := sqlutils.MakeSQLRunner(bDB)
+
+	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupURLA()
+
+	for _, s := range []string{
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+
+		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
+		"SET CLUSTER SETTING physical_replication.consumer.job_checkpoint_frequency = '100ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.minimum_flush_interval = '10ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.cutover_signal_poll_interval = '100ms'",
+		"SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'",
+	} {
+		sqlA.Exec(t, s)
+		sqlB.Exec(t, s)
+	}
+	compareAtTimetamp := func(ts string) {
+		fingerprintQueryFmt := "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT [%s]] AS OF SYSTEM TIME %s"
+		var fingerprintF int64
+		sqlA.QueryRow(t, fmt.Sprintf(fingerprintQueryFmt, "50", ts)).Scan(&fingerprintF)
+		var fingerprintG int64
+		sqlB.QueryRow(t, fmt.Sprintf(fingerprintQueryFmt, "51", ts)).Scan(&fingerprintG)
+		require.Equal(t, fingerprintF, fingerprintG, "fingerprint mismatch at %s", ts)
+	}
+
+	// The overall test plan looks like:
+	//
+	// SETUP
+	//   Create tenant 50 on serverA
+	//   Start service for tenant 50
+	//   Write to tenant 50
+	//   Replicate tenant 50 on serverA to tenant 51 on serverB
+	//
+	// FAILOVER
+	//   Complete replication on tenant 51 as of ts1
+	//   Fingerprint 50 and 51 as of ts1
+
+	// SETUP
+	t.Logf("creating tenant [50]")
+	sqlA.Exec(t, "CREATE VIRTUAL CLUSTER [50]")
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER [50] START SERVICE SHARED")
+
+	tenFDB := newTenantConn(t, serverA.SystemLayer(), "cluster-50")
+	defer tenFDB.Close()
+	sqlTen50 := sqlutils.MakeSQLRunner(tenFDB)
+
+	sqlTen50.Exec(t, "CREATE DATABASE test")
+	sqlTen50.Exec(t, "CREATE TABLE test.t (k PRIMARY KEY) AS SELECT generate_series(1, 100)")
+
+	t.Logf("starting replication [50]->[51]")
+	sqlB.Exec(t, "CREATE VIRTUAL CLUSTER [51] FROM REPLICATION OF 'cluster-50' ON $1", serverAURL.String())
+
+	// FAILOVER
+	_, consumer51JobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("cluster-51"))
+	var ts1 string
+	sqlA.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
+
+	// Randomize query execution to verify fast failback works for both
+	// `COMPLETE REPLICATION TO LATEST` and `COMPLETE REPLICATION TO SYSTEM TIME`
+	rng, _ := randutil.NewPseudoRand()
+	if rng.Intn(2) == 0 {
+		t.Logf("waiting for [51]@%s", ts1)
+		replicationtestutils.WaitUntilReplicatedTime(t,
+			replicationtestutils.DecimalTimeToHLC(t, ts1),
+			sqlB,
+			jobspb.JobID(consumer51JobID))
+
+		t.Logf("completing replication on [51]@%s", ts1)
+		sqlB.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER [51] COMPLETE REPLICATION TO SYSTEM TIME '%s'", ts1))
+	} else {
+		t.Log("waiting for initial scan on [51]")
+		replicationtestutils.WaitUntilStartTimeReached(t, sqlB, jobspb.JobID(consumer51JobID))
+		t.Log("completing replication on [51] to latest")
+		sqlB.Exec(t, "ALTER VIRTUAL CLUSTER [51] COMPLETE REPLICATION TO LATEST")
+	}
+
+	jobutils.WaitForJobToSucceed(t, sqlB, jobspb.JobID(consumer51JobID))
+	compareAtTimetamp(ts1)
 }
 
 // TestReplicationJobResumptionStartTime tests that a replication job picks the
@@ -664,4 +763,22 @@ func waitUntilTenantServerStopped(
 		t.Logf("tenant %q is not accepting connections", tenantName)
 		return nil
 	})
+}
+
+func newTenantConn(
+	t *testing.T, srv serverutils.ApplicationLayerInterface, tenantName string,
+) *gosql.DB {
+	var conn *gosql.DB
+	testutils.SucceedsSoon(t, func() error {
+		db, err := srv.SQLConnE(serverutils.DBName(fmt.Sprintf("cluster:%s", tenantName)))
+		if err != nil {
+			return err
+		}
+		if err := db.Ping(); err != nil {
+			return err
+		}
+		conn = db
+		return nil
+	})
+	return conn
 }
