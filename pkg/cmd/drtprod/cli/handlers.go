@@ -38,7 +38,7 @@ func Initialize(ctx context.Context) {
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			// Command not found, execute it in roachprod instead.
-			_ = helpers.ExecuteCmd(ctx, "roachprod", "roachprod", os.Args[1:]...)
+			_ = helpers.ExecuteCmdInteractive(ctx, "roachprod", os.Args[1:]...)
 			return
 		}
 		// If another error occurs, exit with a failure status.

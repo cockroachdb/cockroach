@@ -37,3 +37,25 @@ targets:
         username: workload
       on_rollback:
       - command: destroy
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'

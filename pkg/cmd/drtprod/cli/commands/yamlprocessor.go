@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
@@ -17,13 +18,13 @@ import (
 )
 
 // commandExecutor is responsible for executing the shell commands
-var commandExecutor = helpers.ExecuteCmd
+var commandExecutor = helpers.ExecuteCmdWithPrefix
 
 // GetYamlProcessor creates a new Cobra command for processing a YAML file.
 // The command expects a YAML file as an argument and runs the commands defined in it.
 func GetYamlProcessor(ctx context.Context) *cobra.Command {
 	displayOnly := false
-	targets := make([]string, 0)
+	userProvidedTargetNames := make([]string, 0)
 	cobraCmd := &cobra.Command{
 		Use:   "execute <yaml file> [flags]",
 		Short: "Executes the commands in sequence as specified in the YAML",
@@ -39,12 +40,12 @@ You can also specify the rollback commands in case of a step failure.
 			if err != nil {
 				return err
 			}
-			return processYaml(ctx, yamlContent, displayOnly, targets)
+			return processYaml(ctx, yamlContent, displayOnly, userProvidedTargetNames)
 		}),
 	}
 	cobraCmd.Flags().BoolVarP(&displayOnly,
 		"display-only", "d", false, "displays the commands that will be executed without running them")
-	cobraCmd.Flags().StringArrayVarP(&targets,
+	cobraCmd.Flags().StringArrayVarP(&userProvidedTargetNames,
 		"targets", "t", nil, "the targets to execute. executes all if not mentioned.")
 	return cobraCmd
 }
@@ -63,8 +64,10 @@ type step struct {
 
 // target defines a target cluster with associated steps to be executed.
 type target struct {
-	TargetName string `yaml:"target_name"` // Name of the target cluster
-	Steps      []step `yaml:"steps"`       // Steps to execute on the target cluster
+	TargetName       string   `yaml:"target_name"`       // Name of the target cluster
+	DependentTargets []string `yaml:"dependent_targets"` // targets should complete before starting this target
+	Steps            []step   `yaml:"steps"`             // Steps to execute on the target cluster
+	commands         []*command
 }
 
 // yamlConfig represents the structure of the entire YAML configuration file.
@@ -92,7 +95,7 @@ func (c *command) String() string {
 
 // processYaml reads the YAML file, parses it, sets the environment variables, and processes the targets.
 func processYaml(
-	ctx context.Context, yamlContent []byte, displayOnly bool, targets []string,
+	ctx context.Context, yamlContent []byte, displayOnly bool, userProvidedTargetNames []string,
 ) (err error) {
 
 	// Unmarshal the YAML content into the yamlConfig struct
@@ -107,7 +110,7 @@ func processYaml(
 	}
 
 	// Process the targets defined in the YAML
-	if err = processTargets(ctx, config.Targets, displayOnly, targets); err != nil {
+	if err = processTargets(ctx, config.Targets, displayOnly, userProvidedTargetNames); err != nil {
 		return err
 	}
 
@@ -135,58 +138,117 @@ func setEnv(environment map[string]string, displayOnly bool) error {
 // processTargets processes each target defined in the YAML configuration.
 // It generates commands for each target and executes them concurrently.
 func processTargets(
-	ctx context.Context, targets []target, displayOnly bool, targetNames []string,
+	ctx context.Context, targets []target, displayOnly bool, userProvidedTargetNames []string,
 ) error {
+	// targetNameMap is used to check all targets that are provided as user input
 	targetNameMap := make(map[string]struct{})
-	targetMap := make(map[string][]*command)
-	for _, tn := range targetNames {
+	for _, tn := range userProvidedTargetNames {
 		targetNameMap[tn] = struct{}{}
 	}
-	for i := 0; i < len(targets); i++ {
-		targets[i].TargetName = os.ExpandEnv(targets[i].TargetName)
-		t := targets[i]
-		if _, ok := targetNameMap[t.TargetName]; len(targetNames) > 0 && !ok {
-			fmt.Printf("Ignoring execution for target %s\n", t.TargetName)
-			continue
-		}
-		// Generate the commands for each target's steps
-		targetSteps, err := generateCmdsFromSteps(t.TargetName, t.Steps)
-		if err != nil {
-			return err
-		}
-		targetMap[t.TargetName] = targetSteps
+	waitGroupTracker, err := buildTargetCmdsAndRegisterWaitGroups(targets, targetNameMap, userProvidedTargetNames)
+	if err != nil {
+		return err
 	}
 
-	// Use a WaitGroup to execute commands concurrently
+	// if displayOnly, we just print and exit
+	if displayOnly {
+		for _, t := range targets {
+			if !shouldSkipTarget(targetNameMap, t, userProvidedTargetNames) {
+				displayCommands(t)
+			}
+		}
+		return nil
+	}
+	// Use a WaitGroup to wait for commands executed concurrently
 	wg := sync.WaitGroup{}
-	for targetName, cmds := range targetMap {
-		if displayOnly {
-			displayCommands(targetName, cmds)
+	for _, t := range targets {
+		if shouldSkipTarget(targetNameMap, t, userProvidedTargetNames) {
 			continue
 		}
 		wg.Add(1)
-		go func(tn string, commands []*command) {
-			err := executeCommands(ctx, tn, commands)
-			if err != nil {
-				fmt.Printf("%s: Error executing commands: %v\n", tn, err)
+		go func(t target) {
+			// defer complete the wait group for the dependent targets to proceed
+			defer waitGroupTracker[t.TargetName].Done()
+			defer wg.Done()
+			for _, dt := range t.DependentTargets {
+				if twg, ok := waitGroupTracker[dt]; ok {
+					fmt.Printf("%s: waiting on <%s>\n", t.TargetName, dt)
+					// wait on the dependent targets
+					// it would not matter if we wait sequentially as all dependent targets need to complete
+					twg.Wait()
+				}
 			}
-			wg.Done()
-		}(targetName, cmds)
+			err := executeCommands(ctx, t.TargetName, t.commands)
+			if err != nil {
+				fmt.Printf("%s: Error executing commands: %v\n", t.TargetName, err)
+			}
+		}(t)
 	}
+	// final wait for all targets to complete
 	wg.Wait()
 	return nil
 }
 
+// shouldSkipTarget returns true if the target should be skipped
+func shouldSkipTarget(
+	targetNameMap map[string]struct{}, t target, userProvidedTargetNames []string,
+) bool {
+	_, ok := targetNameMap[t.TargetName]
+	// the targets provided in "--targets" does not contain the current target
+	// so, this target is skipped
+	return len(userProvidedTargetNames) > 0 && !ok
+}
+
+// buildTargetCmdsAndRegisterWaitGroups builds the commands per target and registers the target to a wait group
+// tracker and returns the same.
+// The wait group tracker is a map of target name to a wait group. A delta is added to the wait group that is
+// marked done when the specific target is complete. The wait group is use by the dependent targets to wait for
+// the completion of the target.
+func buildTargetCmdsAndRegisterWaitGroups(
+	targets []target, targetNameMap map[string]struct{}, userProvidedTargetNames []string,
+) (map[string]*sync.WaitGroup, error) {
+	// map of target name to a wait group. The wait group is used by dependent target to wait for the target to complete
+	waitGroupTracker := make(map[string]*sync.WaitGroup)
+
+	// iterate over all the targets and create all the commands that should be executed for the target
+	for i := 0; i < len(targets); i++ {
+		// expand the environment variables
+		targets[i].TargetName = os.ExpandEnv(targets[i].TargetName)
+		t := targets[i]
+		for j := 0; j < len(t.DependentTargets); j++ {
+			targets[i].DependentTargets[j] = os.ExpandEnv(targets[i].DependentTargets[j])
+		}
+		if shouldSkipTarget(targetNameMap, t, userProvidedTargetNames) {
+			fmt.Printf("Ignoring execution for target %s\n", t.TargetName)
+			continue
+		}
+		// add a delta wait for this target. This is added here so that when the execution loop is run, we need not
+		// worry about the sequence
+		waitGroupTracker[t.TargetName] = &sync.WaitGroup{}
+		waitGroupTracker[t.TargetName].Add(1)
+		// Generate the commands for each target's steps
+		targetSteps, err := generateCmdsFromSteps(t.TargetName, t.Steps)
+		if err != nil {
+			return waitGroupTracker, err
+		}
+		targets[i].commands = targetSteps
+	}
+	return waitGroupTracker, nil
+}
+
 // displayCommands prints the commands in stdout
-func displayCommands(name string, cmds []*command) {
-	fmt.Printf("For target <%s>:\n", name)
-	for _, cmd := range cmds {
+func displayCommands(t target) {
+	if len(t.DependentTargets) > 0 {
+		fmt.Printf("For target <%s> after [%s]:\n", t.TargetName, strings.Join(t.DependentTargets, ", "))
+	} else {
+		fmt.Printf("For target <%s>:\n", t.TargetName)
+	}
+	for _, cmd := range t.commands {
 		fmt.Printf("|-> %s\n", cmd)
 		for _, rCmd := range cmd.rollbackCmds {
 			fmt.Printf("    |-> (Rollback) %s\n", rCmd)
 		}
 	}
-
 }
 
 // executeCommands runs the list of commands for a specific target.

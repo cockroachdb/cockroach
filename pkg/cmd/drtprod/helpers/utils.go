@@ -40,8 +40,9 @@ func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 	}
 }
 
-// ExecuteCmd runs a shell command with the given arguments and streams the output.
-func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+// ExecuteCmdWithPrefix runs a shell command with the given arguments and streams the output.
+// it also adds the specified prefixes
+func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 	// Create a command with the given context and arguments.
 	c := exec.CommandContext(ctx, cmd, args...)
 
@@ -51,12 +52,6 @@ func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...strin
 		return err
 	}
 	stderr, err := c.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	// Start the command execution
-	err = c.Start()
 	if err != nil {
 		return err
 	}
@@ -82,5 +77,17 @@ func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...strin
 	}()
 
 	// Wait for the command to complete and return any errors encountered.
-	return c.Wait()
+	return c.Run()
+}
+
+// ExecuteCmdInteractive runs a shell command with the given arguments and creates an interactive shell.
+func ExecuteCmdInteractive(ctx context.Context, cmd string, args ...string) error {
+	// Create a command with the given context and arguments.
+	c := exec.CommandContext(ctx, cmd, args...)
+
+	// redirect stdin, stdout and stderr
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+
+	// Run the command execution
+	return c.Run()
 }
