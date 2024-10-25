@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -552,6 +553,10 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 		// have exited based on an error.
 		return nil
 	}
+
+	for _, p := range lrw.bh {
+		p.ReportMutations(lrw.FlowCtx.Cfg.StatsRefresher)
+	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	lrw.debug.RecordCheckpoint(lrw.frontier.Frontier().GoTime())
 	return nil
@@ -957,6 +962,7 @@ type BatchHandler interface {
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	ReportMutations(*stats.Refresher)
 	Close(context.Context)
 }
 
@@ -968,6 +974,7 @@ type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	ReportMutations(*stats.Refresher)
 	Close(context.Context)
 }
 
@@ -1027,6 +1034,10 @@ func (t *txnBatch) GetLastRow() cdcevent.Row {
 
 func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
 	t.rp.SetSyntheticFailurePercent(rate)
+}
+
+func (t *txnBatch) ReportMutations(s *stats.Refresher) {
+	t.rp.ReportMutations(s)
 }
 
 func (t *txnBatch) Close(ctx context.Context) {

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -231,6 +232,11 @@ func makeSQLProcessorFromQuerier(
 		ie:       ie,
 	}, nil
 }
+
+// ReportMutations implements the RowProcessor interface, but is a no-op for
+// sqlRowProcessor because its mutations are already reported by the queries it
+// runs when they are run.
+func (sqlRowProcessor) ReportMutations(_ *stats.Refresher) {}
 
 func (*sqlRowProcessor) Close(ctx context.Context) {}
 
