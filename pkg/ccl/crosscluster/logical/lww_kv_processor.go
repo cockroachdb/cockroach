@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -112,6 +113,17 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 	return s, nil
 
+}
+
+func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
+	for _, w := range p.writers {
+		if w.unreportedMutations > 0 && w.leased != nil {
+			if desc := w.leased.Underlying(); desc != nil {
+				refresher.NotifyMutation(desc.(catalog.TableDescriptor), w.unreportedMutations)
+				w.unreportedMutations = 0
+			}
+		}
+	}
 }
 
 // maxRefreshCount is the maximum number of times we will retry a KV batch that has failed with a
@@ -253,6 +265,9 @@ func (p *kvRowProcessor) addToBatch(
 		}
 	}
 
+	// Note that we should report this mutation to sql stats refresh later.
+	w.unreportedMutations++
+
 	return nil
 }
 
@@ -317,6 +332,10 @@ type kvTableWriter struct {
 	ru               row.Updater
 	ri               row.Inserter
 	rd               row.Deleter
+
+	// Mutations to the table this writer wraps that should be reported to sql
+	// stats at some point.
+	unreportedMutations int
 }
 
 func newKVTableWriter(
