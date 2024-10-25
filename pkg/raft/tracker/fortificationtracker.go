@@ -51,6 +51,10 @@ type FortificationTracker struct {
 	// epochs that they have supported the leader in.
 	fortification map[pb.PeerID]pb.Epoch
 
+	// votersSupport is a map that gets populated before campaigning to make sure
+	// that we are supported by a quorum of the voters before campaigning.
+	votersSupport map[pb.PeerID]bool
+
 	// leaderMaxSupported is the maximum LeadSupportUntil that the leader has
 	// ever claimed to support. Tracking this ensures that LeadSupportUntil
 	// never regresses for a raft group. Naively, without any tracking, this
@@ -82,6 +86,7 @@ func NewFortificationTracker(
 		config:        config,
 		storeLiveness: storeLiveness,
 		fortification: map[pb.PeerID]pb.Epoch{},
+		votersSupport: map[pb.PeerID]bool{},
 		logger:        logger,
 	}
 	return &st
@@ -318,6 +323,30 @@ func (ft *FortificationTracker) ConfigChangeSafe() bool {
 func (ft *FortificationTracker) QuorumActive() bool {
 	// NB: Only run by the leader.
 	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil(pb.StateLeader))
+}
+
+// requireQuorumSupportOnCampaign returns true if quorum support before
+// campaigning is required.
+func (ft *FortificationTracker) requireQuorumSupportOnCampaign() bool {
+	return ft.storeLiveness.SupportFromEnabled()
+}
+
+// QuorumSupported returns whether this peer is currently supported by a quorum
+// or not.
+func (ft *FortificationTracker) QuorumSupported() bool {
+	if !ft.requireQuorumSupportOnCampaign() {
+		return true // no-op if we don't require quorum support
+	}
+
+	// TODO(ibrahim): If this is expensive, we can try to clear the map when we
+	// become a follower for a given term.
+	clear(ft.votersSupport)
+
+	ft.config.Voters.Visit(func(id pb.PeerID) {
+		_, ft.votersSupport[id] = ft.IsFortifiedBy(id)
+	})
+
+	return ft.config.Voters.VoteResult(ft.votersSupport) == quorum.VoteWon
 }
 
 // Term returns the leadership term for which the tracker is/was tracking
