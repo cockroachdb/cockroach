@@ -29,7 +29,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
   const isTenant = clusterDetails.isTenant;
   const metadata = tableDetails.metadata;
   const {
-    nodeIDToRegion,
+    nodeStatusByID,
     storeIDToNodeID,
     isLoading: nodesLoading,
   } = useNodeStatuses();
@@ -42,7 +42,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
     }
     const regionsToNodes = mapStoreIDsToNodeRegions(
       tableDetails.metadata.storeIds,
-      nodeIDToRegion,
+      nodeStatusByID,
       storeIDToNodeID,
     );
     return Object.entries(regionsToNodes)

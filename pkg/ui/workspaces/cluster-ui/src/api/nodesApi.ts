@@ -20,6 +20,11 @@ export const getNodes =
     return fetchData(cockroach.server.serverpb.NodesResponse, NODES_PATH);
   };
 
+export type NodeStatus = {
+  region: string;
+  stores: StoreID[];
+};
+
 export const useNodeStatuses = () => {
   const clusterDetails = useContext(ClusterDetailsContext);
   const isTenant = clusterDetails.isTenant;
@@ -32,29 +37,31 @@ export const useNodeStatuses = () => {
     },
   );
 
-  const { storeIDToNodeID, nodeIDToRegion } = useMemo(() => {
-    const nodeIDToRegion: Record<NodeID, string> = {};
+  const { storeIDToNodeID, nodeStatusByID } = useMemo(() => {
+    const nodeStatusByID: Record<NodeID, NodeStatus> = {};
     const storeIDToNodeID: Record<StoreID, NodeID> = {};
     if (!data) {
-      return { nodeIDToRegion, storeIDToNodeID };
+      return { nodeStatusByID, storeIDToNodeID };
     }
-    data.nodes.forEach(ns => {
-      ns.store_statuses.forEach(store => {
+    data.nodes?.forEach(ns => {
+      ns.store_statuses?.forEach(store => {
         storeIDToNodeID[store.desc.store_id as StoreID] = ns.desc
           .node_id as NodeID;
       });
-      nodeIDToRegion[ns.desc.node_id as NodeID] = getRegionFromLocality(
-        ns.desc.locality,
-      );
+
+      nodeStatusByID[ns.desc.node_id as NodeID] = {
+        region: getRegionFromLocality(ns.desc.locality),
+        stores: ns.store_statuses?.map(s => s.desc.store_id as StoreID),
+      };
     });
-    return { nodeIDToRegion, storeIDToNodeID };
+
+    return { nodeStatusByID, storeIDToNodeID };
   }, [data]);
 
   return {
-    data,
     isLoading,
     error,
-    nodeIDToRegion,
+    nodeStatusByID,
     storeIDToNodeID,
   };
 };

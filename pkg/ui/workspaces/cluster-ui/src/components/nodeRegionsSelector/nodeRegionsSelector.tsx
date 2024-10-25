@@ -7,7 +7,6 @@ import React, { useMemo } from "react";
 import Select, { OptionsType } from "react-select";
 
 import { useNodeStatuses } from "src/api";
-import { getRegionFromLocality } from "src/store/nodes";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 import {
   GroupedReactSelectOption,
@@ -23,22 +22,24 @@ export const NodeRegionsSelector: React.FC<NodeRegionsSelectorProps> = ({
   value,
   onChange,
 }) => {
-  const nodesResp = useNodeStatuses();
+  const { nodeStatusByID, isLoading } = useNodeStatuses();
 
   const nodeOptions: GroupedReactSelectOption<StoreID[]>[] = useMemo(() => {
     const optionsMap: Record<string, { nid: NodeID; sids: StoreID[] }[]> = {};
-    if (nodesResp.isLoading && !nodesResp.data?.nodes) {
+    const nodes = Object.keys(nodeStatusByID ?? {});
+    if (isLoading && !nodes.length) {
       return [];
     }
 
-    nodesResp.data.nodes.forEach(node => {
-      const region = getRegionFromLocality(node.desc.locality);
+    nodes.forEach(node => {
+      const nid = parseInt(node) as NodeID;
+      const region = nodeStatusByID[nid].region;
       if (optionsMap[region] == null) {
         optionsMap[region] = [];
       }
       optionsMap[region].push({
-        nid: node.desc.node_id as NodeID,
-        sids: node.store_statuses.map(s => s.desc.store_id as StoreID),
+        nid,
+        sids: nodeStatusByID[nid].stores,
       });
     });
 
@@ -51,7 +52,7 @@ export const NodeRegionsSelector: React.FC<NodeRegionsSelectorProps> = ({
         })),
       };
     });
-  }, [nodesResp]);
+  }, [nodeStatusByID, isLoading]);
 
   const onSelectChange = (
     selected: OptionsType<ReactSelectOption<StoreID[]>>,
