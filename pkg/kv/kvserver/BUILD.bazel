@@ -274,6 +274,7 @@ go_test(
         "client_migration_test.go",
         "client_mvcc_gc_test.go",
         "client_protectedts_test.go",
+        "client_raft_epoch_leases_test.go",
         "client_raft_helpers_test.go",
         "client_raft_log_queue_test.go",
         "client_raft_test.go",
