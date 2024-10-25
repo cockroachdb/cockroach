@@ -14,14 +14,24 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-microbench/util",
+        # Required for generated mocks
+        "//pkg/cmd/roachprod/grafana",  #keep
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/test",
+        # Required for generated mocks
+        "//pkg/roachprod",  #keep
+        # Required for generated mocks
+        "//pkg/roachprod/install",  #keep
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
+        # Required for generated mocks
+        "//pkg/roachprod/vm",  #keep
         "//pkg/util/search",
         "//pkg/util/timeutil",
+        # Required for generated mocks
+        "//pkg/util/version",  #keep
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
@@ -33,26 +43,20 @@ go_test(
     name = "clusterstats_test",
     srcs = [
         "exporter_test.go",
-        "mocks_generated_cluster_test.go",
-        "mocks_generated_test_test.go",
         "streamer_test.go",
-        ":clusterstats_mock",  # keep
+        ":mock_client",  # keep
+        ":mock_cluster",  # keep
+        ":mock_test",  # keep
     ],
     embed = [":clusterstats"],
     embedsrcs = ["openmetrics_expected.txt"],
     deps = [
-        "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
-        "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
-        "//pkg/roachprod",
-        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
-        "//pkg/roachprod/vm",
-        "//pkg/util/version",
         "@com_github_golang_mock//gomock",
         "@com_github_montanaflynn_stats//:stats",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
@@ -62,10 +66,34 @@ go_test(
 )
 
 gomock(
-    name = "clusterstats_mock",
-    out = "mocks_generated_test.go",
+    name = "mock_client",
+    out = "mock_client_generated_test.go",
     interfaces = ["Client"],
     library = "//pkg/roachprod/prometheus",
+    package = "clusterstats",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+gomock(
+    name = "mock_test",
+    out = "mock_test_generated_test.go",
+    interfaces = ["Test"],
+    library = "//pkg/cmd/roachtest/test",
+    package = "clusterstats",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+gomock(
+    name = "mock_cluster",
+    out = "mock_cluster_generated_test.go",
+    interfaces = ["Cluster"],
+    library = "//pkg/cmd/roachtest/cluster",
     package = "clusterstats",
     visibility = [
         ":__pkg__",
