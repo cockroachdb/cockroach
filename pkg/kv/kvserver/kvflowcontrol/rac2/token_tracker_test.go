@@ -137,7 +137,9 @@ func TestTokenTracker(t *testing.T) {
 
 		case "inspect":
 			var buf strings.Builder
-			for _, deduction := range tracker.Inspect() {
+			deductions, total := tracker.Inspect()
+			buf.WriteString(fmt.Sprintf("total: %v\n", total))
+			for _, deduction := range deductions {
 				marshaled, err := marshaller.MarshalToString(&deduction)
 				require.NoError(t, err)
 				fmt.Fprintf(&buf, "%s\n", marshaled)
