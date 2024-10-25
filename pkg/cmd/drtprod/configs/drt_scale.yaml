@@ -56,7 +56,21 @@ targets:
           - $CLUSTER
           - --
           - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=5,num_voters=5"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "ALTER RANGE default CONFIGURE ZONE USING num_replicas=5,num_voters=5"
   # workload cluster specs
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
       - command: create
         args:
           - $WORKLOAD_CLUSTER
@@ -84,6 +98,11 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
       - script: rm
         args:
           - -rf
@@ -104,7 +123,7 @@ targets:
           - --
           - chmod
           - 600
-          - certs/*
+          - './certs/*'
       - command: put
         args:
           - $WORKLOAD_CLUSTER
