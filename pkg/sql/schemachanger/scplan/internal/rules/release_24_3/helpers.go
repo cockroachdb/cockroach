@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package current
+package release_24_3
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -16,12 +16,10 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-25.1"
+	rulesVersion = "-24.3"
 )
 
 // rulesVersionKey version of elements used by this rule set.
-// TODO(annie): Need to update the rulesVersionKey here to point to
-// clusterversion.V25_1 when that is available.
 var rulesVersionKey = clusterversion.V24_3
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
