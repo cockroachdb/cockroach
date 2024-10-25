@@ -1506,11 +1506,25 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 		}
 
 		func() {
+			evalTokens, sendTokens := kvflowcontrol.Tokens(0), kvflowcontrol.Tokens(0)
 			rs.sendStream.mu.Lock()
 			defer rs.sendStream.mu.Unlock()
+			// The number of send tokens deducted is equal to the number of tracked
+			// tokens and the number of tokens deducted for the scheduler, if any.
+			//
+			// The number of eval tokens deducted is equal to the number of tokens
+			// deducted for eval, conveniently stored in the replicaSendStream.
+			trackedDeductions, trackedTokens := rs.sendStream.raftMu.tracker.Inspect()
+			sendTokens += trackedTokens
+			sendTokens += rs.sendStream.mu.sendQueue.deductedForSchedulerTokens
+			for _, tokens := range rs.sendStream.mu.eval.tokensDeducted {
+				evalTokens += tokens
+			}
 			streams = append(streams, kvflowinspectpb.ConnectedStream{
-				Stream:            rc.opts.SSTokenCounter.InspectStream(rs.stream),
-				TrackedDeductions: rs.sendStream.raftMu.tracker.Inspect(),
+				Stream:                  rc.opts.SSTokenCounter.InspectStream(rs.stream),
+				TrackedDeductions:       trackedDeductions,
+				TotalEvalDeductedTokens: int64(evalTokens),
+				TotalSendDeductedTokens: int64(sendTokens),
 			})
 		}()
 	}
