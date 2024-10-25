@@ -25,8 +25,10 @@ targets:
           gce-zones: "us-central1-a"
           nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
-          local-ssd: true
-          gce-local-ssd-count: 4
+          local-ssd: false
+          gce-pd-volume-size: 375
+          gce-pd-volume-type: pd-ssd
+          gce-pd-volume-count: 4
           os-volume-size: 100
           username: drt
           lifetime: 8760h
