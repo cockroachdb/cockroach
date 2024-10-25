@@ -612,7 +612,7 @@ func (r *Replica) hasSendTokensRaftMuLockedReplicaMuLocked() bool {
 
 // ticksSinceLastProposalRLocked returns the number of ticks since the last
 // proposal.
-func (r *Replica) ticksSinceLastProposalRLocked() int {
+func (r *Replica) ticksSinceLastProposalRLocked() int64 {
 	return r.mu.ticks - r.mu.lastProposalAtTicks
 }
 
@@ -1611,7 +1611,7 @@ const (
 // ticks of an election timeout (affect only proposals that have had ample time
 // to apply but didn't).
 func (r *Replica) refreshProposalsLocked(
-	ctx context.Context, refreshAtDelta int, reason refreshRaftReason,
+	ctx context.Context, refreshAtDelta int64, reason refreshRaftReason,
 ) {
 	if refreshAtDelta != 0 && reason != reasonTicks {
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)

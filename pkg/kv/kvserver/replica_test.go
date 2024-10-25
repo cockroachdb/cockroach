@@ -8189,7 +8189,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	r.mu.Unlock()
 
 	// We tick the replica 3*RaftReproposalTimeoutTicks.
-	for i := 0; i < 3*reproposalTicks; i++ {
+	for i := int64(0); i < 3*reproposalTicks; i++ {
 		// Add another pending command on each iteration.
 		id := fmt.Sprintf("%08d", i)
 		ba := &kvpb.BatchRequest{}
@@ -8245,7 +8245,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// time, this will be 1 reproposal (the one at ticks=0 for the reproposal at
 		// ticks=reproposalTicks), then +reproposalTicks reproposals each time.
 		if (ticks % reproposalTicks) == 0 {
-			if exp := i + 2 - reproposalTicks; len(reproposed) != exp { // +1 to offset i, +1 for inclusive
+			if exp := i + 2 - reproposalTicks; int64(len(reproposed)) != exp { // +1 to offset i, +1 for inclusive
 				t.Fatalf("%d: expected %d reproposed commands, but found %d", i, exp, len(reproposed))
 			}
 		} else {
@@ -9860,7 +9860,7 @@ type testQuiescer struct {
 	numProposals           int
 	pendingQuota           bool
 	sendTokens             bool
-	ticksSinceLastProposal int
+	ticksSinceLastProposal int64
 	status                 *raft.SparseStatus
 	lastIndex              kvpb.RaftIndex
 	raftReady              bool
@@ -9917,7 +9917,7 @@ func (q *testQuiescer) hasSendTokensRaftMuLockedReplicaMuLocked() bool {
 	return q.sendTokens
 }
 
-func (q *testQuiescer) ticksSinceLastProposalRLocked() int {
+func (q *testQuiescer) ticksSinceLastProposalRLocked() int64 {
 	return q.ticksSinceLastProposal
 }
 
