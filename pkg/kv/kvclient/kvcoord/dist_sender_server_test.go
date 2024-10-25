@@ -4778,6 +4778,14 @@ func TestPartialPartition(t *testing.T) {
 				// DistSender we will never succeed once we partition. Remove
 				// this block once #118943 is fixed.
 				testutils.SucceedsSoon(t, func() error {
+					if leaseType == roachpb.LeaseLeader {
+						// In leader leases, the leader won't campaign if it's not supported
+						// by a majority of of voters. This causes a flake in this test
+						// where the new leader is not elected if it doesn't yet have
+						// support from a majority. We need to keep trying to transfer the
+						// lease until the new leader is elected.
+						tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+					}
 					sl := tc.StorageLayer(1)
 					store, err := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
 					require.NoError(t, err)
