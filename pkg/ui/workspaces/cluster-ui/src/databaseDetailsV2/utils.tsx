@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { NodeStatus } from "src/api";
 import { TableMetadata } from "src/api/databases/getTableMetadataApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
@@ -12,7 +13,7 @@ import { TableRow } from "./types";
 export const tableMetadataToRows = (
   tables: TableMetadata[],
   nodesInfo: {
-    nodeIDToRegion: Record<NodeID, string>;
+    nodeStatusByID: Record<NodeID, NodeStatus>;
     storeIDToNodeID: Record<StoreID, NodeID>;
     isLoading: boolean;
   },
@@ -20,7 +21,7 @@ export const tableMetadataToRows = (
   return tables.map(table => {
     const nodesByRegion = mapStoreIDsToNodeRegions(
       table.storeIds,
-      nodesInfo?.nodeIDToRegion,
+      nodesInfo?.nodeStatusByID,
       nodesInfo?.storeIDToNodeID,
     );
     return {

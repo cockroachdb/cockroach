@@ -159,7 +159,7 @@ export const DatabasesPageV2 = () => {
   const tableData = useMemo(
     () =>
       rawDatabaseMetadataToDatabaseRows(data?.results ?? [], {
-        nodeIDToRegion: nodesResp.nodeIDToRegion,
+        nodeStatusByID: nodesResp.nodeStatusByID,
         storeIDToNodeID: nodesResp.storeIDToNodeID,
         isLoading: nodesResp.isLoading,
       }),

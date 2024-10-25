@@ -3,54 +3,54 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 
-import { useNodeStatuses } from "src/api";
-import { getRegionFromLocality } from "src/store/nodes";
-import { StoreID } from "src/types/clusterTypes";
+import * as api from "src/api/nodesApi";
+import { NodeID, StoreID } from "src/types/clusterTypes";
 
 import { NodeRegionsSelector } from "./nodeRegionsSelector";
 
-// Mock the useNodeStatuses hook
-jest.mock("src/api", () => ({
-  useNodeStatuses: jest.fn(),
-}));
+import NodesResponse = cockroach.server.serverpb.NodesResponse;
 
-// Mock the getRegionFromLocality function
-jest.mock("src/store/nodes", () => ({
-  getRegionFromLocality: jest.fn(),
-}));
-
-const mockNodeData = {
+const mockNodeData = new NodesResponse({
   nodes: [
     {
-      desc: { node_id: 1, locality: { region: "us-east" } },
+      desc: {
+        node_id: 1,
+        locality: { tiers: [{ key: "region", value: "us-east" }] },
+      },
       store_statuses: [
         { desc: { store_id: 101 } },
         { desc: { store_id: 102 } },
       ],
     },
     {
-      desc: { node_id: 2, locality: { region: "us-west" } },
+      desc: {
+        node_id: 2,
+        locality: { tiers: [{ key: "region", value: "us-west" }] },
+      },
       store_statuses: [{ desc: { store_id: 201 } }],
     },
     {
-      desc: { node_id: 3, locality: { region: "us-east" } },
+      desc: {
+        node_id: 3,
+        locality: { tiers: [{ key: "region", value: "us-east" }] },
+      },
       store_statuses: [{ desc: { store_id: 301 } }],
     },
   ],
-};
+});
 
 describe("NodeRegionsSelector", () => {
   beforeEach(() => {
-    (useNodeStatuses as jest.Mock).mockReturnValue({
-      isLoading: false,
-      data: mockNodeData,
-    });
-    (getRegionFromLocality as jest.Mock).mockImplementation(
-      locality => locality.region,
-    );
+    // Mock the api.getNodes function at the module level
+    jest.spyOn(api, "getNodes").mockResolvedValue(mockNodeData);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it("should render", () => {
@@ -103,9 +103,20 @@ describe("NodeRegionsSelector", () => {
   });
 
   it("handles loading state", () => {
-    (useNodeStatuses as jest.Mock).mockReturnValue({
+    jest.spyOn(api, "useNodeStatuses").mockReturnValue({
+      error: null,
       isLoading: true,
-      data: mockNodeData,
+      nodeStatusByID: {
+        1: { region: "us-east", stores: [101, 102] },
+        2: { region: "us-west", stores: [201] },
+        3: { region: "us-east", stores: [301] },
+      } as Record<NodeID, api.NodeStatus>,
+      storeIDToNodeID: {
+        101: 1,
+        102: 1,
+        201: 2,
+        301: 3,
+      } as Record<StoreID, NodeID>,
     });
 
     render(<NodeRegionsSelector value={[]} onChange={() => {}} />);
