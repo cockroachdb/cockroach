@@ -4764,7 +4764,13 @@ func TestPartialPartition(t *testing.T) {
 				require.NoError(t, tc.WaitForFullReplication())
 
 				desc := tc.LookupRangeOrFatal(t, scratchKey)
-				tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+				err := tc.TransferRangeLease(desc, tc.Target(1))
+				if leaseType != roachpb.LeaseLeader {
+					// In leader leases, the leader won't campaign if it's not supported
+					// by a majority. We will keep trying to transfer the lease until it
+					// succeeds below.
+					require.NoError(t, err)
+				}
 
 				// TODO(baptist): This test should work without this block.
 				// After the lease is transferred, the lease might still be on
@@ -4778,6 +4784,16 @@ func TestPartialPartition(t *testing.T) {
 				// DistSender we will never succeed once we partition. Remove
 				// this block once #118943 is fixed.
 				testutils.SucceedsSoon(t, func() error {
+					if leaseType == roachpb.LeaseLeader {
+						// In leader leases, the leader won't campaign if it's not supported
+						// by a majority of voters. This causes a flake in this test
+						// where the new leader is not elected if it doesn't yet have
+						// support from a majority. We need to keep trying to transfer the
+						// lease until the new leader is elected.
+						if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
+							return err
+						}
+					}
 					sl := tc.StorageLayer(1)
 					store, err := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
 					require.NoError(t, err)
@@ -4795,7 +4811,7 @@ func TestPartialPartition(t *testing.T) {
 				// to fail faster.
 				cancelCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
-				err := txn.Put(cancelCtx, scratchKey, "abc")
+				err = txn.Put(cancelCtx, scratchKey, "abc")
 				if test.useProxy {
 					require.NoError(t, err)
 					require.NoError(t, txn.Commit(cancelCtx))
