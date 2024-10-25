@@ -399,6 +399,163 @@ func TestQuorumActive(t *testing.T) {
 	}
 }
 
+// TestQuorumSupported ensures that we correctly determine whether a leader's
+// quorum is supported or not.
+func TestQuorumSupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+
+	createJointQuorum := func(c0 []pb.PeerID, c1 []pb.PeerID) quorum.JointConfig {
+		jointConfig := quorum.JointConfig{}
+
+		// Populate the first joint config entry.
+		if len(c0) > 0 {
+			jointConfig[0] = make(quorum.MajorityConfig, len(c0))
+		}
+		for _, id := range c0 {
+			jointConfig[0][id] = struct{}{}
+		}
+
+		// Populate the second joint config entry.
+		if len(c1) > 0 {
+			jointConfig[1] = make(quorum.MajorityConfig, len(c1))
+		}
+		for _, id := range c1 {
+			jointConfig[1][id] = struct{}{}
+		}
+		return jointConfig
+	}
+
+	testCases := []struct {
+		curTS              hlc.Timestamp
+		voters             quorum.JointConfig
+		storeLiveness      mockStoreLiveness
+		expQuorumSupported bool
+	}{
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				// No support recorded.
+				map[pb.PeerID]mockLivenessEntry{},
+			),
+			expQuorumSupported: false,
+		},
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					1: makeMockLivenessEntry(10, ts(10)),
+					// Missing peer 2.
+					3: makeMockLivenessEntry(30, ts(20)),
+				},
+			),
+			expQuorumSupported: true,
+		},
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					1: makeMockLivenessEntry(10, ts(10)),
+					// Missing peers 2 and 3.
+				},
+			),
+			expQuorumSupported: false,
+		},
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					// Expired support for peer 1.
+					1: makeMockLivenessEntry(10, ts(5)),
+					2: makeMockLivenessEntry(20, ts(15)),
+					3: makeMockLivenessEntry(30, ts(20)),
+				},
+			),
+			expQuorumSupported: true,
+		},
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					// Expired support for peers 1 and 2.
+					1: makeMockLivenessEntry(10, ts(5)),
+					2: makeMockLivenessEntry(20, ts(5)),
+					3: makeMockLivenessEntry(30, ts(20)),
+				},
+			),
+			expQuorumSupported: false,
+		},
+		{
+			curTS:  ts(10),
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					1: makeMockLivenessEntry(10, ts(10)),
+					2: makeMockLivenessEntry(20, ts(15)),
+					3: makeMockLivenessEntry(30, ts(20)),
+				},
+			),
+			expQuorumSupported: true,
+		},
+		{
+			curTS: ts(10),
+			// Simulate a joint quorum when adding two more nodes.
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{1, 2, 3, 4, 5}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					// Expired supported from 1 and 2.
+					1: makeMockLivenessEntry(10, ts(5)),
+					2: makeMockLivenessEntry(20, ts(5)),
+					3: makeMockLivenessEntry(20, ts(15)),
+					4: makeMockLivenessEntry(20, ts(15)),
+					5: makeMockLivenessEntry(10, ts(15)),
+				},
+			),
+			// Expect the quorum to NOT be supported since the one of the majorities
+			// doesn't provide support.
+			expQuorumSupported: false,
+		},
+		{
+			curTS: ts(10),
+			// Simulate a joint quorum when adding two more nodes.
+			voters: createJointQuorum([]pb.PeerID{1, 2, 3}, []pb.PeerID{1, 2, 3, 4, 5}),
+			storeLiveness: makeMockStoreLiveness(
+				map[pb.PeerID]mockLivenessEntry{
+					// Expired supported from 1 and 5.
+					1: makeMockLivenessEntry(10, ts(5)),
+					2: makeMockLivenessEntry(20, ts(15)),
+					3: makeMockLivenessEntry(10, ts(15)),
+					4: makeMockLivenessEntry(20, ts(15)),
+					5: makeMockLivenessEntry(10, ts(5)),
+				},
+			),
+			// Expect the quorum to be supported since the two majorities provided
+			// support.
+			expQuorumSupported: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.storeLiveness.curTS = tc.curTS
+		cfg := quorum.MakeEmptyConfig()
+		cfg.Voters = tc.voters
+		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness,
+			raftlogger.DiscardLogger)
+		require.Equal(t, tc.expQuorumSupported, fortificationTracker.QuorumSupported())
+	}
+}
+
 // TestCanDefortify tests whether a leader can safely de-fortify or not based
 // on some tracked state.
 func TestCanDefortify(t *testing.T) {
