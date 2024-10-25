@@ -212,4 +212,4 @@ raft proposal dropped
 # Nor can it campaign to become leader.
 campaign 1
 ----
-WARN 1 is unpromotable and can not campaign
+INFO 1 is unpromotable and can not campaign
