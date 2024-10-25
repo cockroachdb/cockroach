@@ -1081,27 +1081,51 @@ func TestCommit(t *testing.T) {
 	}
 }
 
-func TestPastElectionTimeout(t *testing.T) {
+// TestAtRandomizedElectionTimeout tests that the followers who call
+// atRandomizedElectionTimeout() will campaign uniformly randomly between the
+// range of [electionTimeout, 2 * electionTimeout - 1].
+func TestAtRandomizedElectionTimeout(t *testing.T) {
 	tests := []struct {
-		elapse       int64
+		electionElapsed int64
+		// wprobability is the expected probability of an election at
+		// the given electionElapsed.
 		wprobability float64
 		round        bool
 	}{
+		// randomizedElectionTimeout = [10,20).
+		// electionElapsed less than the electionTimeout should never campaign.
+		{0, 0, false},
 		{5, 0, false},
+		{9, 0, false},
+
+		// Since there are 10 possible values for randomizedElectionTimeout, we
+		// expect the probability to be 1/10 for each value.
 		{10, 0.1, true},
-		{13, 0.4, true},
-		{15, 0.6, true},
-		{18, 0.9, true},
-		{20, 1, false},
+		{13, 0.1, true},
+		{15, 0.1, true},
+		{18, 0.1, true},
+		{20, 0.1, true},
+
+		// No possible value of randomizedElectionTimeout [10,20) would cause an
+		// election at electionElapsed = 21.
+		{21, 0, false},
+
+		// Only one out of ten values of randomizedElectionTimeout (11) leads to
+		// election at electionElapsed = 22.
+		{22, 0.1, true},
+
+		// Two out of ten values of randomizedElectionTimeout (10, 11) would lead
+		// to election at electionElapsed = 120.
+		{110, 0.2, true},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-		sm.electionElapsed = tt.elapse
+		sm.electionElapsed = tt.electionElapsed
 		c := 0
 		for j := 0; j < 10000; j++ {
 			sm.resetRandomizedElectionTimeout()
-			if sm.pastElectionTimeout() {
+			if sm.atRandomizedElectionTimeout() {
 				c++
 			}
 		}
