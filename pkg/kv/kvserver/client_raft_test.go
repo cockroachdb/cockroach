@@ -1132,11 +1132,12 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// handler on the other two stores only filters out messages from the
 		// partitioned store. The configuration looks like:
 		//
-		//           [0]
-		//          x  x
-		//         /    \
-		//        x      x
-		//      [1]<---->[2]
+		//     [symmetric=false]      [symmetric=true]
+		//           [0]                     [0]
+		//          ^  ^                    x   x
+		//         /    \                  /     \
+		//        x      x                x       x
+		//      [1]<---->[2]            [1]<----->[2]
 		//
 		log.Infof(ctx, "test: partitioning node")
 		const partitionNodeIdx = 0
@@ -1161,8 +1162,8 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// partitioned one.
 		log.Infof(ctx, "test: waiting for leadership to fail over")
 		testutils.SucceedsSoon(t, func() error {
-			if partRepl.RaftStatus().Lead != raft.None {
-				return errors.New("partitioned replica should stepped down")
+			if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
+				return errors.New("partitioned replica should have stepped down")
 			}
 			lead := otherRepl.RaftStatus().Lead
 			if lead == raft.None {
@@ -1239,7 +1240,16 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		require.Error(t, pErr.GoError(), "unexpected success")
 		nlhe := &kvpb.NotLeaseHolderError{}
 		require.ErrorAs(t, pErr.GetDetail(), &nlhe, pErr)
-		require.True(t, nlhe.Lease.Empty())
+
+		if symmetric {
+			// In symmetric=true, we expect that the partitioned replica to not know
+			// about the leader. As a result, it returns a NotLeaseHolderError without
+			// a speculative lease.
+			require.True(t, nlhe.Lease.Empty(), "expected empty lease, got %v", nlhe.Lease)
+		} else {
+			require.False(t, nlhe.Lease.Empty())
+			require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
+		}
 
 		// Resolve the partition, but continue blocking snapshots destined for the
 		// previously-partitioned replica. The point of blocking the snapshots is to
@@ -1270,7 +1280,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 				continue
 			}
 			store := tc.GetFirstStoreFromServer(t, i)
-			store.Transport().ListenIncomingRaftMessages(store.Ident.StoreID, store)
+			store.Transport().ListenIncomingRaftMessages(store.StoreID(), store)
 			store.StoreLivenessTransport().ListenMessages(
 				store.StoreID(), store.TestingStoreLivenessMessageHandler(),
 			)
@@ -6536,16 +6546,13 @@ func TestRaftCheckQuorum(t *testing.T) {
 		require.False(t, repl1.IsQuiescent())
 		t.Logf("n1 not quiesced")
 
-		// Wait for the leader to become a candidate.
+		// Wait for the leader to step down.
 		require.Eventually(t, func() bool {
 			status := repl1.RaftStatus()
 			logStatus(status)
-			// TODO(ibrahim): once we start checking StoreLiveness before
-			// transitioning to a pre-candidate, we'll need to switch this (and the
-			// conditional below) to handle this.
-			return status.RaftState == raftpb.StatePreCandidate
+			return status.RaftState != raftpb.StateLeader
 		}, 10*time.Second, 500*time.Millisecond)
-		t.Logf("n1 became pre-candidate")
+		t.Logf("n1 stepped down as a leader")
 
 		// n2 or n3 should elect a new leader.
 		var leaderStatus *raft.Status
@@ -6561,23 +6568,17 @@ func TestRaftCheckQuorum(t *testing.T) {
 		}, 10*time.Second, 500*time.Millisecond)
 		t.Logf("n%d became leader", leaderStatus.ID)
 
-		// n1 should remain pre-candidate, since it doesn't hear about the new
-		// leader.
+		// n1 shouldn't become a leader.
 		require.Never(t, func() bool {
 			status := repl1.RaftStatus()
 			logStatus(status)
-			// TODO(ibrahim): uncomment this once we start checking StoreLiveness
-			// before transitioning to a pre-candidate.
-			//expState := status.RaftState == raftpb.StateFollower && status.Lead == raft.None
-			//return !expState // require.Never
-			return status.RaftState != raftpb.StatePreCandidate
+			expState := status.RaftState != raftpb.StateLeader && status.Lead == raft.None
+			return !expState // require.Never
 		}, 3*time.Second, 500*time.Millisecond)
-		t.Logf("n1 remains pre-candidate")
+		t.Logf("n1 remains not leader")
 
-		// The existing leader shouldn't have been affected by n1's prevotes.
-		// TODO(ibrahim): This portion of the test can be removed entirely once we
-		// don't even transition to a pre-candidate because StoreLiveness doesn't
-		// let us.
+		// The existing leader shouldn't have been affected by the possible n1's
+		// prevotes.
 		var finalStatus *raft.Status
 		for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
 			logStatus(status)

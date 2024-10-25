@@ -472,6 +472,8 @@ func dropRaftMessagesFrom(
 				drop := shouldDropFromStore(msg.From.StoreID)
 				if drop {
 					t.Logf("dropping msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
+				} else {
+					t.Logf("allowing msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
 				}
 				return drop
 			},
