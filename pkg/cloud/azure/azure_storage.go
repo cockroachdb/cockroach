@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -221,7 +222,15 @@ func makeAzureStorage(
 	}
 
 	options := args.ExternalStorageOptions()
-	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container, options.ClientName)
+	bucket := dest.AzureConfig.Container
+	if metric.EnableCloudBillingAccounting {
+		// Azure is special in that its bucket names are not unique. So for
+		// the moment, Cloud needs to track Account Name, since it is in fact
+		// unique. We may eventually choose bucket names derived from the
+		// account name to ensure uniqueness and bypass this hack.
+		bucket = dest.AzureConfig.AccountName
+	}
+	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", bucket, options.ClientName)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: unable to create transport")
 	}
