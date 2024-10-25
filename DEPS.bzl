@@ -3923,10 +3923,6 @@ def go_deps():
         name = "com_github_golang_protobuf",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang/protobuf",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:com_github_golang_protobuf.patch",
-        ],
         sha256 = "93bda6e88d4a0a493a98b481de67a10000a755d15f16a800b49a6b96d1bd6f81",
         strip_prefix = "github.com/golang/protobuf@v1.5.3",
         urls = [
@@ -11590,6 +11586,16 @@ def go_deps():
         strip_prefix = "golang.org/x/tools@v0.24.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/tools/org_golang_x_tools-v0.24.0.zip",
+        ],
+    )
+    go_repository(
+        name = "org_golang_x_tools_go_vcs",
+        build_file_proto_mode = "disable_global",
+        importpath = "golang.org/x/tools/go/vcs",
+        sha256 = "ab155d94f90a98a5112967b89bfcd26b5825c1cd6875a5246c7905a568387260",
+        strip_prefix = "golang.org/x/tools/go/vcs@v0.1.0-deprecated",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/tools/go/vcs/org_golang_x_tools_go_vcs-v0.1.0-deprecated.zip",
         ],
     )
     go_repository(
