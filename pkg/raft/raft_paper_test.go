@@ -109,7 +109,7 @@ func TestStartAsFollower(t *testing.T) {
 // every heartbeat interval, but it won't send a MsgHeartbeat.
 func TestLeaderBcastBeat(t *testing.T) {
 	// heartbeat interval
-	hi := 3
+	hi := int64(3)
 
 	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
 		func(t *testing.T, storeLivenessEnabled bool) {
@@ -128,7 +128,7 @@ func TestLeaderBcastBeat(t *testing.T) {
 				mustAppendEntry(r, pb.Entry{Index: uint64(i) + 1})
 			}
 
-			for i := 0; i < hi; i++ {
+			for i := int64(0); i < hi; i++ {
 				require.Empty(t, r.readMessages())
 				r.tick()
 			}
@@ -170,7 +170,7 @@ func TestCandidateStartNewElection(t *testing.T) {
 // Reference: section 5.2
 func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 	// election timeout
-	et := 10
+	et := int64(10)
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
 	case pb.StateFollower:
@@ -179,7 +179,7 @@ func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 		r.becomeCandidate()
 	}
 
-	for i := 1; i < 2*et; i++ {
+	for i := int64(1); i < 2*et; i++ {
 		r.tick()
 	}
 	r.advanceMessagesAfterAppend()
@@ -306,10 +306,10 @@ func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 // follower or candidate is randomized.
 // Reference: section 5.2
 func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
-	et := 10
+	et := int64(10)
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	timeouts := make(map[int]bool)
-	for round := 0; round < 50*et; round++ {
+	timeouts := make(map[int64]bool)
+	for round := int64(0); round < 50*et; round++ {
 		switch state {
 		case pb.StateFollower:
 			r.becomeFollower(r.Term+1, 2)
@@ -317,7 +317,7 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
 			r.becomeCandidate()
 		}
 
-		time := 0
+		time := int64(0)
 		for len(r.readMessages()) == 0 {
 			r.tick()
 			time++
@@ -346,7 +346,7 @@ func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
 // likelihood of split vote in the new election.
 // Reference: section 5.2
 func testNonleadersElectionTimeoutNonconflict(t *testing.T, state pb.StateType) {
-	et := 10
+	et := int64(10)
 	size := 5
 	rs := make([]*raft, size)
 	ids := idsBySize(size)
@@ -711,7 +711,7 @@ func TestVoteRequest(t *testing.T) {
 		})
 		r.readMessages()
 
-		for i := 1; i < r.electionTimeout*2; i++ {
+		for i := int64(1); i < r.electionTimeout*2; i++ {
 			r.tickElection()
 		}
 

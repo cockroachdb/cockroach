@@ -346,7 +346,7 @@ func TestLearnerElectionTimeout(t *testing.T) {
 
 	// n2 is learner. Learner should not start election even when times out.
 	setRandomizedElectionTimeout(n2, n2.electionTimeout)
-	for i := 0; i < n2.electionTimeout; i++ {
+	for i := int64(0); i < n2.electionTimeout; i++ {
 		n2.tick()
 	}
 
@@ -369,7 +369,7 @@ func TestLearnerPromotion(t *testing.T) {
 
 	// n1 should become leader
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := 0; i < n1.electionTimeout; i++ {
+	for i := int64(0); i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 	n1.advanceMessagesAfterAppend()
@@ -385,7 +385,7 @@ func TestLearnerPromotion(t *testing.T) {
 
 	// n2 start election, should become leader
 	setRandomizedElectionTimeout(n2, n2.electionTimeout)
-	for i := 0; i < n2.electionTimeout; i++ {
+	for i := int64(0); i < n2.electionTimeout; i++ {
 		n2.tick()
 	}
 	n2.advanceMessagesAfterAppend()
@@ -635,7 +635,7 @@ func TestLearnerLogReplication(t *testing.T) {
 	n2.becomeFollower(1, None)
 
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := 0; i < n1.electionTimeout; i++ {
+	for i := int64(0); i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 	n1.advanceMessagesAfterAppend()
@@ -1057,7 +1057,7 @@ func TestCommit(t *testing.T) {
 
 func TestPastElectionTimeout(t *testing.T) {
 	tests := []struct {
-		elapse       int
+		elapse       int64
 		wprobability float64
 		round        bool
 	}{
@@ -1546,7 +1546,7 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 
 	// trigger campaign in isolated c
 	c.resetRandomizedElectionTimeout()
-	for i := 0; i < c.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < c.randomizedElectionTimeout; i++ {
 		c.tick()
 	}
 	c.advanceMessagesAfterAppend()
@@ -1665,7 +1665,7 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 	sm.becomeCandidate()
 	sm.becomeLeader()
 
-	for i := 0; i < sm.electionTimeout+1; i++ {
+	for i := int64(0); i < sm.electionTimeout+1; i++ {
 		sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp, Term: sm.Term})
 		sm.tick()
 	}
@@ -1681,7 +1681,7 @@ func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
 	sm.becomeCandidate()
 	sm.becomeLeader()
 
-	for i := 0; i < sm.electionTimeout+1; i++ {
+	for i := int64(0); i < sm.electionTimeout+1; i++ {
 		sm.tick()
 	}
 
@@ -1705,7 +1705,7 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(a, b, c)
 	setRandomizedElectionTimeout(b, b.electionTimeout+1)
 
-	for i := 0; i < b.electionTimeout; i++ {
+	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -1719,7 +1719,7 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 	assert.Equal(t, pb.StateCandidate, c.state)
 
 	// Letting b's electionElapsed reach to electionTimeout
-	for i := 0; i < b.electionTimeout; i++ {
+	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -1757,10 +1757,10 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 	// because the value might be reset to electionTimeout since the last state changes
 	setRandomizedElectionTimeout(a, a.electionTimeout+1)
 	setRandomizedElectionTimeout(b, b.electionTimeout+2)
-	for i := 0; i < a.electionTimeout; i++ {
+	for i := int64(0); i < a.electionTimeout; i++ {
 		a.tick()
 	}
-	for i := 0; i < b.electionTimeout; i++ {
+	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -1790,7 +1790,7 @@ func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(a, b, c)
 	setRandomizedElectionTimeout(b, b.electionTimeout+1)
 
-	for i := 0; i < b.electionTimeout; i++ {
+	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -1836,7 +1836,7 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 
 	require.False(t, b.promotable())
 
-	for i := 0; i < b.electionTimeout; i++ {
+	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -1884,7 +1884,7 @@ func TestDisruptiveFollower(t *testing.T) {
 	// election timeouts (e.g. multi-datacenter deploy)
 	// Or leader messages are being delayed while ticks elapse
 	setRandomizedElectionTimeout(n3, n3.electionTimeout+2)
-	for i := 0; i < n3.randomizedElectionTimeout-1; i++ {
+	for i := int64(0); i < n3.randomizedElectionTimeout-1; i++ {
 		n3.tick()
 	}
 
@@ -2229,7 +2229,7 @@ func TestSendAppendForProgressProbeStoreLivenessDisabled(t *testing.T) {
 		}
 
 		// do a heartbeat
-		for j := 0; j < r.heartbeatTimeout; j++ {
+		for j := int64(0); j < r.heartbeatTimeout; j++ {
 			r.tick()
 		}
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
@@ -2287,7 +2287,7 @@ func TestSendAppendForProgressProbeStoreLivenessEnabled(t *testing.T) {
 		}
 
 		// The next heartbeat timeout will allow another message to be sent.
-		for j := 0; j < r.heartbeatTimeout; j++ {
+		for j := int64(0); j < r.heartbeatTimeout; j++ {
 			r.tick()
 		}
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
@@ -2370,7 +2370,7 @@ func TestRestore(t *testing.T) {
 	assert.Equal(t, s.snap.Metadata.ConfState.Voters, sm.trk.VoterNodes())
 
 	require.False(t, sm.restore(s))
-	for i := 0; i < sm.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < sm.randomizedElectionTimeout; i++ {
 		sm.tick()
 	}
 	assert.Equal(t, pb.StateFollower, sm.state)
@@ -2432,7 +2432,7 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 	require.False(t, sm.restore(s))
 
 	// It should not campaign before actually applying data.
-	for i := 0; i < sm.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < sm.randomizedElectionTimeout; i++ {
 		sm.tick()
 	}
 	assert.Equal(t, pb.StateFollower, sm.state)
@@ -2508,7 +2508,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	nt := newNetwork(n1, n2)
 
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := 0; i < n1.electionTimeout; i++ {
+	for i := int64(0); i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 
@@ -2747,7 +2747,7 @@ func TestAddNodeCheckQuorum(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	for i := 0; i < r.electionTimeout-1; i++ {
+	for i := int64(0); i < r.electionTimeout-1; i++ {
 		r.tick()
 	}
 
@@ -2761,7 +2761,7 @@ func TestAddNodeCheckQuorum(t *testing.T) {
 
 	// After another electionTimeout ticks without hearing from node 2,
 	// node 1 should step down.
-	for i := 0; i < r.electionTimeout; i++ {
+	for i := int64(0); i < r.electionTimeout; i++ {
 		r.tick()
 	}
 
@@ -3032,7 +3032,7 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term.
-	for i := 0; i < lead.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < lead.randomizedElectionTimeout; i++ {
 		lead.tick()
 	}
 	nt.send(lead.readMessages()...)
@@ -3045,7 +3045,7 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 // even the current leader is still under its leader lease.
 func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	for i := 1; i < 4; i++ {
+	for i := int64(1); i < 4; i++ {
 		r := nt.peers[pb.PeerID(i)].(*raft)
 		r.checkQuorum = true
 		setRandomizedElectionTimeout(r, r.electionTimeout+i)
@@ -3053,7 +3053,7 @@ func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 
 	// Letting peer 2 electionElapsed reach to timeout so that it can vote for peer 1
 	f := nt.peers[2].(*raft)
-	for i := 0; i < f.electionTimeout; i++ {
+	for i := int64(0); i < f.electionTimeout; i++ {
 		f.tick()
 	}
 
@@ -3176,12 +3176,12 @@ func TestLeaderTransferTimeout(t *testing.T) {
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := 0; i < lead.heartbeatTimeout; i++ {
+	for i := int64(0); i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
+	for i := int64(0); i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 
@@ -3356,13 +3356,13 @@ func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := 0; i < lead.heartbeatTimeout; i++ {
+	for i := int64(0); i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 	// Second transfer leadership request to the same node.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 
-	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
+	for i := int64(0); i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 
@@ -3459,7 +3459,7 @@ func TestLeaderTransferStaleFollower(t *testing.T) {
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term. Node 3 does not hear about this
 	// either.
-	for i := 0; i < n1.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < n1.randomizedElectionTimeout; i++ {
 		n1.tick()
 	}
 	nt.send(nt.filter(n1.readMessages())...)
@@ -3819,7 +3819,7 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 	})
 
 	// Trigger campaign in node 2
-	for i := 0; i < n2.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < n2.randomizedElectionTimeout; i++ {
 		n2.tick()
 	}
 	// It's still follower because committed conf change is not applied.
@@ -3839,7 +3839,7 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 
 	// Advance apply on node 1 and re-establish leadership.
 	nextEnts(n1, nt.storage[1])
-	for i := 0; i < n1.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < n1.randomizedElectionTimeout; i++ {
 		n1.tick()
 	}
 	nt.send(n1.readMessages()...)
@@ -4308,13 +4308,13 @@ func idsBySize(size int) []pb.PeerID {
 // setRandomizedElectionTimeout set up the value by caller instead of choosing
 // by system, in some test scenario we need to fill in some expected value to
 // ensure the certainty
-func setRandomizedElectionTimeout(r *raft, v int) {
+func setRandomizedElectionTimeout(r *raft, v int64) {
 	r.randomizedElectionTimeout = v
 }
 
 // SetRandomizedElectionTimeout is like setRandomizedElectionTimeout, but
 // exported for use by tests that are not in the raft package, using RawNode.
-func SetRandomizedElectionTimeout(r *RawNode, v int) {
+func SetRandomizedElectionTimeout(r *RawNode, v int64) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
@@ -4340,7 +4340,7 @@ func withFortificationDisabled() testConfigModifierOpt {
 }
 
 func newTestConfig(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
 ) *Config {
 	modifiers := testConfigModifiers{}
 	for _, opt := range opts {
@@ -4387,13 +4387,13 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 }
 
 func newTestRaft(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	return newRaft(newTestConfig(id, election, heartbeat, storage, opts...))
 }
 
 func newTestLearnerRaft(
-	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	return newRaft(cfg)
@@ -4401,7 +4401,7 @@ func newTestLearnerRaft(
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(id pb.PeerID, election, heartbeat int, storage Storage) *RawNode {
+func newTestRawNode(id pb.PeerID, election, heartbeat int64, storage Storage) *RawNode {
 	cfg := newTestConfig(id, election, heartbeat, storage)
 	rn, err := NewRawNode(cfg)
 	if err != nil {
