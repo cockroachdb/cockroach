@@ -33,8 +33,17 @@ import (
 // AddImmediateGCZoneConfig set the GC TTL to 0 for the given table ID. One must
 // make sure to disable strict GC TTL enforcement when using this.
 func AddImmediateGCZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
+	return UpdateGCZoneConfig(sqlDB, id, 0)
+}
+
+// UpdateGCZoneConfig sets the GC TTL to a custom value for the given table ID.
+// If setting the value to 0, one must make sure to disable strict GC TTL
+// enforcement when using this.
+func UpdateGCZoneConfig(
+	sqlDB *gosql.DB, id descpb.ID, ttlSeconds int32,
+) (zonepb.ZoneConfig, error) {
 	cfg := zonepb.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0
+	cfg.GC.TTLSeconds = ttlSeconds
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		return cfg, err
