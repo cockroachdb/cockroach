@@ -852,7 +852,7 @@ func (m *WALFailoverMode) String() string {
 	return redact.StringWithoutMarkers(m)
 }
 
-// SafeFormat implements the refact.SafeFormatter interface.
+// SafeFormat implements the redact.SafeFormatter interface.
 func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch *m {
 	case WALFailoverDefault:
@@ -905,7 +905,7 @@ func (c *WALFailoverConfig) String() string {
 	return redact.StringWithoutMarkers(c)
 }
 
-// SafeFormat implements the refact.SafeFormatter interface.
+// SafeFormat implements the redact.SafeFormatter interface.
 func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch c.Mode {
 	case WALFailoverDefault:

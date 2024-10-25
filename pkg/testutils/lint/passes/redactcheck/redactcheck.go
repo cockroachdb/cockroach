@@ -141,6 +141,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Epoch":  {},
 						"PeerID": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/raft/tracker": {
+						"StateType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/repstream/streampb": {
 						"StreamID": {},
 					},

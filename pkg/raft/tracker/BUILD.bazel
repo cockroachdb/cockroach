@@ -19,6 +19,7 @@ go_library(
         "//pkg/raft/raftstoreliveness",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_exp//maps",
     ],
 )
@@ -39,6 +40,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
