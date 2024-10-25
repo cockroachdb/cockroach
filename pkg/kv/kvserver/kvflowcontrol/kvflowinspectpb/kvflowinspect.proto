@@ -72,6 +72,13 @@ message Handle {
 message ConnectedStream {
   Stream stream = 1 [(gogoproto.nullable) = false];
   repeated TrackedDeduction tracked_deductions = 2 [(gogoproto.nullable) = false];
+  // TotalEvalDeductedTokens represents the total number of tokens deducted for
+  // evaluation, for this connected stream. Only populated on versions >= 24.3.
+  int64 total_eval_deducted_tokens = 3;
+  // TotalSendDeductedTokens represents the total number of tokens deducted
+  // before sending, for this connected stream. Only populated on versions >=
+  // 24.3.
+  int64 total_send_deducted_tokens = 4;
 }
 
 // Stream represents a given kvflowcontrol.Stream and the number of tokens

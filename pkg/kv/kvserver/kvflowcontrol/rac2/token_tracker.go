@@ -163,12 +163,14 @@ func (t *Tracker) tokensGE(index uint64) [raftpb.NumPriorities]kvflowcontrol.Tok
 
 // Inspect returns a snapshot of all tracked token deductions. It's used to
 // power /inspectz-style debugging pages.
-func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
+func (t *Tracker) Inspect() ([]kvflowinspectpb.TrackedDeduction, kvflowcontrol.Tokens) {
 	var res []kvflowinspectpb.TrackedDeduction
+	var totalTokens kvflowcontrol.Tokens
 	for pri := range t.tracked {
 		n := t.tracked[pri].Length()
 		for i := 0; i < n; i++ {
 			deduction := t.tracked[pri].At(i)
+			totalTokens += deduction.tokens
 			res = append(res, kvflowinspectpb.TrackedDeduction{
 				Tokens: int64(deduction.tokens),
 				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
@@ -179,5 +181,5 @@ func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
 			})
 		}
 	}
-	return res
+	return res, totalTokens
 }
