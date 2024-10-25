@@ -3099,6 +3099,31 @@ func TestLeaderTransferToSlowFollower(t *testing.T) {
 	checkLeaderTransferState(t, lead, pb.StateFollower, 3)
 }
 
+func TestLeaderTransferToCandidate(t *testing.T) {
+	nt := newNetworkWithConfig(preVoteConfigWithFortificationDisabled, nil, nil, nil)
+	n3 := nt.peers[3].(*raft)
+
+	// Elect node 1 as the leader of term 1.
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	require.Equal(t, uint64(1), n3.Term)
+
+	// Isolate node 3 so that it decides to become a pre-candidate.
+	nt.isolate(3)
+	for i := 0; i < n3.randomizedElectionTimeout; i++ {
+		nt.tick(n3)
+	}
+	require.Equal(t, pb.StatePreCandidate, n3.state)
+	require.Equal(t, uint64(1), n3.Term)
+
+	// Reconnect node 3 and initiate a transfer of leadership from node 1 to node
+	// 3, all before node 3 steps back to a follower. This will instruct node 3 to
+	// call an election at the next term, which it can and does win.
+	nt.recover()
+	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	require.Equal(t, pb.StateLeader, n3.state)
+	require.Equal(t, uint64(2), n3.Term)
+}
+
 func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
