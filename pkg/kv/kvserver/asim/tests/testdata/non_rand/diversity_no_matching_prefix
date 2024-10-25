@@ -1,0 +1,110 @@
+gen_cluster nodes=9
+----
+
+set_locality node=1 locality=region=aws-west-1,zone=us-west-1a
+----
+
+set_locality node=2 locality=region=aws-west-1,zone=us-west-1b
+----
+
+set_locality node=3 locality=region=aws-west-1,zone=us-west-1c
+----
+
+set_locality node=4 locality=region=aws-west-2,zone=us-west-2a
+----
+
+set_locality node=5 locality=region=aws-west-2,zone=us-west-2b
+----
+
+set_locality node=6 locality=region=aws-west-2,zone=us-west-2c
+----
+
+set_locality node=7 locality=region=aws-east-1,zone=us-east-1a
+----
+
+set_locality node=8 locality=region=aws-east-1,zone=us-east-1b
+----
+
+set_locality node=9 locality=region=aws-east-1,zone=us-east-1c
+----
+
+gen_ranges ranges=900 repl_factor=3 placement_skew=true
+----
+
+eval duration=30m seed=42
+----
+OK
+
+plot stat=replicas
+----
+----
+
+ 900 ┼─╮╮
+ 840 ┤ ╰───╮
+ 780 ┤     ╰─╮╮
+ 720 ┤       ╰───╮╮
+ 660 ┤           ╰──╮╮
+ 600 ┤              ╰──╮╮
+ 540 ┤                 ╰───╮
+ 480 ┤                    ╰╰─╮╮
+ 420 ┤                       ╰───╮
+ 360 ┤                           ╰───╮
+ 300 ┤                            ╭──────────────────────────────────────────────────
+ 240 ┤                      ╭─────╯╯
+ 180 ┤               ╭──────╯
+ 120 ┤         ╭─────╯╯
+  60 ┤   ╭─────╯
+   0 ┼───╯
+                                          replicas
+----
+----
+
+plot stat=leases
+----
+----
+
+ 900 ┼──╮
+ 840 ┤  ╰──╮
+ 780 ┤     ╰──╮
+ 720 ┤        ╰───╮
+ 660 ┤            ╰──╮
+ 600 ┤               ╰──╮
+ 540 ┤                  ╰──╮
+ 480 ┤                     ╰──╮
+ 420 ┤                        ╰──╮
+ 360 ┤                           ╰───╮
+ 300 ┤                               ╰──╮
+ 240 ┤                                  ╰──╮
+ 180 ┤                                     ╰─╮
+ 120 ┤                       ╭───────────────────────────────────────────────────────
+  60 ┤        ╭╭─────────────╯───────╯─╯ ╭────╯╯
+   0 ┼─────────╯╯─╯──────────────────────╯╯
+                                           leases
+----
+----
+
+topology
+----
+aws-east-1
+  us-east-1a
+  │ └── [7]
+  us-east-1b
+  │ └── [8]
+  us-east-1c
+  │ └── [9]
+aws-west-1
+  us-west-1a
+  │ └── [1]
+  us-west-1b
+  │ └── [2]
+  us-west-1c
+  │ └── [3]
+aws-west-2
+  us-west-2a
+    └── [4]
+  us-west-2b
+    └── [5]
+  us-west-2c
+    └── [6]
+
+# vim:ft=sh
