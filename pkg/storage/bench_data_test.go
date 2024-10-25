@@ -210,7 +210,7 @@ var _ initialState = mvccBenchData{}
 func (d mvccBenchData) Key() []string {
 	key := []string{
 		"mvcc",
-		fmt.Sprintf("fmtver_%d", previousReleaseFormatMajorVersion),
+		fmt.Sprintf("cv_%s", clusterversion.PreviousRelease.Version()),
 		fmt.Sprintf("numKeys_%d", d.numKeys),
 		fmt.Sprintf("numVersions_%d", d.numVersions),
 		fmt.Sprintf("valueBytes_%d", d.valueBytes),
@@ -428,7 +428,7 @@ var _ initialState = mvccImportedData{}
 func (i mvccImportedData) Key() []string {
 	key := []string{
 		"mvcc",
-		fmt.Sprintf("fmtver_%d", previousReleaseFormatMajorVersion),
+		fmt.Sprintf("cv_%s", clusterversion.PreviousRelease.Version()),
 		fmt.Sprintf("streak_%d", i.streakBound),
 		fmt.Sprintf("keys_%d", i.keyCount),
 		fmt.Sprintf("valueBytes_%d", i.valueBytes),
