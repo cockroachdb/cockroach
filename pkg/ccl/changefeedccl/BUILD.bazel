@@ -226,6 +226,7 @@ go_test(
         "scheduled_changefeed_test.go",
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
+        "sink_bench_test.go",
         "sink_cloudstorage_test.go",
         "sink_kafka_connection_test.go",
         "sink_kafka_v2_test.go",
