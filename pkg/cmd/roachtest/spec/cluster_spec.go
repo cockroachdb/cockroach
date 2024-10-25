@@ -125,6 +125,7 @@ type ClusterSpec struct {
 		MachineType    string
 		MinCPUPlatform string
 		VolumeType     string
+		VolumeCount    int // volume count is only supported for GCE. This can be moved up if we start supporting other clouds
 		Zones          string
 	} `cloud:"gce"`
 
@@ -237,6 +238,7 @@ func getGCEOpts(
 	minCPUPlatform string,
 	arch vm.CPUArch,
 	volumeType string,
+	volumeCount int,
 	useSpot bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
@@ -249,6 +251,9 @@ func getGCEOpts(
 	}
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
+	}
+	if volumeCount != 0 {
+		opts.PDVolumeCount = volumeCount
 	}
 	opts.SSDCount = localSSDCount
 	if localSSD && localSSDCount > 0 {
@@ -461,11 +466,11 @@ func (s *ClusterSpec) RoachprodOpts(
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
 		)
 		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, s.VolumeSize)
