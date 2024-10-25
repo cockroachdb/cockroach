@@ -1145,7 +1145,7 @@ func (r *raft) tickElection() {
 		r.electionElapsed++
 	}
 
-	if r.promotable() && r.pastElectionTimeout() {
+	if r.pastElectionTimeout() {
 		r.electionElapsed = 0
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
@@ -1306,7 +1306,7 @@ func (r *raft) hup(t CampaignType) {
 		return
 	}
 	if !r.promotable() {
-		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		r.logger.Infof("%x is unpromotable and can not campaign", r.id)
 		return
 	}
 	// NB: The leader is allowed to bump its term by calling an election. Note that
