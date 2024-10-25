@@ -4463,9 +4463,29 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
-	}), nil
+	})
+
+	// When altering a function, the SQL must specify the types of each parameter.
+	// If the specified types differ from the actual function’s types, the statement
+	// will fail with 'function x does not exist'. For functions with CHAR/CHAR(1)
+	// parameters, this generator includes the type name as BPCHAR. The server
+	// accepts this discrepancy if it has the fix from #129007, which has been
+	// backported to all supported releases except 23.1. On 23.1, this will result
+	// in an "undefined function" error. For more details, see #133016.
+	// TODO(spilchen): Remove this check once mixed-version tests against 23.1 no longer happens.
+	olderThanV241, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V24_1.Version()) // 24.1 is the minimum, but workload can run against 23.1 server
+	if err != nil {
+		return nil, err
+	}
+	if olderThanV241 && strings.Contains(opStmt.sql, "BPCHAR") {
+		opStmt.potentialExecErrors.add(pgcode.UndefinedFunction)
+	}
+	return opStmt, nil
 }
 
 func (og *operationGenerator) alterFunctionSetSchema(
