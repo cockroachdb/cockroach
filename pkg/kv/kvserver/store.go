@@ -1156,18 +1156,20 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig      roachpb.SpanConfig
-	Settings               *cluster.Settings
-	Clock                  *hlc.Clock
-	Gossip                 *gossip.Gossip
-	DB                     *kv.DB
-	NodeLiveness           *liveness.NodeLiveness
-	StorePool              *storepool.StorePool
-	Transport              *RaftTransport
+	DefaultSpanConfig roachpb.SpanConfig
+	Settings          *cluster.Settings
+	Clock             *hlc.Clock
+	Gossip            *gossip.Gossip
+	DB                *kv.DB
+	NodeLiveness      *liveness.NodeLiveness
+	StorePool         *storepool.StorePool
+	Transport         *RaftTransport
+
 	StoreLivenessTransport *storeliveness.Transport
-	NodeDialer             *nodedialer.Dialer
-	RPCContext             *rpc.Context
-	RangeDescriptorCache   *rangecache.RangeCache
+
+	NodeDialer           *nodedialer.Dialer
+	RPCContext           *rpc.Context
+	RangeDescriptorCache *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -4096,6 +4098,12 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 	if s.ctSender != nil {
 		s.ctSender.UnregisterLeaseholder(ctx, s.StoreID(), rangeID)
 	}
+}
+
+// TestingStoreLivenessMessageHandler returns the store's store liveness
+// message handler for testing purposes.
+func (s *Store) TestingStoreLivenessMessageHandler() storeliveness.MessageHandler {
+	return s.storeLiveness.(*storeliveness.SupportManager)
 }
 
 // getRootMemoryMonitorForKV returns a BytesMonitor to use for KV memory
