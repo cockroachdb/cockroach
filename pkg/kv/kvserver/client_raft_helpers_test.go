@@ -437,7 +437,7 @@ func dropRaftMessagesFrom(
 		dropFrom[id] = true
 		rep, ok := desc.GetReplicaDescriptorByID(id)
 		if !ok {
-			t.Fatalf("replica %d not found in range descriptor %v", id, desc)
+			t.Fatalf("replica %d not found in range descriptor: %v", id, desc)
 		}
 		t.Logf("from store %d; adding replica %s to drop list", store.StoreID(), id)
 		t.Logf("from store %d; adding store %s to drop list", store.StoreID(), rep.StoreID)
@@ -498,6 +498,10 @@ func alwaysRunWithLeaderLeases(ctx context.Context, st *cluster.Settings) {
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
 	kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, true)
 	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+	// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/118435 we
+	// can remove this. Leader leases require us to reject lease requests on
+	// replicas that are not the leader.
+	kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
 }
 
 func alwaysRunWithEpochLeases(ctx context.Context, st *cluster.Settings) {
