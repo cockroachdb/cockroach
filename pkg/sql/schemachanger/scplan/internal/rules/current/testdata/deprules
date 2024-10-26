@@ -3075,6 +3075,60 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - toAbsent($dependents-Target, $trigger-Target)
+    - $dependents-Node[CurrentStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - transient($dependents-Target, $trigger-Target)
+    - $dependents-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - $dependents-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $dependents-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $trigger-Target[TargetStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - $dependents-Target[TargetStatus] = ABSENT
+    - $dependents-Node[CurrentStatus] = ABSENT
+    - $trigger-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
 - name: dependents removed right before simple constraint
   from: dependents-Node
   kind: SameStagePrecedence
@@ -4387,6 +4441,86 @@ deprules
     - $index-Node[CurrentStatus] = BACKFILLED
     - joinTargetNode($temp, $temp-Target, $temp-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: trigger dependents exist before trigger becomes public
+  from: dependent-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnIndexID($dependent, $trigger, $table-id, $trigger-id)
+    - ToPublicOrTransient($dependent-Target, $trigger-Target)
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - toAbsent($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - transient($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $dependent-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - $trigger-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $dependent-Target[TargetStatus] = ABSENT
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - $trigger-Target[TargetStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $dependent-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger public before its dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnTriggerID($trigger, $dependent, $table-id, $trigger-id)
+    - ToPublicOrTransient($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 
 deprules
 ----
@@ -7465,6 +7599,60 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - toAbsent($dependents-Target, $trigger-Target)
+    - $dependents-Node[CurrentStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - transient($dependents-Target, $trigger-Target)
+    - $dependents-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - $dependents-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $dependents-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $trigger-Target[TargetStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: dependents removed before trigger
+  from: dependents-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependents[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnConstraintID($dependents, $trigger, $table-id, $trigger-id)
+    - $dependents-Target[TargetStatus] = ABSENT
+    - $dependents-Node[CurrentStatus] = ABSENT
+    - $trigger-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
 - name: dependents removed right before simple constraint
   from: dependents-Node
   kind: SameStagePrecedence
@@ -8777,3 +8965,83 @@ deprules
     - $index-Node[CurrentStatus] = BACKFILLED
     - joinTargetNode($temp, $temp-Target, $temp-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: trigger dependents exist before trigger becomes public
+  from: dependent-Node
+  kind: Precedence
+  to: trigger-Node
+  query:
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - $trigger[Type] = '*scpb.Trigger'
+    - joinOnIndexID($dependent, $trigger, $table-id, $trigger-id)
+    - ToPublicOrTransient($dependent-Target, $trigger-Target)
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - toAbsent($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - transient($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $dependent-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - $trigger-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $dependent-Target[TargetStatus] = ABSENT
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger no longer public before dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnConstraintID($trigger, $dependent, $table-id, $trigger-id)
+    - $trigger-Target[TargetStatus] = ABSENT
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $dependent-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger public before its dependents
+  from: trigger-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $trigger[Type] = '*scpb.Trigger'
+    - $dependent[Type] IN ['*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen']
+    - joinOnTriggerID($trigger, $dependent, $table-id, $trigger-id)
+    - ToPublicOrTransient($trigger-Target, $dependent-Target)
+    - $trigger-Node[CurrentStatus] = PUBLIC
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
