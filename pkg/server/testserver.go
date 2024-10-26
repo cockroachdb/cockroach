@@ -542,6 +542,14 @@ func (ts *testServer) RaftTransport() interface{} {
 	return nil
 }
 
+// StoreLivenessTransport is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) StoreLivenessTransport() interface{} {
+	if ts != nil {
+		return ts.storelivenessTransport
+	}
+	return nil
+}
+
 // AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
