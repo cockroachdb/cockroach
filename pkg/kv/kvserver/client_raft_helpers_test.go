@@ -14,8 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -226,8 +229,8 @@ func (h *testClusterStoreRaftMessageHandler) HandleDelegatedSnapshot(
 	return store.HandleDelegatedSnapshot(ctx, req)
 }
 
-// testClusterPartitionedRange is a convenient abstraction to create a range on a node
-// in a multiTestContext which can be partitioned and unpartitioned.
+// testClusterPartitionedRange is a convenient abstraction to create a range on
+// a node in a multiTestContext which can be partitioned and unpartitioned.
 type testClusterPartitionedRange struct {
 	rangeID roachpb.RangeID
 	mu      struct {
@@ -409,32 +412,46 @@ func (pr *testClusterPartitionedRange) extend(
 }
 
 // dropRaftMessagesFrom sets up a Raft message handler on the given server that
-// drops inbound Raft messages from the given range and replica IDs. Outbound
-// messages are not affected, and must be dropped on the receiver.
+// drops inbound Raft messages from the given range and replica IDs. In addition
+// to raft messages, StoreLiveness messages from the replica IDs' store are also
+// dropped. Outbound messages are not affected, and must be dropped on the
+// receiver.
 //
 // If cond is given, messages are only dropped when the atomic bool is true.
 // Otherwise, messages are always dropped.
 //
-// This will replace the previous message handler, if any.
+// This will replace the previous message handlers, if any.
 func dropRaftMessagesFrom(
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	rangeID roachpb.RangeID,
+	desc roachpb.RangeDescriptor,
 	fromReplicaIDs []roachpb.ReplicaID,
 	cond *atomic.Bool,
 ) {
-	dropFrom := map[roachpb.ReplicaID]bool{}
-	for _, id := range fromReplicaIDs {
-		dropFrom[id] = true
-	}
-	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
-		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
-	}
-
 	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
+
+	dropFrom := map[roachpb.ReplicaID]bool{}
+	dropFromStore := map[roachpb.StoreID]bool{}
+	for _, id := range fromReplicaIDs {
+		dropFrom[id] = true
+		rep, ok := desc.GetReplicaDescriptorByID(id)
+		if !ok {
+			t.Fatalf("replica %d not found in range descriptor %v", id, desc)
+		}
+		t.Logf("from store %d; adding replica %s to drop list", store.StoreID(), id)
+		t.Logf("from store %d; adding store %s to drop list", store.StoreID(), rep.StoreID)
+		dropFromStore[rep.StoreID] = true
+	}
+	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
+		return rID == desc.RangeID && (cond == nil || cond.Load()) && dropFrom[from]
+	}
+	shouldDropFromStore := func(from roachpb.StoreID) bool {
+		return (cond == nil || cond.Load()) && dropFromStore[from]
+	}
+
 	srv.RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-		rangeID:                    rangeID,
+		rangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: store,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
@@ -445,6 +462,18 @@ func dropRaftMessagesFrom(
 			},
 			dropResp: func(resp *kvserverpb.RaftMessageResponse) bool {
 				return shouldDrop(resp.RangeID, resp.FromReplica.ReplicaID)
+			},
+		},
+	})
+	srv.StoreLivenessTransport().(*storeliveness.Transport).ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
+		MessageHandler: store.TestingStoreLivenessMessageHandler(),
+		UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+			DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
+				drop := shouldDropFromStore(msg.From.StoreID)
+				if drop {
+					t.Logf("dropping msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
+				}
+				return drop
 			},
 		},
 	})
@@ -461,4 +490,12 @@ func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[stri
 		}
 	}
 	return diffMap
+}
+
+// alwaysRunWithLeaderLeases configures settings to ensure the caller is always
+// using leader leases, regardless of any metamorphic constants.
+func alwaysRunWithLeaderLeases(ctx context.Context, st *cluster.Settings) {
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+	kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, true)
+	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
 }
