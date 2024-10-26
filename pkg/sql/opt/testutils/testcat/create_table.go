@@ -778,6 +778,9 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		kind = cat.DeleteOnly
 		visibility = cat.Inaccessible
 	}
+	if def.Hidden && visibility == cat.Visible {
+		visibility = cat.Hidden
+	}
 
 	var defaultExpr, computedExpr, onUpdateExpr, generatedAsIdentitySequenceOption *string
 	if def.DefaultExpr.Expr != nil {
