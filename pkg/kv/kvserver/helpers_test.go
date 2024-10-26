@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,6 +53,10 @@ import (
 
 func (s *Store) Transport() *RaftTransport {
 	return s.cfg.Transport
+}
+
+func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
+	return s.cfg.StoreLivenessTransport
 }
 
 func (s *Store) FindTargetAndTransferLease(
