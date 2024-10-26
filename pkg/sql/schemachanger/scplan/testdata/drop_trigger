@@ -1,0 +1,58 @@
+setup
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int);
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+CREATE TRIGGER t1_tg_2 AFTER INSERT OR UPDATE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+
+ops
+DROP TRIGGER t1_tg ON defaultdb.t1;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+
+deps
+DROP TRIGGER t1_tg ON defaultdb.t1;
+----
+- from: [TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT]
+  to:   [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger removed before dependents
