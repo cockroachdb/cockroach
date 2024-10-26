@@ -1,0 +1,181 @@
+setup
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int);
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+----
+
+ops
+CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+StatementPhase stage 1 of 1 with 8 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerName
+      Name:
+        Name: t1_tg
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerEnabled
+      Enabled:
+        Enabled: true
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerTiming
+      Timing:
+        ActionTime: 1
+        ForEachRow: true
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerEvents
+      Events:
+        Events:
+        - type: 1
+          columnnames: []
+        - type: 2
+          columnnames: []
+        - type: 3
+          columnnames: []
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncArgs: []
+        FuncBody: |
+          BEGIN
+          RAISE NOTICE '%: old: %, new: %', tg_op, old, new;
+          RETURN COALESCE(new, old);
+          END;
+        FuncID: 105
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 104
+        TriggerID: 1
+        UsesRelationIDs: []
+        UsesRoutineIDs:
+        - 105
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 8 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerName
+      Name:
+        Name: t1_tg
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerEnabled
+      Enabled:
+        Enabled: true
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerTiming
+      Timing:
+        ActionTime: 1
+        ForEachRow: true
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerEvents
+      Events:
+        Events:
+        - type: 1
+          columnnames: []
+        - type: 2
+          columnnames: []
+        - type: 3
+          columnnames: []
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncArgs: []
+        FuncBody: |
+          BEGIN
+          RAISE NOTICE '%: old: %, new: %', tg_op, old, new;
+          RETURN COALESCE(new, old);
+          END;
+        FuncID: 105
+        TableID: 104
+        TriggerID: 1
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 104
+        TriggerID: 1
+        UsesRelationIDs: []
+        UsesRoutineIDs:
+        - 105
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+
+deps
+CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
