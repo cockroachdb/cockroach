@@ -856,9 +856,9 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	// requests and node liveness heartbeats still succeed.
 	partitioned := &atomic.Bool{}
 	partitioned.Store(true)
-	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n3, desc.RangeID, []roachpb.ReplicaID{1, 2}, partitioned)
+	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n3, desc, []roachpb.ReplicaID{1, 2}, partitioned)
 	t.Logf("partitioned n3 raft traffic from n1 and n2")
 
 	repl3.TripBreaker()
@@ -897,8 +897,8 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 
 	// Also partition n1 and n2 away from each other, and trip their breakers. All
 	// nodes are now completely partitioned away from each other.
-	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{2, 3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{1, 3}, partitioned)
+	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{2, 3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{1, 3}, partitioned)
 
 	repl1.TripBreaker()
 	repl2.TripBreaker()

@@ -1146,6 +1146,27 @@ func (tc *TestCluster) WaitForLeaseUpgrade(
 	return l
 }
 
+func (tc *TestCluster) WaitForLeaseUpgradeToLeaderLease(
+	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
+) roachpb.Lease {
+	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
+		"cluster configured to only use expiration leases")
+	require.True(t, kvserver.LeaderLeasesEnabled.Get(&tc.Server(0).ClusterSettings().SV),
+		"cluster isn't configured to use leader leases")
+	var l roachpb.Lease
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		l = li.Current()
+		if l.Type() == roachpb.LeaseExpiration {
+			return errors.Errorf("lease still an expiration based lease")
+		}
+		require.Equal(t, l.Type(), roachpb.LeaseLeader)
+		return nil
+	})
+	return l
+}
+
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
 func (tc *TestCluster) RemoveLeaseHolderOrFatal(
 	t serverutils.TestFataler,
