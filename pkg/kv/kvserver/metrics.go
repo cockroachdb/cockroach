@@ -3753,6 +3753,17 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
+
+	// Pre-initialize some category stats, so that metrics generation is
+	// deterministic.
+	// TODO(radu): #133507 tracks fixing this properly.
+	for _, category := range []sstable.Category{
+		"batch-eval", "crdb-unknown", "mvcc-gc", "rangefeed",
+		"replication", "scan-regular"} {
+		cm := makePebbleCategorizedIterMetrics(category)
+		sm.categoryIterMetrics.metricsMap.Store(category, cm)
+		storeRegistry.AddMetricStruct(cm)
+	}
 	return sm
 }
 
