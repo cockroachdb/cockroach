@@ -676,7 +676,19 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCannotCommitWithoutNewTermEntry(t, storeLivenessEnabled)
+		})
+}
+
+func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
+	var cfg func(c *Config) = nil
+	if !storeLivenessEnabled {
+		cfg = fortificationDisabledConfig
+	}
+
+	tt := newNetworkWithConfig(cfg, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -695,8 +707,18 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 	// avoid committing ChangeTerm proposal
 	tt.ignore(pb.MsgApp)
 
-	// elect 2 as the new leader with term 2
+	// Elect 2 as the new leader with term 2.
+	if storeLivenessEnabled {
+		// We need to withdraw support of the current leader.
+		tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+	}
+
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// Restore the support state.
+		tt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
+	}
 
 	// no log entries from previous term should be committed
 	sm = tt.peers[2].(*raft)
@@ -4131,7 +4153,8 @@ type network struct {
 
 	// msgHook is called for each message sent. It may inspect the
 	// message and return true to send it or false to drop it.
-	msgHook func(pb.Message) bool
+	msgHook        func(pb.Message) bool
+	livenessFabric *raftstoreliveness.LivenessFabric
 }
 
 // newNetwork initializes a network from peers.
@@ -4150,13 +4173,15 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 
 	npeers := make(map[pb.PeerID]stateMachine, size)
 	nstorage := make(map[pb.PeerID]*MemoryStorage, size)
-
+	livenessFabric := raftstoreliveness.NewLivenessFabric()
 	for j, p := range peers {
 		id := peerAddrs[j]
+		livenessFabric.AddPeer(id)
 		switch v := p.(type) {
 		case nil:
 			nstorage[id] = newTestMemoryStorage(withPeers(peerAddrs...))
-			cfg := newTestConfig(id, 10, 1, nstorage[id])
+			cfg := newTestConfig(id, 10, 1, nstorage[id],
+				withStoreLiveness(livenessFabric.GetStoreLiveness(id)))
 			if configFunc != nil {
 				configFunc(cfg)
 			}
@@ -4192,10 +4217,11 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 		}
 	}
 	return &network{
-		peers:   npeers,
-		storage: nstorage,
-		dropm:   make(map[connem]float64),
-		ignorem: make(map[pb.MessageType]bool),
+		peers:          npeers,
+		storage:        nstorage,
+		dropm:          make(map[connem]float64),
+		ignorem:        make(map[pb.MessageType]bool),
+		livenessFabric: livenessFabric,
 	}
 }
 
