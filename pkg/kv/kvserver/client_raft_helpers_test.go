@@ -499,3 +499,10 @@ func alwaysRunWithLeaderLeases(ctx context.Context, st *cluster.Settings) {
 	kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, true)
 	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
 }
+
+func alwaysRunWithEpochLeases(ctx context.Context, st *cluster.Settings) {
+	// Only run the test with epoch based leases.
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 0.0)
+}
