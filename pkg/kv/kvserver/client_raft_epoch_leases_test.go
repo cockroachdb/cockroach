@@ -106,11 +106,11 @@ func TestRaftCheckQuorumEpochLeases(t *testing.T) {
 			// Set up dropping of inbound messages on n1 from n2,n3, but don't
 			// activate it yet.
 			var partitioned atomic.Bool
-			dropRaftMessagesFrom(t, tc.Servers[0], desc.RangeID, []roachpb.ReplicaID{2, 3}, &partitioned)
+			dropRaftMessagesFrom(t, tc.Servers[0], desc, []roachpb.ReplicaID{2, 3}, &partitioned)
 			if symmetric {
 				// Drop outbound messages from n1 to n2,n3 too.
-				dropRaftMessagesFrom(t, tc.Servers[1], desc.RangeID, []roachpb.ReplicaID{1}, &partitioned)
-				dropRaftMessagesFrom(t, tc.Servers[2], desc.RangeID, []roachpb.ReplicaID{1}, &partitioned)
+				dropRaftMessagesFrom(t, tc.Servers[1], desc, []roachpb.ReplicaID{1}, &partitioned)
+				dropRaftMessagesFrom(t, tc.Servers[2], desc, []roachpb.ReplicaID{1}, &partitioned)
 			}
 
 			// Make sure the lease is on n1 and that everyone has applied it.

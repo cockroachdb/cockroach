@@ -450,6 +450,7 @@ go_test(
         "//pkg/kv/kvserver/split",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/kv/kvserver/storeliveness",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/kv/kvserver/tenantrate",
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnwait",
