@@ -196,6 +196,7 @@ var DefaultPubKeyNames = []string{
 	"id_ed25519",
 	"id_ed25519_sk",
 	"id_dsa",
+	"google_compute_engine",
 }
 
 // SSHPublicKeyPath returns the path to the default public key expected by
