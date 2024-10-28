@@ -310,7 +310,7 @@ var TenantColumnsWithReplication = ResultColumns{
 	// The latest fully replicated time.
 	{Name: "replicated_time", Typ: types.TimestampTZ},
 	{Name: "replication_lag", Typ: types.Interval},
-	{Name: "cutover_time", Typ: types.Decimal},
+	{Name: "failover_time", Typ: types.Decimal},
 	{Name: "status", Typ: types.String},
 }
 

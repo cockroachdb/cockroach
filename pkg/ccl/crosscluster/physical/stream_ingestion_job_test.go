@@ -135,7 +135,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
 		"SET CLUSTER SETTING physical_replication.consumer.job_checkpoint_frequency = '100ms'",
 		"SET CLUSTER SETTING physical_replication.consumer.minimum_flush_interval = '10ms'",
-		"SET CLUSTER SETTING physical_replication.consumer.cutover_signal_poll_interval = '100ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.failover_signal_poll_interval = '100ms'",
 		"SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'",
 	} {
 		sqlA.Exec(t, s)

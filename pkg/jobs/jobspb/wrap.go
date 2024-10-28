@@ -102,13 +102,13 @@ var _ base.SQLInstanceID
 type ReplicationStatus uint8
 
 const (
-	InitializingReplication   ReplicationStatus = 0
-	CreatingInitialSplits     ReplicationStatus = 6
-	Replicating               ReplicationStatus = 1
-	ReplicationPaused         ReplicationStatus = 2
-	ReplicationPendingCutover ReplicationStatus = 3
-	ReplicationCuttingOver    ReplicationStatus = 4
-	ReplicationError          ReplicationStatus = 5
+	InitializingReplication    ReplicationStatus = 0
+	CreatingInitialSplits      ReplicationStatus = 6
+	Replicating                ReplicationStatus = 1
+	ReplicationPaused          ReplicationStatus = 2
+	ReplicationPendingFailover ReplicationStatus = 3
+	ReplicationFailingOver     ReplicationStatus = 4
+	ReplicationError           ReplicationStatus = 5
 )
 
 // String implements fmt.Stringer.
@@ -120,10 +120,10 @@ func (rs ReplicationStatus) String() string {
 		return "replicating"
 	case ReplicationPaused:
 		return "replication paused"
-	case ReplicationPendingCutover:
-		return "replication pending cutover"
-	case ReplicationCuttingOver:
-		return "replication cutting over"
+	case ReplicationPendingFailover:
+		return "replication pending failover"
+	case ReplicationFailingOver:
+		return "replication failing over"
 	case ReplicationError:
 		return "replication error"
 	case CreatingInitialSplits:

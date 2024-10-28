@@ -117,7 +117,7 @@ func completeIngestion(
 
 	msg := redact.Sprintf("completing the producer job %d in the source cluster",
 		details.StreamID)
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver, msg)
+	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 	evalContext := &execCtx.ExtendedEvalContext().Context
 	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
@@ -273,7 +273,7 @@ func ingestWithRetries(
 	if err != nil {
 		return err
 	}
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
+	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver,
 		"stream ingestion finished successfully")
 	return nil
 }
@@ -466,10 +466,10 @@ func maybeRevertToCutoverTimestamp(
 			shouldRevertToCutover = cutoverTimeIsEligibleForCutover(ctx, cutoverTimestamp, md.Progress)
 
 			if shouldRevertToCutover {
-				updateRunningStatusInternal(md, ju, jobspb.ReplicationCuttingOver,
+				updateRunningStatusInternal(md, ju, jobspb.ReplicationFailingOver,
 					fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTimestamp))
 			} else {
-				if streamIngestionProgress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+				if streamIngestionProgress.ReplicationStatus == jobspb.ReplicationFailingOver {
 					return errors.AssertionFailedf("cutover already started but cutover time %s is not eligible for cutover",
 						cutoverTimestamp)
 				}

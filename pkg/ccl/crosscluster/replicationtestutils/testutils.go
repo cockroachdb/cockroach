@@ -646,13 +646,13 @@ var defaultSrcClusterSetting = map[string]string{
 }
 
 var defaultDestClusterSetting = map[string]string{
-	`stream_replication.consumer_heartbeat_frequency`:      `'1s'`,
-	`stream_replication.job_checkpoint_frequency`:          `'100ms'`,
-	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
-	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
-	`jobs.registry.interval.adopt`:                         `'1s'`,
-	`spanconfig.reconciliation_job.checkpoint_interval`:    `'100ms'`,
-	`kv.rangefeed.enabled`:                                 `true`,
+	`stream_replication.consumer_heartbeat_frequency`:       `'1s'`,
+	`stream_replication.job_checkpoint_frequency`:           `'100ms'`,
+	`bulkio.stream_ingestion.minimum_flush_interval`:        `'10ms'`,
+	`bulkio.stream_ingestion.failover_signal_poll_interval`: `'100ms'`,
+	`jobs.registry.interval.adopt`:                          `'1s'`,
+	`spanconfig.reconciliation_job.checkpoint_interval`:     `'100ms'`,
+	`kv.rangefeed.enabled`:                                  `true`,
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {
