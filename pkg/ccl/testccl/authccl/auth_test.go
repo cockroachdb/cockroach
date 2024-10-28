@@ -6,12 +6,14 @@
 package authccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
 	"math"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -389,6 +393,49 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					return "ok " + dbName, nil
+
+				case "console_api_auth":
+					// Parse arguments.
+					authorizationHeader := ""
+					if td.HasArg("authorization") {
+						td.ScanArgs(t, "authorization", &authorizationHeader)
+					}
+					// Default the endpoint to `/_admin/v1/cluster` if not provided.
+					endpoint := apiconstants.AdminPrefix + "cluster"
+					if td.HasArg("path") {
+						td.ScanArgs(t, "path", &endpoint)
+					}
+					userName := ""
+					if td.HasArg("username") {
+						td.ScanArgs(t, "username", &userName)
+					}
+
+					// Get an unauthenticated client (without the session cookie) to test JWT auth.
+					client, err := s.GetUnauthenticatedHTTPClient()
+					require.NoError(t, err)
+
+					// Construct an HTTP request.
+					req, err := http.NewRequest(
+						"GET",
+						s.AdminURL().WithPath(endpoint).String(),
+						bytes.NewBuffer(nil),
+					)
+					require.NoError(t, err)
+					if authorizationHeader != "" {
+						req.Header.Set(authserver.AuthorizationHeader, authorizationHeader)
+					}
+					if userName != "" {
+						req.Header.Set(authserver.UsernameHeader, userName)
+					}
+
+					// Send the request and assert the response status code.
+					resp, err := client.Do(req)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					return strconv.Itoa(resp.StatusCode), nil
+
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),
 						`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, td.Input)
@@ -429,6 +476,7 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					return string(body), nil
+
 				default:
 					td.Fatalf(t, "unknown command: %s", td.Cmd)
 				}

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 )
@@ -81,11 +82,22 @@ type Server interface {
 	VerifyPasswordDBConsole(
 		ctx context.Context, userName username.SQLUsername, passwordStr string,
 	) (valid bool, expired bool, err error)
+
+	// VerifyJWT verifies the JWT for authenticating the request. An optional username may be provided
+	// if the JWT is likely to match multiple user identities.
+	// It returns three parameters:
+	// - a boolean indicating if the JWT is valid,
+	// - the username associated with the JWT (if validated), and
+	// - an error for any internal errors which prevented validation.
+	VerifyJWT(
+		ctx context.Context, jwtStr, usernameOptional string,
+	) (valid bool, userName string, err error)
 }
 
 type SQLServerInterface interface {
 	ExecutorConfig() *sql.ExecutorConfig
 	InternalExecutor() isql.Executor
+	PGServer() *pgwire.Server
 }
 
 type AuthMux interface {
