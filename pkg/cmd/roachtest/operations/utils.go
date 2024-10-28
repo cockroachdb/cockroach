@@ -95,6 +95,30 @@ func pickRandomTable(
 	return tableNames[rng.Intn(len(tableNames))]
 }
 
+func pickRandomRole(ctx context.Context, o operation.Operation, conn *gosql.DB) string {
+	rng, _ := randutil.NewPseudoRand()
+
+	roles, err := conn.QueryContext(ctx, "SELECT username FROM [SHOW ROLES]")
+	if err != nil {
+		o.Fatal(err)
+		return ""
+	}
+	var roleNames []string
+	for roles.Next() {
+		var name string
+		if err := roles.Scan(&name); err != nil {
+			o.Fatal(err)
+			return ""
+		}
+		roleNames = append(roleNames, name)
+	}
+	if len(roleNames) == 0 {
+		o.Fatalf("unexpected zero active roles found in cluster")
+		return ""
+	}
+	return roleNames[rng.Intn(len(roleNames))]
+}
+
 func drainNode(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, node option.NodeListOption,
 ) {

@@ -5,6 +5,7 @@ go_library(
     testonly = 1,
     srcs = [
         "add_column.go",
+        "add_database.go",
         "add_index.go",
         "backup_restore.go",
         "cluster_settings.go",
