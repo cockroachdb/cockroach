@@ -494,7 +494,7 @@ func SQL(
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, authMode, database, cmdArray)
 	}
 
-	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, database, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, database, cmdArray, true)
 	if err != nil {
 		return err
 	}
@@ -2459,7 +2459,7 @@ func StartJaeger(
 		}
 		_, err = c.ExecSQL(
 			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode(), "", /* database */
-			[]string{"-e", setupStmt},
+			[]string{"-e", setupStmt}, true,
 		)
 		if err != nil {
 			return err
