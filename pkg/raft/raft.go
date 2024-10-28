@@ -351,8 +351,6 @@ type raft struct {
 	// leadEpoch, if set, corresponds to the StoreLiveness epoch that this peer
 	// has supported the leader in. It's unset if the peer hasn't supported the
 	// current leader.
-	//
-	// TODO(arul): This should be populated when responding to a MsgFortify.
 	leadEpoch pb.Epoch
 	// leadTransferee, if set, is the id of the leader transfer target during a
 	// pending leadership transfer. The value is set while the outgoing leader
@@ -444,7 +442,6 @@ func newRaft(c *Config) *raft {
 
 	r := &raft{
 		id:                          c.ID,
-		lead:                        None,
 		isLearner:                   false,
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
@@ -818,7 +815,7 @@ func (r *raft) sendFortify(to pb.PeerID) {
 		// Doing so avoids a self-addressed message.
 		epoch, live := r.storeLiveness.SupportFor(r.lead)
 		if live {
-			r.leadEpoch = epoch
+			r.setLeadEpoch(epoch)
 			// The leader needs to persist the LeadEpoch durably before it can start
 			// supporting itself. We do so by sending a self-addressed
 			// MsgFortifyLeaderResp message so that it is added to the msgsAfterAppend
@@ -1033,10 +1030,7 @@ func (r *raft) reset(term uint64) {
 		// de-fortification.
 		assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
 			"should not be changing terms when supporting a fortified leader; leader exempted")
-		r.Term = term
-		r.Vote = None
-		r.lead = None
-		r.leadEpoch = 0
+		r.setTerm(term)
 	}
 
 	r.electionElapsed = 0
@@ -1061,6 +1055,51 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
+}
+
+func (r *raft) setTerm(term uint64) {
+	if term == r.Term {
+		return
+	}
+	assertTrue(term > r.Term, "term cannot regress")
+	r.Term = term
+	r.Vote = None
+	r.lead = None
+	r.leadEpoch = 0
+}
+
+func (r *raft) setVote(id pb.PeerID) {
+	if id == r.Vote {
+		return
+	}
+	assertTrue(r.Vote == None, "cannot change vote")
+	r.Vote = id
+}
+
+func (r *raft) setLead(lead pb.PeerID) {
+	if lead == r.lead {
+		return
+	}
+	assertTrue(r.lead == None, "cannot change lead")
+	r.lead = lead
+}
+
+func (r *raft) resetLead() {
+	r.lead = None
+	r.leadEpoch = 0
+}
+
+func (r *raft) setLeadEpoch(leadEpoch pb.Epoch) {
+	if leadEpoch == r.leadEpoch {
+		return
+	}
+	assertTrue(r.lead != None, "leader must be set")
+	assertTrue(leadEpoch > r.leadEpoch, "leadEpoch cannot regress")
+	r.leadEpoch = leadEpoch
+}
+
+func (r *raft) resetLeadEpoch() {
+	r.leadEpoch = 0
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -1214,7 +1253,7 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
-	r.lead = lead
+	r.setLead(lead)
 	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 }
@@ -1227,7 +1266,7 @@ func (r *raft) becomeCandidate() {
 	r.step = stepCandidate
 	r.reset(r.Term + 1)
 	r.tick = r.tickElection
-	r.Vote = r.id
+	r.setVote(r.id)
 	r.state = pb.StateCandidate
 	r.logger.Infof("%x became candidate at term %d", r.id, r.Term)
 }
@@ -1250,8 +1289,7 @@ func (r *raft) becomePreCandidate() {
 	// leader leases, this is fine, because we wouldn't be here unless we'd
 	// revoked StoreLiveness support for the leader's store to begin with. It's
 	// a bit weird from the perspective of raft though. See if we can avoid this.
-	r.lead = None
-	r.leadEpoch = 0
+	r.resetLead()
 	r.state = pb.StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
 }
@@ -1269,7 +1307,7 @@ func (r *raft) becomeLeader() {
 	// and not even when learning of a leader in a later term.
 	r.fortificationTracker.Reset(r.Term)
 	r.tick = r.tickHeartbeat
-	r.lead = r.id
+	r.setLead(r.id)
 	r.state = pb.StateLeader
 	// Followers enter replicate mode when they've been successfully probed
 	// (perhaps after having received a snapshot as a result). The leader is
@@ -1622,7 +1660,7 @@ func (r *raft) Step(m pb.Message) error {
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
-				r.Vote = m.From
+				r.setVote(m.From)
 			}
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
@@ -2017,6 +2055,13 @@ func stepLeader(r *raft, m pb.Message) error {
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		// If this is a message from a leader of r.Term, transition to a follower
+		// with the sender of the message as the leader, then process the message.
+		assertTrue(m.Term == r.Term, "message term should equal current term")
+		r.becomeFollower(m.Term, m.From)
+		return r.step(r, m) // stepFollower
+	}
 	// Only handle vote responses corresponding to our candidacy (while in
 	// StateCandidate, we may get stale MsgPreVoteResp messages in this term from
 	// our pre-candidate state).
@@ -2030,18 +2075,11 @@ func stepCandidate(r *raft, m pb.Message) error {
 	case pb.MsgProp:
 		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
-	case pb.MsgApp:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleAppendEntries(m)
-	case pb.MsgHeartbeat:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleHeartbeat(m)
 	case pb.MsgSnap:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
+		// Message.Term until we address #127348 and #127349.
+		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
-	case pb.MsgFortifyLeader:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleFortify(m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
@@ -2059,17 +2097,20 @@ func stepCandidate(r *raft, m pb.Message) error {
 			// m.Term > r.Term; reuse r.Term
 			r.becomeFollower(r.Term, r.lead)
 		}
-	case pb.MsgTimeoutNow:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		// TODO(nvanbenschoten): this is temporarily duplicating logic from
-		// stepFollower. Unify.
-		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
-		r.hup(campaignTransfer)
 	}
 	return nil
 }
 
 func stepFollower(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		r.setLead(m.From)
+		if m.Type != pb.MsgDeFortifyLeader {
+			// If we receive any message from the leader except a MsgDeFortifyLeader,
+			// we know that the leader is still alive and still acting as the leader,
+			// so reset the election timer.
+			r.electionElapsed = 0
+		}
+	}
 	switch m.Type {
 	case pb.MsgProp:
 		if r.lead == None {
@@ -2085,25 +2126,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgApp:
-		r.electionElapsed = 0
-		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
-		// anymore within the course of a single term (in the context of which this
-		// function is always called). Instead, if r.lead != None, we should be able
-		// to assert that the leader hasn't changed within a given term. Maybe at
-		// the caller itself.
-		r.lead = m.From
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleHeartbeat(m)
 	case pb.MsgSnap:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleSnapshot(m)
 	case pb.MsgFortifyLeader:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleFortify(m)
 	case pb.MsgDeFortifyLeader:
 		r.handleDeFortify(m)
@@ -2130,8 +2158,7 @@ func stepFollower(r *raft, m pb.Message) error {
 			return nil
 		}
 		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
-		r.lead = None
-		r.leadEpoch = 0
+		r.resetLead()
 	case pb.MsgTimeoutNow:
 		// TODO(nvanbenschoten): we will eventually want some kind of logic like
 		// this. However, even this may not be enough, because we're calling a
@@ -2152,7 +2179,7 @@ func stepFollower(r *raft, m pb.Message) error {
 		// be able to replace this leadEpoch assignment with a call to deFortify.
 		// Currently, it may panic because only the leader should be able to
 		// de-fortify without bumping the term.
-		r.leadEpoch = 0
+		r.resetLeadEpoch()
 		r.hup(campaignTransfer)
 	}
 	return nil
@@ -2320,7 +2347,7 @@ func (r *raft) handleFortify(m pb.Message) {
 		})
 		return
 	}
-	r.leadEpoch = epoch
+	r.setLeadEpoch(epoch)
 	r.send(pb.Message{
 		To:        m.From,
 		Type:      pb.MsgFortifyLeaderResp,
@@ -2382,7 +2409,7 @@ func (r *raft) deFortify(from pb.PeerID, term uint64) {
 			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
 		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
-	r.leadEpoch = 0
+	r.resetLeadEpoch()
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
@@ -2588,10 +2615,10 @@ func (r *raft) loadState(state pb.HardState) {
 		r.logger.Panicf("%x state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex())
 	}
 	r.raftLog.committed = state.Commit
-	r.Term = state.Term
-	r.Vote = state.Vote
-	r.lead = state.Lead
-	r.leadEpoch = state.LeadEpoch
+	r.setTerm(state.Term)
+	r.setVote(state.Vote)
+	r.setLead(state.Lead)
+	r.setLeadEpoch(state.LeadEpoch)
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater

@@ -46,6 +46,7 @@ HighPri:
 # The inspect state should match up with the formatted state printed above.
 inspect
 ----
+total: +1.9 KiB
 {
   "priority": -128,
   "tokens": "100",
@@ -166,6 +167,7 @@ LowPri:
 # The inspect state should match up with the formatted state printed above.
 inspect
 ----
+total: +1.1 KiB
 {
   "priority": -128,
   "tokens": "400",
@@ -239,5 +241,6 @@ state
 # (nothing).
 inspect
 ----
+total: +0 B
 
 # vim:ft=sh

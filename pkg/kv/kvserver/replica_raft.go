@@ -1321,7 +1321,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			raftStatus := raftGroup.BasicStatus()
 			if shouldCampaignAfterConfChange(ctx, r.store.ClusterSettings(), r.store.StoreID(),
 				r.descRLocked(), raftStatus, leaseStatus) {
-				r.forceCampaignLocked(ctx)
+				r.forceCampaignLocked(ctx, raftStatus)
 			}
 		}
 
@@ -2613,11 +2613,28 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // simply partitioned away from it and/or liveness.
 //
 // TODO(nvanbenschoten): this is the remaining logic which needs work in order
-// to complete #125254. See the comment in raft.go about how even a local
+// to complete #129796. See the comment in raft.go about how even a local
 // fortification check is not enough to make MsgTimeoutNow safe.
-func (r *Replica) forceCampaignLocked(ctx context.Context) {
+func (r *Replica) forceCampaignLocked(ctx context.Context, raftStatus raft.BasicStatus) {
 	log.VEventf(ctx, 3, "force campaigning")
-	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	msg := raftpb.Message{
+		To: raftpb.PeerID(r.replicaID),
+		// We pretend that the message was sent from the leader, who we know is set
+		// in the status because we checked in shouldCampaignAfterConfChange.
+		//
+		// As the TODO above implies, this is a hack and is borderline unsafe. Only
+		// the leader should be able to send a MsgTimeoutNow, because a "force"
+		// election gives the candidate permission to tell all voters to violate the
+		// leader's fortification. In this case, we lie to raft about this message
+		// coming from the leader, which in some ways it is because the leader is
+		// the one committing the entry which demotes itself to a learner.
+		//
+		// We should find a way to get rid of this, perhaps through the approach
+		// presented in #133308.
+		From: raftStatus.Lead,
+		Term: raftStatus.Term,
+		Type: raftpb.MsgTimeoutNow,
+	}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
