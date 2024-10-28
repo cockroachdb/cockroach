@@ -300,7 +300,3 @@ func (tu *optTableUpserter) updateConflictingRow(
 func (tu *optTableUpserter) tableDesc() catalog.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
-
-// walkExprs is part of the tableWriter interface.
-func (tu *optTableUpserter) walkExprs(walk func(desc string, index int, expr tree.TypedExpr)) {
-}

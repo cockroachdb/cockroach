@@ -43,6 +43,3 @@ func (ti *tableInserter) row(
 func (ti *tableInserter) tableDesc() catalog.TableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
-
-// walkExprs is part of the tableWriter interface.
-func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}

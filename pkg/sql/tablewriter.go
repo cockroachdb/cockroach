@@ -27,13 +27,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// expressionCarrier handles visiting sub-expressions.
-type expressionCarrier interface {
-	// walkExprs explores all sub-expressions held by this object, if
-	// any.
-	walkExprs(func(desc string, index int, expr tree.TypedExpr))
-}
-
 // tableWriter handles writing kvs and forming table rows.
 //
 // Usage:
@@ -48,8 +41,6 @@ type expressionCarrier interface {
 //	err := tw.finalize()
 //	// Handle err.
 type tableWriter interface {
-	expressionCarrier
-
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
 	init(context.Context, *kv.Txn, *eval.Context) error
