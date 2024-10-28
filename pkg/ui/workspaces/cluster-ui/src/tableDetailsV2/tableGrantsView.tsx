@@ -27,7 +27,7 @@ export const TableGrantsView: React.FC = () => {
   }, [tableGrants]);
 
   return (
-    <PageSection heading={"Grants"}>
+    <PageSection>
       <GrantsTable error={error} loading={isLoading} data={dataWithKey ?? []} />
     </PageSection>
   );

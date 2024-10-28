@@ -3,15 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Icon } from "@cockroachlabs/ui-components";
 import { Col, Row, Skeleton } from "antd";
-import moment from "moment-timezone";
 import React, { useContext } from "react";
 
 import { useNodeStatuses } from "src/api";
 import { TableDetails } from "src/api/databases/getTableMetadataApi";
-import { Tooltip } from "src/components/tooltip";
-import { TABLE_METADATA_LAST_UPDATED_HELP } from "src/constants/tooltipMessages";
+import { LiveDataPercent } from "src/components/liveDataPercent/liveDataPercent";
+import { TableMetadataLastUpdatedTooltip } from "src/components/tooltipMessages/tableMetadataLastUpdatedTooltip";
 import { ClusterDetailsContext } from "src/contexts";
 import { PageSection } from "src/layouts";
 import { SqlBox, SqlBoxSize } from "src/sql";
@@ -55,14 +53,6 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       .join(", ");
   };
 
-  const percentLiveDataWithPrecision = (metadata.percentLiveData * 100).toFixed(
-    2,
-  );
-
-  const formattedErrorText = metadata.lastUpdateError
-    ? "Update error: " + metadata.lastUpdateError
-    : null;
-
   return (
     <>
       <PageSection>
@@ -71,28 +61,21 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
       <PageSection>
         <Row justify={"end"}>
           <Col>
-            <Tooltip
-              title={formattedErrorText ?? TABLE_METADATA_LAST_UPDATED_HELP}
+            <TableMetadataLastUpdatedTooltip
+              errorMessage={metadata.lastUpdateError}
+              timestamp={metadata.lastUpdated}
             >
-              <Row gutter={8} align={"middle"} justify={"center"}>
-                {metadata.lastUpdateError ? (
-                  <Icon fill={"warning"} iconName={"Caution"} />
-                ) : (
-                  <Icon fill="info" iconName={"InfoCircle"} />
-                )}
-                <Col>
-                  {" "}
-                  Last updated:{" "}
-                  <Timestamp
-                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-                    time={moment.utc(metadata.lastUpdated)}
-                    fallback={"Never"}
-                  />
-                </Col>
-              </Row>
-            </Tooltip>
+              {(durationText, icon) => (
+                <>
+                  {icon}
+                  <span> Last updated: {durationText} </span>
+                </>
+              )}
+            </TableMetadataLastUpdatedTooltip>
           </Col>
         </Row>
+      </PageSection>
+      <PageSection>
         <Row gutter={8}>
           <Col span={12}>
             <SummaryCard>
@@ -119,13 +102,10 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
               <SummaryCardItem
                 label="% of Live data"
                 value={
-                  <div>
-                    <div>{percentLiveDataWithPrecision}% </div>
-                    <div>
-                      {Bytes(metadata.totalLiveDataBytes)} /{" "}
-                      {Bytes(metadata.totalLiveDataBytes)}
-                    </div>
-                  </div>
+                  <LiveDataPercent
+                    liveBytes={metadata.totalLiveDataBytes}
+                    totalBytes={metadata.totalLiveDataBytes}
+                  />
                 }
               />
               <SummaryCardItem

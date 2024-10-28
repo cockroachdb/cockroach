@@ -27,7 +27,7 @@ export const DbGrantsView: React.FC = () => {
   }, [databaseGrants]);
 
   return (
-    <PageSection heading={"Grants"}>
+    <PageSection>
       <GrantsTable data={dataWithKey ?? []} loading={isLoading} error={error} />
     </PageSection>
   );

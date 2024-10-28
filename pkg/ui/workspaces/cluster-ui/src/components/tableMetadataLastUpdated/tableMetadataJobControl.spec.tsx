@@ -48,7 +48,7 @@ describe("TableMetadataJobControl", () => {
     jest.clearAllMocks();
   });
 
-  it("renders the last refreshed time", () => {
+  it("renders the relative last refreshed time", () => {
     render(
       <TimezoneContext.Provider value="UTC">
         <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
@@ -56,8 +56,9 @@ describe("TableMetadataJobControl", () => {
     );
 
     expect(screen.getByText(/Last refreshed:/)).toBeInTheDocument();
+    const lastCompletedRelativeTime = mockLastCompletedTime.fromNow();
     expect(
-      screen.getByText(/Jan 01, 2024 at 12:00:00 UTC/),
+      screen.getByText(new RegExp(lastCompletedRelativeTime)),
     ).toBeInTheDocument();
   });
 

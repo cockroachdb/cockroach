@@ -3,6 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+@import "src/core/index.module";
+@import "application.module.scss";
+
 .page-header {
   width: 100%;
   margin-bottom: crl-gutters(2);
@@ -18,7 +21,14 @@
   align-items: center; // Allows the text to center vertically.
   margin-bottom: 0;
   gap: crl-gutters(2);
+  color: $colors--neutral-7;
+  font-family: $font-family--semi-bold;
+  font-style: normal;
+  font-stretch: normal;
+  font-size: $font-size--large;
+  padding-bottom: 12px;
 }
+
 
 .header-breadcrumbs {
   margin-top: crl-gutters(1);
@@ -47,3 +57,4 @@
 .loader {
   margin-left: crl-gutters(1);
 }
+
