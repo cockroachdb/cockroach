@@ -210,7 +210,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	receivedRevertRequest = make(chan struct{})
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
+	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
 	streamAddr := getTestRandomClientURI(roachpb.MustMakeTenantID(oldTenantID), oldTenantName)
 	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr)
