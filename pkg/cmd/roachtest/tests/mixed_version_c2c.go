@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -76,11 +77,57 @@ func runC2CMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster, sp
 func InitC2CMixed(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp replicationSpec,
 ) *c2cMixed {
+	// Currently, this test only knows how to orchestrate one major upgrade on the
+	// source and destination cluster. Since the source must always wait to
+	// finalize after the dest, the test can only currently explore certain
+	// upgrade scenarios:
+	//
+	// 1. no version skipping: source and dest both upgrade from n-1 to n, where n
+	// is master.
+	//
+	// 2. both version skipping: source and dest both upgrade from n-2 to n
+	//
+	// 3. source version skips: source upgrades from n-2 to n, dest upgrades from
+	// n-1 to n.
+	//
+	// We can't currently explore the following scenarios:
+	//
+	// 1. dest version skips: source upgrades from n-1 to n, dest upgrades from
+	// n-2 to n. as the dest must always run a major version ahead of the source.
+	//
+	// TODO: it would be nice to test multiple major upgrades, where one cluster
+	// conducts version skipping while the other does not. This will require
+	// building in more coordination in the test driver.
+
+	// It's a bit sad we need to open a new rng here, while the mixed version
+	// drivers below each open their own rng.
+	//
+	// TODO(msbutler): add a mixed version option to pass the seed to the driver.
+	rng, _ := randutil.NewPseudoRand()
+	sourceVersionSkips := false
+	destVersionSkips := false
+	if rng.Intn(2) == 0 {
+		sourceVersionSkips = true
+	}
+	if rng.Intn(2) == 0 && sourceVersionSkips {
+		destVersionSkips = true
+	}
+
+	t.L().Printf("source version skips: %t, dest version skips: %t", sourceVersionSkips, destVersionSkips)
+
+	boolToProb := func(b bool) float64 {
+		if b {
+			return 1.0
+		}
+		return 0.0
+	}
+
 	sourceMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(1, sp.srcNodes),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SharedProcessDeployment),
 		mixedversion.WithTag("source"),
+		mixedversion.WithSkipVersionProbability(boolToProb(sourceVersionSkips)),
 		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
@@ -89,6 +136,7 @@ func InitC2CMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.WithTag("dest"),
+		mixedversion.WithSkipVersionProbability(boolToProb(destVersionSkips)),
 		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
@@ -294,10 +342,9 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 			cm.midUpgradeCatchupMu.Unlock()
 			if h.Context().Stage == mixedversion.LastUpgradeStage {
 				l.Printf("waiting for destination cluster to finalize upgrade")
-				select {
-				case <-destFinalized:
-				case <-ctx.Done():
-				}
+				// TODO(msbutler): once we allow multiple major upgrades, we will need
+				// to reset this channel.
+				chanReadCtx(ctx, destFinalized)
 			} else {
 				l.Printf("no need to wait for dest: not ready to finalize")
 			}
