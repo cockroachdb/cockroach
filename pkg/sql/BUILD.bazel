@@ -253,7 +253,7 @@ go_library(
         "tablewriter_delete.go",
         "tablewriter_insert.go",
         "tablewriter_update.go",
-        "tablewriter_upsert_opt.go",
+        "tablewriter_upsert.go",
         "telemetry.go",
         "telemetry_logging.go",
         "temporary_schema.go",
