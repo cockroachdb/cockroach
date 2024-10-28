@@ -6,6 +6,8 @@
 package tests
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -233,13 +236,68 @@ func downloadProfiles(
 			return err
 		}
 		url := urlPrefix + diagID
-		filename := fmt.Sprintf("%s-%s.zip", collectedAt.Format("2006-01-02T15_04_05Z07:00"), diagID)
-		logger.Printf("downloading profile %s", filename)
-		if err := client.Download(ctx, url, filepath.Join(stmtDir, filename)); err != nil {
+		resp, err := client.Get(context.Background(), url)
+		if err != nil {
 			return err
 		}
+		defer resp.Body.Close()
+		// Copy the contents of the URL to a BytesBuffer to determine the
+		// filename before saving it below.
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, resp.Body)
+		if err != nil {
+			return err
+		}
+		filename, err := getFilename(collectedAt, buf)
+		if err != nil {
+			return err
+		}
+		// write the buf to the filename
+		file, err := os.Create(filepath.Join(stmtDir, filename))
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(file, &buf); err != nil {
+			return err
+		}
+		logger.Printf("downloaded profile %s", filename)
 	}
 	return nil
+}
+
+// getFilename creates a file name for the profile based on the traced operation
+// and duration. An example filename is
+// 2024-10-24T18_23_57Z-UPSERT-101.490ms.zip.
+func getFilename(collectedAt time.Time, buf bytes.Buffer) (string, error) {
+	// Download the zip to a BytesBuffer.
+	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		return "", err
+	}
+	// NB: The format of the trace.txt file is not guaranteed to be stable. If
+	// this proves problematic we could parse the trace.json instead. Parsing
+	// the trace.txt is easier due to the nested structure of the trace.json.
+	r, err := unzip.Open("trace.txt")
+	if err != nil {
+		return "", err
+	}
+	bytes, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	if err = r.Close(); err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(bytes), "\n")
+	// The first line is the SQL statement. An example is `UPSERT INTO kv (k, v)
+	// VALUES ($1, $2)`. We only grab the operation to help differentiate
+	// traces. An alternative if this isn't differentiated enough is to use the
+	// entire fingerprint text, however that creates longs and complex
+	// filenames.
+	operation := strings.Split(strings.TrimSpace(lines[0]), " ")[0]
+	// Use the second to last line because the last line is empty.
+	duration := strings.Split(strings.TrimSpace(lines[len(lines)-2]), " ")[0]
+	return fmt.Sprintf("%s-%s-%s.zip", collectedAt.Format("2006-01-02T15_04_05Z07:00"), operation, duration), nil
 }
 
 type IP struct {
