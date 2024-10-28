@@ -1644,7 +1644,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				<-shutdownSetupDone
 
 				// Eagerly listen to cutover signal to exercise node shutdown during actual cutover.
-				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='5s'`)
+				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='5s'`)
 
 				// While executing a node shutdown on either the src or destination
 				// cluster, ensure the destination cluster's stream ingestion job
