@@ -22,10 +22,7 @@ import (
 const (
 	dlqSchemaName = "crdb_replication"
 	// dlqBaseTableName is defined as: "<dbName>.<dlqSchemaName>.dlq_<tableID>_<schemaName>_<tableName>"
-	dlqBaseTableName   = "%s.%s.%s"
-	createEnumBaseStmt = `CREATE TYPE IF NOT EXISTS %s.%s.mutation_type AS ENUM (
-			'insert', 'update', 'delete'
-	)`
+	dlqBaseTableName     = "%s.%s.%s"
 	createSchemaBaseStmt = `CREATE SCHEMA IF NOT EXISTS %s.%s`
 	createTableBaseStmt  = `CREATE TABLE IF NOT EXISTS %s (
 			id                  INT8 DEFAULT unique_rowid(),
@@ -33,7 +30,7 @@ const (
   		table_id    				INT8 NOT NULL,
 			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
   		dlq_reason					STRING NOT NULL,
-			mutation_type				%s.%s.mutation_type,       
+			mutation_type				STRING NOT NULL,       
   		key_value_bytes			BYTES NOT NULL NOT VISIBLE,
 			incoming_row     		JSONB,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
@@ -111,11 +108,11 @@ func (dlq *noopDeadLetterQueueClient) Log(
 	}
 
 	tableID := cdcEventRow.TableID
-	var mutationType replicationMutationType
+	var mutationType string
 	if cdcEventRow.IsDeleted() {
-		mutationType = deleteMutation
+		mutationType = deleteMutation.String()
 	} else {
-		mutationType = insertMutation
+		mutationType = insertMutation.String()
 	}
 
 	bytes, err := protoutil.Marshal(&kv)
@@ -129,7 +126,7 @@ func (dlq *noopDeadLetterQueueClient) Log(
 		mutation_type: %s,  
 		key_value_bytes: %v, 
 		incoming_row: %s`,
-		ingestionJobID, tableID, reason.Error(), stoppedRetryReason.String(), mutationType.String(), bytes, cdcEventRow.DebugString())
+		ingestionJobID, tableID, reason.Error(), stoppedRetryReason.String(), mutationType, bytes, cdcEventRow.DebugString())
 	return nil
 }
 
@@ -147,12 +144,7 @@ func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", dstTableMeta.getDatabaseName())
 		}
 
-		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
-		if _, err := dlq.ie.Exec(ctx, "create-dlq-enum", nil, createEnumStmt); err != nil {
-			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", dstTableMeta.getDatabaseName())
-		}
-
-		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, dstTableMeta.getDatabaseName(), dlqSchemaName)
+		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
 			return errors.Wrapf(err, "failed to create dlq for table %d", dstTableMeta.tableID)
 		}
@@ -186,11 +178,11 @@ func (dlq *deadLetterQueueClient) Log(
 	}
 
 	// TODO(azhu): include update type
-	var mutationType replicationMutationType
+	var mutationType string
 	if cdcEventRow.IsDeleted() {
-		mutationType = deleteMutation
+		mutationType = deleteMutation.String()
 	} else {
-		mutationType = insertMutation
+		mutationType = insertMutation.String()
 	}
 
 	jsonRow, err := cdcEventRow.ToJSON()
@@ -204,7 +196,7 @@ func (dlq *deadLetterQueueClient) Log(
 			ingestionJobID,
 			dstTableMeta.tableID,
 			fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
-			mutationType.String(),
+			mutationType,
 			bytes,
 		); err != nil {
 			return errors.Wrapf(err, "failed to insert row for table %s without json", dlqTableName)
@@ -220,7 +212,7 @@ func (dlq *deadLetterQueueClient) Log(
 		ingestionJobID,
 		dstTableMeta.tableID,
 		fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
-		mutationType.String(),
+		mutationType,
 		bytes,
 		jsonRow,
 	); err != nil {
