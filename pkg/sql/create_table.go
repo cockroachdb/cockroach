@@ -552,13 +552,12 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
-			tw := tableWriter(ti)
 			defer func() {
-				tw.close(params.ctx)
+				ti.close(params.ctx)
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
 				return err
 			}
 
@@ -575,7 +574,7 @@ func (n *createTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					if err := tw.finalize(params.ctx); err != nil {
+					if err := ti.finalize(params.ctx); err != nil {
 						return err
 					}
 					break
@@ -585,7 +584,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					if err := tw.flushAndStartNewBatch(params.ctx); err != nil {
+					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
 						return err
 					}
 				}
@@ -597,7 +596,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// An empty row.PartialIndexUpdateHelper is used here because
 				// there are no indexes, partial or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
-				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				if err := ti.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}

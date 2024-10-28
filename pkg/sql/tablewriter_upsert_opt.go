@@ -89,9 +89,7 @@ type optTableUpserter struct {
 	tabColIdxToRetIdx []int
 }
 
-var _ tableWriter = &optTableUpserter{}
-
-// init is part of the tableWriter interface.
+// init initializes the optTableUpserter with a Txn.
 func (tu *optTableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
 	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx); err != nil {
 		return err
@@ -152,7 +150,18 @@ func (tu *optTableUpserter) makeResultFromRow(
 	return resultRow
 }
 
-// row is part of the tableWriter interface.
+// row performs an upsert.
+//
+// The passed Datums is not used after `row` returns.
+//
+// The PartialIndexUpdateHelper is used to determine which partial indexes
+// to avoid updating when performing row modification. This is necessary
+// because not all rows are indexed by partial indexes.
+//
+// The traceKV parameter determines whether the individual K/V operations
+// should be logged to the context. We use a separate argument here instead
+// of a Value field on the context because Value access in context.Context
+// is rather expensive.
 func (tu *optTableUpserter) row(
 	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
@@ -293,7 +302,8 @@ func (tu *optTableUpserter) updateConflictingRow(
 	return err
 }
 
-// tableDesc is part of the tableWriter interface.
+// tableDesc returns the TableDescriptor for the table that the optTableInserter
+// will modify.
 func (tu *optTableUpserter) tableDesc() catalog.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
