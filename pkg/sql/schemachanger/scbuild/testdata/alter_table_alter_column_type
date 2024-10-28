@@ -27,3 +27,85 @@ ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE CHAR(5)
   {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 5}, typeName: CHAR(5)}
 - [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], ABSENT]
   {columnIds: [2], constraintId: 2, expr: (CAST(CAST(c2 AS CHAR(5)) AS CHAR(10)) = c2), indexIdForValidation: 1, referencedColumnIds: [2], tableId: 104}
+
+build
+ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE BIGINT USING c2::BIGINT
+----
+- [[Column:{DescID: 104, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: c2, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: c2, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(10)}, ABSENT], PUBLIC]
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 10}, typeName: CHAR(10)}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: t_pkey, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 2, name: t_pkey, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 3, indexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 2, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 2, indexId: 2, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 2, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 3, indexId: 3, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 3, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 2, indexId: 3, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 3, tableId: 104}
+- [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], ABSENT]
+  {constraintId: 4, indexId: 4, isUnique: true, sourceIndexId: 2, tableId: 104, temporaryIndexId: 5}
+- [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, name: t_pkey, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 3, indexId: 4, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 4, kind: STORED, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 5, indexId: 5, isUnique: true, sourceIndexId: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 3, indexId: 5, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 5, kind: STORED, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 5, tableId: 104}
+- [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
+  {columnId: 4, pgAttributeNum: 2, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: c2, ColumnID: 4}, PUBLIC], ABSENT]
+  {columnId: 4, name: c2, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4, TypeName: INT8}, PUBLIC], ABSENT]
+  {columnId: 4, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[ColumnComputeExpression:{DescID: 104, ColumnID: 4}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 4, expr: 'c2::INT8', referencedColumnIds: [2], tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 4, indexId: 2, kind: STORED, ordinalInKind: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 4, indexId: 3, kind: STORED, ordinalInKind: 2, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 4, indexId: 4, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 4, indexId: 5, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: c2_shadow, ColumnID: 2}, TRANSIENT_ABSENT], ABSENT]
+  {absentName: c2, columnId: 2, name: c2_shadow, tableId: 104}
