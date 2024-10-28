@@ -8,7 +8,7 @@
 # This script sets up the tpch run workload script in the workload nodes
 # The --scale-factor and other flags are passed as argument to this script
 # NOTE - This uses CLUSTER and WORKLOAD_CLUSTER environment variable, if not set the script fails
-if [ "$#" -lt 3 ]; then
+if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <script_suffix> <flags to init:--scale-factor,--db>"
   exit 1
 fi
