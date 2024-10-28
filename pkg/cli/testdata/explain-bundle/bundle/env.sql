@@ -22,7 +22,7 @@
 --   bulkio.backup.read_with_priority_after = 1m0s  (age of read-as-of time above which a BACKUP should read with priority)
 --   bulkio.column_backfill.batch_size = 200  (the number of rows updated at a time to add/remove columns)
 --   bulkio.index_backfill.batch_size = 50000  (the number of rows for which we construct index entries in a single batch)
---   bulkio.stream_ingestion.cutover_signal_poll_interval = 30s  (the interval at which the stream ingestion job checks if it has been signaled to cutover)
+--   bulkio.stream_ingestion.failover_signal_poll_interval = 30s  (the interval at which the stream ingestion job checks if it has been signaled to cutover)
 --   bulkio.stream_ingestion.minimum_flush_interval = 5s  (the minimum timestamp between flushes; flushes may still occur if internal buffers fill up)
 --   changefeed.backfill.concurrent_scan_requests = 0  (number of concurrent scan requests per node issued during a backfill)
 --   changefeed.experimental_poll_interval = 1s  (polling interval for the table descriptors)
