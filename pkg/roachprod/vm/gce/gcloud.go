@@ -2323,8 +2323,11 @@ func propagateDiskLabels(
 			if !useLocalSSD {
 				// The persistent disks are already created. The disks are suffixed with an offset
 				// which starts from 1. A total of "pdVolumeCount" disks are created.
-				for offset := 1; offset <= pdVolumeCount; offset++ {
-					g.Go(func() error {
+				g.Go(func() error {
+					// the loop is run inside the go-routine to ensure that we do not run all the gcloud commands.
+					// For a 150 node with 4 disks, we have seen that the gcloud command cannot handle so many concurrent
+					// commands.
+					for offset := 1; offset <= pdVolumeCount; offset++ {
 						persistentDiskArgs := append([]string(nil), argsPrefix...)
 						persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
 						// N.B. additional persistent disks are suffixed with the offset, starting at 1.
@@ -2335,9 +2338,9 @@ func propagateDiskLabels(
 						if err != nil {
 							return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
 						}
-						return nil
-					})
-				}
+					}
+					return nil
+				})
 			}
 		}
 	}
