@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -228,6 +229,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
 		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
 		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
+		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
+		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9555,4 +9558,80 @@ var crdbInternalFullyQualifiedNamesView = virtualSchemaView{
 		{Name: "database_name", Typ: types.String},
 		{Name: "fq_name", Typ: types.String},
 	},
+}
+
+var crdbInternalStoreLivenessSupportFromTable = virtualSchemaTable{
+	comment: `node-level view of store liveness support from other stores`,
+	schema: `
+CREATE TABLE crdb_internal.store_liveness_support_from (
+  node_id               INT NOT NULL,
+  store_id              INT NOT NULL,
+  support_from_node_id  INT NOT NULL,
+  support_from_store_id INT NOT NULL,
+  support_epoch         INT NOT NULL,
+  support_expiration    TIMESTAMP NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.StoreLivenessSupportFrom(ctx, &slpb.InspectStoreLivenessRequest{})
+		if err != nil {
+			return err
+		}
+		return populateStoreLivenessSupportResponse(resp, addRow)
+	},
+}
+
+var crdbInternalStoreLivenessSupportForTable = virtualSchemaTable{
+	comment: `node-level view of store liveness support for other stores`,
+	schema: `
+CREATE TABLE crdb_internal.store_liveness_support_for (
+  node_id               INT NOT NULL,
+  store_id              INT NOT NULL,
+  support_for_node_id  INT NOT NULL,
+  support_for_store_id INT NOT NULL,
+  support_epoch         INT NOT NULL,
+  support_expiration    TIMESTAMP NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.StoreLivenessSupportFor(ctx, &slpb.InspectStoreLivenessRequest{})
+		if err != nil {
+			return err
+		}
+		return populateStoreLivenessSupportResponse(resp, addRow)
+	},
+}
+
+func populateStoreLivenessSupportResponse(
+	resp *slpb.InspectStoreLivenessResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, ssps := range resp.SupportStatesPerStore {
+		for _, ss := range ssps.SupportStates {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(ssps.StoreID.NodeID)),
+				tree.NewDInt(tree.DInt(ssps.StoreID.StoreID)),
+				tree.NewDInt(tree.DInt(ss.Target.NodeID)),
+				tree.NewDInt(tree.DInt(ss.Target.StoreID)),
+				tree.NewDInt(tree.DInt(ss.Epoch)),
+				eval.TimestampToInexactDTimestamp(ss.Expiration),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

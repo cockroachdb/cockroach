@@ -81,9 +81,9 @@ ALTER DATABASE d OWNER TO testuser
 
 # Check ownership - testuser should own all objects just created
 query TT
-SELECT datname, datdba FROM pg_database WHERE datname='d'
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name='d'
 ----
-d  2264919399
+d  testuser
 
 # Switch to database d so it can reassign from current db
 statement ok
@@ -94,9 +94,9 @@ REASSIGN OWNED BY testuser TO testuser2
 
 # Check ownership - testuser2 should now own all objects just created
 query TT
-SELECT datname, datdba FROM pg_database WHERE datname='d'
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name='d'
 ----
-d  3957504279
+d  testuser2
 
 user testuser2
 
@@ -130,10 +130,11 @@ CREATE SCHEMA s2
 
 # Check ownership for testuser and root
 query TT rowsort
-SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s1' OR nspname='s2'
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s1', 's2', 'public')
 ----
-s1  2264919399
-s2  1546506610
+public  root
+s2      root
+s1      testuser
 
 # root / superusers can always perform REASSIGN OWNED BY.
 user root
@@ -143,12 +144,13 @@ REASSIGN OWNED BY testuser, root TO testuser2
 
 user testuser2
 
-# Check ownership - testuser2 should own both objects
+# Check ownership - testuser2 should own all objects
 query TT rowsort
-SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s1' OR nspname='s2'
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s1', 's2', 'public')
 ----
-s1  3957504279
-s2  3957504279
+public  testuser2
+s2      testuser2
+s1      testuser2
 
 # Ensure testuser2 is new owner by dropping.
 statement ok
@@ -193,10 +195,11 @@ CREATE TYPE s.typ AS ENUM ();
 ALTER TYPE s.typ OWNER to testuser
 
 # Check ownership - testuser should own all objects just created
-query TT
-SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s'
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s', 'public')
 ----
-s  2264919399
+s       testuser
+public  testuser2
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
@@ -204,19 +207,19 @@ SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
 t  testuser
 
 query TT rowsort
-SELECT typname, typowner FROM pg_type WHERE typname='_typ' OR typname='typ'
+SELECT name, owner FROM [SHOW TYPES] WHERE name = 'typ'
 ----
-typ   2264919399
-_typ  2264919399
+typ  testuser
 
 statement ok
 REASSIGN OWNED BY testuser TO testuser2
 
 # testuser2 should own everything now
-query TT
-SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s'
+query TT rowsort
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name IN ('s', 'public')
 ----
-s  3957504279
+public  testuser2
+s       testuser2
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
@@ -224,10 +227,9 @@ SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
 t  testuser2
 
 query TT rowsort
-SELECT typname, typowner FROM pg_type WHERE typname='_typ' OR typname='typ'
+SELECT name, owner FROM [SHOW TYPES] WHERE name = 'typ'
 ----
-typ   3957504279
-_typ  3957504279
+typ  testuser2
 
 # Ensure testuser2 is owner by dropping as member of testuser2.
 user testuser2
@@ -281,10 +283,10 @@ ALTER TABLE d.t2 OWNER TO testuser
 
 # Confirm ownership - testuser should own all objects just created
 query TT rowsort
-SELECT datname, datdba FROM pg_database WHERE datname='d' OR datname='test'
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name IN ('d', 'test')
 ----
-d     2264919399
-test  1546506610
+d     testuser
+test  root
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
@@ -312,10 +314,10 @@ REASSIGN OWNED BY testuser TO testuser2
 
 # Confirm ownership - testuser2 should own just table t1
 query TT rowsort
-SELECT datname, datdba FROM pg_database WHERE datname='d' OR datname='test'
+SELECT database_name, owner FROM [SHOW DATABASES] WHERE database_name IN ('d', 'test')
 ----
-d     2264919399
-test  1546506610
+d     testuser
+test  root
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
