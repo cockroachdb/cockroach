@@ -119,6 +119,7 @@ go_test(
         "//pkg/util/version",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_stretchr_testify//assert",

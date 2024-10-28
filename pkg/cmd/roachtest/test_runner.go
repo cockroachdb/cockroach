@@ -1160,6 +1160,9 @@ func (r *testRunner) runTest(
 		if s.Run != nil {
 			if t.Failed() {
 				errWithOwner := failuresAsErrorWithOwnership(t.failures())
+				if errWithOwner == nil {
+					errWithOwner = transientErrorOwnershipFallback(t.failures())
+				}
 				if errWithOwner == nil || !errWithOwner.InfraFlake {
 					r.status.fail[t] = struct{}{}
 				}
