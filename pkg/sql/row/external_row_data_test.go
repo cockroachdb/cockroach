@@ -145,7 +145,9 @@ func TestExternalRowDataDistSQL(t *testing.T) {
 
 	// Place leaseholders on nodes 3, 4, 5.
 	r0.Exec(t, `ALTER TABLE t SPLIT AT VALUES (2), (4)`)
-	r0.Exec(t, `ALTER TABLE t RELOCATE VALUES (ARRAY[3], 1), (ARRAY[4], 3), (ARRAY[5], 5)`)
+	r0.ExecSucceedsSoon(
+		t, `ALTER TABLE t RELOCATE VALUES (ARRAY[3], 1), (ARRAY[4], 3), (ARRAY[5], 5)`,
+	)
 
 	asOf := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
