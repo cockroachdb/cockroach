@@ -1134,6 +1134,22 @@ func (s *vectorizedFlowCreator) setupFlow(
 			hasLocalInput := false
 			for j := range processorSpecs[i].Input {
 				input := &processorSpecs[i].Input[j]
+				// It is possible that the same type slice is shared by multiple
+				// stages of processors. If it just so happens that there is
+				// free capacity in the slice, and we append to it when planning
+				// vectorized operators for both stages, we might corrupt the
+				// type schema captured by the operators for the earlier stage.
+				// In order to prevent such type schema corruption we cap the
+				// slice to force creation of a fresh copy on the first append.
+				if s.f.Gateway {
+					// Sharing of the same type slice is only possible on the
+					// gateway node because we don't serialize the specs created
+					// during the physical planning. On the remote nodes each
+					// stage of processors gets their own allocation, so there
+					// is no aliasing that can lead to the type schema
+					// corruption.
+					input.ColumnTypes = input.ColumnTypes[:len(input.ColumnTypes):len(input.ColumnTypes)]
+				}
 				for k := range input.Streams {
 					stream := &input.Streams[k]
 					s.streamIDToSpecIdx[stream.StreamID] = i
