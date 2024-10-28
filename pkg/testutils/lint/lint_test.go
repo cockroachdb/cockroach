@@ -661,7 +661,7 @@ func TestLint(t *testing.T) {
 					":!testutils/lint",
 					":!util/envutil/env.go",
 					":!testutils/data_path.go",
-					":!testutils/bazelcodecover/code_cover_on.go", // For BAZEL_COVER_DIR.
+					":!util/buildutil/code_cover_on.go", // For BAZEL_COVER_DIR.
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil",                           // GRPC_GO_* variables

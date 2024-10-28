@@ -42,6 +42,7 @@ var (
 	platform          = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	envChannel        = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 	enabledAssertions = buildutil.CrdbTestBuild
+	enabledCoverage   = buildutil.CrdbCoverageBuild
 )
 
 var (
@@ -160,7 +161,8 @@ func (b Info) Long() string {
 	fmt.Fprintf(tw, "C Compiler:       %s\n", b.CgoCompiler)
 	fmt.Fprintf(tw, "Build Commit ID:  %s\n", b.Revision)
 	fmt.Fprintf(tw, "Build Type:       %s\n", b.Type)
-	fmt.Fprintf(tw, "Enabled Assertions: %t", b.EnabledAssertions) // No final newline: cobra prints one for us.
+	fmt.Fprintf(tw, "Enabled Assertions: %t\n", b.EnabledAssertions)
+	fmt.Fprintf(tw, "Enabled Coverage: %t", b.EnabledCoverage) // No final newline: cobra prints one for us.
 	_ = tw.Flush()
 	return buf.String()
 }
@@ -202,6 +204,7 @@ func GetInfo() Info {
 		Channel:           ch,
 		EnvChannel:        envChannel,
 		EnabledAssertions: enabledAssertions,
+		EnabledCoverage:   enabledCoverage,
 	}
 }
 

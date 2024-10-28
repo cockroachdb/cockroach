@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/testutils/bazelcodecover"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -49,7 +49,7 @@ import (
 // to be the body of an action package main `main` func elsewhere. It is
 // abstracted for reuse by duplicated `main` funcs in different distributions.
 func Main() {
-	bazelcodecover.MaybeInitCodeCoverage()
+	buildutil.MaybeInitCodeCoverage()
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
 	}

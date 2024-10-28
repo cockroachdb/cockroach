@@ -2305,7 +2305,6 @@ GO_TARGETS = [
     "//pkg/storage/pebbleiter:pebbleiter_test",
     "//pkg/storage:storage",
     "//pkg/storage:storage_test",
-    "//pkg/testutils/bazelcodecover:bazelcodecover",
     "//pkg/testutils/colcontainerutils:colcontainerutils",
     "//pkg/testutils/datapathutils:datapathutils",
     "//pkg/testutils/diagutils:diagutils",

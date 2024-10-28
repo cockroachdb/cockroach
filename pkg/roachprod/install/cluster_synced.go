@@ -467,7 +467,7 @@ func (c *SyncedCluster) Stop(
 	} else {
 		cmd := fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName)
 		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
-			[]string{"-e", cmd})
+			[]string{"-e", cmd}, true)
 		if err != nil || res[0].Err != nil {
 			if len(res) > 0 {
 				return errors.CombineErrors(err, res[0].Err)

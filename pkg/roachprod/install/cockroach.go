@@ -733,6 +733,7 @@ func (c *SyncedCluster) ExecSQL(
 	authMode PGAuthMode,
 	database string,
 	args []string,
+	combineOutput bool,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, WithNodes(nodes).WithDisplay(display).WithFailSlow(),
@@ -748,7 +749,11 @@ func (c *SyncedCluster) ExecSQL(
 			cmd += SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " sql --url " +
 				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database) + " " +
 				ssh.Escape(args)
-			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
+			cmdOpts := defaultCmdOpts("run-sql")
+			if !combineOutput {
+				cmdOpts.combinedOut = false
+			}
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, cmdOpts)
 		})
 
 	return results, err
@@ -1236,7 +1241,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		firstNode := c.TargetNodes()[0]
 		results, err := c.ExecSQL(
 			ctx, l, Nodes{firstNode}, virtualClusterName, sqlInstance, AuthRootCert, "", /* database */
-			[]string{"-e", stmts})
+			[]string{"-e", stmts}, true)
 
 		if err != nil || results[0].Err != nil {
 			err := errors.CombineErrors(err, results[0].Err)
@@ -1424,15 +1429,21 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.StorageCluster.ExecSQL(
 			ctx, l, startOpts.StorageCluster.Nodes[:1], SystemInterfaceName, 0, DefaultAuthMode(), "", /* database */
-			[]string{"--format", "csv", "-e", stmt})
+			[]string{"--format", "csv", "-e", stmt}, false)
 		if err != nil {
 			return "", err
 		}
 		if results[0].Err != nil {
 			return "", results[0].Err
 		}
-
-		return results[0].CombinedOut, nil
+		// N.B. We can't use results[0].CombinedOut because of spurious startup messages/warnings. E.g., if the binary
+		// is instrumented with assertions (`crdb_test` build flag), we'll see a message of the form:
+		// 	initialized metamorphic constant "mvcc-max-iters-before-seek" with value 2
+		// If the binary is instrumented with covearge (`bazel_code_coverage` build flag), we may see a warning of the form:
+		//	warning: BAZEL_COVER_DIR not set, no coverage data emitted
+		// Thus, we use results[0].Stdout, instead; ignoring stderr is _ok_, only because we're still relying on
+		// the exit code; however, it may reduce observability in the case where the SQL driver logs debug ctx to stderr.
+		return results[0].Stdout, nil
 	}
 
 	virtualClusterIDByName := func(name string) (int, error) {
@@ -1446,6 +1457,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 		}
 
 		rows, err := csv.NewReader(strings.NewReader(existsOut)).ReadAll()
+
 		if err != nil {
 			return -1, fmt.Errorf("failed to parse system.tenants output: %w\n%s", err, existsOut)
 		}

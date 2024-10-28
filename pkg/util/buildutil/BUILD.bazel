@@ -2,6 +2,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 # gazelle:exclude gen-crdb_test_off.go
 # gazelle:exclude gen-crdb_test_on.go
+# gazelle:exclude gen-code_cover_off.go
+# gazelle:exclude gen-code_cover_on.go
 
 # keep
 go_library(
@@ -9,9 +11,18 @@ go_library(
     srcs = select({
         "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
         "//conditions:default": [":gen-crdb-test-off"],
+    }) + select({
+        "//build/toolchains:bazel_code_coverage": [":gen-bazel-code-cover-on"],
+        "//conditions:default": [":gen-bazel-code-cover-off"],
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil",
     visibility = ["//visibility:public"],
+    deps = select({
+        "//build/toolchains:bazel_code_coverage": [
+            "@io_bazel_rules_go//go/tools/coverdata",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
@@ -27,6 +38,20 @@ genrule(
     name = "gen-crdb-test-off",
     srcs = ["crdb_test_off.go"],
     outs = ["gen-crdb_test_off.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+genrule(
+    name = "gen-bazel-code-cover-on",
+    srcs = ["code_cover_on.go"],
+    outs = ["gen-code_cover_on.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+genrule(
+    name = "gen-bazel-code-cover-off",
+    srcs = ["code_cover_off.go"],
+    outs = ["gen-code_cover_off.go"],
     cmd = REMOVE_GO_BUILD_CONSTRAINTS,
 )
 

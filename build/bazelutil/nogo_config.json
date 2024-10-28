@@ -181,7 +181,8 @@
             "pkg/workload/histogram/histogram.go": "flagged by linter, should be evaluated",
             "pkg/workload/schemachange/deck.go": "flagged by linter, should be evaluated",
             "pkg/workload/schemachange/schemachange.go": "flagged by linter, should be evaluated",
-            "pkg/workload/tpcc/generate.go": "flagged by linter, should be evaluated"
+            "pkg/workload/tpcc/generate.go": "flagged by linter, should be evaluated",
+            "_test_1\\.go$": "generated code"
         }
     },
     "errcheck": {
@@ -255,7 +256,8 @@
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
             "/_cgo_gotypes.go$": "cgo generated code",
-            "_test\\.go$": "tests"
+            "_test\\.go$": "tests",
+            "_test_1\\.go$": "generated code"
         }
     },
     "printf": {
@@ -1285,7 +1287,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "_test_1\\.go$": "generated code"
         }
     },
     "SA5012": {
