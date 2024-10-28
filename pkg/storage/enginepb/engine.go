@@ -17,7 +17,7 @@ func (e *EngineType) Type() string { return "string" }
 // String implements the pflag.Value interface.
 func (e *EngineType) String() string { return redact.StringWithoutMarkers(e) }
 
-// SafeFormat implements the refact.SafeFormatter interface.
+// SafeFormat implements the redact.SafeFormatter interface.
 func (e *EngineType) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch *e {
 	case EngineTypeDefault:

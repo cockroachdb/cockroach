@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/exp/maps"
 )
 
@@ -390,29 +391,33 @@ func (pr *Progress) ShouldSendProbe(last, commit uint64, advanceCommit bool) boo
 	}
 }
 
+// String implements the fmt.Stringer interface.
 func (pr *Progress) String() string {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "%s match=%d next=%d sentCommit=%d matchCommit=%d", pr.State, pr.Match,
+	return redact.StringWithoutMarkers(pr)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (pr *Progress) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("%s match=%d next=%d sentCommit=%d matchCommit=%d", pr.State, pr.Match,
 		pr.Next, pr.SentCommit, pr.MatchCommit)
 	if pr.IsLearner {
-		fmt.Fprint(&buf, " learner")
+		p.SafeString(" learner")
 	}
 	if pr.IsPaused() {
-		fmt.Fprint(&buf, " paused")
+		p.SafeString(" paused")
 	}
 	if pr.PendingSnapshot > 0 {
-		fmt.Fprintf(&buf, " pendingSnap=%d", pr.PendingSnapshot)
+		p.Printf(" pendingSnap=%d", pr.PendingSnapshot)
 	}
 	if !pr.RecentActive {
-		fmt.Fprint(&buf, " inactive")
+		p.SafeString(" inactive")
 	}
 	if n := pr.Inflights.Count(); n > 0 {
-		fmt.Fprintf(&buf, " inflight=%d", n)
+		p.Printf(" inflight=%d", n)
 		if pr.Inflights.Full() {
-			fmt.Fprint(&buf, "[full]")
+			p.SafeString("[full]")
 		}
 	}
-	return buf.String()
 }
 
 // ProgressMap is a map of *Progress.

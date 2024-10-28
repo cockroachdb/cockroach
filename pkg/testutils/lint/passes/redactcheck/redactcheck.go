@@ -145,6 +145,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConfChangeType":       {},
 						"ConfChangeTransition": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/raft/tracker": {
+						"StateType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/repstream/streampb": {
 						"StreamID": {},
 					},
