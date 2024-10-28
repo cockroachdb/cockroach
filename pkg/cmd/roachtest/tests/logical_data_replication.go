@@ -227,35 +227,9 @@ func TestLDRBasic(
 	}
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, mode)
-
-	// Setup latency verifiers
-	maxExpectedLatency := 2 * time.Minute
-	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer llv.maybeLogLatencyHist()
-
-	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer rlv.maybeLogLatencyHist()
-
 	workloadDoneCh := make(chan struct{})
-	debugZipFetcher := &sync.Once{}
-
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
-		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
-	monitor.Go(func(ctx context.Context) error {
-		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
 	monitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
@@ -263,10 +237,7 @@ func TestLDRBasic(
 	})
 
 	monitor.Wait()
-
-	llv.assertValid(t)
-	rlv.assertValid(t)
-
+	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
 
@@ -291,34 +262,9 @@ func TestLDRSchemaChange(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, mode)
 
-	// Setup latency verifiers
-	maxExpectedLatency := 2 * time.Minute
-	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer llv.maybeLogLatencyHist()
-
-	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer rlv.maybeLogLatencyHist()
-
 	workloadDoneCh := make(chan struct{})
-	debugZipFetcher := &sync.Once{}
-
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
-		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
-	monitor.Go(func(ctx context.Context) error {
-		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
 	monitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
@@ -339,10 +285,7 @@ func TestLDRSchemaChange(
 	)
 
 	monitor.Wait()
-
-	llv.assertValid(t)
-	rlv.assertValid(t)
-
+	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
 
@@ -368,34 +311,10 @@ func TestLDRUpdateHeavy(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, mode)
 
-	// Setup latency verifiers
-	maxExpectedLatency := 3 * time.Minute
-	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer llv.maybeLogLatencyHist()
-
-	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer rlv.maybeLogLatencyHist()
-
 	workloadDoneCh := make(chan struct{})
-	debugZipFetcher := &sync.Once{}
-
+	maxExpectedLatency := 3 * time.Minute
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
-		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
-	monitor.Go(func(ctx context.Context) error {
-		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
@@ -403,10 +322,7 @@ func TestLDRUpdateHeavy(
 	})
 
 	monitor.Wait()
-
-	llv.assertValid(t)
-	rlv.assertValid(t)
-
+	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
 
@@ -499,32 +415,9 @@ func TestLDROnNodeShutdown(
 
 	// Setup latency verifiers, remembering to account for latency spike from killing a node
 	maxExpectedLatency := 5 * time.Minute
-	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer llv.maybeLogLatencyHist()
-
-	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer rlv.maybeLogLatencyHist()
-
 	workloadDoneCh := make(chan struct{})
-	debugZipFetcher := &sync.Once{}
-
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
-		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
-	monitor.Go(func(ctx context.Context) error {
-		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
-			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
-			return err
-		}
-		return nil
-	})
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
@@ -543,6 +436,7 @@ func TestLDROnNodeShutdown(
 	}
 
 	monitor.Wait()
+	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
 }
 
@@ -806,6 +700,46 @@ func setupLDR(
 
 	t.L().Printf("LDR Setup complete")
 	return leftJobID, rightJobID
+}
+
+func setupLatencyVerifiers(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	mon cluster.Monitor,
+	leftJobID, rightJobID int,
+	setup multiClusterSetup,
+	workloadDoneCh chan struct{},
+	maxExpectedLatency time.Duration,
+) func() {
+	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer llv.maybeLogLatencyHist()
+
+	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer rlv.maybeLogLatencyHist()
+
+	debugZipFetcher := &sync.Once{}
+
+	mon.Go(func(ctx context.Context) error {
+		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	mon.Go(func(ctx context.Context) error {
+		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	return func() {
+		rlv.assertValid(t)
+		llv.assertValid(t)
+	}
 }
 
 func VerifyCorrectness(
