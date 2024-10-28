@@ -165,7 +165,17 @@ go_test(
             "@com_github_prometheus_client_model//go",
             "@org_golang_x_sys//unix",
         ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "//pkg/util/log/eventpb",
+            "@com_github_prometheus_client_model//go",
+            "@org_golang_x_sys//unix",
+        ],
         "@io_bazel_rules_go//go/platform:plan9": [
+            "//pkg/util/log/eventpb",
+            "@com_github_prometheus_client_model//go",
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
             "//pkg/util/log/eventpb",
             "@com_github_prometheus_client_model//go",
             "@org_golang_x_sys//unix",
