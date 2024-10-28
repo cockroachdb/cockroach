@@ -2150,22 +2150,22 @@ SHOW BACKUP 'family' IN ('*****', '*****', '*****', '*****', '*****', '*****', '
 SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- passwords exposed
 
 parse
-SHOW BACKUP 'abc' WITH SKIP SIZE
+SHOW BACKUP 'abc' IN 'def' WITH SKIP SIZE
 ----
-SHOW BACKUP '*****' WITH OPTIONS (skip size) -- normalized!
-SHOW BACKUP ('*****') WITH OPTIONS (skip size) -- fully parenthesized
-SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
-SHOW BACKUP '*****' WITH OPTIONS (skip size) -- identifiers removed
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- passwords exposed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') IN ('*****') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' IN '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' IN 'def' WITH OPTIONS (skip size) -- passwords exposed
 
 parse
-SHOW BACKUP 'abc' WITH NOWAIT
+SHOW BACKUP 'abc' IN 'def' WITH NOWAIT
 ----
-SHOW BACKUP '*****' WITH OPTIONS (skip size) -- normalized!
-SHOW BACKUP ('*****') WITH OPTIONS (skip size) -- fully parenthesized
-SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
-SHOW BACKUP '*****' WITH OPTIONS (skip size) -- identifiers removed
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- passwords exposed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') IN ('*****') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' IN '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' IN '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' IN 'def' WITH OPTIONS (skip size) -- passwords exposed
 
 parse
 SHOW DEFAULT SESSION VARIABLES FOR ROLE foo
