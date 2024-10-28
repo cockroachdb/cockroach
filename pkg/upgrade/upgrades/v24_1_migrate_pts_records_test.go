@@ -88,6 +88,7 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 			keys.ZonesTableID,
 			keys.RoleMembersTableID,
 			keys.CommentsTableID,
+			keys.UsersTableID,
 			tableDesc.GetID()})
 		descIDsArr = append(descIDsArr, tableDesc.GetID())
 		allTables = append(allTables, tbl)
