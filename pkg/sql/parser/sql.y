@@ -3387,15 +3387,10 @@ backup_stmt:
       Options: *$8.backupOptions(),
     }
   }
-| BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+| BACKUP opt_backup_targets TO error
   {
-    $$.val = &tree.Backup{
-      Targets: $2.backupTargetListPtr(),
-      To: $4.stringOrPlaceholderOptList(),
-      IncrementalFrom: $6.exprs(),
-      AsOf: $5.asOfClause(),
-      Options: *$7.backupOptions(),
-    }
+    setErr(sqllex, errors.New("The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection."))
+    return helpWith(sqllex, "BACKUP")
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -3819,14 +3814,10 @@ drop_external_connection_stmt:
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  RESTORE FROM error
   {
-    $$.val = &tree.Restore{
-    DescriptorCoverage: tree.AllDescriptors,
-    From: $3.listOfStringOrPlaceholderOptList(),
-    AsOf: $4.asOfClause(),
-    Options: *($5.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE FROM <backupURI>` syntax is no longer supported. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -3838,14 +3829,10 @@ restore_stmt:
 		Options: *($7.restoreOptions()),
     }
   }
-| RESTORE backup_targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM error
   {
-    $$.val = &tree.Restore{
-    Targets: $2.backupTargetList(),
-    From: $4.listOfStringOrPlaceholderOptList(),
-    AsOf: $5.asOfClause(),
-    Options: *($6.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE backup_targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -3857,14 +3844,10 @@ restore_stmt:
       Options: *($8.restoreOptions()),
     }
   }
-| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE SYSTEM USERS FROM error
   {
-    $$.val = &tree.Restore{
-      DescriptorCoverage: tree.SystemUsers,
-      From: $5.listOfStringOrPlaceholderOptList(),
-      AsOf: $6.asOfClause(),
-      Options: *($7.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -8260,57 +8243,42 @@ show_backup_stmt:
 			Options: *$6.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP string_or_placeholder opt_with_show_backup_options error
 	{
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupDefaultDetails,
-			Path:    $3.expr(),
-			Options: *$4.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options error
 	{
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupSchemaDetails,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP SCHEMAS` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP SCHEMAS FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options error
 	{
     /* SKIP DOC */
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupFileDetails,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP FILES` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP FILES FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options error
 	{
     /* SKIP DOC */
+    setErr(sqllex, errors.New("The `SHOW BACKUP RANGES` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP RANGES FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
+	}
+| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options error
+	{
+		/* SKIP DOC */
+		setErr(sqllex, errors.New("The `SHOW BACKUP VALIDATE` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP VALIDATE FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
+	}
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list error
+	{
 		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupRangeDetails,
+			Details:  tree.BackupConnectionTest,
 			Path:    $4.expr(),
 			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options
-  	{
-      /* SKIP DOC */
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupValidateDetails,
-  			Path:    $4.expr(),
-  			Options: *$5.showBackupOptions(),
-  		}
-  	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
-  	{
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
-  			Options: *$5.showBackupOptions(),
-  		}
-  	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 show_backup_details:

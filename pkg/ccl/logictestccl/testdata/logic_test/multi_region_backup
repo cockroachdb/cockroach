@@ -375,13 +375,13 @@ ALTER DATABASE "mr-backup-1" CONFIGURE ZONE USING gc.ttlseconds = 1;
 ALTER DATABASE "mr-backup-2" CONFIGURE ZONE USING gc.ttlseconds = 1
 
 statement ok
-BACKUP DATABASE "mr-backup-1" TO 'nodelocal://1/mr-backup-1/';
+BACKUP DATABASE "mr-backup-1" INTO 'nodelocal://1/mr-backup-1/';
 
 statement ok
-BACKUP DATABASE "mr-backup-2" TO 'nodelocal://1/mr-backup-2/';
+BACKUP DATABASE "mr-backup-2" INTO 'nodelocal://1/mr-backup-2/';
 
 statement ok
-BACKUP DATABASE "mr-backup-1", "mr-backup-2" TO 'nodelocal://1/mr-backup-combined/'
+BACKUP DATABASE "mr-backup-1", "mr-backup-2" INTO 'nodelocal://1/mr-backup-combined/'
 
 query T rowsort
 select database_name from [show databases]
@@ -408,7 +408,7 @@ system
 test
 
 statement ok
-RESTORE DATABASE "mr-backup-1" FROM 'nodelocal://1/mr-backup-1/'
+RESTORE DATABASE "mr-backup-1" FROM LATEST IN 'nodelocal://1/mr-backup-1/'
 
 query T rowsort
 select database_name from [show databases]
@@ -562,7 +562,7 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
                                            lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-RESTORE DATABASE "mr-backup-2" FROM 'nodelocal://1/mr-backup-2/'
+RESTORE DATABASE "mr-backup-2" FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 
 query T rowsort
 select database_name from [show databases]
@@ -731,7 +731,7 @@ system
 test
 
 statement ok
-RESTORE DATABASE "mr-backup-1", "mr-backup-2" FROM 'nodelocal://1/mr-backup-combined/'
+RESTORE DATABASE "mr-backup-1", "mr-backup-2" FROM LATEST IN 'nodelocal://1/mr-backup-combined/'
 
 query T rowsort
 select database_name from [show databases]
@@ -1031,16 +1031,16 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
 subtest multiregion_table_backup_and_restore
 
 statement ok
-BACKUP TABLE regional_by_row_table TO 'nodelocal://1/rbr_table/';
+BACKUP TABLE regional_by_row_table INTO 'nodelocal://1/rbr_table/';
 
 statement ok
-BACKUP TABLE regional_by_table_in_primary_region TO 'nodelocal://1/rbt_table_in_primary_region/';
+BACKUP TABLE regional_by_table_in_primary_region INTO 'nodelocal://1/rbt_table_in_primary_region/';
 
 statement ok
-BACKUP TABLE regional_by_table_in_ca_central_1 TO 'nodelocal://1/rbt_table_in_ca_central_1/';
+BACKUP TABLE regional_by_table_in_ca_central_1 INTO 'nodelocal://1/rbt_table_in_ca_central_1/';
 
 statement ok
-BACKUP TABLE global_table TO 'nodelocal://1/global_table/';
+BACKUP TABLE global_table INTO 'nodelocal://1/global_table/';
 
 statement ok
 DROP TABLE regional_by_row_table;
@@ -1049,16 +1049,16 @@ DROP TABLE regional_by_table_in_ca_central_1;
 DROP TABLE global_table;
 
 statement ok
-RESTORE TABLE regional_by_row_table FROM 'nodelocal://1/rbr_table/';
+RESTORE TABLE regional_by_row_table FROM LATEST IN 'nodelocal://1/rbr_table/';
 
 statement ok
-RESTORE TABLE regional_by_table_in_primary_region FROM 'nodelocal://1/rbt_table_in_primary_region/';
+RESTORE TABLE regional_by_table_in_primary_region FROM LATEST IN 'nodelocal://1/rbt_table_in_primary_region/';
 
 statement ok
-RESTORE TABLE regional_by_table_in_ca_central_1 FROM 'nodelocal://1/rbt_table_in_ca_central_1/';
+RESTORE TABLE regional_by_table_in_ca_central_1 FROM LATEST IN 'nodelocal://1/rbt_table_in_ca_central_1/';
 
 statement ok
-RESTORE TABLE global_table FROM 'nodelocal://1/global_table/';
+RESTORE TABLE global_table FROM LATEST IN 'nodelocal://1/global_table/';
 
 query IIIIT rowsort
 SELECT * FROM regional_by_row_table;
@@ -1202,13 +1202,13 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                  lease_preferences = '[]'
 
 statement ok
-BACKUP TABLE non_mr_table TO 'nodelocal://1/non_mr_table/'
+BACKUP TABLE non_mr_table INTO 'nodelocal://1/non_mr_table/'
 
 statement ok
 DROP TABLE non_mr_table
 
 statement ok
-RESTORE TABLE non_mr_table FROM 'nodelocal://1/non_mr_table/'
+RESTORE TABLE non_mr_table FROM LATEST IN 'nodelocal://1/non_mr_table/'
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE non_mr_table
@@ -1222,11 +1222,11 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                  lease_preferences = '[]'
 
 statement ok
-RESTORE TABLE non_mr_table FROM 'nodelocal://1/non_mr_table/' WITH into_db = 'mr-backup-1'
+RESTORE TABLE non_mr_table FROM LATEST IN 'nodelocal://1/non_mr_table/' WITH into_db = 'mr-backup-1'
 
 # Verify that an MR table cannot be restored in a non-MR database.
 statement error cannot restore descriptor for multi-region table regional_by_row_table into non-multi-region database non_mr_backup
-RESTORE TABLE "mr-backup-2".regional_by_row_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db = 'non_mr_backup'
+RESTORE TABLE "mr-backup-2".regional_by_row_table FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db = 'non_mr_backup'
 
 statement ok
 USE 'mr-backup-1'
@@ -1268,7 +1268,7 @@ DROP TABLE global_table;
 subtest restore_tables_into_database_with_same_regions
 
 statement ok
-RESTORE TABLE regional_by_row_table FROM 'nodelocal://1/mr-backup-2/'
+RESTORE TABLE regional_by_row_table FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 
 query TT
 SHOW CREATE TABLE regional_by_row_table
@@ -1288,7 +1288,7 @@ regional_by_row_table  CREATE TABLE public.regional_by_row_table (
                        ) LOCALITY REGIONAL BY ROW
 
 statement ok
-RESTORE TABLE regional_by_table_in_primary_region FROM 'nodelocal://1/mr-backup-2/'
+RESTORE TABLE regional_by_table_in_primary_region FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
@@ -1302,7 +1302,7 @@ regional_by_table_in_primary_region             CREATE TABLE public.regional_by_
 
 
 statement ok
-RESTORE TABLE regional_by_table_in_ca_central_1 FROM 'nodelocal://1/mr-backup-2/'
+RESTORE TABLE regional_by_table_in_ca_central_1 FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 
 # REGIONAL BY TABLE tables with a specific region are permitted if that region
 # exists in the database.
@@ -1317,7 +1317,7 @@ regional_by_table_in_ca_central_1               CREATE TABLE public.regional_by_
 ) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
 
 statement ok
-RESTORE TABLE global_table FROM 'nodelocal://1/mr-backup-2/'
+RESTORE TABLE global_table FROM LATEST IN 'nodelocal://1/mr-backup-2/'
 
 query TT
 SHOW CREATE TABLE global_table
@@ -1337,7 +1337,7 @@ statement ok
 CREATE DATABASE "mr-restore-1" primary region "ap-southeast-2" regions "us-east-1"
 
 statement ok
-RESTORE TABLE "mr-backup-2".global_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+RESTORE TABLE "mr-backup-2".global_table FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
 
 statement ok
 USE "mr-restore-1";
@@ -1368,7 +1368,7 @@ TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
 
 
 statement ok
-RESTORE TABLE "mr-backup-2".regional_by_table_in_primary_region FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+RESTORE TABLE "mr-backup-2".regional_by_table_in_primary_region FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
 
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
@@ -1402,11 +1402,11 @@ ca-central-1    {ca-az1,ca-az2,ca-az3}  {mr-backup-1,mr-backup-2}               
 us-east-1       {us-az1,us-az2,us-az3}  {mr-backup-1,mr-backup-2,mr-restore-1}  {}                          {}
 
 statement error "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: could not find enum value "ca-central-1" in "crdb_internal_region"
-RESTORE TABLE "mr-backup-2".regional_by_table_in_ap_southeast_2 FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+RESTORE TABLE "mr-backup-2".regional_by_table_in_ap_southeast_2 FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
 
 # Cannot restore a REGIONAL BY TABLE table that has different regions.
 statement error cannot restore REGIONAL BY TABLE regional_by_table_in_ca_central_1 IN REGION "ca-central-1" \(table ID: [0-9]+\) into database "mr-restore-1"; region "ca-central-1" not found in database regions "ap-southeast-2", "us-east-1"
-RESTORE TABLE "mr-backup-2".regional_by_table_in_ca_central_1 FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
+RESTORE TABLE "mr-backup-2".regional_by_table_in_ca_central_1 FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
 
 statement error "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: could not find enum value "ca-central-1" in "crdb_internal_region"
-RESTORE TABLE "mr-backup-2".regional_by_row_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
+RESTORE TABLE "mr-backup-2".regional_by_row_table FROM LATEST IN 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
