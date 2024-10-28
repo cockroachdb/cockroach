@@ -35,7 +35,7 @@ func NewOptions(
 	return Options{
 		LivenessInterval:             livenessInterval,
 		HeartbeatInterval:            heartbeatInterval,
-		SupportExpiryInterval:        1 * time.Second,
+		SupportExpiryInterval:        100 * time.Millisecond,
 		IdleSupportFromInterval:      1 * time.Minute,
 		SupportWithdrawalGracePeriod: supportWithdrawalGracePeriod,
 	}
