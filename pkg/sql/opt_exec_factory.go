@@ -1694,7 +1694,7 @@ func (ef *execFactory) ConstructUpsert(
 		run: upsertRun{
 			checkOrds:  checks,
 			insertCols: ri.InsertCols,
-			tw: optTableUpserter{
+			tw: tableUpserter{
 				ri:            ri,
 				canaryOrdinal: int(canaryCol),
 				fetchCols:     fetchCols,

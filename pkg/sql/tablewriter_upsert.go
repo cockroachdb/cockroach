@@ -18,29 +18,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// optTableUpserter implements the upsert operation when it is planned by the
-// cost-based optimizer (CBO). The CBO can use a much simpler upserter because
-// it incorporates conflict detection, update and computed column evaluation,
-// and other upsert operations into the input query, rather than requiring the
+// tableUpserter implements the upsert operation. Upsert query plans
+// incorporate conflict detection, update and computed column evaluation, and
+// other upsert operations into the input query, rather than requiring the
 // upserter to do it. For example:
 //
 //	CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 //	INSERT INTO abc VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b=10
 //
-// The CBO will generate an input expression similar to this:
+// The optimizer will generate an input expression similar to this:
 //
 //	SELECT ins_a, ins_b, ins_c, fetch_a, fetch_b, fetch_c, 10 AS upd_b
 //	FROM (VALUES (1, 2, NULL)) AS ins(ins_a, ins_b, ins_c)
 //	LEFT OUTER JOIN abc AS fetch(fetch_a, fetch_b, fetch_c)
 //	ON ins_a = fetch_a
 //
-// The other non-CBO upserters perform custom left lookup joins. However, that
-// doesn't allow sharing of optimization rules and doesn't work with correlated
-// SET expressions.
-//
-// For more details on how the CBO compiles UPSERT statements, see the block
-// comment on Builder.buildInsert in opt/optbuilder/insert.go.
-type optTableUpserter struct {
+// For more details on how the optimizer compiles UPSERT statements, see the
+// block comment on Builder.buildInsert in opt/optbuilder/insert.go.
+type tableUpserter struct {
 	tableWriterBase
 
 	ri row.Inserter
@@ -89,8 +84,8 @@ type optTableUpserter struct {
 	tabColIdxToRetIdx []int
 }
 
-// init initializes the optTableUpserter with a Txn.
-func (tu *optTableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+// init initializes the tableUpserter with a Txn.
+func (tu *tableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
 	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx); err != nil {
 		return err
 	}
@@ -132,7 +127,7 @@ func (tu *optTableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval
 // There are two main examples of this reshaping:
 // 1) A row may not contain values for nullable columns, so insert those NULLs.
 // 2) Don't return values we wrote into non-public mutation columns.
-func (tu *optTableUpserter) makeResultFromRow(
+func (tu *tableUpserter) makeResultFromRow(
 	row tree.Datums, colIDToRowIndex catalog.TableColMap,
 ) tree.Datums {
 	resultRow := make(tree.Datums, tu.colIDToReturnIndex.Len())
@@ -162,7 +157,7 @@ func (tu *optTableUpserter) makeResultFromRow(
 // should be logged to the context. We use a separate argument here instead
 // of a Value field on the context because Value access in context.Context
 // is rather expensive.
-func (tu *optTableUpserter) row(
+func (tu *tableUpserter) row(
 	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	tu.currentBatchSize++
@@ -206,7 +201,7 @@ func (tu *optTableUpserter) row(
 // insertNonConflictingRow inserts the given source row into the table when
 // there was no conflict. If the RETURNING clause was specified, then the
 // inserted row is stored in the rowsUpserted collection.
-func (tu *optTableUpserter) insertNonConflictingRow(
+func (tu *tableUpserter) insertNonConflictingRow(
 	ctx context.Context,
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
@@ -253,7 +248,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 // already be initialized with the descriptors for the fetch and update values.
 // If the RETURNING clause was specified, then the updated row is stored in the
 // rowsUpserted collection.
-func (tu *optTableUpserter) updateConflictingRow(
+func (tu *tableUpserter) updateConflictingRow(
 	ctx context.Context,
 	b *kv.Batch,
 	fetchRow tree.Datums,
@@ -304,6 +299,6 @@ func (tu *optTableUpserter) updateConflictingRow(
 
 // tableDesc returns the TableDescriptor for the table that the optTableInserter
 // will modify.
-func (tu *optTableUpserter) tableDesc() catalog.TableDescriptor {
+func (tu *tableUpserter) tableDesc() catalog.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
