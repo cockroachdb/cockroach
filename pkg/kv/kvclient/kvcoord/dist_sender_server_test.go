@@ -8,6 +8,7 @@ package kvcoord_test
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"reflect"
 	"sort"
@@ -4898,11 +4899,17 @@ func TestProxyTracing(t *testing.T) {
 
 	// Expect the "proxy request complete" message to be in the trace and that it
 	// comes from the proxy node n2.
-	row := conn.QueryRowContext(ctx, "SELECT message, tag, location "+
-		"FROM [SHOW TRACE FOR SESSION] "+
-		"WHERE message LIKE '%proxy request complete%'"+
-		"AND location LIKE '%server/node%'",
-		"AND tag LIKE '%n2%'",
-	)
-	require.NotNil(t, row)
+	var msg, tag, loc string
+	if err = conn.QueryRowContext(ctx, `SELECT message, tag, location
+		FROM [SHOW TRACE FOR SESSION]
+		WHERE message LIKE '%proxy request complete%'
+		AND location LIKE '%server/node%'
+		AND tag LIKE '%n2%'`,
+	).Scan(&msg, &tag, &loc); err != nil {
+		if errors.Is(err, gosql.ErrNoRows) {
+			t.Fatalf("request succeeded without proxying")
+		}
+		t.Fatal(err)
+	}
+	t.Logf("found trace event; msg=%s, tag=%s, loc=%s", msg, tag, loc)
 }
