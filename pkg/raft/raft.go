@@ -2040,7 +2040,11 @@ func stepCandidate(r *raft, m pb.Message) error {
 			r.becomeFollower(r.Term, r.lead)
 		}
 	case pb.MsgTimeoutNow:
-		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
+		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		// TODO(nvanbenschoten): this is temporarily duplicating logic from
+		// stepFollower. Unify.
+		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
+		r.hup(campaignTransfer)
 	}
 	return nil
 }
