@@ -254,7 +254,9 @@ func testsToRun(
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		updateSpecForSelectiveTests(ctx, specs)
+		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+			fmt.Fprintf(os.Stdout, format, args...)
+		})
 	}
 
 	var notSkipped []registry.TestSpec
@@ -308,12 +310,14 @@ func testsToRun(
 //     the successful tests.
 //  4. The tests that meet the 35% criteria, are marked as "selected=true"
 //  5. All tests that are marked "selected=true" are considered for the test run.
-func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec) {
+func updateSpecForSelectiveTests(
+	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
+) {
 	selectedTestsCount := 0
 	allTests, err := testselector.CategoriseTests(ctx,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		fmt.Printf("running all tests! error selecting tests: %v\n", err)
+		logFunc("running all tests! error selecting tests: %v\n", err)
 		return
 	}
 
@@ -350,7 +354,7 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 	for i := 0; i < numberOfTestsToSelect; i++ {
 		successfulTests[i].Selected = true
 	}
-	fmt.Printf("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
+	logFunc("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
 	for i := range specs {
 		if testShouldBeSkipped(allTestsMap, specs[i], roachtestflags.Suite) {
 			if specs[i].Skip == "" {
@@ -366,7 +370,7 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 			specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
 		}
 	}
-	fmt.Printf("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
+	logFunc("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
 }
 
 // testShouldBeSkipped decides whether a test should be skipped based on test details and suite
