@@ -87,6 +87,40 @@ func TestNonCatchablePanicIsNotCaught(t *testing.T) {
 	})
 }
 
+type testInterface interface {
+	foo()
+}
+
+type testImpl1 struct{}
+
+var _ testInterface = &testImpl1{}
+
+func (t testImpl1) foo() {}
+
+type testImpl2 struct{}
+
+var _ testInterface = &testImpl2{}
+
+func (t testImpl2) foo() {}
+
+// TestRuntimePanicIsCaught verifies that if a runtime panic occurs in the
+// safe-to-catch package (which this test package is), then it is converted into
+// an internal error (#133167).
+func TestRuntimePanicIsCaught(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
+
+	require.Error(t, colexecerror.CatchVectorizedRuntimeError(func() {
+		// Attempt an invalid interface conversion.
+		var o testInterface = &testImpl1{}
+		_ = o.(*testImpl2)
+	}))
+}
+
 // BenchmarkCatchVectorizedRuntimeError measures the time for
 // CatchVectorizedRuntimeError to catch and process an error.
 func BenchmarkCatchVectorizedRuntimeError(b *testing.B) {
