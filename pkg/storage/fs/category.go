@@ -6,14 +6,12 @@
 package fs
 
 import (
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 // ReadCategory is used to export metrics and maps to a QoS understood by
-// Pebble. Categories are being introduced lazily, since more categories
-// result in more metrics.
+// Pebble.
 type ReadCategory int8
 
 const (
@@ -48,32 +46,24 @@ const (
 	BackupReadCategory
 )
 
-var readCategoryMap = map[ReadCategory]sstable.CategoryAndQoS{
-	UnknownReadCategory: {Category: "crdb-unknown", QoSLevel: sstable.LatencySensitiveQoSLevel},
+var readCategoryMap = [...]sstable.Category{
+	UnknownReadCategory: sstable.RegisterCategory("crdb-unknown", sstable.LatencySensitiveQoSLevel),
 	// TODO(sumeer): consider splitting batch-eval into two categories, for
 	// latency sensitive and non latency sensitive.
-	BatchEvalReadCategory: {Category: "batch-eval", QoSLevel: sstable.LatencySensitiveQoSLevel},
-	ScanRegularBatchEvalReadCategory: {
-		Category: "scan-regular", QoSLevel: sstable.LatencySensitiveQoSLevel},
-	ScanBackgroundBatchEvalReadCategory: {Category: "scan-background", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
-	MVCCGCReadCategory:                  {Category: "mvcc-gc", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
-	RangeSnapshotReadCategory: {
-		Category: "range-snap", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
-	RangefeedReadCategory: {
-		Category: "rangefeed", QoSLevel: sstable.LatencySensitiveQoSLevel},
-	ReplicationReadCategory: {Category: "replication", QoSLevel: sstable.LatencySensitiveQoSLevel},
-	IntentResolutionReadCategory: {
-		Category: "intent-resolution", QoSLevel: sstable.LatencySensitiveQoSLevel},
-	BackupReadCategory: {
-		Category: "backup", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
+	BatchEvalReadCategory:               sstable.RegisterCategory("batch-eval", sstable.LatencySensitiveQoSLevel),
+	ScanRegularBatchEvalReadCategory:    sstable.RegisterCategory("scan-regular", sstable.LatencySensitiveQoSLevel),
+	ScanBackgroundBatchEvalReadCategory: sstable.RegisterCategory("scan-background", sstable.NonLatencySensitiveQoSLevel),
+	MVCCGCReadCategory:                  sstable.RegisterCategory("mvcc-gc", sstable.NonLatencySensitiveQoSLevel),
+	RangeSnapshotReadCategory:           sstable.RegisterCategory("range-snap", sstable.NonLatencySensitiveQoSLevel),
+	RangefeedReadCategory:               sstable.RegisterCategory("rangefeed", sstable.LatencySensitiveQoSLevel),
+	ReplicationReadCategory:             sstable.RegisterCategory("replication", sstable.LatencySensitiveQoSLevel),
+	IntentResolutionReadCategory:        sstable.RegisterCategory("intent-resolution", sstable.LatencySensitiveQoSLevel),
+	BackupReadCategory:                  sstable.RegisterCategory("backup", sstable.NonLatencySensitiveQoSLevel),
 }
 
-func GetCategoryAndQoS(c ReadCategory) sstable.CategoryAndQoS {
-	categoryAndQoS, ok := readCategoryMap[c]
-	if !ok {
-		panic(errors.AssertionFailedf("unknown category %d", c))
-	}
-	return categoryAndQoS
+// PebbleCategory returns the sstable.Category associated with the given ReadCategory.
+func (c ReadCategory) PebbleCategory() sstable.Category {
+	return readCategoryMap[c]
 }
 
 const (
