@@ -539,6 +539,9 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 						},
 					)
 				} else {
+					if targets.Tables.SequenceOnly {
+						return nil, pgerror.Newf(pgcode.WrongObjectType, "%s is not a sequence", tableDesc.GetName())
+					}
 					descs = append(
 						descs,
 						DescriptorWithObjectType{
