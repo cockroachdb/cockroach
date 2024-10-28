@@ -49,7 +49,7 @@ func TestRawNodeStep(t *testing.T) {
 			rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 			require.NoError(t, err, "#%d", i)
 			msgt := pb.MessageType(i)
-			err = rawNode.Step(pb.Message{Type: msgt})
+			err = rawNode.Step(pb.Message{Type: msgt, From: 2})
 			// LocalMsg should be ignored.
 			if IsLocalMsg(msgt) {
 				assert.Equal(t, ErrStepLocalMsg, err, "#%d", i)
