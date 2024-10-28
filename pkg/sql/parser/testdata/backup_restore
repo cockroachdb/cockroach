@@ -1,38 +1,38 @@
-parse
+error
 BACKUP TABLE foo TO 'bar'
 ----
-BACKUP TABLE foo TO '*****' -- normalized!
-BACKUP TABLE (foo) TO ('*****') -- fully parenthesized
-BACKUP TABLE foo TO '_' -- literals removed
-BACKUP TABLE _ TO '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TABLE foo TO 'bar'
+                    ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP foo TO 'bar'
 ----
-BACKUP TABLE foo TO '*****' -- normalized!
-BACKUP TABLE (foo) TO ('*****') -- fully parenthesized
-BACKUP TABLE foo TO '_' -- literals removed
-BACKUP TABLE _ TO '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP foo TO 'bar'
+              ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP TO 'bar'
 ----
-BACKUP TO '*****' -- normalized!
-BACKUP TO ('*****') -- fully parenthesized
-BACKUP TO '_' -- literals removed
-BACKUP TO '*****' -- identifiers removed
-BACKUP TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TO 'bar'
+          ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP role TO 'bar'
 ----
-BACKUP TABLE "role" TO '*****' -- normalized!
-BACKUP TABLE ("role") TO ('*****') -- fully parenthesized
-BACKUP TABLE "role" TO '_' -- literals removed
-BACKUP TABLE _ TO '*****' -- identifiers removed
-BACKUP TABLE "role" TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP role TO 'bar'
+               ^
+HINT: try \h BACKUP
 
 parse
 BACKUP TABLE foo INTO 'bar'
@@ -87,50 +87,50 @@ BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (updates_cluster_monitoring_met
 BACKUP TABLE _ INTO LATEST IN '*****' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- identifiers removed
 BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- passwords exposed
 
-parse
+error
 EXPLAIN BACKUP TABLE foo TO 'bar'
 ----
-EXPLAIN BACKUP TABLE foo TO '*****' -- normalized!
-EXPLAIN BACKUP TABLE (foo) TO ('*****') -- fully parenthesized
-EXPLAIN BACKUP TABLE foo TO '_' -- literals removed
-EXPLAIN BACKUP TABLE _ TO '*****' -- identifiers removed
-EXPLAIN BACKUP TABLE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+EXPLAIN BACKUP TABLE foo TO 'bar'
+                            ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP TABLE foo.foo, baz.baz TO 'bar'
 ----
-BACKUP TABLE foo.foo, baz.baz TO '*****' -- normalized!
-BACKUP TABLE (foo.foo), (baz.baz) TO ('*****') -- fully parenthesized
-BACKUP TABLE foo.foo, baz.baz TO '_' -- literals removed
-BACKUP TABLE _._, _._ TO '*****' -- identifiers removed
-BACKUP TABLE foo.foo, baz.baz TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TABLE foo.foo, baz.baz TO 'bar'
+                                 ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP foo.foo, baz.baz TO 'bar'
 ----
-BACKUP TABLE foo.foo, baz.baz TO '*****' -- normalized!
-BACKUP TABLE (foo.foo), (baz.baz) TO ('*****') -- fully parenthesized
-BACKUP TABLE foo.foo, baz.baz TO '_' -- literals removed
-BACKUP TABLE _._, _._ TO '*****' -- identifiers removed
-BACKUP TABLE foo.foo, baz.baz TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP foo.foo, baz.baz TO 'bar'
+                           ^
+HINT: try \h BACKUP
 
-parse
+error
 SHOW BACKUP 'bar'
 ----
-SHOW BACKUP '*****' -- normalized!
-SHOW BACKUP ('*****') -- fully parenthesized
-SHOW BACKUP '_' -- literals removed
-SHOW BACKUP '*****' -- identifiers removed
-SHOW BACKUP 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `SHOW BACKUP` syntax without the `IN` keyword has been removed. Please use `SHOW BACKUP FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+SHOW BACKUP 'bar'
+                 ^
+HINT: try \h SHOW BACKUP
 
-parse
+error
 SHOW BACKUP 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', CHECK_FILES
 ----
-SHOW BACKUP '*****' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- normalized!
-SHOW BACKUP ('*****') WITH OPTIONS (check_files, encryption_passphrase = '*****') -- fully parenthesized
-SHOW BACKUP '_' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- literals removed
-SHOW BACKUP '*****' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- identifiers removed
-SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = 'secret') -- passwords exposed
+at or near "EOF": syntax error: The `SHOW BACKUP` syntax without the `IN` keyword has been removed. Please use `SHOW BACKUP FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+SHOW BACKUP 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', CHECK_FILES
+                                                                    ^
+HINT: try \h SHOW BACKUP
 
 parse
 SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
@@ -151,32 +151,32 @@ SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_locati
 SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
 
 
-parse
+error
 EXPLAIN SHOW BACKUP 'bar'
 ----
-EXPLAIN SHOW BACKUP '*****' -- normalized!
-EXPLAIN SHOW BACKUP ('*****') -- fully parenthesized
-EXPLAIN SHOW BACKUP '_' -- literals removed
-EXPLAIN SHOW BACKUP '*****' -- identifiers removed
-EXPLAIN SHOW BACKUP 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `SHOW BACKUP` syntax without the `IN` keyword has been removed. Please use `SHOW BACKUP FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+EXPLAIN SHOW BACKUP 'bar'
+                         ^
+HINT: try \h SHOW BACKUP
 
-parse
+error
 SHOW BACKUP RANGES 'bar'
 ----
-SHOW BACKUP RANGES '*****' -- normalized!
-SHOW BACKUP RANGES ('*****') -- fully parenthesized
-SHOW BACKUP RANGES '_' -- literals removed
-SHOW BACKUP RANGES '*****' -- identifiers removed
-SHOW BACKUP RANGES 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `SHOW BACKUP RANGES` syntax without the `IN` keyword has been removed. Please use `SHOW BACKUP RANGES FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+SHOW BACKUP RANGES 'bar'
+                        ^
+HINT: try \h SHOW BACKUP
 
-parse
+error
 SHOW BACKUP FILES 'bar'
 ----
-SHOW BACKUP FILES '*****' -- normalized!
-SHOW BACKUP FILES ('*****') -- fully parenthesized
-SHOW BACKUP FILES '_' -- literals removed
-SHOW BACKUP FILES '*****' -- identifiers removed
-SHOW BACKUP FILES 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `SHOW BACKUP FILES` syntax without the `IN` keyword has been removed. Please use `SHOW BACKUP FILES FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+SHOW BACKUP FILES 'bar'
+                       ^
+HINT: try \h SHOW BACKUP
 
 parse
 SHOW BACKUP CONNECTION 'bar'
@@ -275,231 +275,149 @@ SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****', encryption_i
 SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- identifiers removed
 SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper') -- passwords exposed
 
-parse
+error
 BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
 ----
-BACKUP TABLE foo TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- normalized!
-BACKUP TABLE (foo) TO ('*****') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('*****') -- fully parenthesized
-BACKUP TABLE foo TO '_' AS OF SYSTEM TIME '_' INCREMENTAL FROM '_' -- literals removed
-BACKUP TABLE _ TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+                    ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
 ----
-BACKUP TABLE foo TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- normalized!
-BACKUP TABLE (foo) TO ('*****') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('*****') -- fully parenthesized
-BACKUP TABLE foo TO '_' AS OF SYSTEM TIME '_' INCREMENTAL FROM '_' -- literals removed
-BACKUP TABLE _ TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+              ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
 ----
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '*****', $2, '*****' -- normalized!
-BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('*****'), ($2), ('*****') -- fully parenthesized
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $1, '_' -- literals removed
-BACKUP TABLE _ TO $1 INCREMENTAL FROM '*****', $2, '*****' -- identifiers removed
-BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- passwords exposed
+at or near "1": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
+                    ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
 ----
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '*****', $2, '*****' -- normalized!
-BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('*****'), ($2), ('*****') -- fully parenthesized
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $1, '_' -- literals removed
-BACKUP TABLE _ TO $1 INCREMENTAL FROM '*****', $2, '*****' -- identifiers removed
-BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- passwords exposed
+at or near "1": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
+              ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP DATABASE foo TO 'bar'
 ----
-BACKUP DATABASE foo TO '*****' -- normalized!
-BACKUP DATABASE foo TO ('*****') -- fully parenthesized
-BACKUP DATABASE foo TO '_' -- literals removed
-BACKUP DATABASE _ TO '*****' -- identifiers removed
-BACKUP DATABASE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP DATABASE foo TO 'bar'
+                       ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP DATABASE foo TO ($1)
 ----
-BACKUP DATABASE foo TO $1 -- normalized!
-BACKUP DATABASE foo TO ($1) -- fully parenthesized
-BACKUP DATABASE foo TO $1 -- literals removed
-BACKUP DATABASE _ TO $1 -- identifiers removed
+at or near "(": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP DATABASE foo TO ($1)
+                       ^
+HINT: try \h BACKUP
 
-parse
+error
 EXPLAIN BACKUP DATABASE foo TO 'bar'
 ----
-EXPLAIN BACKUP DATABASE foo TO '*****' -- normalized!
-EXPLAIN BACKUP DATABASE foo TO ('*****') -- fully parenthesized
-EXPLAIN BACKUP DATABASE foo TO '_' -- literals removed
-EXPLAIN BACKUP DATABASE _ TO '*****' -- identifiers removed
-EXPLAIN BACKUP DATABASE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+EXPLAIN BACKUP DATABASE foo TO 'bar'
+                               ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP DATABASE foo TO bar
 ----
-BACKUP DATABASE foo TO '*****' -- normalized!
-BACKUP DATABASE foo TO ('*****') -- fully parenthesized
-BACKUP DATABASE foo TO '_' -- literals removed
-BACKUP DATABASE _ TO '*****' -- identifiers removed
-BACKUP DATABASE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP DATABASE foo TO bar
+                       ^
+HINT: try \h BACKUP
 
-
-parse
-BACKUP DATABASE foo, baz TO 'bar'
-----
-BACKUP DATABASE foo, baz TO '*****' -- normalized!
-BACKUP DATABASE foo, baz TO ('*****') -- fully parenthesized
-BACKUP DATABASE foo, baz TO '_' -- literals removed
-BACKUP DATABASE _, _ TO '*****' -- identifiers removed
-BACKUP DATABASE foo, baz TO 'bar' -- passwords exposed
-
-parse
-BACKUP DATABASE foo TO "bar.12" INCREMENTAL FROM "baz.34"
-----
-BACKUP DATABASE foo TO '*****' INCREMENTAL FROM '*****' -- normalized!
-BACKUP DATABASE foo TO ('*****') INCREMENTAL FROM ('*****') -- fully parenthesized
-BACKUP DATABASE foo TO '_' INCREMENTAL FROM '_' -- literals removed
-BACKUP DATABASE _ TO '*****' INCREMENTAL FROM '*****' -- identifiers removed
-BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34' -- passwords exposed
-
-
-parse
-BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
-----
-BACKUP DATABASE foo TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- normalized!
-BACKUP DATABASE foo TO ('*****') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('*****') -- fully parenthesized
-BACKUP DATABASE foo TO '_' AS OF SYSTEM TIME '_' INCREMENTAL FROM '_' -- literals removed
-BACKUP DATABASE _ TO '*****' AS OF SYSTEM TIME '1' INCREMENTAL FROM '*****' -- identifiers removed
-BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- passwords exposed
-
-parse
-BACKUP DATABASE foo TO ($1, $2)
-----
-BACKUP DATABASE foo TO ($1, $2)
-BACKUP DATABASE foo TO (($1), ($2)) -- fully parenthesized
-BACKUP DATABASE foo TO ($1, $1) -- literals removed
-BACKUP DATABASE _ TO ($1, $2) -- identifiers removed
-
-parse
-BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'
-----
-BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM '*****' -- normalized!
-BACKUP DATABASE foo TO (($1), ($2)) INCREMENTAL FROM ('*****') -- fully parenthesized
-BACKUP DATABASE foo TO ($1, $1) INCREMENTAL FROM '_' -- literals removed
-BACKUP DATABASE _ TO ($1, $2) INCREMENTAL FROM '*****' -- identifiers removed
-BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz' -- passwords exposed
-
-parse
-BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b'
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b')) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', execution locality = '_') -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b') -- passwords exposed
-
-parse
-BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = (true), kms = (('*****'), ('*****'))) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- passwords exposed
-
-parse
-BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached) -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', detached) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', detached) -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached) -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', detached) -- passwords exposed
-
-parse
-BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = (true), detached, kms = (('*****'), ('*****'))) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, detached, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- passwords exposed
-
-
-# Regression test for #95235.
-parse
+error
 BACKUP foo TO 'bar' WITH OPTIONS (detached = false)
 ----
-BACKUP TABLE foo TO '*****' -- normalized!
-BACKUP TABLE (foo) TO ('*****') -- fully parenthesized
-BACKUP TABLE foo TO '_' -- literals removed
-BACKUP TABLE _ TO '*****' -- identifiers removed
-BACKUP TABLE foo TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH OPTIONS (detached = false)
+              ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP VIRTUAL CLUSTER 36 TO 'bar'
 ----
-BACKUP VIRTUAL CLUSTER 36 TO '*****' -- normalized!
-BACKUP VIRTUAL CLUSTER 36 TO ('*****') -- fully parenthesized
-BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
-BACKUP VIRTUAL CLUSTER 36 TO '*****' -- identifiers removed
-BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP VIRTUAL CLUSTER 36 TO 'bar'
+                             ^
+HINT: try \h BACKUP
 
-parse
+error
 BACKUP TENANT 36 TO 'bar'
 ----
-BACKUP VIRTUAL CLUSTER 36 TO '*****' -- normalized!
-BACKUP VIRTUAL CLUSTER 36 TO ('*****') -- fully parenthesized
-BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
-BACKUP VIRTUAL CLUSTER 36 TO '*****' -- identifiers removed
-BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- passwords exposed
+at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported.. Please use `BACKUP INTO` to create a backup collection.
+DETAIL: source SQL:
+BACKUP TENANT 36 TO 'bar'
+                    ^
+HINT: try \h BACKUP
 
-parse
+error
 RESTORE TABLE foo FROM 'bar'
 ----
-RESTORE TABLE foo FROM '*****' -- normalized!
-RESTORE TABLE (foo) FROM ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM '_' -- literals removed
-RESTORE TABLE _ FROM '*****' -- identifiers removed
-RESTORE TABLE foo FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TABLE foo FROM 'bar'
+                            ^
+HINT: try \h RESTORE
 
-parse
+error
 EXPLAIN RESTORE TABLE foo FROM 'bar'
 ----
-EXPLAIN RESTORE TABLE foo FROM '*****' -- normalized!
-EXPLAIN RESTORE TABLE (foo) FROM ('*****') -- fully parenthesized
-EXPLAIN RESTORE TABLE foo FROM '_' -- literals removed
-EXPLAIN RESTORE TABLE _ FROM '*****' -- identifiers removed
-EXPLAIN RESTORE TABLE foo FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+EXPLAIN RESTORE TABLE foo FROM 'bar'
+                                    ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE foo FROM 'bar'
 ----
-RESTORE TABLE foo FROM '*****' -- normalized!
-RESTORE TABLE (foo) FROM ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM '_' -- literals removed
-RESTORE TABLE _ FROM '*****' -- identifiers removed
-RESTORE TABLE foo FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo FROM 'bar'
+                      ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE TABLE foo FROM $1
 ----
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
 RESTORE TABLE foo FROM $1
-RESTORE TABLE (foo) FROM ($1) -- fully parenthesized
-RESTORE TABLE foo FROM $1 -- literals removed
-RESTORE TABLE _ FROM $1 -- identifiers removed
+                         ^
+HINT: try \h RESTORE
 
-
-parse
+error
 RESTORE foo FROM $1
 ----
-RESTORE TABLE foo FROM $1 -- normalized!
-RESTORE TABLE (foo) FROM ($1) -- fully parenthesized
-RESTORE TABLE foo FROM $1 -- literals removed
-RESTORE TABLE _ FROM $1 -- identifiers removed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo FROM $1
+                   ^
+HINT: try \h RESTORE
 
 parse
 RESTORE TABLE foo FROM $2 IN $1
@@ -509,23 +427,23 @@ RESTORE TABLE (foo) FROM ($2) IN ($1) -- fully parenthesized
 RESTORE TABLE foo FROM $1 IN $1 -- literals removed
 RESTORE TABLE _ FROM $2 IN $1 -- identifiers removed
 
-parse
+error
 RESTORE TABLE foo FROM $1, $2, 'bar'
 ----
-RESTORE TABLE foo FROM $1, $2, '*****' -- normalized!
-RESTORE TABLE (foo) FROM ($1), ($2), ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM $1, $1, '_' -- literals removed
-RESTORE TABLE _ FROM $1, $2, '*****' -- identifiers removed
-RESTORE TABLE foo FROM $1, $2, 'bar' -- passwords exposed
+at or near ",": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TABLE foo FROM $1, $2, 'bar'
+                         ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE foo FROM $1, $2, 'bar'
 ----
-RESTORE TABLE foo FROM $1, $2, '*****' -- normalized!
-RESTORE TABLE (foo) FROM ($1), ($2), ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM $1, $1, '_' -- literals removed
-RESTORE TABLE _ FROM $1, $2, '*****' -- identifiers removed
-RESTORE TABLE foo FROM $1, $2, 'bar' -- passwords exposed
+at or near ",": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo FROM $1, $2, 'bar'
+                   ^
+HINT: try \h RESTORE
 
 parse
 RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
@@ -545,106 +463,86 @@ RESTORE TABLE foo FROM $1 IN $1, $1, '_' -- literals removed
 RESTORE TABLE _ FROM $4 IN $1, $2, '*****' -- identifiers removed
 RESTORE TABLE foo FROM $4 IN $1, $2, 'bar' -- passwords exposed
 
-parse
+error
 RESTORE TABLE foo, baz FROM 'bar'
 ----
-RESTORE TABLE foo, baz FROM '*****' -- normalized!
-RESTORE TABLE (foo), (baz) FROM ('*****') -- fully parenthesized
-RESTORE TABLE foo, baz FROM '_' -- literals removed
-RESTORE TABLE _, _ FROM '*****' -- identifiers removed
-RESTORE TABLE foo, baz FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TABLE foo, baz FROM 'bar'
+                                 ^
+HINT: try \h RESTORE
 
-
-parse
+error
 RESTORE foo, baz FROM 'bar'
 ----
-RESTORE TABLE foo, baz FROM '*****' -- normalized!
-RESTORE TABLE (foo), (baz) FROM ('*****') -- fully parenthesized
-RESTORE TABLE foo, baz FROM '_' -- literals removed
-RESTORE TABLE _, _ FROM '*****' -- identifiers removed
-RESTORE TABLE foo, baz FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo, baz FROM 'bar'
+                           ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
 ----
-RESTORE TABLE foo, baz FROM '*****' AS OF SYSTEM TIME '1' -- normalized!
-RESTORE TABLE (foo), (baz) FROM ('*****') AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE TABLE foo, baz FROM '_' AS OF SYSTEM TIME '_' -- literals removed
-RESTORE TABLE _, _ FROM '*****' AS OF SYSTEM TIME '1' -- identifiers removed
-RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1' -- passwords exposed
+at or near "as": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+                                  ^
+HINT: try \h RESTORE
 
-
-parse
+error
 RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
 ----
-RESTORE TABLE foo, baz FROM '*****' AS OF SYSTEM TIME '1' -- normalized!
-RESTORE TABLE (foo), (baz) FROM ('*****') AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE TABLE foo, baz FROM '_' AS OF SYSTEM TIME '_' -- literals removed
-RESTORE TABLE _, _ FROM '*****' AS OF SYSTEM TIME '1' -- identifiers removed
-RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1' -- passwords exposed
+at or near "as": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+                            ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE DATABASE foo FROM 'bar'
 ----
-RESTORE DATABASE foo FROM '*****' -- normalized!
-RESTORE DATABASE foo FROM ('*****') -- fully parenthesized
-RESTORE DATABASE foo FROM '_' -- literals removed
-RESTORE DATABASE _ FROM '*****' -- identifiers removed
-RESTORE DATABASE foo FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE DATABASE foo FROM 'bar'
+                               ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE DATABASE foo FROM ($1)
 ----
-RESTORE DATABASE foo FROM $1 -- normalized!
-RESTORE DATABASE foo FROM ($1) -- fully parenthesized
-RESTORE DATABASE foo FROM $1 -- literals removed
-RESTORE DATABASE _ FROM $1 -- identifiers removed
+at or near "(": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE DATABASE foo FROM ($1)
+                          ^
+HINT: try \h RESTORE
 
-parse
+error
 EXPLAIN RESTORE DATABASE foo FROM 'bar'
 ----
-EXPLAIN RESTORE DATABASE foo FROM '*****' -- normalized!
-EXPLAIN RESTORE DATABASE foo FROM ('*****') -- fully parenthesized
-EXPLAIN RESTORE DATABASE foo FROM '_' -- literals removed
-EXPLAIN RESTORE DATABASE _ FROM '*****' -- identifiers removed
-EXPLAIN RESTORE DATABASE foo FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+EXPLAIN RESTORE DATABASE foo FROM 'bar'
+                                       ^
+HINT: try \h RESTORE
 
-parse
-RESTORE DATABASE foo FROM bar
-----
-RESTORE DATABASE foo FROM '*****' -- normalized!
-RESTORE DATABASE foo FROM ('*****') -- fully parenthesized
-RESTORE DATABASE foo FROM '_' -- literals removed
-RESTORE DATABASE _ FROM '*****' -- identifiers removed
-RESTORE DATABASE foo FROM 'bar' -- passwords exposed
-
-
-parse
+error
 RESTORE DATABASE foo, baz FROM 'bar'
 ----
-RESTORE DATABASE foo, baz FROM '*****' -- normalized!
-RESTORE DATABASE foo, baz FROM ('*****') -- fully parenthesized
-RESTORE DATABASE foo, baz FROM '_' -- literals removed
-RESTORE DATABASE _, _ FROM '*****' -- identifiers removed
-RESTORE DATABASE foo, baz FROM 'bar' -- passwords exposed
+at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE DATABASE foo, baz FROM 'bar'
+                                    ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE DATABASE foo FROM 'bar' WITH new_db_name = 'baz'
 ----
-RESTORE DATABASE foo FROM '*****' WITH OPTIONS (new_db_name = 'baz') -- normalized!
-RESTORE DATABASE foo FROM ('*****') WITH OPTIONS (new_db_name = ('baz')) -- fully parenthesized
-RESTORE DATABASE foo FROM '_' WITH OPTIONS (new_db_name = '_') -- literals removed
-RESTORE DATABASE _ FROM '*****' WITH OPTIONS (new_db_name = 'baz') -- identifiers removed
-RESTORE DATABASE foo FROM 'bar' WITH OPTIONS (new_db_name = 'baz') -- passwords exposed
-
-parse
-RESTORE DATABASE foo FROM 'bar' WITH schema_only
-----
-RESTORE DATABASE foo FROM '*****' WITH OPTIONS (schema_only) -- normalized!
-RESTORE DATABASE foo FROM ('*****') WITH OPTIONS (schema_only) -- fully parenthesized
-RESTORE DATABASE foo FROM '_' WITH OPTIONS (schema_only) -- literals removed
-RESTORE DATABASE _ FROM '*****' WITH OPTIONS (schema_only) -- identifiers removed
-RESTORE DATABASE foo FROM 'bar' WITH OPTIONS (schema_only) -- passwords exposed
+at or near "with": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE DATABASE foo FROM 'bar' WITH new_db_name = 'baz'
+                                ^
+HINT: try \h RESTORE
 
 parse
 RESTORE DATABASE foo FROM 'bar' IN LATEST WITH incremental_location = 'baz'
@@ -655,119 +553,41 @@ RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (incremental_location = '_') -
 RESTORE DATABASE _ FROM 'bar' IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
 RESTORE DATABASE foo FROM 'bar' IN 'latest' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
 
-parse
-RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
-----
-RESTORE DATABASE foo, baz FROM '*****' AS OF SYSTEM TIME '1' -- normalized!
-RESTORE DATABASE foo, baz FROM ('*****') AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE DATABASE foo, baz FROM '_' AS OF SYSTEM TIME '_' -- literals removed
-RESTORE DATABASE _, _ FROM '*****' AS OF SYSTEM TIME '1' -- identifiers removed
-RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1' -- passwords exposed
-
-parse
+error
 RESTORE DATABASE foo FROM ($1, $2)
 ----
+at or near "(": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
 RESTORE DATABASE foo FROM ($1, $2)
-RESTORE DATABASE foo FROM (($1), ($2)) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM ($1, $2) -- identifiers removed
+                          ^
+HINT: try \h RESTORE
 
-parse
-RESTORE DATABASE foo FROM ($1), ($2)
-----
-RESTORE DATABASE foo FROM $1, $2 -- normalized!
-RESTORE DATABASE foo FROM ($1), ($2) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, $1 -- literals removed
-RESTORE DATABASE _ FROM $1, $2 -- identifiers removed
-
-parse
+error
 RESTORE DATABASE foo FROM ($1), ($2, $3)
 ----
-RESTORE DATABASE foo FROM $1, ($2, $3) -- normalized!
-RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
+at or near "(": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE DATABASE foo FROM ($1), ($2, $3)
+                          ^
+HINT: try \h RESTORE
 
-parse
-RESTORE DATABASE foo FROM ($1, $2), $3
-----
-RESTORE DATABASE foo FROM ($1, $2), $3
-RESTORE DATABASE foo FROM (($1), ($2)), ($3) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $1), $1 -- literals removed
-RESTORE DATABASE _ FROM ($1, $2), $3 -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM $1, ($2, $3)
-----
-RESTORE DATABASE foo FROM $1, ($2, $3)
-RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
-----
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
-RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $1), ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM ($1, $2), ($3, $4) -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-----
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE DATABASE _ FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
-
-parse
+error
 RESTORE FROM ($1, $2)
 ----
+at or near "(": syntax error: The `RESTORE FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
 RESTORE FROM ($1, $2)
-RESTORE FROM (($1), ($2)) -- fully parenthesized
-RESTORE FROM ($1, $1) -- literals removed
-RESTORE FROM ($1, $2) -- identifiers removed
+             ^
+HINT: try \h RESTORE
 
-parse
-RESTORE FROM ($1, $2), $3
-----
-RESTORE FROM ($1, $2), $3
-RESTORE FROM (($1), ($2)), ($3) -- fully parenthesized
-RESTORE FROM ($1, $1), $1 -- literals removed
-RESTORE FROM ($1, $2), $3 -- identifiers removed
-
-parse
-RESTORE FROM $1, ($2, $3)
-----
-RESTORE FROM $1, ($2, $3)
-RESTORE FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE FROM $1, ($1, $1) -- literals removed
-RESTORE FROM $1, ($2, $3) -- identifiers removed
-
-parse
-RESTORE FROM ($1, $2), ($3, $4)
-----
-RESTORE FROM ($1, $2), ($3, $4)
-RESTORE FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE FROM ($1, $1), ($1, $1) -- literals removed
-RESTORE FROM ($1, $2), ($3, $4) -- identifiers removed
-
-parse
-RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-----
-RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-RESTORE FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE FROM ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
-
-parse
+error
 RESTORE FROM $1, $2, 'bar'
 ----
-RESTORE FROM $1, $2, '*****' -- normalized!
-RESTORE FROM ($1), ($2), ('*****') -- fully parenthesized
-RESTORE FROM $1, $1, '_' -- literals removed
-RESTORE FROM $1, $2, '*****' -- identifiers removed
-RESTORE FROM $1, $2, 'bar' -- passwords exposed
+at or near ",": syntax error: The `RESTORE FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE FROM $1, $2, 'bar'
+               ^
+HINT: try \h RESTORE
 
 parse
 RESTORE FROM $4 IN $1, $2, 'bar'
@@ -787,119 +607,51 @@ RESTORE FROM $1 IN $1, $1, '_' AS OF SYSTEM TIME '_' WITH OPTIONS (skip_missing_
 RESTORE FROM $4 IN $1, $2, '*****' AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- identifiers removed
 RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- passwords exposed
 
-parse
+error
 RESTORE abc.xzy FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys
 ----
-RESTORE TABLE abc.xzy FROM '*****' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys) -- normalized!
-RESTORE TABLE (abc.xzy) FROM ('*****') WITH OPTIONS (into_db = ('foo'), skip_missing_foreign_keys) -- fully parenthesized
-RESTORE TABLE abc.xzy FROM '_' WITH OPTIONS (into_db = '_', skip_missing_foreign_keys) -- literals removed
-RESTORE TABLE _._ FROM '*****' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys) -- identifiers removed
-RESTORE TABLE abc.xzy FROM 'a' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys) -- passwords exposed
+at or near "with": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE abc.xzy FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys
+                         ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
 ----
-RESTORE FROM '*****' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys, skip_localities_check) -- normalized!
-RESTORE FROM ('*****') WITH OPTIONS (into_db = ('foo'), skip_missing_foreign_keys, skip_localities_check) -- fully parenthesized
-RESTORE FROM '_' WITH OPTIONS (into_db = '_', skip_missing_foreign_keys, skip_localities_check) -- literals removed
-RESTORE FROM '*****' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys, skip_localities_check) -- identifiers removed
-RESTORE FROM 'a' WITH OPTIONS (into_db = 'foo', skip_missing_foreign_keys, skip_localities_check) -- passwords exposed
+at or near "with": syntax error: The `RESTORE FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
+                 ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz',
 skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, skip_missing_udfs, detached, skip_localities_check)
 ----
-RESTORE TABLE foo FROM '*****' WITH OPTIONS (encryption_passphrase = '*****', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, detached, skip_localities_check) -- normalized!
-RESTORE TABLE (foo) FROM ('*****') WITH OPTIONS (encryption_passphrase = '*****', into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, detached, skip_localities_check) -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH OPTIONS (encryption_passphrase = '*****', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, detached, skip_localities_check) -- literals removed
-RESTORE TABLE _ FROM '*****' WITH OPTIONS (encryption_passphrase = '*****', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, detached, skip_localities_check) -- identifiers removed
-RESTORE TABLE foo FROM 'bar' WITH OPTIONS (encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, detached, skip_localities_check) -- passwords exposed
+at or near "with": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz',
+                       ^
+HINT: try \h RESTORE
 
-parse
-RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz,
-SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS, SKIP_LOCALITIES_CHECK, SKIP_MISSING_UDFS
-----
-RESTORE TABLE foo FROM '*****' WITH OPTIONS (encryption_passphrase = '*****', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, skip_localities_check) -- normalized!
-RESTORE TABLE (foo) FROM ('*****') WITH OPTIONS (encryption_passphrase = '*****', into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, skip_localities_check) -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH OPTIONS (encryption_passphrase = '*****', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, skip_localities_check) -- literals removed
-RESTORE TABLE _ FROM '*****' WITH OPTIONS (encryption_passphrase = '*****', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, skip_localities_check) -- identifiers removed
-RESTORE TABLE foo FROM 'bar' WITH OPTIONS (encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_missing_udfs, skip_localities_check) -- passwords exposed
-
-parse
+error
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 ----
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- normalized!
-RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+at or near "(": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
+                       ^
+HINT: try \h RESTORE
 
-parse
+error
 RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5'
 ----
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster_name = 'tenant-5') -- normalized!
-RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH OPTIONS (virtual_cluster_name = ('tenant-5')) -- fully parenthesized
-RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH OPTIONS (virtual_cluster_name = '_') -- literals removed
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster_name = 'tenant-5') -- identifiers removed
-
-parse
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
-----
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster_name = 'tenant-5') -- normalized!
-RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH OPTIONS (virtual_cluster_name = ('tenant-5')) -- fully parenthesized
-RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH OPTIONS (virtual_cluster_name = '_') -- literals removed
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster_name = 'tenant-5') -- identifiers removed
-
-parse
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5'
-----
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster = '5') -- normalized!
-RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH OPTIONS (virtual_cluster = ('5')) -- fully parenthesized
-RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH OPTIONS (virtual_cluster = '_') -- literals removed
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster = '5') -- identifiers removed
-
-parse
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
-----
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster = '5') -- normalized!
-RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH OPTIONS (virtual_cluster = ('5')) -- fully parenthesized
-RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH OPTIONS (virtual_cluster = '_') -- literals removed
-RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH OPTIONS (virtual_cluster = '5') -- identifiers removed
-
-parse
-BACKUP TABLE foo TO 'bar' WITH revision_history, detached
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = true, detached) -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = (true), detached) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, detached) -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = true, detached) -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached) -- passwords exposed
-
-parse
-BACKUP TABLE foo TO 'bar' WITH revision_history = $1, detached, execution locality = $2
-----
-BACKUP TABLE foo TO '*****' WITH OPTIONS (revision_history = $1, detached, execution locality = $2) -- normalized!
-BACKUP TABLE (foo) TO ('*****') WITH OPTIONS (revision_history = ($1), detached, execution locality = ($2)) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = $1, detached, execution locality = $1) -- literals removed
-BACKUP TABLE _ TO '*****' WITH OPTIONS (revision_history = $1, detached, execution locality = $2) -- identifiers removed
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = $1, detached, execution locality = $2) -- passwords exposed
-
-parse
-RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached
-----
-RESTORE TABLE foo FROM '*****' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- normalized!
-RESTORE TABLE (foo) FROM ('*****') WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- literals removed
-RESTORE TABLE _ FROM '*****' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- identifiers removed
-RESTORE TABLE foo FROM 'bar' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- passwords exposed
-
-parse
-RESTORE TABLE foo FROM 'bar' WITH remove_regions
-----
-RESTORE TABLE foo FROM '*****' WITH OPTIONS (skip_localities_check, remove_regions) -- normalized!
-RESTORE TABLE (foo) FROM ('*****') WITH OPTIONS (skip_localities_check, remove_regions) -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_localities_check, remove_regions) -- literals removed
-RESTORE TABLE _ FROM '*****' WITH OPTIONS (skip_localities_check, remove_regions) -- identifiers removed
-RESTORE TABLE foo FROM 'bar' WITH OPTIONS (skip_localities_check, remove_regions) -- passwords exposed
+at or near "(": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported.. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
+DETAIL: source SQL:
+RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5'
+                       ^
+HINT: try \h RESTORE
 
 parse
 BACKUP INTO 'bar' WITH include_all_virtual_clusters = $1, detached
@@ -946,120 +698,15 @@ RESTORE FROM '_' IN '_' WITH OPTIONS (detached, unsafe_restore_incompatible_vers
 RESTORE FROM 'latest' IN '*****' WITH OPTIONS (detached, unsafe_restore_incompatible_version, execution locality = 'abc') -- identifiers removed
 RESTORE FROM 'latest' IN 'bar' WITH OPTIONS (detached, unsafe_restore_incompatible_version, execution locality = 'abc') -- passwords exposed
 
-error
-BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+# Regression test for #95612
+parse
+BACKUP INTO LATEST IN UNLOGGED WITH OPTIONS ( DETACHED = FALSE )
 ----
-at or near "key1": syntax error
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH key1, key2 = 'value'
-                         ^
-HINT: try \h BACKUP
-
-error
-BACKUP foo TO 'bar' WITH revision_history, revision_history
-----
-at or near "EOF": syntax error: revision_history option specified multiple times
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH revision_history, revision_history
-                                                           ^
-
-error
-BACKUP foo TO 'bar' WITH detached, revision_history, detached
-----
-at or near "EOF": syntax error: detached option specified multiple times
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH detached, revision_history, detached
-                                                             ^
-
-error
-BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
-----
-at or near ",": syntax error: revision_history option specified multiple times
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH revision_history=false, revision_history, detached
-                                                                 ^
-
-error
-BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
-----
-at or near "true": syntax error: detached option specified multiple times
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
-                                                                   ^
-
-error
-BACKUP TO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
-----
-at or near "EOF": syntax error: include_all_virtual_clusters specified multiple times
-DETAIL: source SQL:
-BACKUP TO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
-                                                                                      ^
-
-error
-BACKUP foo TO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
-----
-at or near ",": syntax error: updates_cluster_monitoring_metrics option specified multiple times
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
-                                                                                                     ^
-
-error
-BACKUP foo TO 'bar' WITH detached=$1, revision_history
-----
-at or near "1": syntax error
-DETAIL: source SQL:
-BACKUP foo TO 'bar' WITH detached=$1, revision_history
-                                  ^
-HINT: try \h BACKUP
-
-error
-RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
-----
-at or near "key1": syntax error
-DETAIL: source SQL:
-RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
-                            ^
-HINT: try \h RESTORE
-
-error
-RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
-----
-at or near "skip_missing_foreign_keys": syntax error: skip_missing_foreign_keys specified multiple times
-DETAIL: source SQL:
-RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
-                                                       ^
-
-error
-RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
-----
-at or near "skip_missing_sequences": syntax error: skip_missing_sequences specified multiple times
-DETAIL: source SQL:
-RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
-                                                                        ^
-
-error
-RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
-----
-at or near "detached": syntax error: detached option specified multiple times
-DETAIL: source SQL:
-RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
-                                                          ^
-
-error
-RESTORE foo FROM 'bar' WITH skip_missing_udfs, skip_missing_views, skip_missing_udfs
-----
-at or near "skip_missing_udfs": syntax error: skip_missing_udfs specified multiple times
-DETAIL: source SQL:
-RESTORE foo FROM 'bar' WITH skip_missing_udfs, skip_missing_views, skip_missing_udfs
-                                                                   ^
-
-error
-RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version
-----
-at or near "unsafe_restore_incompatible_version": syntax error: unsafe_restore_incompatible_version specified multiple times
-DETAIL: source SQL:
-RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version
-                                                             ^
+BACKUP INTO LATEST IN '*****' -- normalized!
+BACKUP INTO LATEST IN ('*****') -- fully parenthesized
+BACKUP INTO LATEST IN '_' -- literals removed
+BACKUP INTO LATEST IN '*****' -- identifiers removed
+BACKUP INTO LATEST IN 'unlogged' -- passwords exposed
 
 error
 BACKUP ROLE foo, bar TO 'baz'
@@ -1078,23 +725,3 @@ DETAIL: source SQL:
 RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE
-
-# Regression test for #95612
-parse
-BACKUP INTO LATEST IN UNLOGGED WITH OPTIONS ( DETACHED = FALSE )
-----
-BACKUP INTO LATEST IN '*****' -- normalized!
-BACKUP INTO LATEST IN ('*****') -- fully parenthesized
-BACKUP INTO LATEST IN '_' -- literals removed
-BACKUP INTO LATEST IN '*****' -- identifiers removed
-BACKUP INTO LATEST IN 'unlogged' -- passwords exposed
-
-# Regression test for https://github.com/cockroachdb/cockroach/issues/110411.
-parse
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
-----
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- normalized!
-SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH OPTIONS (TIME = '_') -- literals removed
-SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- identifiers removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- passwords exposed
