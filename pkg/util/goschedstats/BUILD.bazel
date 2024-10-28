@@ -11,6 +11,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -22,6 +24,7 @@ go_test(
     srcs = ["runnable_test.go"],
     embed = [":goschedstats"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

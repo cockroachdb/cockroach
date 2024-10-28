@@ -6,11 +6,13 @@
 package goschedstats
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -73,7 +75,7 @@ func TestSchedStatsTicker(t *testing.T) {
 	// Tick every 1ms until the reportingPeriod has elapsed.
 	for i := 1; ; i++ {
 		now = now.Add(samplePeriodShort)
-		sst.getStatsOnTick(now, cbs, &tt)
+		sst.getStatsOnTick(now, cbs, nil, &tt)
 		if now.Sub(startTime) <= reportingPeriod {
 			// No reset of the time ticker.
 			require.Equal(t, 0, tt.numResets)
@@ -95,7 +97,7 @@ func TestSchedStatsTicker(t *testing.T) {
 	tt.numResets = 0
 	for i := 1; ; i++ {
 		now = now.Add(samplePeriodLong)
-		sst.getStatsOnTick(now, cbs, &tt)
+		sst.getStatsOnTick(now, cbs, nil, &tt)
 		if now.Sub(startTime) <= reportingPeriod {
 			// No reset of the time ticker.
 			require.Equal(t, 0, tt.numResets)
@@ -108,6 +110,67 @@ func TestSchedStatsTicker(t *testing.T) {
 	// No longer underloaded, so the time ticker is reset to samplePeriodShort,
 	// and this period is provided to the latest callback.
 	require.Equal(t, 1, tt.numResets)
+	require.Equal(t, samplePeriodShort, tt.lastResetDuration)
+	require.Equal(t, samplePeriodShort, callbackSamplePeriod)
+}
+
+func TestSchedStatsTickerShortPeriodOverride(t *testing.T) {
+	ctx := context.Background()
+	var callbackSamplePeriod time.Duration
+	cb := func(numRunnable int, numProcs int, samplePeriod time.Duration) {
+		// Always underloaded.
+		require.Equal(t, 0, numRunnable)
+		require.Equal(t, 1, numProcs)
+		callbackSamplePeriod = samplePeriod
+	}
+	cbs := []callbackWithID{{cb, 0}}
+	now := timeutil.UnixEpoch
+	startTime := now
+	st := cluster.MakeTestingClusterSettings()
+	// Override to use short sample period.
+	alwaysUseShortSamplePeriodEnabled.Override(ctx, &st.SV, true)
+	// Start with long sample period.
+	sst := schedStatsTicker{
+		lastTime:              now,
+		curPeriod:             samplePeriodLong,
+		numRunnableGoroutines: func() (numRunnable int, numProcs int) { return 0, 1 },
+	}
+	tt := testTimeTicker{}
+	// Tick until the reportingPeriod has elapsed.
+	for i := 1; ; i++ {
+		now = now.Add(samplePeriodLong)
+		sst.getStatsOnTick(now, cbs, st, &tt)
+		if now.Sub(startTime) <= reportingPeriod {
+			// No reset of the time ticker.
+			require.Equal(t, 0, tt.numResets)
+			// Each tick causes a callback.
+			require.Equal(t, samplePeriodLong, callbackSamplePeriod)
+		} else {
+			break
+		}
+	}
+	// Sample period resets to short.
+	require.Equal(t, 1, tt.numResets)
+	require.Equal(t, samplePeriodShort, tt.lastResetDuration)
+	require.Equal(t, samplePeriodShort, callbackSamplePeriod)
+
+	// Tick again until the reportingPeriod has elapsed.
+	startTime = now
+	tt.numResets = 0
+	for i := 1; ; i++ {
+		now = now.Add(samplePeriodShort)
+		sst.getStatsOnTick(now, cbs, st, &tt)
+		if now.Sub(startTime) <= reportingPeriod {
+			// No reset of the time ticker.
+			require.Equal(t, 0, tt.numResets)
+			// Each tick causes a callback.
+			require.Equal(t, samplePeriodShort, callbackSamplePeriod)
+		} else {
+			break
+		}
+	}
+	// Still using short sample period.
+	require.Equal(t, 0, tt.numResets)
 	require.Equal(t, samplePeriodShort, tt.lastResetDuration)
 	require.Equal(t, samplePeriodShort, callbackSamplePeriod)
 }
