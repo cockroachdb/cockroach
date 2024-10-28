@@ -152,9 +152,6 @@ func (tu *optTableUpserter) makeResultFromRow(
 	return resultRow
 }
 
-// desc is part of the tableWriter interface.
-func (*optTableUpserter) desc() string { return "opt upserter" }
-
 // row is part of the tableWriter interface.
 func (tu *optTableUpserter) row(
 	ctx context.Context, row tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,

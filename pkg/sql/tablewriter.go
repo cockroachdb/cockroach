@@ -76,10 +76,6 @@ type tableWriter interface {
 	// close frees all resources held by the tableWriter.
 	close(context.Context)
 
-	// desc returns a name suitable for describing the table writer in
-	// the output of EXPLAIN.
-	desc() string
-
 	// enable auto commit in call to finalize().
 	enableAutoCommit()
 }
