@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/errors"
 )
 
 var updateNodePool = sync.Pool{
@@ -282,8 +283,13 @@ func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }
 
-// enforceNotNullConstraints enforces NOT NULL column constraints.
+// enforceNotNullConstraints enforces NOT NULL column constraints. row and cols
+// must have the same length.
 func enforceNotNullConstraints(row tree.Datums, cols []catalog.Column) error {
+	if len(row) != len(cols) {
+		return errors.AssertionFailedf("expected length of row (%d) and columns (%d) to match",
+			len(row), len(cols))
+	}
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
