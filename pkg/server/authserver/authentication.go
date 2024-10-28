@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,6 +58,18 @@ const (
 
 	// DemoLoginPath is the demo shell auto-login URL.
 	DemoLoginPath = "/demologin"
+
+	// AuthorizationHeader is the 'Authorization' header in the HTTP request.
+	AuthorizationHeader = "Authorization"
+
+	// bearerType denotes Bearer token based request authentication.
+	// In this case, the Authorization header is set to "Bearer <token>".
+	bearerType = "Bearer"
+
+	// UsernameHeader is the HTTP request header to hold the SQL username. This is used to identify a
+	// specific user identity making the request, when there is a possibility to match against
+	// multiple identities, for example, a JWT could be matched to multiple principals/identities.
+	UsernameHeader = "X-Cockroach-User"
 )
 
 type noOIDCConfigured struct{}
@@ -96,6 +111,15 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
+
+// jwtVerifier is a duplicate of the singleton global pgwire object which gets
+// initialized from VerifyJWT method whenever a JWT auth attempt for accessing
+// DB console APIs happens. It depends on jwtauthccl module to be imported
+// properly to override its default ConfigureJWTAuth constructor.
+var jwtVerifier = struct {
+	sync.Once
+	j pgwire.JWTVerifier
+}{}
 
 type authenticationServer struct {
 	cfg       *base.Config
@@ -392,6 +416,31 @@ WHERE id = $1`
 	return true, userName, nil
 }
 
+// VerifyUserSessionDBConsole is part of the Server interface. It retrieves user
+// session details required for proceeding with DB console login.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
+func (s *authenticationServer) VerifyUserSessionDBConsole(
+	ctx context.Context, userName username.SQLUsername,
+) (
+	verified bool,
+	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
+	err error,
+) {
+	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+		ctx,
+		s.sqlServer.ExecutorConfig(),
+		userName,
+		"", /* databaseName */
+	)
+	if err != nil {
+		return false, nil, err
+	}
+	if !exists || !canLoginDBConsole {
+		return false, nil, nil
+	}
+	return true, pwRetrieveFn, nil
+}
+
 // VerifyPasswordDBConsole is part of the Server interface.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) VerifyPasswordDBConsole(
@@ -435,6 +484,64 @@ func (s *authenticationServer) VerifyPasswordDBConsole(
 			passwordStr, hashedPassword)
 	}
 	return ok, false, err
+}
+
+// VerifyJWT is part of the Server interface.
+func (s *authenticationServer) VerifyJWT(
+	ctx context.Context, jwtStr, usernameOptional string,
+) (valid bool, userName string, err error) {
+	execCfg := s.sqlServer.ExecutorConfig()
+	jwtVerifier.Do(func() {
+		if jwtVerifier.j == nil {
+			jwtVerifier.j = pgwire.ConfigureJWTAuth(
+				ctx,
+				execCfg.AmbientCtx,
+				execCfg.Settings,
+				execCfg.NodeInfo.LogicalClusterID(),
+			)
+		}
+	})
+
+	// Retrieve the matching user identity within the JWT.
+	_, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
+	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
+	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
+		ctx,
+		inputUser,
+		[]byte(jwtStr),
+		identMap,
+	)
+	if err != nil {
+		return false, "", err
+	}
+
+	// Validate the user identity for access to DB console APIs.
+	verified, _, err := s.VerifyUserSessionDBConsole(ctx, retrievedUser)
+	if err != nil {
+		return false, "", err
+	}
+	if !verified {
+		return false, "", errors.Errorf("access denied for user %v", retrievedUser)
+	}
+
+	// Verify the JWT against the user identity. The configured cluster settings
+	// for Cluster SSO via JWT are honored.
+	//
+	// TODO: RetrieveIdentity is again called within ValidateJWTLogin. While we do
+	// not anticipate major performance degradation due to this, we could move
+	// RetrieveIdentity outside of ValidateJWTLogin and expect callers (e.g. cluster SSO flow)
+	// to always call these methods in the order: RetrieveIdentity, ValidateJWTLogin.
+	if _, err = jwtVerifier.j.ValidateJWTLogin(
+		ctx,
+		execCfg.Settings,
+		retrievedUser,
+		[]byte(jwtStr),
+		identMap,
+	); err != nil {
+		return false, "", err
+	}
+
+	return true, retrievedUser.Normalized(), nil
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.
@@ -517,18 +624,40 @@ type authenticationMux struct {
 	allowAnonymous bool
 }
 
+// ServeHTTP implements the http.Handler interface.
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := am.getSession(w, req)
-	if err == nil {
-		req = req.WithContext(
-			ContextWithHTTPAuthInfo(req.Context(), username, cookie.ID))
-	} else if !am.allowAnonymous {
-		if log.V(1) {
-			log.Infof(req.Context(), "web session error: %v", err)
+	// Call into the inner HTTP handler if either of the following holds true:
+	// 1. a valid session cookie is provided
+	// 2. a valid JWT is provided
+	// 3. allowAnonymous is set to true
+
+	// Validate session cookie in the request, if present.
+	userName, cookie, werr := am.getSession(w, req)
+	if werr == nil {
+		req = req.WithContext(ContextWithHTTPAuthInfo(req.Context(), userName, cookie.ID))
+	}
+
+	// If the cookie is absent, fallback to JWT based authentication.
+	jerr := errors.New("default JWT error")
+	if errors.Is(werr, http.ErrNoCookie) {
+		userName, jerr = am.verifyJWT(req)
+		if jerr == nil {
+			// JWTs are inherently stateless and do not require any session
+			// info to be persisted, so set the session ID to 0 for now.
+			// TODO(pritesh-lahoti): Evaluate if we need to persist the
+			// session for observability or auditing purposes.
+			req = req.WithContext(ContextWithHTTPAuthInfo(req.Context(), userName, 0))
 		}
-		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
+	}
+
+	if !am.allowAnonymous && (werr != nil && jerr != nil) {
+		if log.V(1) {
+			log.Infof(req.Context(), "session error: %v; jwt error: %v", werr, jerr)
+		}
+		http.Error(w, "a valid authentication cookie or JWT is required", http.StatusUnauthorized)
 		return
 	}
+
 	am.inner.ServeHTTP(w, req)
 }
 
@@ -603,4 +732,29 @@ func AuthenticationHeaderMatcher(key string) (string, bool) {
 	// likely be added to GRPC Gateway so that the logic does not have to be
 	// duplicated here.
 	return fmt.Sprintf("%s%s", gwruntime.MetadataHeaderPrefix, key), true
+}
+
+// verifyJWT retrieves the JWT from the Authorization request header,
+// verifies its signature and returns the associated username.
+func (am *authenticationMux) verifyJWT(req *http.Request) (string, error) {
+	authHeaderVal := req.Header.Get(AuthorizationHeader)
+	authHeaderParts := strings.Split(strings.TrimSpace(authHeaderVal), " ")
+	if len(authHeaderParts) != 2 || !strings.EqualFold(authHeaderParts[0], bearerType) {
+		return "", errors.New("could not retrieve JWT from the request header")
+	}
+
+	jwtString := authHeaderParts[1]
+	inputUsername := req.Header.Get(UsernameHeader)
+	valid, retrievedUsername, err := am.server.VerifyJWT(req.Context(), jwtString, inputUsername)
+	if err != nil {
+		err := srverrors.APIInternalError(req.Context(), err)
+		return "", err
+	}
+
+	if !valid {
+		err := errors.New("the provided JWT could not be verified")
+		return "", err
+	}
+
+	return retrievedUsername, nil
 }
