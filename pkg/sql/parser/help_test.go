@@ -564,11 +564,11 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE ??`, `SCRUB TABLE`},
 		{`EXPERIMENTAL SCRUB DATABASE ??`, `SCRUB DATABASE`},
 
-		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
+		{`BACKUP foo INTO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
-		{`BACKUP foo TO 'bar' AS OF SYSTEM ??`, `BACKUP`},
+		{`BACKUP foo INTO 'bar' AS OF SYSTEM ??`, `BACKUP`},
 
-		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
+		{`RESTORE foo FROM LATEST IN '/bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
 		{`IMPORT TABLE ??`, `IMPORT`},
