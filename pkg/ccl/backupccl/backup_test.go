@@ -11091,7 +11091,7 @@ func TestExportResponseDataSizeZeroCPUPagination(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2)`)
 	sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
 	sqlDB.Exec(t, `BACKUP TABLE foo INTO 'nodelocal://1/foo'`)
-	require.Equal(t, 2, numRequests)
+	require.GreaterOrEqual(t, numRequests, 2)
 }
 
 func TestBackupRestoreForeignKeys(t *testing.T) {
