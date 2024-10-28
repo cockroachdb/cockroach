@@ -3405,7 +3405,7 @@ func checkLeaderTransferState(t *testing.T, r *raft, state pb.StateType, lead pb
 // the node also got votes, it would panic as it transitioned to StateLeader).
 func TestLeaderTransferNonMember(t *testing.T) {
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(2, 3, 4)))
-	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgTimeoutNow})
+	r.Step(pb.Message{From: 2, To: 1, Term: 1, Type: pb.MsgTimeoutNow})
 
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgVoteResp})
 	r.Step(pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp})
@@ -3703,7 +3703,7 @@ func TestLearnerCampaign(t *testing.T) {
 	// the check could have happened by the time the recipient becomes a learner,
 	// in which case it will receive MsgTimeoutNow as in this test case and we
 	// verify that it's ignored.
-	nt.send(pb.Message{From: 1, To: 2, Type: pb.MsgTimeoutNow})
+	nt.send(pb.Message{From: 1, To: 2, Term: 1, Type: pb.MsgTimeoutNow})
 	require.Equal(t, pb.StateFollower, n2.state)
 }
 

@@ -387,6 +387,7 @@ type raft struct {
 	// disableConfChangeValidation is Config.DisableConfChangeValidation,
 	// see there for details.
 	disableConfChangeValidation bool
+	campaignOnConfChange        bool
 	// an estimate of the size of the uncommitted tail of the Raft log. Used to
 	// prevent unbounded log growth. Only maintained by the leader. Reset on
 	// term changes.
@@ -1061,6 +1062,7 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
+	r.campaignOnConfChange = false
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -1301,6 +1303,10 @@ func (r *raft) becomeLeader() {
 }
 
 func (r *raft) hup(t CampaignType) {
+	r.hup2(t, true)
+}
+
+func (r *raft) hup2(t CampaignType, checkConfChange bool) {
 	if r.state == pb.StateLeader {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
@@ -1319,8 +1325,11 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
-	if r.hasUnappliedConfChanges() {
+	if checkConfChange && r.hasUnappliedConfChanges() {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
+		if t == campaignTransfer {
+			r.campaignOnConfChange = true
+		}
 		return
 	}
 
@@ -2133,26 +2142,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.lead = None
 		r.leadEpoch = 0
 	case pb.MsgTimeoutNow:
-		// TODO(nvanbenschoten): we will eventually want some kind of logic like
-		// this. However, even this may not be enough, because we're calling a
-		// campaignTransfer election, which bypasses leader fortification checks. It
-		// may never be safe for MsgTimeoutNow to come from anyone but the leader.
-		// We need to think about this more.
-		//
-		//if r.supportingFortifiedLeader() && r.lead != m.From {
-		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
-		//	return nil
-		//}
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
+		// The leader told us to call an elections, so consider it defortified.
+		r.deFortify(m.From, m.Term)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
-		// TODO(nvanbenschoten): Once the TODO above is addressed, and assuming its
-		// handled by ensuring MsgTimeoutNow only comes from the leader, we should
-		// be able to replace this leadEpoch assignment with a call to deFortify.
-		// Currently, it may panic because only the leader should be able to
-		// de-fortify without bumping the term.
-		r.leadEpoch = 0
 		r.hup(campaignTransfer)
 	}
 	return nil
@@ -2527,6 +2522,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	// The remaining steps only make sense if this node is the leader and there
 	// are other nodes.
 	if r.state != pb.StateLeader || len(cs.Voters) == 0 {
+		if r.campaignOnConfChange {
+			r.campaignOnConfChange = false
+			r.hup2(campaignTransfer, false)
+		}
 		return cs
 	}
 
@@ -2553,13 +2552,32 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	if r.isLearner {
 		// This node is leader and was demoted, step down.
 		//
-		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
-		// interruption). This might still drop some proposals but it's better than
-		// nothing.
-		//
-		// NB: Similar to the CheckQuorum step down case, we must remember our
-		// prior stint as leader, lest we regress the QSE.
-		r.becomeFollower(r.Term, r.lead)
+		// Before doing so, ask the follower with the largest Match to campaign
+		// immediately with a TimeoutNow to avoid interruption. This might still
+		// drop some proposals, but it's better than nothing.
+		var maxMatch uint64
+		var maxMatchNode pb.PeerID
+		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+			if id == r.id {
+				return
+			}
+			if pr.IsLearner {
+				return
+			}
+			// NOTE: ProgressTracker.Visit visits peers in increasing ID order, so
+			// this will be deterministic even if multiple nodes have the same Match.
+			if pr.Match > maxMatch {
+				maxMatch = pr.Match
+				maxMatchNode = id
+			}
+		})
+		if maxMatchNode != None {
+			r.logger.Infof("%x sends MsgTimeoutNow to %x before stepping down as learner", r.id, maxMatchNode)
+			r.transferLeader(maxMatchNode) // calls becomeFollower
+		} else {
+			// If there is no peer that would make a good leader, just step down.
+			r.becomeFollower(r.Term, r.lead)
+		}
 		return cs
 	}
 

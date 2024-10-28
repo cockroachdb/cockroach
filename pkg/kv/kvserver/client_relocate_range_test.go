@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -211,6 +212,8 @@ func TestAdminRelocateRange(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 6, args)
 	defer tc.Stopper().Stop(ctx)
 
+	tBegin := timeutil.Now()
+
 	// s1 (LH) ---> s2 (LH) s1 s3
 	// Pure upreplication.
 	k := keys.MustAddr(tc.ScratchRange(t))
@@ -302,6 +305,10 @@ func TestAdminRelocateRange(t *testing.T) {
 		requireNumAtomic(1, 0, func() {
 			relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(0, 3))
 		})
+	}
+
+	if dur := timeutil.Since(tBegin); dur > 4*time.Second {
+		t.Errorf("test took %.2fs", dur.Seconds())
 	}
 }
 
