@@ -35,14 +35,12 @@ func pickRandomDB(
 	dbs, err := conn.QueryContext(ctx, "SELECT database_name FROM [SHOW DATABASES]")
 	if err != nil {
 		o.Fatal(err)
-		return ""
 	}
 	var dbNames []string
 	for dbs.Next() {
 		var dbName string
 		if err := dbs.Scan(&dbName); err != nil {
 			o.Fatal(err)
-			return ""
 		}
 		isExcluded := false
 		for i := range excludeDBs {
@@ -58,7 +56,6 @@ func pickRandomDB(
 	}
 	if len(dbNames) == 0 {
 		o.Fatalf("unexpected zero active dbs found in cluster")
-		return ""
 	}
 	return dbNames[rng.Intn(len(dbNames))]
 }
@@ -71,28 +68,45 @@ func pickRandomTable(
 	// Pick a random table.
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", dbName)); err != nil {
 		o.Fatal(err)
-		return ""
 	}
 
 	tables, err := conn.QueryContext(ctx, "SELECT table_name FROM [SHOW TABLES]")
 	if err != nil {
 		o.Fatal(err)
-		return ""
 	}
 	var tableNames []string
 	for tables.Next() {
 		var tableName string
 		if err := tables.Scan(&tableName); err != nil {
 			o.Fatal(err)
-			return ""
 		}
 		tableNames = append(tableNames, tableName)
 	}
 	if len(tableNames) == 0 {
 		o.Fatalf("unexpected zero active tables found in db %s", dbName)
-		return ""
 	}
 	return tableNames[rng.Intn(len(tableNames))]
+}
+
+func pickRandomRole(ctx context.Context, o operation.Operation, conn *gosql.DB) string {
+	rng, _ := randutil.NewPseudoRand()
+
+	roles, err := conn.QueryContext(ctx, "SELECT username FROM [SHOW ROLES]")
+	if err != nil {
+		o.Fatal(err)
+	}
+	var roleNames []string
+	for roles.Next() {
+		var name string
+		if err := roles.Scan(&name); err != nil {
+			o.Fatal(err)
+		}
+		roleNames = append(roleNames, name)
+	}
+	if len(roleNames) == 0 {
+		o.Fatalf("unexpected zero active roles found in cluster")
+	}
+	return roleNames[rng.Intn(len(roleNames))]
 }
 
 func drainNode(
