@@ -31,6 +31,9 @@ if [ -z "${dd_api_key}" ]; then
   exit 1
 fi
 
+# sync cluster is needed for operations
+drtprod ssh ${WORKLOAD_CLUSTER} -- "ROACHPROD_GCE_DEFAULT_PROJECT=${ROACHPROD_GCE_DEFAULT_PROJECT} ./roachprod sync"
+
 # the ssh keys of all workload nodes should be setup on the crdb nodes for the operations
 roachprod ssh ${CLUSTER} -- "echo \"$(roachprod run ${WORKLOAD_CLUSTER} -- cat ./.ssh/id_rsa.pub|grep ssh-rsa)\" >> ./.ssh/authorized_keys"
 
