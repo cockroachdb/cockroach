@@ -232,6 +232,10 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
 		}
+		if !failer.CanUseChaos() {
+			t.L().Printf("skipping failure mode %q in chaos test", failureMode)
+			continue
+		}
 		failer.Setup(ctx)
 		defer failer.Cleanup(ctx)
 		failers = append(failers, failer)
@@ -1223,6 +1227,13 @@ type Failer interface {
 	// CanUseLocal returns true if the failer can be run with a local cluster.
 	CanUseLocal() bool
 
+	// CanUseChaos returns true if the failer can be used in the chaos tests. A
+	// failer may not want to run in chaos tests if we do not expect cockroach to
+	// recover from it and do not want to lose signal for the chaos tests. Even if
+	// a failer is not included in the chaos tests, it will still be run alone in
+	// its own tests.
+	CanUseChaos() bool
+
 	// CanRunWith returns true if the failer can run concurrently with another
 	// given failure mode on a different cluster node. It is not required to
 	// commute, i.e. A may not be able to run with B even though B can run with A.
@@ -1260,6 +1271,7 @@ type noopFailer struct{}
 func (f *noopFailer) Mode() failureMode                       { return failureModeNoop }
 func (f *noopFailer) String() string                          { return string(f.Mode()) }
 func (f *noopFailer) CanUseLocal() bool                       { return true }
+func (f *noopFailer) CanUseChaos() bool                       { return true }
 func (f *noopFailer) CanRunWith(failureMode) bool             { return true }
 func (f *noopFailer) Setup(context.Context)                   {}
 func (f *noopFailer) Ready(context.Context, int)              {}
@@ -1292,6 +1304,7 @@ func (f *blackholeFailer) Mode() failureMode {
 
 func (f *blackholeFailer) String() string              { return string(f.Mode()) }
 func (f *blackholeFailer) CanUseLocal() bool           { return false } // needs iptables
+func (f *blackholeFailer) CanUseChaos() bool           { return true }
 func (f *blackholeFailer) CanRunWith(failureMode) bool { return true }
 func (f *blackholeFailer) Setup(context.Context)       {}
 func (f *blackholeFailer) Ready(context.Context, int)  {}
@@ -1381,6 +1394,7 @@ type crashFailer struct {
 func (f *crashFailer) Mode() failureMode           { return failureModeCrash }
 func (f *crashFailer) String() string              { return string(f.Mode()) }
 func (f *crashFailer) CanUseLocal() bool           { return true }
+func (f *crashFailer) CanUseChaos() bool           { return true }
 func (f *crashFailer) CanRunWith(failureMode) bool { return true }
 func (f *crashFailer) Setup(context.Context)       {}
 func (f *crashFailer) Ready(context.Context, int)  {}
@@ -1418,6 +1432,16 @@ func (f *deadlockFailer) CanUseLocal() bool             { return true }
 func (f *deadlockFailer) CanRunWith(m failureMode) bool { return true }
 func (f *deadlockFailer) Setup(context.Context)         {}
 func (f *deadlockFailer) Cleanup(context.Context)       {}
+
+func (f *deadlockFailer) CanUseChaos() bool {
+	// We disable the deadlock failer in chaos tests, because none of the three
+	// forms of leases (expiration, epoch, and leader) can survive it. Epoch and
+	// leader leases cannot survive it by design without the introduction of a
+	// replica watchdog. Expiration leases can survive it if combined with
+	// DistSender circuit breakers, but those are not yet enabled by default, even
+	// though we do enable them in the chaos tests.
+	return false
+}
 
 func (f *deadlockFailer) Ready(ctx context.Context, nodeID int) {
 	// In chaos tests, other nodes will be failing concurrently. We therefore
@@ -1542,6 +1566,7 @@ type diskStallFailer struct {
 func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskStall }
 func (f *diskStallFailer) String() string              { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
+func (f *diskStallFailer) CanUseChaos() bool           { return true }
 func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
@@ -1589,6 +1614,7 @@ type pauseFailer struct {
 func (f *pauseFailer) Mode() failureMode       { return failureModePause }
 func (f *pauseFailer) String() string          { return string(f.Mode()) }
 func (f *pauseFailer) CanUseLocal() bool       { return true }
+func (f *pauseFailer) CanUseChaos() bool       { return true }
 func (f *pauseFailer) Setup(context.Context)   {}
 func (f *pauseFailer) Cleanup(context.Context) {}
 
