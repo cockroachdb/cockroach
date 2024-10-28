@@ -28,9 +28,6 @@ type tableDeleter struct {
 
 var _ tableWriter = &tableDeleter{}
 
-// desc is part of the tableWriter interface.
-func (*tableDeleter) desc() string { return "deleter" }
-
 // init is part of the tableWriter interface.
 func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
 	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx)
