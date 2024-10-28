@@ -10,12 +10,14 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // systemDBs lists dbs created by default on a new cockroachdb cluster. These
@@ -111,7 +113,23 @@ func drainNode(
 		MaybeOption(!c.IsSecure(), "insecure").
 		Option("self")
 
-	c.Run(ctx, option.WithNodes(node), cmd.String())
+	// On the drt-cluster, the drain process has been observed to fail intermittently,
+	// causing the node to reject SQL client connections while remaining healthy for other subsystems.
+	// To make the node accept SQL connections again, a manual restart is required.
+	// To avoid manual intervention, the drain operation will be retried a few times before failing the operation.
+	// Once the GitHub issue (https://github.com/cockroachdb/cockroach/issues/130853) is fixed, fallback to c.Run without retries.
+	opts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     3,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		err = c.RunE(ctx, option.WithNodes(node), cmd.String())
+		if err == nil {
+			return
+		}
+	}
+	o.Fatalf("drain failed: %v", err)
 }
 
 func decommissionNode(

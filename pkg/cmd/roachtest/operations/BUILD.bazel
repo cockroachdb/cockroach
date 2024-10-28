@@ -35,6 +35,7 @@ go_library(
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/hlc",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
