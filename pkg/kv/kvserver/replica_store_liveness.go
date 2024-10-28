@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// RaftLeaderFortificationFractionEnabled controls the fraction of ranges for
+// which the raft leader fortification protocol is enabled.
 var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.raft.leader_fortification.fraction_enabled",
