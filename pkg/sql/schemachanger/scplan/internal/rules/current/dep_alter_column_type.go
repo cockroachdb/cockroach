@@ -52,4 +52,21 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"adding a transient column compute expression moves to 'absent' after PK validation to ensures it's there for the backfill",
+		scgraph.Precedence,
+		"primary-index", "transient-column-compute",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.ColumnComputeExpression)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToPublic),
+				to.TargetStatus(scpb.Transient),
+				from.CurrentStatus(scpb.Status_VALIDATED),
+				to.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
+			}
+		},
+	)
 }

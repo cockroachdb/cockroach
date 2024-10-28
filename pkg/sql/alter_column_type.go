@@ -32,10 +32,6 @@ import (
 var AlterColTypeInTxnNotSupportedErr = unimplemented.NewWithIssuef(
 	49351, "ALTER COLUMN TYPE is not supported inside a transaction")
 
-var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
-	49351, "ALTER COLUMN TYPE cannot be used in combination "+
-		"with other ALTER TABLE commands")
-
 // AlterColumnType takes an AlterTableAlterColumnType, determines
 // which conversion to use and applies the type conversion.
 func AlterColumnType(
@@ -216,7 +212,7 @@ func alterColumnTypeGeneral(
 	}
 
 	if len(cmds) > 1 {
-		return alterColTypeInCombinationNotSupportedErr
+		return sqlerrors.NewAlterColTypeInCombinationNotSupportedError()
 	}
 
 	// Disallow ALTER COLUMN TYPE general if the table is already undergoing

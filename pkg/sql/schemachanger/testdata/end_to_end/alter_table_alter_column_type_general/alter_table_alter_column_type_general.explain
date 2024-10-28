@@ -1,0 +1,322 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+SET enable_experimental_alter_column_type_general=TRUE;
+INSERT INTO t VALUES (1,NULL),(2,'1'),(3,'2');
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j SET DATA TYPE BIGINT USING j::BIGINT;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE INT8 USING ‹j›::INT8;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 7 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey+)}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
+ │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 4 (t_pkey+)}
+ │         ├── 11 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
+ │         │    └── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
+ │         └── 16 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":4,"IndexID":4,"IsUnique":true,"SourceIndexID":2,"TableID":104,"TemporaryIndexID":5}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"Kind":2,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"Kind":2,"Ordinal":1,"TableID":104}
+ │              └── AddColumnToIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 7 elements transitioning toward PUBLIC
+ │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey+)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
+ │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 4 (t_pkey+)}
+ │    │    ├── 11 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey~)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 2 (t_pkey~)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey~)}
+ │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
+ │    │    │    └── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 7 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey+)}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
+ │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 4 (t_pkey+)}
+ │         ├── 11 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
+ │         │    └── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
+ │         └── 21 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":4,"IndexID":4,"IsUnique":true,"SourceIndexID":2,"TableID":104,"TemporaryIndexID":5}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"Kind":2,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"Kind":2,"Ordinal":1,"TableID":104}
+ │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ ├── PostCommitPhase
+ │    ├── Stage 1 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── DELETE_ONLY → WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    │    └── ABSENT      → PUBLIC     IndexData:{DescID: 104 (t), IndexID: 3}
+ │    │    └── 4 Mutation operations
+ │    │         ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":3,"TableID":104}
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":3,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 2 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 1 Backfill operation
+ │    │         └── BackfillIndex {"IndexID":2,"SourceIndexID":1,"TableID":104}
+ │    ├── Stage 3 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 3 Mutation operations
+ │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 4 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 3 Mutation operations
+ │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 5 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 1 Backfill operation
+ │    │         └── MergeIndex {"BackfilledIndexID":2,"TableID":104,"TemporaryIndexID":3}
+ │    ├── Stage 6 of 15 in PostCommitPhase
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── MERGED     → WRITE_ONLY            PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 4 Mutation operations
+ │    │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+ │    │         ├── MakeMergedIndexWriteOnly {"IndexID":2,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 7 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    └── 1 Validation operation
+ │    │         └── ValidateIndex {"IndexID":2,"TableID":104}
+ │    ├── Stage 8 of 15 in PostCommitPhase
+ │    │    ├── 5 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── VALIDATED → PUBLIC      PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT    → PUBLIC      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 2 (t_pkey~)}
+ │    │    │    ├── ABSENT    → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    │    ├── ABSENT    → PUBLIC      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
+ │    │    │    └── ABSENT    → PUBLIC      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 5}
+ │    │    ├── 2 elements transitioning toward ABSENT
+ │    │    │    ├── PUBLIC    → VALIDATED   PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+ │    │    │    └── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │    │    └── 10 Mutation operations
+ │    │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
+ │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
+ │    │         ├── SetIndexName {"IndexID":2,"Name":"t_pkey","TableID":104}
+ │    │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":104}
+ │    │         ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":5,"IndexID":5,"IsUnique":true,"SourceIndexID":2,"TableID":104}}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":5,"TableID":104}
+ │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"TableID":104}
+ │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":5,"Kind":2,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 9 of 15 in PostCommitPhase
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    │    └── ABSENT      → PUBLIC     IndexData:{DescID: 104 (t), IndexID: 5}
+ │    │    └── 3 Mutation operations
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":5,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 10 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    └── 1 Backfill operation
+ │    │         └── BackfillIndex {"IndexID":4,"SourceIndexID":2,"TableID":104}
+ │    ├── Stage 11 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    └── 3 Mutation operations
+ │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":4,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 12 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    └── 3 Mutation operations
+ │    │         ├── MakeBackfilledIndexMerging {"IndexID":4,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    ├── Stage 13 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    └── 1 Backfill operation
+ │    │         └── MergeIndex {"BackfilledIndexID":4,"TableID":104,"TemporaryIndexID":5}
+ │    ├── Stage 14 of 15 in PostCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── MERGED     → WRITE_ONLY            PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 2 (t_pkey~)}
+ │    │    └── 4 Mutation operations
+ │    │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
+ │    │         ├── MakeMergedIndexWriteOnly {"IndexID":4,"TableID":104}
+ │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    └── Stage 15 of 15 in PostCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+ │         └── 1 Validation operation
+ │              └── ValidateIndex {"IndexID":4,"TableID":104}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 9 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 2 (t_pkey~)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 5}
+      │    │    └── PUBLIC                → TRANSIENT_ABSENT ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
+      │    ├── 5 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC                → WRITE_ONLY       Column:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~)}
+      │    │    ├── PUBLIC                → ABSENT           ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-j_shadow~)}
+      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
+      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 1 (t_pkey-)}
+      │    │    └── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+      │    └── 16 Mutation operations
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":104}
+      │         ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"Kind":2,"TableID":104}
+      │         ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward PUBLIC
+      │    │    ├── VALIDATED   → PUBLIC              PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey~)}
+      │    │    ├── ABSENT      → PUBLIC              IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 4 (t_pkey+)}
+      │    │    └── WRITE_ONLY  → PUBLIC              Column:{DescID: 104 (t), ColumnID: 3 (j+)}
+      │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── PUBLIC      → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+      │    │    └── PUBLIC      → TRANSIENT_ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 2 (t_pkey~)}
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY         Column:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~)}
+      │    │    └── DELETE_ONLY → ABSENT              PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+      │    └── 10 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+      │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":2,"TableID":104}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── SetIndexName {"IndexID":4,"Name":"t_pkey","TableID":104}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":4,"TableID":104}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── TRANSIENT_VALIDATED → TRANSIENT_DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+      │    │    ├── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey~)}
+      │    │    ├── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 2 (t_pkey~)}
+      │    │    └── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
+      │    └── 6 Mutation operations
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 4 of 4 in PostCommitNonRevertiblePhase
+           ├── 4 elements transitioning toward TRANSIENT_ABSENT
+           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey~), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey~)}
+           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
+           │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 5}
+           ├── 3 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY           → ABSENT           Column:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~)}
+           │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-j_shadow~), TypeName: "STRING"}
+           │    └── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
+           └── 8 Mutation operations
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
