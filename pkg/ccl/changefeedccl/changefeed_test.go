@@ -6992,7 +6992,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 				return nil
 			}
 			return errors.New("waiting for checkpoint")
-		})
+		}, testutils.WithSideEye())
 
 		// Pause the job and read and verify the latest checkpoint information.
 		require.NoError(t, jobFeed.Pause())
