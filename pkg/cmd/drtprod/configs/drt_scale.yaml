@@ -172,5 +172,7 @@ targets:
         flags:
           scale-factor: 1000
       - script: "pkg/cmd/drtprod/scripts/generate_tpch_run.sh"
+        args:
+          - scale_factor_1000
         flags:
           scale-factor: 1000
