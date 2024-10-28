@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1416,6 +1417,7 @@ func (m mockBatchHandler) HandleBatch(
 func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
 func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 func (m mockBatchHandler) Close(context.Context)               {}
+func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
 
 type mockDLQ int
 

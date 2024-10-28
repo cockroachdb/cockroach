@@ -1449,67 +1449,69 @@ func TestSizeOfEvent(t *testing.T) {
 func TestProcessorBackpressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
+		span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
-	p, h, stopper := newTestProcessor(t, withSpan(span), withBudget(newTestBudget(math.MaxInt64)),
-		withChanCap(1), withEventTimeout(0), withRangefeedTestType(scheduledProcessorWithBufferedReg))
-	defer stopper.Stop(ctx)
-	defer p.Stop()
+		p, h, stopper := newTestProcessor(t, withSpan(span), withBudget(newTestBudget(math.MaxInt64)),
+			withChanCap(1), withEventTimeout(0), withRangefeedTestType(rt))
+		defer stopper.Stop(ctx)
+		defer p.Stop()
 
-	// Add a registration.
-	stream := newTestStream()
-	ok, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil)
-	require.True(t, ok)
+		// Add a registration.
+		stream := newTestStream()
+		ok, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil)
+		require.True(t, ok)
 
-	// Wait for the initial checkpoint.
-	h.syncEventAndRegistrations()
-	require.Len(t, stream.Events(), 1)
+		// Wait for the initial checkpoint.
+		h.syncEventAndRegistrations()
+		require.Len(t, stream.Events(), 1)
 
-	// Block the registration consumer, and spawn a goroutine to post events to
-	// the stream, which should block. The rangefeed pipeline buffers a few
-	// additional events in intermediate goroutines between channels, so post 10
-	// events to be sure.
-	unblock := stream.BlockSend()
-	defer unblock()
+		// Block the registration consumer, and spawn a goroutine to post events to
+		// the stream, which should block. The rangefeed pipeline buffers a few
+		// additional events in intermediate goroutines between channels, so post 10
+		// events to be sure.
+		unblock := stream.BlockSend()
+		defer unblock()
 
-	const numEvents = 10
-	doneC := make(chan struct{})
-	go func() {
-		for i := 0; i < numEvents; i++ {
-			assert.True(t, p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: int64(i + 1)}))
+		const numEvents = 10
+		doneC := make(chan struct{})
+		go func() {
+			for i := 0; i < numEvents; i++ {
+				assert.True(t, p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: int64(i + 1)}))
+			}
+			close(doneC)
+		}()
+
+		// The sender should be blocked for at least 3 seconds.
+		select {
+		case <-doneC:
+			t.Fatal("send unexpectely succeeded")
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
 		}
-		close(doneC)
-	}()
 
-	// The sender should be blocked for at least 3 seconds.
-	select {
-	case <-doneC:
-		t.Fatal("send unexpectely succeeded")
-	case <-time.After(3 * time.Second):
-	case <-ctx.Done():
-	}
+		// Unblock the sender, and wait for it to complete.
+		unblock()
+		select {
+		case <-doneC:
+		case <-time.After(time.Second):
+			t.Fatal("sender did not complete")
+		}
 
-	// Unblock the sender, and wait for it to complete.
-	unblock()
-	select {
-	case <-doneC:
-	case <-time.After(time.Second):
-		t.Fatal("sender did not complete")
-	}
-
-	// Wait for the final checkpoint event.
-	h.syncEventAndRegistrations()
-	events := stream.Events()
-	require.Equal(t, &kvpb.RangeFeedEvent{
-		Checkpoint: &kvpb.RangeFeedCheckpoint{
-			Span:       span.AsRawSpanWithNoLocals(),
-			ResolvedTS: hlc.Timestamp{WallTime: numEvents},
-		},
-	}, events[len(events)-1])
+		// Wait for the final checkpoint event.
+		h.syncEventAndRegistrations()
+		events := stream.Events()
+		require.Equal(t, &kvpb.RangeFeedEvent{
+			Checkpoint: &kvpb.RangeFeedCheckpoint{
+				Span:       span.AsRawSpanWithNoLocals(),
+				ResolvedTS: hlc.Timestamp{WallTime: numEvents},
+			},
+		}, events[len(events)-1])
+	})
 }
 
 // TestProcessorContextCancellation tests that the processor cancels the
