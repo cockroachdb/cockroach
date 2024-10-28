@@ -178,9 +178,6 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 				// to replace it.
 				knownSuccessor := i.RaftStatus.Term > lease.Term && i.RaftStatus.Lead != raft.None
 				if !knownSuccessor {
-					// TODO(nvanbenschoten): we could introduce a new INDETERMINATE state
-					// for this case, instead of using ERROR. This would look a bit less
-					// unexpected.
 					status.State = kvserverpb.LeaseState_ERROR
 					status.ErrInfo = "leader lease is not held locally, cannot determine validity"
 					return status

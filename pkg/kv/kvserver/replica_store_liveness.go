@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
+// RaftLeaderFortificationFractionEnabled controls the fraction of ranges for
+// which the raft leader fortification protocol is enabled.
+var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.raft.leader_fortification.fraction_enabled",
 	"controls the fraction of ranges for which the raft leader fortification "+
@@ -87,7 +89,7 @@ func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	if !r.store.storeLiveness.SupportFromEnabled(context.TODO()) {
 		return false
 	}
-	fracEnabled := raftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
+	fracEnabled := RaftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
 	fortifyEnabled := raftFortificationEnabledForRangeID(fracEnabled, r.RangeID)
 	return fortifyEnabled
 }
