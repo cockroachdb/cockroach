@@ -31,9 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -113,7 +110,8 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	if literalArtifactsDir == "" {
 		literalArtifactsDir = artifactsDir
 	}
-	setLogConfig(artifactsDir)
+	redirectLogger := redirectCRDBLogger(context.Background(), filepath.Join(artifactsDir, "roachtest.crdb.log"))
+	logger.InitCRDBLogConfig(redirectLogger)
 	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
@@ -219,20 +217,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	return err
-}
-
-// This diverts all the default non-fatal logging to a file in `baseDir`. This is particularly
-// useful in CI, where without this, stderr/stdout are cluttered with logs from various
-// packages used in roachtest like sarama and testutils.
-func setLogConfig(baseDir string) {
-	logConf := logconfig.DefaultStderrConfig()
-	logConf.Sinks.Stderr.Filter = logpb.Severity_FATAL
-	if err := logConf.Validate(&baseDir); err != nil {
-		panic(err)
-	}
-	if _, err := log.ApplyConfig(logConf, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */); err != nil {
-		panic(err)
-	}
 }
 
 // getUser takes the value passed on the command line and comes up with the
@@ -393,6 +377,17 @@ func testRunnerLogger(
 	}
 	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
 	return l, teeOpt
+}
+
+func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
+	verboseCfg := logger.Config{}
+	var err error
+	l, err := verboseCfg.NewLogger(path)
+	if err != nil {
+		panic(err)
+	}
+	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
+	return l
 }
 
 func maybeDumpSummaryMarkdown(r *testRunner) error {
