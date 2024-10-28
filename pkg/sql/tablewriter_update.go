@@ -56,6 +56,3 @@ func (tu *tableUpdater) rowForUpdate(
 func (tu *tableUpdater) tableDesc() catalog.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
-
-// walkExprs is part of the tableWriter interface.
-func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
