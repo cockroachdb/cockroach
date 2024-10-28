@@ -37,7 +37,7 @@ var _ mutationPlanNode = &upsertNode{}
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	tw        optTableUpserter
+	tw        tableUpserter
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted/upserted into.
