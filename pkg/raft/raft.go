@@ -1549,8 +1549,13 @@ func (r *raft) Step(m pb.Message) error {
 		}
 
 	case m.Term < r.Term:
-		if (r.checkQuorum || r.preVote) &&
-			(m.Type == pb.MsgHeartbeat || m.Type == pb.MsgApp || m.Type == pb.MsgFortifyLeader) {
+		ignore := true
+
+		switch m.Type {
+		case pb.MsgHeartbeat, pb.MsgApp, pb.MsgFortifyLeader:
+			if !r.checkQuorum && !r.preVote {
+				break
+			}
 			// We have received messages from a leader at a lower term. It is possible
 			// that these messages were simply delayed in the network, but this could
 			// also mean that this node has advanced its term number during a network
@@ -1573,7 +1578,9 @@ func (r *raft) Step(m pb.Message) error {
 			// However, this disruption is inevitable to free this stuck node with
 			// fresh election. This can be prevented with Pre-Vote phase.
 			r.send(pb.Message{To: m.From, Type: pb.MsgAppResp})
-		} else if m.Type == pb.MsgPreVote {
+			return nil
+
+		case pb.MsgPreVote:
 			// Before Pre-Vote enable, there may have candidate with higher term,
 			// but less log. After update to Pre-Vote, the cluster may deadlock if
 			// we drop messages with a lower term.
@@ -1582,12 +1589,31 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
-		} else {
-			// ignore other cases
+			return nil
+
+		case pb.MsgSnap:
+			// A snapshot message may arrive under an outdated term. Since it carries
+			// committed state, we can safely process it regardless of the term. The
+			// message term means the snapshot is committed as of this term. By raft
+			// invariants, all committed state under a particular term will be
+			// committed under later terms as well.
+			//
+			// TODO(#127348): the MsgSnap handler assumes the message came from this
+			// term leader, which is not true if the term is bumped here.
+			// TODO(#127349): it is generally not true because the snapshot could have
+			// been initiated by a leaseholder (which at the time of writing is not
+			// necessarily the leader), and/or delegated via a follower.
+			m.Term = r.Term
+			ignore = false
+		}
+
+		// Ignore the message if it has not been handled above and can not be
+		// handled below.
+		if ignore {
 			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
+			return nil
 		}
-		return nil
 	}
 
 	switch m.Type {
