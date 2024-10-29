@@ -84,6 +84,12 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 			errors.Newf("LDAP authorization: unable to establish LDAP connection")
 	}
 
+	// Bind with ldap service user DN and passwd for performing the groups listing for ldap user.
+	if err := authManager.mu.util.Bind(ctx, authManager.mu.conf.ldapBindDN, authManager.mu.conf.ldapBindPassword); err != nil {
+		return nil, redact.Sprintf("error binding ldap service account: %v", err),
+			errors.Newf("LDAP authorization: error binding as LDAP service user with configured credentials")
+	}
+
 	// Fetch the ldap server Distinguished Name using sql username as search value
 	// for  ldap search attribute
 	fetchedGroups, err := authManager.mu.util.ListGroups(ctx, authManager.mu.conf, userDN.String())
