@@ -1268,12 +1268,25 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					msg = "lease state could not be determined"
 				}
 				log.VEventf(ctx, 2, "%s", msg)
-				// TODO(nvanbenschoten): now that leader leases are going to return an
-				// ERROR status on follower replicas instead of a VALID status, we will
-				// hit this path more. Do we need to add the lease to this
-				// NotLeaseHolder error to ensure fast redirection?
+				// If the lease state could not be determined as valid or invalid, then
+				// we return an error to redirect the request to the replica pointed to
+				// by the lease record. We don't know for sure who the leaseholder is,
+				// but that replica is still the best bet.
+				//
+				// However, we only do this if the lease is not owned by the local store
+				// who is currently struggling to evaluate the validity of the lease.
+				// This avoids self-redirection, which might prevent the client from
+				// trying other replicas.
+				//
+				// TODO(nvanbenschoten): this self-redirection case only happens with
+				// epoch-based leases, so we can remove this logic when we remove that
+				// lease type.
+				var holder roachpb.Lease
+				if !status.Lease.OwnedBy(r.store.StoreID()) {
+					holder = status.Lease
+				}
 				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(
-					kvpb.NewNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.shMu.state.Desc, msg))
+					kvpb.NewNotLeaseHolderError(holder, r.store.StoreID(), r.shMu.state.Desc, msg))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
 				if !status.Lease.OwnedBy(r.store.StoreID()) {

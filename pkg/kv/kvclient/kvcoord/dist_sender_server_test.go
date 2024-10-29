@@ -4698,16 +4698,26 @@ func TestPartialPartition(t *testing.T) {
 		{false, 3, [][2]roachpb.NodeID{{1, 2}}},
 	}
 	for _, test := range testCases {
-		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers),
-			func(t *testing.T) {
+		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers), func(t *testing.T) {
+			testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 				st := cluster.MakeTestingClusterSettings()
 				kvcoord.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
-				// With epoch leases this test doesn't work reliably. It passes
-				// in cases where it should fail and fails in cases where it
-				// should pass.
-				// TODO(baptist): Attempt to pin the liveness leaseholder to
-				// node 3 to make epoch leases reliable.
-				kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+				switch leaseType {
+				case roachpb.LeaseExpiration:
+					kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+				case roachpb.LeaseEpoch:
+					// With epoch leases this test doesn't work reliably. It passes
+					// in cases where it should fail and fails in cases where it
+					// should pass.
+					// TODO(baptist): Attempt to pin the liveness leaseholder to
+					// node 3 to make epoch leases reliable.
+					skip.IgnoreLint(t, "flaky with epoch leases")
+				case roachpb.LeaseLeader:
+					kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+					kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+				default:
+					t.Fatalf("unknown lease type %s", leaseType)
+				}
 				kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 				kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 				closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
@@ -4801,6 +4811,7 @@ func TestPartialPartition(t *testing.T) {
 
 				tc.Stopper().Stop(ctx)
 			})
+		})
 	}
 }
 
@@ -4812,104 +4823,121 @@ func TestProxyTracing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	const numServers = 3
-	const numRanges = 3
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
-	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
-	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		const numServers = 3
+		const numRanges = 3
+		st := cluster.MakeTestingClusterSettings()
+		switch leaseType {
+		case roachpb.LeaseExpiration:
+			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+		case roachpb.LeaseEpoch:
+			// With epoch leases this test doesn't work reliably. It passes
+			// in cases where it should fail and fails in cases where it
+			// should pass.
+			// TODO(baptist): Attempt to pin the liveness leaseholder to
+			// node 3 to make epoch leases reliable.
+			skip.IgnoreLint(t, "flaky with epoch leases")
+		case roachpb.LeaseLeader:
+			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+			kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+		default:
+			t.Fatalf("unknown lease type %s", leaseType)
+		}
+		kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
+		kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+		closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
+		closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
-	var p rpc.Partitioner
-	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
-		ServerArgsPerNode: func() map[int]base.TestServerArgs {
-			perNode := make(map[int]base.TestServerArgs)
-			for i := 0; i < numServers; i++ {
-				ctk := rpc.ContextTestingKnobs{}
-				// Partition between n1 and n3.
-				p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
-				perNode[i] = base.TestServerArgs{
-					Settings: st,
-					Knobs: base.TestingKnobs{
-						Server: &server.TestingKnobs{
-							ContextTestingKnobs: ctk,
+		var p rpc.Partitioner
+		tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+			ServerArgsPerNode: func() map[int]base.TestServerArgs {
+				perNode := make(map[int]base.TestServerArgs)
+				for i := 0; i < numServers; i++ {
+					ctk := rpc.ContextTestingKnobs{}
+					// Partition between n1 and n3.
+					p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+					perNode[i] = base.TestServerArgs{
+						Settings: st,
+						Knobs: base.TestingKnobs{
+							Server: &server.TestingKnobs{
+								ContextTestingKnobs: ctk,
+							},
 						},
-					},
+					}
 				}
-			}
-			return perNode
-		}(),
-	})
-	defer tc.Stopper().Stop(ctx)
+				return perNode
+			}(),
+		})
+		defer tc.Stopper().Stop(ctx)
 
-	// Set up the mapping after the nodes have started and we have their
-	// addresses.
-	for i := 0; i < numServers; i++ {
-		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
-		addr := g.GetNodeAddr().String()
-		nodeID := g.NodeID.Get()
-		p.RegisterNodeAddr(addr, nodeID)
-	}
+		// Set up the mapping after the nodes have started and we have their
+		// addresses.
+		for i := 0; i < numServers; i++ {
+			g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
+			addr := g.GetNodeAddr().String()
+			nodeID := g.NodeID.Get()
+			p.RegisterNodeAddr(addr, nodeID)
+		}
 
-	conn := tc.Conns[0]
+		conn := tc.Conns[0]
 
-	// Create a table and pin the leaseholder replicas to n3. The partition
-	// between n1 and n3 will lead to re-routing via n2, which we expect captured
-	// in the trace.
-	_, err := conn.Exec("CREATE TABLE t (i INT)")
-	require.NoError(t, err)
-	_, err = conn.Exec("ALTER TABLE t CONFIGURE ZONE USING num_replicas=3, lease_preferences='[[+dc=dc3]]', constraints='[]'")
-	require.NoError(t, err)
-	_, err = conn.Exec(
-		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
-	require.NoError(t, err)
-	_, err = conn.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t")
-	require.NoError(t, err)
-	require.NoError(t, tc.WaitForFullReplication())
-
-	leaseCount := func(node int) int {
-		var count int
-		err := conn.QueryRow(fmt.Sprintf(
-			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
-		).Scan(&count)
+		// Create a table and pin the leaseholder replicas to n3. The partition
+		// between n1 and n3 will lead to re-routing via n2, which we expect captured
+		// in the trace.
+		_, err := conn.Exec("CREATE TABLE t (i INT)")
 		require.NoError(t, err)
-		return count
-	}
+		_, err = conn.Exec("ALTER TABLE t CONFIGURE ZONE USING num_replicas=3, lease_preferences='[[+dc=dc3]]', constraints='[]'")
+		require.NoError(t, err)
+		_, err = conn.Exec(
+			fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+		require.NoError(t, err)
+		_, err = conn.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t")
+		require.NoError(t, err)
+		require.NoError(t, tc.WaitForFullReplication())
 
-	checkLeaseCount := func(node, expectedLeaseCount int) error {
-		if count := leaseCount(node); count != expectedLeaseCount {
-			require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
-				ForceLeaseQueueProcess())
-			return errors.Errorf("expected %d leases on node %d, found %d",
-				expectedLeaseCount, node, count)
+		leaseCount := func(node int) int {
+			var count int
+			err := conn.QueryRow(fmt.Sprintf(
+				"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
+			).Scan(&count)
+			require.NoError(t, err)
+			return count
 		}
-		return nil
-	}
 
-	// Wait until the leaseholder for the test table ranges are on n3.
-	testutils.SucceedsSoon(t, func() error {
-		return checkLeaseCount(3, numRanges)
+		checkLeaseCount := func(node, expectedLeaseCount int) error {
+			if count := leaseCount(node); count != expectedLeaseCount {
+				require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
+					ForceLeaseQueueProcess())
+				return errors.Errorf("expected %d leases on node %d, found %d",
+					expectedLeaseCount, node, count)
+			}
+			return nil
+		}
+
+		// Wait until the leaseholder for the test table ranges are on n3.
+		testutils.SucceedsSoon(t, func() error {
+			return checkLeaseCount(3, numRanges)
+		})
+
+		p.EnablePartition(true)
+
+		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
+		require.NoError(t, err)
+
+		// Expect the "proxy request complete" message to be in the trace and that it
+		// comes from the proxy node n2.
+		var msg, tag, loc string
+		if err = conn.QueryRowContext(ctx, `SELECT message, tag, location
+			FROM [SHOW TRACE FOR SESSION]
+			WHERE message LIKE '%proxy request complete%'
+			AND location LIKE '%server/node%'
+			AND tag LIKE '%n2%'`,
+		).Scan(&msg, &tag, &loc); err != nil {
+			if errors.Is(err, gosql.ErrNoRows) {
+				t.Fatalf("request succeeded without proxying")
+			}
+			t.Fatal(err)
+		}
+		t.Logf("found trace event; msg=%s, tag=%s, loc=%s", msg, tag, loc)
 	})
-
-	p.EnablePartition(true)
-
-	_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
-	require.NoError(t, err)
-
-	// Expect the "proxy request complete" message to be in the trace and that it
-	// comes from the proxy node n2.
-	var msg, tag, loc string
-	if err = conn.QueryRowContext(ctx, `SELECT message, tag, location
-		FROM [SHOW TRACE FOR SESSION]
-		WHERE message LIKE '%proxy request complete%'
-		AND location LIKE '%server/node%'
-		AND tag LIKE '%n2%'`,
-	).Scan(&msg, &tag, &loc); err != nil {
-		if errors.Is(err, gosql.ErrNoRows) {
-			t.Fatalf("request succeeded without proxying")
-		}
-		t.Fatal(err)
-	}
-	t.Logf("found trace event; msg=%s, tag=%s, loc=%s", msg, tag, loc)
 }

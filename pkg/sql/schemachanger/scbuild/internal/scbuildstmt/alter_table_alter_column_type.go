@@ -126,10 +126,9 @@ func validateAutomaticCastForNewType(
 	// suggested hint to use one.
 	if !hasUsingExpr {
 		// Compute a suggested default computed expression for inclusion in the error hint.
-		hintExpr := tree.CastExpr{
-			Expr:       &tree.ColumnItem{ColumnName: tree.Name(colName)},
-			Type:       toType,
-			SyntaxMode: tree.CastShort,
+		hintExpr, err := parser.ParseExpr(fmt.Sprintf("%s::%s", colName, toType.SQLString()))
+		if err != nil {
+			panic(err)
 		}
 		panic(errors.WithHintf(
 			pgerror.Newf(
@@ -137,7 +136,7 @@ func validateAutomaticCastForNewType(
 				"column %q cannot be cast automatically to type %s",
 				colName,
 				toType.SQLString(),
-			), "You might need to specify \"USING %s\".", tree.Serialize(&hintExpr),
+			), "You might need to specify \"USING %s\".", tree.Serialize(hintExpr),
 		))
 	}
 
@@ -282,14 +281,6 @@ func handleGeneralColumnConversion(
 	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V24_3) {
 		panic(scerrors.NotImplementedErrorf(t,
 			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
-	}
-
-	// TODO(#132936): Not yet supported in the DSC. Throwing an error to trigger
-	// fallback to legacy.
-	if newColType.Type.Family() == types.EnumFamily {
-		panic(scerrors.NotImplementedErrorf(t,
-			"backfilling during ALTER COLUMN TYPE for an enum column "+
-				"type is not supported"))
 	}
 
 	// Generate the ID of the new column we are adding.
@@ -447,7 +438,7 @@ func getComputeExpressionForBackfill(
 		return
 	}
 
-	_, _, _, err = schemaexpr.DequalifyAndValidateExprImpl(b, expr, newColType.Type,
+	typedExpr, _, _, err := schemaexpr.DequalifyAndValidateExprImpl(b, expr, newColType.Type,
 		tree.AlterColumnTypeUsingExpr, b.SemaCtx(), volatility.Volatile, tn, b.ClusterSettings().Version.ActiveVersion(b),
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
@@ -456,6 +447,14 @@ func getComputeExpressionForBackfill(
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)
+	if err != nil {
+		return
+	}
+
+	// Return the updated expression from DequalifyAndValidateExprImpl. For expressions
+	// involving user-defined types like enums, the types will be resolved to ensure
+	// they can be used during backfill.
+	expr, err = parser.ParseExpr(typedExpr)
 	return
 }
 

@@ -216,7 +216,7 @@ func (b *Builder) buildRoutine(
 		}
 		invocationTypes[i] = texpr.ResolvedType()
 	}
-	b.factory.Metadata().AddUserDefinedFunction(o, invocationTypes, f.Func.ReferenceByName)
+	b.factory.Metadata().AddUserDefinedRoutine(o, invocationTypes, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change

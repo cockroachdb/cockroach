@@ -14,7 +14,27 @@ import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 enum LeaseState {
-  // ERROR indicates that the lease can't be used or acquired.
+  // ERROR indicates that the lease can't be used or acquired. The state is
+  // not a definitive indication of the lease's validity. Rather, it is an
+  // indication that the validity is indeterminate; it may be valid or it
+  // may not be.
+  //
+  // The ERROR state is returned in the following cases:
+  // 1. An epoch lease has a reference to a node liveness record which the
+  //    lease status evaluator is not aware of. This can happen when gossip
+  //    is down and node liveness information is not available for the lease
+  //    holder. In such cases, it would be unsafe to use the lease because
+  //    the evaluator cannot determine the lease's expiration, so it may
+  //    have expired. However, it would also be unsafe to replace the lease,
+  //    because it may still be valid.
+  // 2. A leader lease is evaluated on a replica that is not the raft leader
+  //    and is not aware of a successor raft leader at a future term (either
+  //    itself or some other replica). In such cases, the lease may be valid
+  //    or it may have expired. The raft leader (+leaseholder) itself would
+  //    be able to tell, but the only way for a follower replica to tell is
+  //    for it to try to become the raft leader, while respecting raft
+  //    fortification rules. In the meantime, it is best for the follower
+  //    replica to redirect any requests to the raft leader (+leaseholder).
   ERROR = 0;
   // VALID indicates that the lease is not expired at the current clock
   // time and can be used to serve a given request.
