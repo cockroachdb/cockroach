@@ -11,6 +11,7 @@ go_library(
         "support_manager.go",
         "supporter_state.go",
         "transport.go",
+        "unreliable_store_liveness_handler.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],

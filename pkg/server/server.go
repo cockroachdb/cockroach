@@ -179,10 +179,11 @@ type topLevelServer struct {
 	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
 	keyVisualizerServer *KeyVisualizerServer
 
-	recoveryServer *loqrecovery.Server
-	raftTransport  *kvserver.RaftTransport
-	stopper        *stop.Stopper
-	stopTrigger    *stopTrigger
+	recoveryServer         *loqrecovery.Server
+	raftTransport          *kvserver.RaftTransport
+	storelivenessTransport *storeliveness.Transport
+	stopper                *stop.Stopper
+	stopTrigger            *stopTrigger
 
 	debug          *debug.Server
 	kvProber       *kvprober.Prober
@@ -1282,6 +1283,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tsServer:                  &sTS,
 		recoveryServer:            recoveryServer,
 		raftTransport:             raftTransport,
+		storelivenessTransport:    storeLivenessTransport,
 		stopper:                   stopper,
 		stopTrigger:               stopTrigger,
 		debug:                     debugServer,

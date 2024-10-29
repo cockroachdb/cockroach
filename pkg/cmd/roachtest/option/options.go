@@ -243,6 +243,15 @@ func NoBackupSchedule(opts interface{}) {
 	}
 }
 
+// DisableWALFailover can be used to generate StartOpts that disable use of WAL
+// failover.
+func DisableWALFailover(opts interface{}) {
+	switch opts := opts.(type) {
+	case *StartOpts:
+		opts.RoachprodOpts.WALFailover = ""
+	}
+}
+
 // Graceful performs a graceful stop of the cockroach process.
 func Graceful(gracePeriodSeconds int) func(interface{}) {
 	return func(opts interface{}) {

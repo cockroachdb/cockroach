@@ -637,6 +637,10 @@ type StorageLayerInterface interface {
 	// The return value is of type *kvserver.RaftTransport.
 	RaftTransport() interface{}
 
+	// StoreLivenessTransport provides access to the store liveness transport.
+	// The return value is of type *storeliveness.Transport.
+	StoreLivenessTransport() interface{}
+
 	// GetRangeLease returns information on the lease for the range
 	// containing key, and a timestamp taken from the node. The lease is
 	// returned regardless of its status.
