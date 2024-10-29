@@ -4339,20 +4339,42 @@ func newNetwork(peers ...stateMachine) *network {
 // newNetworkWithConfig is like newNetwork but calls the given func to
 // modify the configuration of any state machines it creates.
 func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *network {
+	return newNetworkWithConfigAndLivenessFabric(configFunc, nil /* fabric */, peers...)
+}
+
+// newNetworkWithConfig is like newNetwork but calls the given func to
+// modify the configuration of any state machines it creates and uses the store
+// liveness fabric if provided.
+func newNetworkWithConfigAndLivenessFabric(
+	configFunc func(*Config),
+	fabric *raftstoreliveness.LivenessFabric,
+	peers ...stateMachine,
+) *network {
 	size := len(peers)
 	peerAddrs := idsBySize(size)
 
 	npeers := make(map[pb.PeerID]stateMachine, size)
 	nstorage := make(map[pb.PeerID]*MemoryStorage, size)
-	livenessFabric := raftstoreliveness.NewLivenessFabric()
+
+	createNewFabric := fabric == nil
+
+	if createNewFabric {
+		fabric = raftstoreliveness.NewLivenessFabric()
+	}
+
 	for j, p := range peers {
 		id := peerAddrs[j]
-		livenessFabric.AddPeer(id)
+		// If we are not creating a liveness fabric from scratch, it's the caller's
+		// responsibility for adding the peers to the fabric.
+		if createNewFabric {
+			fabric.AddPeer(id)
+		}
+
 		switch v := p.(type) {
 		case nil:
 			nstorage[id] = newTestMemoryStorage(withPeers(peerAddrs...))
 			cfg := newTestConfig(id, 10, 1, nstorage[id],
-				withStoreLiveness(livenessFabric.GetStoreLiveness(id)))
+				withStoreLiveness(fabric.GetStoreLiveness(id)))
 			if configFunc != nil {
 				configFunc(cfg)
 			}
@@ -4392,7 +4414,7 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 		storage:        nstorage,
 		dropm:          make(map[connem]float64),
 		ignorem:        make(map[pb.MessageType]bool),
-		livenessFabric: livenessFabric,
+		livenessFabric: fabric,
 	}
 }
 
