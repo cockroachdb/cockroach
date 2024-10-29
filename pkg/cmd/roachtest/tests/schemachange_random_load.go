@@ -151,12 +151,15 @@ func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDir
 	defer db.Close()
 
 	// Save a backup file called schemachange to the store directory.
-	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
+	_, err := db.Exec("BACKUP DATABASE schemachange INTO 'nodelocal://1/schemachange'")
 	if err != nil {
 		t.L().Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
-
-	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
+	var backupPath string
+	if err := db.QueryRow("SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/schemachange']").Scan(&backupPath); err != nil {
+		t.L().Printf("Failed to get backup path from node 1: %v\n", err.Error())
+	}
+	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange", backupPath)
 	localBackupFilePath := filepath.Join(t.ArtifactsDir(), "backup")
 	remoteTransactionsFilePath := filepath.Join(storeDirectory, txnLogFile)
 	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), txnLogFile)
