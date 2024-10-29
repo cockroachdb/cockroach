@@ -194,10 +194,22 @@ type LivenessFabric struct {
 
 // NewLivenessFabric initializes and returns a LivenessFabric.
 func NewLivenessFabric() *LivenessFabric {
+	return NewLivenessFabricWithPeers()
+}
+
+// NewLivenessFabricWithPeers initializes and returns a LivenessFabric with the
+// given peer IDs provided.
+func NewLivenessFabricWithPeers(peers ...pb.PeerID) *LivenessFabric {
 	state := make(map[pb.PeerID]*MockStoreLiveness)
-	return &LivenessFabric{
+	fabric := &LivenessFabric{
 		state: state,
 	}
+
+	for _, peer := range peers {
+		fabric.AddPeer(peer)
+	}
+
+	return fabric
 }
 
 // AddPeer adds a peer to the liveness fabric.
