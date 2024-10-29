@@ -88,7 +88,7 @@ func registerCDCBench(r registry.Registry) {
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
+				Suites:           registry.Suites(registry.Weekly),
 				RequiresLicense:  true,
 				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -116,7 +116,7 @@ func registerCDCBench(r registry.Registry) {
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
+				Suites:           registry.Suites(registry.Weekly),
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -134,7 +134,7 @@ func registerCDCBench(r registry.Registry) {
 					Benchmark:        true,
 					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
+					Suites:           registry.Suites(registry.Weekly),
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -150,7 +150,7 @@ func registerCDCBench(r registry.Registry) {
 					Benchmark:        true,
 					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
+					Suites:           registry.Suites(registry.Weekly),
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
