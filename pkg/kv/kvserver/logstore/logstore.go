@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -31,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -130,16 +129,16 @@ type RaftState struct {
 
 // AppendStats describes a completed log storage append operation.
 type AppendStats struct {
-	Begin time.Time
-	End   time.Time
+	Begin crtime.Mono
+	End   crtime.Mono
 
 	RegularEntries    int
 	RegularBytes      int64
 	SideloadedEntries int
 	SideloadedBytes   int64
 
-	PebbleBegin time.Time
-	PebbleEnd   time.Time
+	PebbleBegin crtime.Mono
+	PebbleEnd   crtime.Mono
 	PebbleBytes int64
 	// Only set when !NonBlocking, which means almost never, since
 	// kv.raft_log.non_blocking_synchronization.enabled defaults to true.
@@ -227,7 +226,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	if len(m.Entries) > 0 {
 		firstPurge := kvpb.RaftIndex(m.Entries[0].Index) // first new entry written
 		overwriting = firstPurge <= prevLastIndex
-		stats.Begin = timeutil.Now()
+		stats.Begin = crtime.NowMono()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
 		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := MaybeSideloadEntries(ctx, m.Entries, s.Sideload)
@@ -246,7 +245,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.RegularBytes += otherEntriesSize
 		stats.SideloadedEntries += numSideloaded
 		stats.SideloadedBytes += sideLoadedEntriesSize
-		stats.End = timeutil.Now()
+		stats.End = crtime.NowMono()
 	}
 
 	if hs := m.HardState(); !raft.IsEmptyHardState(hs) {
@@ -281,7 +280,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// communicates an important invariant, but is hard to grok now and can be
 	// outdated. Raft invariants are in the responsibility of the layer above
 	// (Replica), so this comment might need to move.
-	stats.PebbleBegin = timeutil.Now()
+	stats.PebbleBegin = crtime.NowMono()
 	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := m.MustSync()
 	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
@@ -308,7 +307,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			const expl = "while committing batch without sync wait"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		stats.PebbleEnd = timeutil.Now()
+		stats.PebbleEnd = crtime.NowMono()
 		// Instead, enqueue that waiting on the SyncWaiterLoop, who will signal the
 		// callback when the write completes.
 		waiterCallback := nonBlockingSyncWaiterCallbackPool.Get().(*nonBlockingSyncWaiterCallback)
@@ -328,7 +327,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			const expl = "while committing batch"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		stats.PebbleEnd = timeutil.Now()
+		stats.PebbleEnd = crtime.NowMono()
 		stats.PebbleCommitStats = batch.CommitStats()
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
@@ -390,12 +389,12 @@ type nonBlockingSyncWaiterCallback struct {
 	batch storage.WriteBatch
 	// Used to record Metrics.
 	metrics        Metrics
-	logCommitBegin time.Time
+	logCommitBegin crtime.Mono
 }
 
 // run is the callback's logic. It is executed on the SyncWaiterLoop goroutine.
 func (cb *nonBlockingSyncWaiterCallback) run() {
-	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
+	dur := cb.logCommitBegin.Elapsed().Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
 	commitStats := cb.batch.CommitStats()
 	cb.cb.OnLogSync(cb.ctx, cb.onDone, commitStats)
