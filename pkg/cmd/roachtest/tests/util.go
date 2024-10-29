@@ -151,7 +151,7 @@ func profileTopStatements(
 
 	// Enable continuous statement diagnostics rather than just the first one.
 	sql := "SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled=true"
-	if _, err := db.Exec(sql); err != nil {
+	if _, err := db.ExecContext(ctx, sql); err != nil {
 		return err
 	}
 
@@ -199,7 +199,7 @@ FROM (
 		dbName,
 		minNumExpectedStmts,
 	)
-	if _, err := db.Exec(sql); err != nil {
+	if _, err := db.ExecContext(ctx, sql); err != nil {
 		return err
 	}
 	return nil
@@ -217,7 +217,7 @@ func downloadProfiles(
 	query := "SELECT id, collected_at FROM system.statement_diagnostics"
 	db := cluster.Conn(ctx, logger, 1)
 	defer db.Close()
-	idRow, err := db.Query(query)
+	idRow, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func downloadProfiles(
 			return err
 		}
 		url := urlPrefix + diagID
-		resp, err := client.Get(context.Background(), url)
+		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return err
 		}

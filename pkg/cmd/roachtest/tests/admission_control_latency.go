@@ -994,7 +994,7 @@ func (v variations) waitForRebalanceToStop(ctx context.Context, t test.Test) {
 		Multiplier:     1,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if row := db.QueryRow(q); row != nil {
+		if row := db.QueryRowContext(ctx, q); row != nil {
 			var secondsSinceLastEvent int
 			if err := row.Scan(&secondsSinceLastEvent); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 				t.Fatal(err)
@@ -1021,7 +1021,7 @@ func (v variations) waitForIOOverloadToEnd(ctx context.Context, t test.Test) {
 		anyOverloaded := false
 		for _, nodeId := range v.targetNodes() {
 			db := v.Conn(ctx, t.L(), nodeId)
-			if row := db.QueryRow(q); row != nil {
+			if row := db.QueryRowContext(ctx, q); row != nil {
 				var overload float64
 				if err := row.Scan(&overload); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 					db.Close()
