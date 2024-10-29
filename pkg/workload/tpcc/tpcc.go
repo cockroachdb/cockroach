@@ -130,6 +130,8 @@ type tpcc struct {
 	// context group for any background reset table operation to avoid goroutine leaks during long duration workloads
 	resetTableGrp      ctxgroup.Group
 	resetTableCancelFn context.CancelFunc
+
+	asOfSystemTime string
 }
 
 type waitSetter struct {
@@ -260,7 +262,8 @@ var tpccMeta = workload.Meta{
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
-			"txn-preamble-file":        {RuntimeOnly: true},
+			`txn-preamble-file`:        {RuntimeOnly: true},
+			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -300,6 +303,10 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
 		// Support executing a query file before each transaction.
 		g.flags.StringVar(&g.txnPreambleFile, "txn-preamble-file", "", "queries that will be injected before each txn")
+		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
+			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
+				"check. Example values are (\"'-1m'\", \"'-1h'\")")
+
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -604,7 +611,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 
 				start := timeutil.Now()
-				err := check.Fn(db, "" /* asOfSystemTime */)
+				err := check.Fn(db, w.asOfSystemTime /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
 					return errors.Wrapf(err, `check failed: %s`, check.Name)
