@@ -935,11 +935,7 @@ func TestSpan_UseAfterFinish(t *testing.T) {
 				// below.
 				for i := 0; i < 20; i++ {
 					t.Run("invoke", func(t *testing.T) {
-						if i == 9 {
-							f.Func.Call(args)
-						} else {
-							f.Func.Call(args)
-						}
+						f.Func.Call(args)
 					})
 				}
 			})
