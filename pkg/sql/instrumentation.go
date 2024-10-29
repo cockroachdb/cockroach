@@ -457,7 +457,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
 	var previouslySampled bool
-	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
+	previouslySampled, ih.savePlanForStats = false, false // statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
 
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
