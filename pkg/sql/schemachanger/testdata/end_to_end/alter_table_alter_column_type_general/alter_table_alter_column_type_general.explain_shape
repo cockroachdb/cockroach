@@ -1,0 +1,26 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+SET enable_experimental_alter_column_type_general=TRUE;
+INSERT INTO t VALUES (1,NULL),(2,'1'),(3,'2');
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET DATA TYPE BIGINT USING j::BIGINT;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE INT8 USING ‹j›::INT8;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey~ (i; j-j_shadow~, j+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey~
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey~ in relation t
+ │    └── into t_pkey+ (i; j+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[5] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ └── execute 4 system table mutations transactions

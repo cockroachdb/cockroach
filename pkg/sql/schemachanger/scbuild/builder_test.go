@@ -51,6 +51,8 @@ func TestBuildDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 
+	skip.UnderRace(t, "expensive and can easily extend past test timeout")
+
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
@@ -95,6 +97,7 @@ func TestBuildDataDriven(t *testing.T) {
 										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 										sd.ApplicationName = ""
 										sd.EnableUniqueWithoutIndexConstraints = true
+										sd.AlterColumnTypeGeneralEnabled = true
 									},
 								),
 							),

@@ -1,0 +1,19 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+SET enable_experimental_alter_column_type_general=TRUE;
+INSERT INTO t VALUES (1,NULL),(2,'1'),(3,'2');
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES (10+$stageKey, '$stageKey');
+----
+
+# One row is expected to be added after each stage.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount FROM t WHERE i > 3;
+----
+true
+
+test
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE BIGINT USING j::BIGINT;
+----
