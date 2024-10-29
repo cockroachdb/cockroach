@@ -840,9 +840,10 @@ func (r *raft) sendDeFortify(to pb.PeerID) {
 		case r.Term == fortifiedTerm:
 			r.deFortify(r.id, fortifiedTerm)
 		case r.Term > fortifiedTerm:
-			// NB: The current term has advanced, so we don't attempt to de-fortify, as the de-fortification
-			// attempt corresponds to a prior term. These term checks would have happened in Step had we
-			// sent a self-addressed message; we decided not to, so we need to handle this especially
+			// NB: The current term has advanced, so we don't attempt to de-fortify,
+			// as the de-fortification attempt corresponds to a prior term. These term
+			// checks would have happened in Step had we sent a self-addressed
+			// message; we decided not to, so we need to handle this especially
 			// ourselves.
 			r.logger.Debugf("de-foritfying self at term %d is a no-op; current term %d",
 				fortifiedTerm, r.Term,
@@ -906,9 +907,28 @@ func (r *raft) bcastDeFortify() {
 // MsgDeFortifyLeader to all peers or not.
 func (r *raft) shouldBcastDeFortify() bool {
 	assertTrue(r.state != pb.StateLeader, "leaders should not be de-fortifying without stepping down")
-	// TODO(arul): expand this condition to ensure a new leader has committed an
-	// entry.
-	return r.fortificationTracker.FortificationEnabledForTerm() && r.fortificationTracker.CanDefortify()
+
+	if !r.fortificationTracker.NeedsDefortify() {
+		// Fast path for if we've determined we no longer need to de-fortify.
+		return false
+	}
+	if !r.fortificationTracker.CanDefortify() {
+		return false
+	}
+
+	committedTerm, err := r.raftLog.term(r.raftLog.committed)
+	if err != nil {
+		// NB: Extremely rare case where we can't figure out what the currently
+		// committed term is. Conservatively send out a MsgDeFortifyLeader, but log
+		// loudly.
+		r.logger.Warningf("failed to get committed term: %v", err)
+		return true
+	}
+
+	// Inform the fortification tracker of the committed term, and see whether the
+	// answer to whether we should de-fortify has changed.
+	r.fortificationTracker.InformCommittedTerm(committedTerm)
+	return r.fortificationTracker.NeedsDefortify()
 }
 
 // maybeUnpauseAndBcastAppend unpauses and attempts to send an MsgApp to all the
