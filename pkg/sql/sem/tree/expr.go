@@ -423,7 +423,7 @@ func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
 		Expr:   expr,
 		Locale: locale,
 	}
-	node.typ = types.MakeCollatedString(types.String, locale)
+	node.typ = types.MakeCollatedType(expr.ResolvedType(), locale)
 	return node
 }
 

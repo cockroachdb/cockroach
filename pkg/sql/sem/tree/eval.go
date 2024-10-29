@@ -1490,7 +1490,7 @@ func cmpOpFixups(
 	}
 
 	// Array equality comparisons.
-	for _, t := range append(types.Scalar, types.AnyEnum) {
+	for _, t := range append(types.Scalar, types.AnyEnum, types.AnyCollatedString) {
 		appendCmpOp := func(sym treecmp.ComparisonOperatorSymbol, cmpOp *CmpOp) {
 			s, ok := cmpOps[sym]
 			if !ok {
