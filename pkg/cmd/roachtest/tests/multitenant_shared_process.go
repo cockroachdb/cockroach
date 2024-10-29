@@ -54,4 +54,17 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 		},
 	})
+
+	r.Add(registry.TestSpec{
+		Name:                "multitenant/shared-process/drain",
+		Owner:               registry.OwnerServer,
+		Cluster:             r.MakeClusterSpec(crdbNodeCount+1, spec.WorkloadNode()),
+		Leases:              registry.MetamorphicLeases,
+		SkipPostValidations: registry.PostValidationNoDeadNodes,
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runDrainAndShutdownInternal(ctx, t, c, true /* runAsShared */)
+		},
+	})
 }

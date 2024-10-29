@@ -358,7 +358,20 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 // runDrainAndShutdown is to verify that we can use the --shutdown flag so the
 // process quits after draining is complete.
 func runDrainAndShutdown(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	runDrainAndShutdownInternal(ctx, t, c, false /* runAsShared */)
+}
+
+func runDrainAndShutdownInternal(
+	ctx context.Context, t test.Test, c cluster.Cluster, runAsShared bool,
+) {
+	clusterSettings := install.MakeClusterSettings()
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, c.All())
+
+	if runAsShared {
+		startOpts := option.StartSharedVirtualClusterOpts(appTenantName)
+		c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, clusterSettings)
+	}
+
 	db := c.Conn(ctx, t.L(), 1)
 	defer func() { _ = db.Close() }()
 
