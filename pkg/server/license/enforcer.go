@@ -614,10 +614,12 @@ func (e *Enforcer) getGracePeriodDuration(defaultAndMaxLength time.Duration) tim
 	return newLength
 }
 
+var maxOpenTxnsDuringThrottle = envutil.EnvOrDefaultInt64("COCKROACH_MAX_OPEN_TXNS_DURING_THROTTLE", defaultMaxOpenTransactions)
+
 // getMaxOpenTransactions returns the number of open transactions allowed before
 // throttling takes affect.
 func (e *Enforcer) getMaxOpenTransactions() int64 {
-	newLimit := envutil.EnvOrDefaultInt64("COCKROACH_MAX_OPEN_TXNS_DURING_THROTTLE", defaultMaxOpenTransactions)
+	newLimit := maxOpenTxnsDuringThrottle
 	if tk := e.GetTestingKnobs(); tk != nil && tk.OverrideMaxOpenTransactions != nil {
 		newLimit = *tk.OverrideMaxOpenTransactions
 	}
