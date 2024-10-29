@@ -272,8 +272,9 @@ func typeIndirection(e opt.ScalarExpr) *types.T {
 
 // typeCollate returns the collated string typed with the given locale.
 func typeCollate(e opt.ScalarExpr) *types.T {
+	t := e.Child(0).(opt.ScalarExpr).DataType()
 	locale := e.(*CollateExpr).Locale
-	return types.MakeCollatedString(types.String, locale)
+	return types.MakeCollatedType(t, locale)
 }
 
 // typeArrayFlatten returns the type of the subquery as an array.
