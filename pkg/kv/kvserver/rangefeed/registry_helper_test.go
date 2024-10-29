@@ -182,7 +182,7 @@ func (s *testStream) SetSendErr(err error) {
 	s.mu.sendErr = err
 }
 
-func (s *testStream) Events() []*kvpb.RangeFeedEvent {
+func (s *testStream) GetAndClearEvents() []*kvpb.RangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	es := s.mu.events
