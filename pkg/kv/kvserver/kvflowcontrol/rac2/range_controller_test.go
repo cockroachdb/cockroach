@@ -2348,3 +2348,36 @@ func TestConstructRaftEventForReplica(t *testing.T) {
 		})
 	}
 }
+
+func TestRangeSendStreamStatsString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stats := RangeSendStreamStats{
+		internal: []ReplicaSendStreamStats{
+			{
+				IsStateReplicate: false,
+				HasSendQueue:     true,
+				ReplicaSendQueueStats: ReplicaSendQueueStats{
+					ReplicaID:      1,
+					SendQueueCount: 10,
+					SendQueueBytes: 100,
+				},
+			},
+			{
+				IsStateReplicate: true,
+				HasSendQueue:     false,
+				ReplicaSendQueueStats: ReplicaSendQueueStats{
+					ReplicaID:      2,
+					SendQueueCount: 0,
+					SendQueueBytes: 0,
+				},
+			},
+		},
+	}
+
+	require.Equal(t,
+		"[r1=(is_state_replicate=false has_send_queue=true send_queue_size=100 B / 10 entries), "+
+			"r2=(is_state_replicate=true has_send_queue=false send_queue_size=0 B / 0 entries)]",
+		stats.String())
+}

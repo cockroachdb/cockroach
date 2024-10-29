@@ -3084,14 +3084,23 @@ func excludeReplicasInNeedOfCatchup(
 	sendStreamStats(stats)
 	filled := 0
 	for _, repl := range replicas {
-		if stats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID); ok &&
-			(!stats.IsStateReplicate || stats.HasSendQueue) {
+		if replicaSendStreamStats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID); ok &&
+			(!replicaSendStreamStats.IsStateReplicate || replicaSendStreamStats.HasSendQueue) {
 			log.KvDistribution.VEventf(ctx, 5,
-				"not considering %s as a potential candidate for a lease transfer "+
+				"not considering %v as a potential candidate for a lease transfer "+
 					"because the replica requires catchup: "+
-					"[is_state_replicate=%v has_send_queue=%v]",
-				repl, stats.IsStateReplicate, stats.HasSendQueue)
+					"replica=(%v) range=%v",
+				repl, replicaSendStreamStats, stats)
 			continue
+		} else if ok {
+			log.KvDistribution.VEventf(ctx, 6,
+				"replica %v is up-to-date and does not require catchup "+
+					"replica=(%v) range=%v",
+				repl, replicaSendStreamStats, stats)
+		} else {
+			log.KvDistribution.VEventf(ctx, 4,
+				"replica %v is not in the send stream stats range=%v",
+				repl, stats)
 		}
 		// We are also not excluding any replicas which weren't included in the
 		// stats here. If they weren't included it indicates that they were either

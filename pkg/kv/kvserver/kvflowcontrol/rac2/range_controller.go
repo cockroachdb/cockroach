@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -194,6 +195,22 @@ type RangeSendStreamStats struct {
 	internal []ReplicaSendStreamStats
 }
 
+func (s *RangeSendStreamStats) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *RangeSendStreamStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[")
+	for i := range s.internal {
+		if i > 0 {
+			w.Printf(", ")
+		}
+		w.Printf("r%v=(%v)", s.internal[i].ReplicaID, s.internal[i])
+	}
+	w.Printf("]")
+}
+
 // Clear clears the stats for all replica send streams so that the underlying
 // memory can be reused.
 func (s *RangeSendStreamStats) Clear() {
@@ -298,6 +315,15 @@ type ReplicaSendStreamStats struct {
 	ReplicaSendQueueStats
 }
 
+func (rsss ReplicaSendStreamStats) String() string {
+	return redact.StringWithoutMarkers(rsss)
+}
+
+func (rsss ReplicaSendStreamStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("is_state_replicate=%v has_send_queue=%v %v",
+		rsss.IsStateReplicate, rsss.HasSendQueue, rsss.ReplicaSendQueueStats)
+}
+
 // ReplicaSendQueueStats contains the size and count of the send stream queue
 // for a replica.
 type ReplicaSendQueueStats struct {
@@ -306,6 +332,16 @@ type ReplicaSendQueueStats struct {
 	SendQueueBytes int64
 	// SendQueueCount is the number of entries in the send queue.
 	SendQueueCount int64
+}
+
+func (rsqs ReplicaSendQueueStats) String() string {
+	return redact.StringWithoutMarkers(rsqs)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rsqs ReplicaSendQueueStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("send_queue_size=%v / %v entries",
+		humanizeutil.IBytes(rsqs.SendQueueBytes), rsqs.SendQueueCount)
 }
 
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
@@ -1497,7 +1533,6 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	if len(statsToSet.internal) != 0 {
 		panic(errors.AssertionFailedf("statsToSet is non-empty %v", statsToSet.internal))
 	}
-	statsToSet.Clear()
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
