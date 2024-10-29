@@ -33,7 +33,7 @@ type InteractionOpts struct {
 
 	// SetRandomizedElectionTimeout is used to plumb this function down from the
 	// raft test package.
-	SetRandomizedElectionTimeout func(node *raft.RawNode, timeout int)
+	SetRandomizedElectionTimeout func(node *raft.RawNode, timeout int64)
 }
 
 // Node is a member of a raft group tested via an InteractionEnv.

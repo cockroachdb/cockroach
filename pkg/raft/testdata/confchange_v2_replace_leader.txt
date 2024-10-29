@@ -170,7 +170,7 @@ raft-state
 # Make sure n1 cannot campaign to become leader.
 campaign 1
 ----
-WARN 1 is unpromotable and can not campaign
+INFO 1 is unpromotable and can not campaign
 
 support-expired 1
 ----

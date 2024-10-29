@@ -220,7 +220,7 @@ var (
 	// defaultRaftHeartbeatIntervalTicks is the default value for
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
 	// each heartbeat.
-	defaultRaftHeartbeatIntervalTicks = envutil.EnvOrDefaultInt(
+	defaultRaftHeartbeatIntervalTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_HEARTBEAT_INTERVAL_TICKS", 2)
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
@@ -233,12 +233,12 @@ var (
 	// sufficient for a full network roundtrip. Raft heartbeats are also sent via
 	// SystemClass, avoiding head-of-line blocking by general RPC traffic. The 1-2
 	// random factor provides an additional buffer.
-	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
-	defaultRaftReproposalTimeoutTicks = envutil.EnvOrDefaultInt(
+	defaultRaftReproposalTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_REPROPOSAL_TIMEOUT_TICKS", 6)
 
 	// defaultRaftEnableCheckQuorum specifies whether to enable CheckQuorum in
@@ -524,15 +524,15 @@ type RaftConfig struct {
 	// an election. The actual election timeout is randomized by each replica to
 	// between 1-2 election timeouts. This value is inherited by individual stores
 	// unless overridden.
-	RaftElectionTimeoutTicks int
+	RaftElectionTimeoutTicks int64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
 	// check, so the actual timeout is 1-2 times this value.
-	RaftReproposalTimeoutTicks int
+	RaftReproposalTimeoutTicks int64
 
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
-	RaftHeartbeatIntervalTicks int
+	RaftHeartbeatIntervalTicks int64
 
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies the range lease duration.
 	RangeLeaseDuration time.Duration

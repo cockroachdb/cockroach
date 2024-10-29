@@ -811,10 +811,10 @@ type Replica struct {
 		quotaReleaseQueue []*quotapool.IntAlloc
 
 		// Counts calls to Replica.tick()
-		ticks int
+		ticks int64
 
 		// lastProposalAtTicks tracks the time of the last proposal, in ticks.
-		lastProposalAtTicks int
+		lastProposalAtTicks int64
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
