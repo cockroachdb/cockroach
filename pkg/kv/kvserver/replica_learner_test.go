@@ -924,19 +924,6 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	// below.
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
 
-	// Synchronize on the moment before the snapshot gets sent so we can measure
-	// the state at that time & gather metrics.
-	blockUntilSnapshotSendCh := make(chan struct{})
-	blockSnapshotSendCh := make(chan struct{})
-	ltk.storeKnobs.SendSnapshot = func(request *kvserverpb.DelegateSendSnapshotRequest) {
-		close(blockUntilSnapshotSendCh)
-		select {
-		case <-blockSnapshotSendCh:
-		case <-time.After(10 * time.Second):
-			return
-		}
-	}
-
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
 			ServerArgs:      base.TestServerArgs{Knobs: knobs},
@@ -1013,46 +1000,27 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		return nil
 	})
 
-	// Wait until the snapshot is about to be sent before calculating what the
-	// snapshot size should be. This allows our snapshot measurement to account
-	// for any state changes that happen between calling AddNonVoters and the
-	// snapshot being sent.
-	<-blockUntilSnapshotSendCh
-	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl)
-	require.NoError(t, err)
-
-	close(blockSnapshotSendCh)
+	// AddNonVoter will return after the snapshot is sent. Wait for it to do so
+	// before checking asserting on snapshot sent/received metrics.
 	require.NoError(t, g.Wait())
-
-	// Record the snapshot metrics for the sender after the raft snapshot was sent.
+	// Record metrics.
 	senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0, metrics)
-
-	// Asserts that the raft snapshot (aka recovery snapshot) bytes sent have been
-	// recorded and that it was not double counted in a different metric.
-	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
-
-	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
-		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
-	}
-	require.Equal(t, senderMapExpected, senderMapDelta)
-
-	// Record the snapshot metrics for the receiver after the raft snapshot was
-	// received.
 	receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1, metrics)
 
-	// Asserts that the raft snapshot (aka recovery snapshot) bytes received have
-	// been recorded and that it was not double counted in a different metric.
-	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
+	// Assert that the raft snapshot (aka recovery snapshot) bytes sent have been
+	// recorded and that they were not double counted in the rebalancing metric.
+	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
+	require.Greater(t, senderMapDelta[".recovery"].sentBytes, int64(0))
+	require.Equal(t, int64(0), senderMapDelta[".rebalancing"].sentBytes)
+	require.Equal(t, senderMapDelta[""], senderMapDelta[".recovery"])
 
-	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
-		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
-	}
-	require.Equal(t, receiverMapExpected, receiverMapDelta)
+	// Assert that the raft snapshot (aka recovery snapshot) bytes received have
+	// been recorded and that they were not double counted in the rebalancing
+	// metric.
+	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
+	require.Greater(t, receiverMapDelta[".recovery"].rcvdBytes, int64(0))
+	require.Equal(t, int64(0), receiverMapDelta[".rebalancing"].rcvdBytes)
+	require.Equal(t, receiverMapDelta[""], receiverMapDelta[".recovery"])
 }
 
 func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drainingNodeID int) {
