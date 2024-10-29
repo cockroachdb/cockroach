@@ -240,13 +240,13 @@ export const TablesPageV2 = () => {
   const tableData = useMemo(
     () =>
       tableMetadataToRows(tableList ?? [], {
-        nodeIDToRegion: nodesResp.nodeIDToRegion,
+        nodeStatusByID: nodesResp.nodeStatusByID,
         storeIDToNodeID: nodesResp.storeIDToNodeID,
         isLoading: nodesResp.isLoading,
       }),
     [
       tableList,
-      nodesResp.nodeIDToRegion,
+      nodesResp.nodeStatusByID,
       nodesResp.storeIDToNodeID,
       nodesResp.isLoading,
     ],
