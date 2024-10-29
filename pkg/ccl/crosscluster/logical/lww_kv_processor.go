@@ -411,7 +411,7 @@ func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdceve
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
-		ShouldWinTie: true,
+		// ShouldWinTie: true,
 	}
 	return p.ri.InsertRow(ctx, &row.KVBatchAdapter{Batch: b}, p.newVals, ph, oth, false, false)
 }
@@ -432,7 +432,7 @@ func (p *kvTableWriter) updateRow(
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
-		ShouldWinTie: true,
+		// ShouldWinTie: true,
 	}
 	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, oth, false)
 	return err
@@ -452,7 +452,7 @@ func (p *kvTableWriter) deleteRow(
 		OriginTimestamp:    after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
-		ShouldWinTie: true,
+		// ShouldWinTie: true,
 	}
 
 	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, oth, false)
