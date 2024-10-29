@@ -344,7 +344,7 @@ func makeStoreCPUFn(
 	tsQueries := make([]tsQuery, numNodes)
 	for i := range tsQueries {
 		tsQueries[i] = tsQuery{
-			name:      "cr.node.sys.cpu.combined.percent-normalized",
+			name:      "cr.node.sys.cpu.host.combined.percent-normalized",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
 			tenantID:  roachpb.SystemTenantID,
