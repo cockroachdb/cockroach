@@ -9451,6 +9451,8 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 	flush_bytes INT,
 	flush_batches INT,
 	last_flush_time INTERVAL,
+	chunks_running INT,
+	chunks_done INT,
 	last_kvs_done INT,
 	last_kvs_todo INT,
 	last_batches INT,
@@ -9507,6 +9509,8 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 				tree.NewDInt(tree.DInt(status.Flushes.Bytes)),                                                                   // flush_bytes
 				tree.NewDInt(tree.DInt(status.Flushes.Batches)),                                                                 // flush_batches
 				curOrLast(nanosSince(status.Flushes.Last.CurFlushStart), status.Flushes.Last.LastFlushNanos, streampb.Flushing), // last_flush_time
+				tree.NewDInt(tree.DInt(status.Flushes.Last.ChunksRunning)),                                                      // chunks_running
+				tree.NewDInt(tree.DInt(status.Flushes.Last.ChunksDone)),                                                         // chunks_done
 				tree.NewDInt(tree.DInt(status.Flushes.Last.TotalKVs)),                                                           // last_kvs_done
 				tree.NewDInt(tree.DInt(status.Flushes.Last.ProcessedKVs)),                                                       // last_kvs_todo
 				tree.NewDInt(tree.DInt(status.Flushes.Last.Batches)),                                                            // last_batches

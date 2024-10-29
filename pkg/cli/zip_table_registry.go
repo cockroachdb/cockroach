@@ -1095,6 +1095,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"flush_bytes",
 			"flush_batches",
 			"last_flush_time",
+			"chunks_running",
+			"chunks_done",
 			"last_kvs_done",
 			"last_kvs_todo",
 			"last_batches",

@@ -344,7 +344,7 @@ func makeStoreCPUFn(
 	tsQueries := make([]tsQuery, numNodes)
 	for i := range tsQueries {
 		tsQueries[i] = tsQuery{
-			name:      "cr.node.sys.cpu.combined.percent-normalized",
+			name:      "cr.node.sys.cpu.host.combined.percent-normalized",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
 			tenantID:  roachpb.SystemTenantID,
@@ -376,8 +376,8 @@ func makeStoreCPUFn(
 			// as much to avoid any surprises.
 			if cpu < 0 || cpu > 1 {
 				return nil, errors.Newf(
-					"node %d has core count normalized CPU utilization ts datapoint "+
-						"not in [0%,100%] (impossible!): %f [resp=%+v]", node, cpu, resp)
+					"node idx %d has core count normalized CPU utilization ts datapoint "+
+						"not in [0\\%,100\\%] (impossible!): %v [resp=%+v]", node, cpu, resp)
 			}
 
 			nodeIdx := node * storesPerNode
