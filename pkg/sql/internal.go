@@ -550,7 +550,7 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			// r.lastErr if necessary.
 			_ /* err */ = r.Close()
 		}
-		if r.errCallback != nil {
+		if r.lastErr != nil && r.errCallback != nil {
 			r.lastErr = r.errCallback(r.lastErr)
 			r.errCallback = nil
 		}
