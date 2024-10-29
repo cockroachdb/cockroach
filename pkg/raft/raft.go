@@ -75,16 +75,16 @@ var ErrProposalDropped = errors.New("raft proposal dropped")
 
 // lockedRand is a small wrapper around rand.Rand to provide
 // synchronization among multiple raft groups. Only the methods needed
-// by the code are exposed (e.g. Intn).
+// by the code are exposed (e.g. Int63n).
 type lockedRand struct {
 	mu sync.Mutex
 }
 
-func (r *lockedRand) Intn(n int) int {
+func (r *lockedRand) Int63n(n int64) int64 {
 	r.mu.Lock()
-	v, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	v, _ := rand.Int(rand.Reader, big.NewInt(n))
 	r.mu.Unlock()
-	return int(v.Int64())
+	return v.Int64()
 }
 
 var globalRand = &lockedRand{}
@@ -105,11 +105,11 @@ type Config struct {
 	// candidate and start an election. ElectionTick must be greater than
 	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
 	// unnecessary leader switching.
-	ElectionTick int
+	ElectionTick int64
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
 	// leadership every HeartbeatTick ticks.
-	HeartbeatTick int
+	HeartbeatTick int64
 
 	// Storage is the storage for raft. raft generates entries and states to be
 	// stored in storage. raft reads the persisted entries and states out of
@@ -390,13 +390,14 @@ type raft struct {
 	// term changes.
 	uncommittedSize entryPayloadSize
 
-	// electionElapsed is the number of ticks since we last reached the
-	// electionTimeout. Tracked by both leaders and followers alike. Additionally,
-	// followers also reset this field whenever they receive a valid message from
-	// the current leader or if the leader is fortified when ticked.
+	// electionElapsed is tracked by both leaders and followers. For followers, it
+	// is the number of ticks since they last received a valid message from the
+	// from the current leader, unless the follower is fortifying a leader
+	// (leadEpoch != 0), in which case it is always set to 0. For leaders, it is
+	// the number of ticks since the last time it performed a checkQuorum.
 	//
 	// Invariant: electionElapsed = 0 when r.leadEpoch != 0 on a follower.
-	electionElapsed int
+	electionElapsed int64
 
 	// heartbeatElapsed is the number of ticks since we last reached the
 	// heartbeatTimeout. Leaders use this field to keep track of when they should
@@ -407,19 +408,19 @@ type raft struct {
 	// TODO(arul): consider renaming these to "fortifyElapsed" given heartbeats
 	// are no longer the first class concept they used to be pre-leader
 	// fortification.
-	heartbeatElapsed int
+	heartbeatElapsed int64
 
 	maxInflight      int
 	maxInflightBytes uint64
 	checkQuorum      bool
 	preVote          bool
 
-	heartbeatTimeout int
-	electionTimeout  int
+	heartbeatTimeout int64
+	electionTimeout  int64
 	// randomizedElectionTimeout is a random number between
 	// [electiontimeout, 2 * electiontimeout - 1]. It gets reset
 	// when raft changes its state to follower or candidate.
-	randomizedElectionTimeout int
+	randomizedElectionTimeout int64
 	disableProposalForwarding bool
 
 	tick func()
@@ -1174,7 +1175,7 @@ func (r *raft) tickElection() {
 		// 2. But we do want to take advantage of randomized election timeouts built
 		//    into raft to prevent hung elections.
 		// We achieve both of these goals by "forwarding" electionElapsed to begin
-		// at r.electionTimeout. Also see pastElectionTimeout.
+		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
 		r.logger.Debugf(
 			"%d setting election elapsed to start from %d ticks after store liveness support expired",
 			r.id, r.electionTimeout,
@@ -1184,8 +1185,7 @@ func (r *raft) tickElection() {
 		r.electionElapsed++
 	}
 
-	if r.promotable() && r.pastElectionTimeout() {
-		r.electionElapsed = 0
+	if r.atRandomizedElectionTimeout() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
@@ -1344,7 +1344,7 @@ func (r *raft) hup(t CampaignType) {
 		return
 	}
 	if !r.promotable() {
-		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		r.logger.Infof("%x is unpromotable and can not campaign", r.id)
 		return
 	}
 	// NB: The leader is allowed to bump its term by calling an election. Note that
@@ -2647,15 +2647,15 @@ func (r *raft) loadState(state pb.HardState) {
 	r.setLeadEpoch(state.LeadEpoch)
 }
 
-// pastElectionTimeout returns true if r.electionElapsed is greater
-// than or equal to the randomized election timeout in
-// [electiontimeout, 2 * electiontimeout - 1].
-func (r *raft) pastElectionTimeout() bool {
-	return r.electionElapsed >= r.randomizedElectionTimeout
+// atRandomizedElectionTimeout returns true if r.electionElapsed modulo the
+// r.randomizedElectionTimeout is equal to 0. This means that at every
+// r.randomizedElectionTimeout period, this method will return true once.
+func (r *raft) atRandomizedElectionTimeout() bool {
+	return r.electionElapsed != 0 && r.electionElapsed%r.randomizedElectionTimeout == 0
 }
 
 func (r *raft) resetRandomizedElectionTimeout() {
-	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Intn(r.electionTimeout)
+	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Int63n(r.electionTimeout)
 }
 
 func (r *raft) transferLeader(to pb.PeerID) {

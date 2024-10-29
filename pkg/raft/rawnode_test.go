@@ -585,7 +585,7 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
-	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < rawNode.raft.randomizedElectionTimeout; i++ {
 		// TODO(arul): consider getting rid of this hack to reset the epoch so that
 		// we can call an election without panicking.
 		rawNode.raft.leadEpoch = 0
