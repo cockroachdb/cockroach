@@ -15,7 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/lib/pq/oid"
 )
 
 type cleanupAddedIndex struct {
@@ -49,7 +53,16 @@ func runAddIndex(
 	rng, _ := randutil.NewPseudoRand()
 	dbName := pickRandomDB(ctx, o, conn, systemDBs)
 	tableName := pickRandomTable(ctx, o, conn, dbName)
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT column_name FROM [SHOW COLUMNS FROM %s.%s]", dbName, tableName))
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
+		`
+SELECT
+	attname, atttypid
+FROM
+	pg_catalog.pg_attribute
+WHERE
+	attrelid = '%s.%s'::REGCLASS::OID;
+`,
+		dbName, tableName))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -59,7 +72,8 @@ func runAddIndex(
 		return nil
 	}
 	var colName string
-	if err := rows.Scan(&colName); err != nil {
+	var colType oid.Oid
+	if err := rows.Scan(&colName, &colType); err != nil {
 		o.Fatal(err)
 	}
 
@@ -72,9 +86,24 @@ func runAddIndex(
 		defer setSchemaLocked(ctx, o, conn, dbName, tableName, true /* lock */)
 	}
 
+	predicateClause := ""
+	// If a types OID is known basic SQL type, we can optionally choose to make
+	// this a partial index.
+	if typ, exists := types.OidToType[colType]; exists {
+		randomValue := randgen.RandDatum(rng, typ, false)
+		predicates := []string{"<", ">", "<=", ">=", "=", "<>"}
+		predicate := predicates[rng.Intn(len(predicates))]
+		str := tree.AsStringWithFlags(randomValue, tree.FmtParsable)
+		// Use an RNG to determine if we want to add the final predicate,
+		// currently there is a 50% chance of making partial indexes.
+		if rng.Intn(2) != 0 {
+			predicateClause = fmt.Sprintf("WHERE (%s %s %s)", colName, predicate, str)
+		}
+	}
+
 	indexName := fmt.Sprintf("add_index_op_%d", rng.Uint32())
-	o.Status(fmt.Sprintf("adding index to column %s in table %s.%s", colName, dbName, tableName))
-	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s)", indexName, dbName, tableName, colName)
+	o.Status(fmt.Sprintf("adding index to column %s in table %s.%s %s", colName, dbName, tableName, predicateClause))
+	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s) %s", indexName, dbName, tableName, colName, predicateClause)
 	_, err = conn.ExecContext(ctx, createIndexStmt)
 	if err != nil {
 		o.Fatal(err)
