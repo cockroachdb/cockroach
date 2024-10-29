@@ -192,7 +192,8 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceNotNullConstraints(rowVals, r.insertCols); err != nil {
+	insertVals := rowVals[:len(r.insertCols)]
+	if err := enforceNotNullConstraints(insertVals, r.insertCols); err != nil {
 		return err
 	}
 
@@ -208,15 +209,13 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		if err != nil {
 			return err
 		}
-
-		// Truncate rowVals so that it no longer includes partial index predicate
-		// values.
-		rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
 	}
 
 	// Verify the CHECK constraint results, if any.
-	if !r.checkOrds.Empty() {
-		checkVals := rowVals[len(r.insertCols):]
+	if n := r.checkOrds.Len(); n > 0 {
+		// CHECK constraint results are after the insert columns.
+		offset := len(r.insertCols)
+		checkVals := rowVals[offset : offset+n]
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			r.ti.tableDesc(), r.checkOrds, checkVals,
@@ -225,25 +224,20 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		}
 	}
 
-	if len(rowVals) > len(r.insertCols) {
-		// Remove extra columns for check constraints and AFTER triggers.
-		rowVals = rowVals[:len(r.insertCols)]
-	}
-
 	// Error out the insert if the enforce_home_region session setting is on and
 	// the row's locality doesn't match the gateway region.
-	if err := r.regionLocalInfo.checkHomeRegion(rowVals); err != nil {
+	if err := r.regionLocalInfo.checkHomeRegion(insertVals); err != nil {
 		return err
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, rowVals, pm, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, insertVals, pm, r.traceKV); err != nil {
 		return err
 	}
 
 	// If result rows need to be accumulated, do it.
 	if r.ti.rows != nil {
-		for i, val := range rowVals {
+		for i, val := range insertVals {
 			// The downstream consumer will want the rows in the order of
 			// the table descriptor, not that of insertCols. Reorder them
 			// and ignore non-public columns.

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -26,72 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// expressionCarrier handles visiting sub-expressions.
-type expressionCarrier interface {
-	// walkExprs explores all sub-expressions held by this object, if
-	// any.
-	walkExprs(func(desc string, index int, expr tree.TypedExpr))
-}
-
-// tableWriter handles writing kvs and forming table rows.
-//
-// Usage:
-//
-//	err := tw.init(txn, evalCtx)
-//	// Handle err.
-//	for {
-//	   values := ...
-//	   row, err := tw.row(values)
-//	   // Handle err.
-//	}
-//	err := tw.finalize()
-//	// Handle err.
-type tableWriter interface {
-	expressionCarrier
-
-	// init provides the tableWriter with a Txn and optional monitor to write to
-	// and returns an error if it was misconfigured.
-	init(context.Context, *kv.Txn, *eval.Context) error
-
-	// row performs a sql row modification (tableInserter performs an insert,
-	// etc). It batches up writes to the init'd txn and periodically sends them.
-	//
-	// The passed Datums is not used after `row` returns.
-	//
-	// The PartialIndexUpdateHelper is used to determine which partial indexes
-	// to avoid updating when performing row modification. This is necessary
-	// because not all rows are indexed by partial indexes.
-	//
-	// The traceKV parameter determines whether the individual K/V operations
-	// should be logged to the context. We use a separate argument here instead
-	// of a Value field on the context because Value access in context.Context
-	// is rather expensive and the tableWriter interface is used on the
-	// inner loop of table accesses.
-	row(context.Context, tree.Datums, row.PartialIndexUpdateHelper, bool /* traceKV */) error
-
-	// flushAndStartNewBatch is called at the end of each batch but the last.
-	// This should flush the current batch.
-	flushAndStartNewBatch(context.Context) error
-
-	// finalize flushes out any remaining writes. It is called after all calls
-	// to row.
-	finalize(context.Context) error
-
-	// tableDesc returns the TableDescriptor for the table that the tableWriter
-	// will modify.
-	tableDesc() catalog.TableDescriptor
-
-	// close frees all resources held by the tableWriter.
-	close(context.Context)
-
-	// desc returns a name suitable for describing the table writer in
-	// the output of EXPLAIN.
-	desc() string
-
-	// enable auto commit in call to finalize().
-	enableAutoCommit()
-}
 
 type autoCommitOpt int
 
@@ -162,6 +95,7 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 	4<<20,
 )
 
+// init initializes the tableWriterBase with a Txn.
 func (tb *tableWriterBase) init(
 	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context,
 ) error {

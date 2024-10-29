@@ -37,7 +37,7 @@ var _ mutationPlanNode = &upsertNode{}
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	tw        optTableUpserter
+	tw        tableUpserter
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted/upserted into.
@@ -134,8 +134,26 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
 func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceNotNullConstraints(rowVals, n.run.insertCols); err != nil {
-		return err
+	// Check for NOT NULL constraint violations.
+	if n.run.tw.canaryOrdinal != -1 && rowVals[n.run.tw.canaryOrdinal] != tree.DNull {
+		// When there is a canary column and its value is not NULL, then an
+		// existing row is being updated, so check only the update columns for
+		// NOT NULL constraint violations.
+		offset := len(n.run.insertCols) + len(n.run.tw.fetchCols)
+		vals := rowVals[offset : offset+len(n.run.tw.updateCols)]
+		if err := enforceNotNullConstraints(vals, n.run.tw.updateCols); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, there is no canary column (i.e., canaryOrdinal is -1,
+		// which is the case for "blind" upsert which overwrites existing rows
+		// without performing a read) or it is NULL, indicating that a new row
+		// is being inserted. In this case, check the insert columns for a NOT
+		// NULL constraint violation.
+		vals := rowVals[:len(n.run.insertCols)]
+		if err := enforceNotNullConstraints(vals, n.run.insertCols); err != nil {
+			return err
+		}
 	}
 
 	// Create a set of partial index IDs to not add or remove entries from.

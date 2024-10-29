@@ -294,8 +294,8 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			configured := d.checkUsingConfig(cfg.workspace, "lintonbuild") ||
 				d.checkUsingConfig(cfg.workspace, "nolintonbuild")
 			if !configured {
-				return "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
-This may be because you haven't configured whether to run lints during builds.
+				return "Failed to find `--config=lintonbuild` or `--config=nolintonbuild` in .bazelrc.user." + `
+
 Put EXACTLY ONE of the following lines in your .bazelrc.user:
     build --config=lintonbuild
         OR
