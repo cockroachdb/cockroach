@@ -337,6 +337,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/multitenant",
         "//pkg/multitenant/mtinfo",
         "//pkg/multitenant/mtinfopb",
