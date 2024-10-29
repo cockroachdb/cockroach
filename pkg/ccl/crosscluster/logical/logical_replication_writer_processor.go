@@ -1009,7 +1009,7 @@ func (t *txnBatch) HandleBatch(
 		if err != nil {
 			return stats, err
 		}
-		stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+		stats.Add(s)
 	} else {
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, kv := range batch {
@@ -1020,7 +1020,7 @@ func (t *txnBatch) HandleBatch(
 				if err != nil {
 					return err
 				}
-				stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+				stats.Add(s)
 			}
 			return nil
 		}, isql.WithSessionData(t.sd))
