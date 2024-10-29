@@ -810,18 +810,28 @@ func (expr *CollateExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"invalid locale %s", expr.Locale)
 	}
-	t := subExpr.ResolvedType()
-	if types.IsStringType(t) {
-		expr.Expr = subExpr
-		expr.typ = types.MakeCollatedString(t, expr.Locale)
-		return expr, nil
-	} else if t.Family() == types.UnknownFamily {
-		expr.Expr = subExpr
-		expr.typ = types.MakeCollatedString(types.String, expr.Locale)
-		return expr, nil
+	// setType is a recursive helper function to handle type checking of COLLATE
+	// on arrays.
+	var setType func(t *types.T) (*CollateExpr, error)
+	setType = func(t *types.T) (*CollateExpr, error) {
+		if types.IsStringType(t) {
+			expr.Expr = subExpr
+			expr.typ = types.MakeCollatedString(t, expr.Locale)
+			return expr, nil
+		} else if t.Family() == types.ArrayFamily {
+			if e, err := setType(t.ArrayContents()); err == nil {
+				e.typ = types.MakeArray(e.typ)
+				return e, nil
+			}
+		} else if t.Family() == types.UnknownFamily {
+			expr.Expr = subExpr
+			expr.typ = types.MakeCollatedString(types.String, expr.Locale)
+			return expr, nil
+		}
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
+			"incompatible type for COLLATE: %s", t)
 	}
-	return nil, pgerror.Newf(pgcode.DatatypeMismatch,
-		"incompatible type for COLLATE: %s", t)
+	return setType(subExpr.ResolvedType())
 }
 
 // NewTypeIsNotCompositeError generates an error suitable to report
