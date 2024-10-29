@@ -259,7 +259,7 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.Perturbation),
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
