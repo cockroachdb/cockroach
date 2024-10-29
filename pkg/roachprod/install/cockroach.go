@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
 //go:embed scripts/start.sh
@@ -438,23 +439,35 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// `--start-single-node` flag will handle all of this for us.
 		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode() && !startOpts.SkipInit
 
-		for _, node := range c.Nodes {
-			// NB: if cockroach started successfully, we ignore the output as it is
-			// some harmless start messaging.
-			if err := c.startNode(ctx, l, node, startOpts); err != nil {
+		// First, we start the init node, which is the node whose address is passed as the join address by other nodes.
+		// Then, further down the code, we start all other nodes in parallel.
+		// We need to check whether initNode is part of all nodes for usage like `roachprod start $CLUSTER:2-4`
+		initNode := startOpts.GetInitTarget()
+		if c.Nodes.Contains(initNode) {
+			if err := c.startNode(ctx, l, initNode, startOpts); err != nil {
 				return err
 			}
-			// We reserve a few special operations (bootstrapping, and setting
-			// cluster settings) to the InitTarget.
-			if startOpts.GetInitTarget() != node {
-				continue
-			}
-
 			if shouldInit {
-				if err := c.initializeCluster(ctx, l, node); err != nil {
+				// The init node also performs special operations like bootstrapping and setting cluster settings.
+				if err := c.initializeCluster(ctx, l, initNode); err != nil {
 					return err
 				}
 			}
+		}
+
+		var g errgroup.Group
+		for _, n := range c.Nodes {
+			node := n
+			// ignore the init node, it has been already started above.
+			if initNode == node {
+				continue
+			}
+			g.Go(func() error {
+				return c.startNode(ctx, l, node, startOpts)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
 		}
 	}
 
