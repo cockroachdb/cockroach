@@ -2758,10 +2758,10 @@ def go_deps():
         name = "com_github_eapache_go_resiliency",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/eapache/go-resiliency",
-        sha256 = "d9bf171efc34a8906488dde76b1f80e8c9ff6eb8ab5f7d7ebc56812882b2b77e",
-        strip_prefix = "github.com/eapache/go-resiliency@v1.4.0",
+        sha256 = "ab5ced8ffc8eea6c9d546a571e64366ac6b472491ce537f138364166bc6a1d59",
+        strip_prefix = "github.com/eapache/go-resiliency@v1.6.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eapache/go-resiliency/com_github_eapache_go_resiliency-v1.4.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eapache/go-resiliency/com_github_eapache_go_resiliency-v1.6.0.zip",
         ],
     )
     go_repository(
@@ -4778,10 +4778,10 @@ def go_deps():
         name = "com_github_ibm_sarama",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/IBM/sarama",
-        sha256 = "8d4bc76db8c94cd58f8ccb962892bab41d373623296cf18e5df7117bf3ec0546",
-        strip_prefix = "github.com/IBM/sarama@v1.42.1",
+        sha256 = "9c433de2e182b9de69102a76015ef3ef30de40f7d42dbd2af61401c010c0b049",
+        strip_prefix = "github.com/IBM/sarama@v1.43.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/IBM/sarama/com_github_ibm_sarama-v1.42.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/IBM/sarama/com_github_ibm_sarama-v1.43.1.zip",
         ],
     )
     go_repository(
