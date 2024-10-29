@@ -13,7 +13,7 @@ INCREMENTAL FROM
 	'gs://acme-co-backup/database-bank-2017-03-27-weekly',
 	'gs://acme-co-backup/database-bank-2017-03-28-nightly'
 WITH
-	revision_history
+	revision_history = true
 
 17:
 -----------------
@@ -23,7 +23,7 @@ WITH
 AS OF SYSTEM TIME '-10s'
  INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly',
                   'gs://acme-co-backup/database-bank-2017-03-28-nightly'
-             WITH revision_history
+             WITH revision_history = true
 
 127:
 -------------------------------------------------------------------------------------------------------------------------------
@@ -32,10 +32,10 @@ AS OF SYSTEM TIME '-10s'
                TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly'
 AS OF SYSTEM TIME '-10s'
  INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly'
-             WITH revision_history
+             WITH revision_history = true
 
-252:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history
+259:
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history = true
 
 
