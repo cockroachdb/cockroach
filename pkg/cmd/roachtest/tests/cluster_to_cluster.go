@@ -214,17 +214,25 @@ func defaultWorkloadDriver(
 
 type replicateTPCC struct {
 	warehouses int
+	duration   time.Duration
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	return fmt.Sprintf(`./cockroach workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
-		tpcc.warehouses, nodes, tenantName)
+	cmd := roachtestutil.NewCommand(`./cockroach workload init tpcc`).
+		Flag("data-loader", "import").
+		Flag("warehouses", tpcc.warehouses).
+		Arg("{pgurl%s:%s}", nodes, tenantName)
+	return cmd.String()
 }
 
 func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
 	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
-	return fmt.Sprintf(`./cockroach workload run tpcc --warehouses %d --tolerate-errors {pgurl%s:%s}`,
-		tpcc.warehouses, nodes, tenantName)
+	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
+		Flag("warehouses", tpcc.warehouses).
+		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
+		Option("tolerate-errors").
+		Arg("{pgurl%s:%s}", nodes, tenantName)
+	return cmd.String()
 }
 
 func (tpcc replicateTPCC) runDriver(
