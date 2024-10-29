@@ -449,3 +449,36 @@ TABLE t76994
  │    └── WHERE b < 0
  └── UNIQUE WITHOUT INDEX (a)
       └── WHERE b > 0
+
+# Table implicit types should not include hidden columns.
+exec-ddl
+CREATE TABLE hidden_columns (
+  a INT,
+  b INT NOT VISIBLE,
+  c INT
+)
+----
+
+build
+SELECT ROW(1, 2)::hidden_columns;
+----
+project
+ ├── columns: row:1(tuple{int AS a, int AS c}!null)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 0.05
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── cast: RECORD [as=row:1, type=tuple{int AS a, int AS c}, immutable]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
