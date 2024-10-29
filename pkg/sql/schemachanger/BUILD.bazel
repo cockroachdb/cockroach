@@ -57,6 +57,7 @@ go_test(
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/sctest",  # keep
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

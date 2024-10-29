@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -457,6 +458,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
+						SQLEvalContext: &eval.TestingKnobs{
+							// We disable the randomization of some batch sizes because with
+							// some low values the test takes much longer.
+							ForceProductionValues: true,
+						},
 						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 							BeforeStage: func(p scplan.Plan, stageIdx int) error {
 								if !clusterCreated.Load() {
