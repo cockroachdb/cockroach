@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { NodeStatus } from "src/api";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 
 // mapStoreIDsToNodeRegions creates a mapping of regions
@@ -10,7 +11,7 @@ import { NodeID, StoreID } from "src/types/clusterTypes";
 // the provided storeIDs.
 export const mapStoreIDsToNodeRegions = (
   stores: StoreID[],
-  clusterNodeIDToRegion: Record<NodeID, string> = {},
+  clusterNodeIDToRegion: Record<NodeID, NodeStatus> = {},
   clusterStoreIDToNodeID: Record<StoreID, NodeID> = {},
 ): Record<string, NodeID[]> => {
   const nodes = stores.reduce((acc, storeID) => {
@@ -20,7 +21,7 @@ export const mapStoreIDsToNodeRegions = (
 
   const nodesByRegion: Record<string, NodeID[]> = {};
   nodes.forEach(nodeID => {
-    const region = clusterNodeIDToRegion[nodeID];
+    const region = clusterNodeIDToRegion[nodeID].region;
     if (!nodesByRegion[region]) {
       nodesByRegion[region] = [];
     }
