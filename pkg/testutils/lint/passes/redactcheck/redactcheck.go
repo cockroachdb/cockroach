@@ -138,8 +138,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
-						"Epoch":  {},
-						"PeerID": {},
+						"Epoch":                {},
+						"PeerID":               {},
+						"MessageType":          {},
+						"EntryType":            {},
+						"ConfChangeType":       {},
+						"ConfChangeTransition": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/tracker": {
 						"StateType": {},
@@ -227,6 +231,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/util/admission": {
 						"WorkKind":  {},
 						"QueueKind": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb": {
+						"TraceID": {},
+						"SpanID":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},

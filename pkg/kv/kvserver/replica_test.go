@@ -7772,7 +7772,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	dropProp := int32(1)
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			cancel()
 			return atomic.LoadInt32(&dropProp) == 1, nil
 		}
@@ -7890,7 +7890,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride kvpb.LeaseAppliedIndex) {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				return wrongLeaseIndex
 			}
@@ -7994,7 +7994,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	abandoned := make(map[kvserverbase.CmdIDKey]struct{}) // protected by repl.mu
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := abandoned[p.idKey]; ok {
-			log.Infof(p.ctx, "abandoning command")
+			log.Infof(p.Context(), "abandoning command")
 			return true, nil
 		}
 		return false, nil
@@ -8066,7 +8066,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		if atomic.LoadInt32(&dropAll) == 1 {
 			return true, nil
 		}
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(p.command.MaxLeaseIndex))
 		}
 		return false, nil
@@ -8098,7 +8098,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 	origIndexes := make([]int, 0, num)
 	for _, p := range tc.repl.mu.proposals {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 		}
 	}
