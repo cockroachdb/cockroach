@@ -4897,13 +4897,17 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 				t.Log(err)
 			}
 		}()
-		if err := txn.Put(ctx, "a", "a"); err != nil {
-			return err
-		}
-		if err := txn.Put(ctx, "b", "b"); err != nil {
-			return err
-		}
-		return txn.Commit(ctx)
+		// We rely on a 1PC to avoid parallel commit. Under stress, the parallel
+		// commit transition from STAGING to COMMITTED may be delayed and race with
+		// the db.Get below (outside the txn) initiating txn recovery. The recovery
+		// will resolve the txn record and intent, and the additional inflight EndTxn
+		// from the coordinator can confuse tests that use this helper method.
+		//
+		// See: https://github.com/cockroachdb/cockroach/pull/131071.
+		b := txn.NewBatch()
+		b.Put("a", "a")
+		b.Put("b", "b")
+		return txn.CommitInBatch(ctx, b)
 	}))
 	tup, err := db.Get(ctx, "a")
 	require.NoError(t, err)
