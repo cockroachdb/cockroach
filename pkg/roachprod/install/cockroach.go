@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
 //go:embed scripts/start.sh
@@ -438,23 +439,31 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// `--start-single-node` flag will handle all of this for us.
 		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode() && !startOpts.SkipInit
 
-		for _, node := range c.Nodes {
-			// NB: if cockroach started successfully, we ignore the output as it is
-			// some harmless start messaging.
-			if err := c.startNode(ctx, l, node, startOpts); err != nil {
-				return err
-			}
-			// We reserve a few special operations (bootstrapping, and setting
-			// cluster settings) to the InitTarget.
-			if startOpts.GetInitTarget() != node {
-				continue
-			}
-
-			if shouldInit {
-				if err := c.initializeCluster(ctx, l, node); err != nil {
+		var g errgroup.Group
+		for _, n := range c.Nodes {
+			node := n
+			g.Go(func() error {
+				// NB: if cockroach started successfully, we ignore the output as it is
+				// some harmless start messaging.
+				if err := c.startNode(ctx, l, node, startOpts); err != nil {
 					return err
 				}
-			}
+				// We reserve a few special operations (bootstrapping, and setting
+				// cluster settings) to the InitTarget.
+				if startOpts.GetInitTarget() != node {
+					return nil
+				}
+
+				if shouldInit {
+					if err := c.initializeCluster(ctx, l, node); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
 		}
 	}
 
