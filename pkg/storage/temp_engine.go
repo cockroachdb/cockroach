@@ -106,6 +106,8 @@ func newPebbleTempEngine(
 			// pebbleMap.makeKey and pebbleMap.makeKeyWithSequence on how this works.
 			// Use the default bytes.Compare-like comparer.
 			cfg.opts.Comparer = pebble.DefaultComparer
+			cfg.opts.KeySchemas = nil
+			cfg.opts.KeySchema = ""
 			cfg.opts.DisableWAL = true
 			cfg.opts.Experimental.KeyValidationFunc = nil
 			cfg.opts.BlockPropertyCollectors = nil
