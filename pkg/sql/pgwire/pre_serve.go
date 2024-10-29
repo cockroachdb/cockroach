@@ -441,6 +441,9 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		// TODO(knz): Remove this condition - see
 		// https://github.com/cockroachdb/cockroach/issues/53404
 		if s.cfg.Insecure {
+			if buildutil.CrdbTestBuild {
+				log.Infof(ctx, "using insecure mode since version=%d and cfg.Insecure=true", version)
+			}
 			return
 		}
 
@@ -452,6 +455,9 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 			if buildutil.CrdbTestBuild {
 				log.Warningf(ctx, "client cannot connect since version=%d AcceptSQLWithoutTLS=false and connType=%s", version, connType)
 			}
+		}
+		if buildutil.CrdbTestBuild {
+			log.Infof(ctx, "client did not request SSL version=%d AcceptSQLWithoutTLS=false and connType=%s", version, connType)
 		}
 		return
 	}
@@ -473,6 +479,9 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 	// Protocol sanity check.
 	if len(buf.Msg) > 0 {
 		serverErr = errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
+		if buildutil.CrdbTestBuild {
+			log.Warningf(ctx, "protocol error err=%v", serverErr)
+		}
 		return
 	}
 
@@ -482,6 +491,9 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 	// Do we have a TLS configuration?
 	tlsConfig, serverErr := s.getTLSConfig()
 	if serverErr != nil {
+		if buildutil.CrdbTestBuild {
+			log.Warningf(ctx, "could not get TLS config err=%v", serverErr)
+		}
 		return
 	}
 
@@ -494,12 +506,21 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		}
 		n, serverErr = conn.Write(sslUnsupported)
 		if serverErr != nil {
+			if buildutil.CrdbTestBuild {
+				log.Warningf(ctx, "error while sending sslUnsupported message to client err=%v", serverErr)
+			}
 			return
 		}
 	} else {
+		if buildutil.CrdbTestBuild {
+			log.Infof(ctx, "sending sslSupported message to client")
+		}
 		// We have a TLS configuration. Upgrade the connection.
 		n, serverErr = conn.Write(sslSupported)
 		if serverErr != nil {
+			if buildutil.CrdbTestBuild {
+				log.Warningf(ctx, "error while sending sslSupported message to client err=%v", serverErr)
+			}
 			return
 		}
 		newConn = tls.Server(conn, tlsConfig)
@@ -509,6 +530,9 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 
 	// Finally, re-read the version/command from the client.
 	newVersion, *buf, serverErr = s.readVersion(newConn)
+	if buildutil.CrdbTestBuild && serverErr != nil {
+		log.Warningf(ctx, "error when reading version err=%v", serverErr)
+	}
 	return
 }
 
