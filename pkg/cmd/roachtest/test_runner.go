@@ -903,8 +903,12 @@ func (r *testRunner) runWorker(
 				case registry.DefaultLeases:
 				case registry.EpochLeases:
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
+					c.clusterSettings["kv.raft.leader_fortification.fraction_enabled"] = "0.0"
 				case registry.ExpirationLeases:
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "true"
+				case registry.LeaderLeases:
+					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
+					c.clusterSettings["kv.raft.leader_fortification.fraction_enabled"] = "1.0"
 				case registry.MetamorphicLeases:
 					enabled := prng.Float64() < 0.5
 					c.status(fmt.Sprintf("metamorphically setting kv.expiration_leases_only.enabled = %t",
