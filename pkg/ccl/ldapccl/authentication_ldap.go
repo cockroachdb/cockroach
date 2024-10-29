@@ -87,6 +87,12 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 			errors.Newf("LDAP authentication: unable to establish LDAP connection")
 	}
 
+	// Bind with ldap service user DN and passwd for performing the search for ldap user.
+	if err := authManager.mu.util.Bind(ctx, authManager.mu.conf.ldapBindDN, authManager.mu.conf.ldapBindPassword); err != nil {
+		return nil, redact.Sprintf("error binding ldap service account: %v", err),
+			errors.Newf("LDAP authentication: error binding as LDAP service user with configured credentials")
+	}
+
 	// Fetch the ldap server Distinguished Name using sql username as search value
 	// for  ldap search attribute
 	userDN, err := authManager.mu.util.Search(ctx, authManager.mu.conf, user.Normalized())
