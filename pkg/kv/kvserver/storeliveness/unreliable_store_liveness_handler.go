@@ -22,7 +22,7 @@ var _ MessageHandler = &UnreliableHandler{}
 
 // HandleMessage implements the MessageHandler interface.
 func (h *UnreliableHandler) HandleMessage(msg *storelivenesspb.Message) error {
-	if h.DropStoreLivenessMsg(msg) {
+	if h.DropStoreLivenessMsg != nil && h.DropStoreLivenessMsg(msg) {
 		return nil
 	}
 
