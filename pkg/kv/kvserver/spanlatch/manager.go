@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -147,7 +148,7 @@ type Guard struct {
 	// Non-nil only when AcquireOptimistic has retained the snapshot for later
 	// checking of conflicts, and waiting.
 	snap        *snapshot
-	acquireTime int64
+	acquireTime crtime.Mono
 }
 
 func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
@@ -531,7 +532,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 			}
 		}
 	}
-	lg.acquireTime = timeutil.Now().UnixNano()
+	lg.acquireTime = crtime.NowMono()
 	return nil
 }
 
@@ -640,7 +641,7 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 
 	var held time.Duration
 	if lg.acquireTime != 0 {
-		held = timeutil.Since(timeutil.FromUnixNanos(lg.acquireTime))
+		held = lg.acquireTime.Elapsed()
 	}
 	if held > m.longLatchHoldThreshold() {
 		const msg = "%s has held latch for %d ns. Some possible causes are " +
