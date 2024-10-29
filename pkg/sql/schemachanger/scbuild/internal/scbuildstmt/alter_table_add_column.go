@@ -311,17 +311,18 @@ func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
 }
 
 type addColumnSpec struct {
-	tbl      *scpb.Table
-	col      *scpb.Column
-	fam      *scpb.ColumnFamily
-	name     *scpb.ColumnName
-	colType  *scpb.ColumnType
-	def      *scpb.ColumnDefaultExpression
-	onUpdate *scpb.ColumnOnUpdateExpression
-	compute  *scpb.ColumnComputeExpression
-	comment  *scpb.ColumnComment
-	unique   bool
-	notNull  bool
+	tbl              *scpb.Table
+	col              *scpb.Column
+	fam              *scpb.ColumnFamily
+	name             *scpb.ColumnName
+	colType          *scpb.ColumnType
+	def              *scpb.ColumnDefaultExpression
+	onUpdate         *scpb.ColumnOnUpdateExpression
+	compute          *scpb.ColumnComputeExpression
+	comment          *scpb.ColumnComment
+	unique           bool
+	notNull          bool
+	transientCompute bool
 }
 
 // addColumn adds a column as specified in the `spec`. It delegates most of the work
@@ -348,7 +349,11 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 			b.Add(spec.onUpdate)
 		}
 		if spec.compute != nil {
-			b.Add(spec.compute)
+			if spec.transientCompute {
+				b.AddTransient(spec.compute)
+			} else {
+				b.Add(spec.compute)
+			}
 		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
