@@ -64,9 +64,6 @@ func (lu *mockLDAPUtil) Bind(ctx context.Context, userDN string, ldapPwd string)
 func (lu *mockLDAPUtil) Search(
 	ctx context.Context, conf ldapConfig, username string,
 ) (userDN string, err error) {
-	if err := lu.Bind(ctx, conf.ldapBindDN, conf.ldapBindPassword); err != nil {
-		return "", errors.Wrap(err, searchFailureMessage)
-	}
 	if strings.Contains(conf.ldapBaseDN, invalidParam) {
 		return "", errors.Newf(searchFailureMessage+": invalid base DN %q provided", conf.ldapBaseDN)
 	}
@@ -105,9 +102,6 @@ func (lu *mockLDAPUtil) SetGroups(userDN string, groupsDN []string) {
 func (lu *mockLDAPUtil) ListGroups(
 	ctx context.Context, conf ldapConfig, userDN string,
 ) (ldapGroupsDN []string, err error) {
-	if err := lu.Bind(ctx, conf.ldapBindDN, conf.ldapBindPassword); err != nil {
-		return nil, errors.Wrap(err, groupListFailureMessage)
-	}
 	if strings.Contains(conf.ldapBaseDN, invalidParam) {
 		return nil, errors.Newf(groupListFailureMessage+": invalid base DN %q provided", conf.ldapBaseDN)
 	}

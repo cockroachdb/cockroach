@@ -88,6 +88,48 @@ ERROR: LDAP option "ldapsearchfilter" is set to invalid value: "(*)": "ldapsearc
 
 subtest end
 
+subtest incorrect_ldap_service_account
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=ldap_user password="valid"
+----
+ERROR: LDAP authentication: error binding as LDAP service user with configured credentials (SQLSTATE 28000)
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd="invalid" ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd="invalid" ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" "ldapbindpasswd=invalid" ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=ldap_user password="valid"
+----
+ERROR: LDAP authentication: error binding as LDAP service user with configured credentials (SQLSTATE 28000)
+
+subtest end
+
 subtest invalid_ldap_password
 
 set_hba
