@@ -1126,7 +1126,7 @@ func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 }
 
 // WaitForLeaseUpgrade waits until the lease held for the given range descriptor
-// is upgraded to an epoch-based one.
+// is upgraded to either a leader-lease or an epoch-based lease.
 func (tc *TestCluster) WaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
 ) roachpb.Lease {
@@ -1140,7 +1140,7 @@ func (tc *TestCluster) WaitForLeaseUpgrade(
 		if l.Type() == roachpb.LeaseExpiration {
 			return errors.Errorf("lease still an expiration based lease")
 		}
-		require.Equal(t, int64(1), l.Epoch)
+		t.Logf("lease is now of type: %s", l.Type())
 		return nil
 	})
 	return l

@@ -2455,10 +2455,15 @@ func (u *CommonTestUtils) resetCluster(
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
+	var opts = []option.StartStopOption{option.NoBackupSchedule}
+	if !version.AtLeast(clusterupgrade.MustParseVersion("v24.1.0")) {
+		opts = append(opts, option.DisableWALFailover)
+	}
+
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
 	settings = append(settings, install.BinaryOption(cockroachPath), install.SecureOption(true))
 	return clusterupgrade.StartWithSettings(
-		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(option.NoBackupSchedule), settings...,
+		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(opts...), settings...,
 	)
 }
 

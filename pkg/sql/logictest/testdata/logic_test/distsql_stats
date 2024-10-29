@@ -2869,6 +2869,14 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 '{"bar": {"baz": 2}}'  0           0                    1
 '{"bar": {"baz": 3}}'  0           0                    1
 
+# Regression test for collecting stats on a table only with virtual computed
+# columns (#130817).
+statement ok
+CREATE TABLE t130817 (k INT PRIMARY KEY AS (NULL) VIRTUAL);
+
+statement ok
+ANALYZE t130817;
+
 # Test partial stats using extremes on indexed virtual computed columns.
 statement ok
 INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
