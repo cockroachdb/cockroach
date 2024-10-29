@@ -499,6 +499,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		case <-ctx.Done():
+			p.Metrics.RangefeedProcessorQueueTimeout.Inc(1)
 			p.sendStop(newErrBufferCapacityExceeded())
 			return false
 		}
@@ -528,6 +529,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			case <-ctx.Done():
 				// Sending on the eventC channel would have blocked.
 				// Instead, tear down the processor and return immediately.
+				p.Metrics.RangefeedProcessorQueueTimeout.Inc(1)
 				p.sendStop(newErrBufferCapacityExceeded())
 				return false
 			}
