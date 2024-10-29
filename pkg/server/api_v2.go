@@ -191,7 +191,7 @@ func registerRoutes(
 
 		{"sql/", a.execSQL, true, authserver.RegularRole, true},
 		{"database_metadata/", a.GetDbMetadata, true, authserver.RegularRole, true},
-		{"database_metadata/{database_id:[0-9]+}/", a.GetDbMetadataForId, true, authserver.RegularRole, true},
+		{"database_metadata/{database_id:[0-9]+}/", a.GetDbMetadataWithDetails, true, authserver.RegularRole, true},
 		{"table_metadata/", a.GetTableMetadata, true, authserver.RegularRole, true},
 		{"table_metadata/{table_id:[0-9]+}/", a.GetTableMetadataWithDetails, true, authserver.RegularRole, true},
 		{"table_metadata/updatejob/", a.TableMetadataJob, true, authserver.RegularRole, true},
