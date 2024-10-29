@@ -180,6 +180,13 @@ var useStreaksInLDR = settings.RegisterBoolSetting(
 	true,
 )
 
+var ldrProcCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.ingest_processor_parallelism",
+	"target number of stream partitions per source node",
+	1,
+)
+
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (*streampb.ReplicationStreamSpec, error) {
@@ -207,7 +214,9 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 			return nil, err
 		}
 	}
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
+
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans,
+		int(ldrProcCount.Get(&r.evalCtx.Settings.SV)), useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
