@@ -62,7 +62,7 @@ var writerWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.flush_worker_per_proc",
 	"the maximum number of workers per processor to use to flush each batch",
-	32,
+	128,
 	settings.NonNegativeInt,
 )
 
