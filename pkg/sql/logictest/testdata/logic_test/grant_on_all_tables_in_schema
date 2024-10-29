@@ -132,3 +132,12 @@ database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 otherdb        public       tbl         admin     ALL             true
 otherdb        public       tbl         root      ALL             true
 otherdb        public       tbl         testuser  SELECT          false
+
+statement ok
+CREATE TABLE t131157 (c1 INT)
+
+statement ok
+GRANT ALL ON t131157 TO testuser
+
+statement error t131157 is not a sequence
+REVOKE CREATE ON SEQUENCE t131157 FROM testuser
