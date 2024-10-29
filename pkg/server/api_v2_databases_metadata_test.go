@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
 	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
@@ -320,7 +321,7 @@ func TestGetTableMetadata(t *testing.T) {
 	})
 }
 
-func TestGetTableMetadataForId(t *testing.T) {
+func TestGetTableMetadataWithDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
@@ -621,7 +622,7 @@ func TestGetDbMetadata(t *testing.T) {
 	})
 }
 
-func TestGetDbMetadataForId(t *testing.T) {
+func TestGetDbMetadataWithDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
@@ -835,6 +836,42 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 		// completion
 		assertJobTriggered(t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale").String(), jobCompletedChan)
 	})
+}
+
+func TestVersionGating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
+			},
+		},
+	})
+	defer ts.Stopper().Stop(context.Background())
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+	var testCases = []struct {
+		name   string
+		url    string
+		method string
+	}{
+		{"table metadata", "/api/v2/table_metadata/?dbId=1", http.MethodGet},
+		{"table metadata details", "/api/v2/table_metadata/1/", http.MethodGet},
+		{"database metadata", "/api/v2/database_metadata/", http.MethodGet},
+		{"database metadata details", "/api/v2/database_metadata/1/", http.MethodGet},
+		{"table metadata update job info", "/api/v2/table_metadata/updatejob/", http.MethodGet},
+		{"table metadata update job trigger", "/api/v2/table_metadata/updatejob/", http.MethodPost},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			resp := makeApiRequest[versionConflictResponse](t, client, ts.AdminURL().WithPath(testCase.url).String(), testCase.method)
+			require.Equal(t, clusterversion.MinSupported.Version().String(), resp.Version)
+		})
+
+	}
 }
 
 func makeApiRequest[T any](
