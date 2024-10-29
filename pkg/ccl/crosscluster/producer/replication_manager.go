@@ -180,6 +180,13 @@ var useStreaksInLDR = settings.RegisterBoolSetting(
 	true,
 )
 
+var useMultiProcLDR = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.ingest_processor_parallelism.enabled",
+	"controls whether ldr consults the ingest_processor_parallelism setting or not",
+	false,
+)
+
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (*streampb.ReplicationStreamSpec, error) {
@@ -207,7 +214,14 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 			return nil, err
 		}
 	}
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
+
+	// Pass targetSpans = 1 to prevent re-partitioning spans.
+	targetSpans := 1
+	if useMultiProcLDR.Get(&r.evalCtx.Settings.SV) {
+		targetSpans = 0
+	}
+
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans, targetSpans, useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
