@@ -1666,25 +1666,44 @@ func TestAllServerStepdown(t *testing.T) {
 }
 
 func TestCandidateResetTermMsgHeartbeat(t *testing.T) {
-	testCandidateResetTerm(t, pb.MsgHeartbeat)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCandidateResetTerm(t, pb.MsgHeartbeat, storeLivenessEnabled)
+		})
 }
 
 func TestCandidateResetTermMsgApp(t *testing.T) {
-	testCandidateResetTerm(t, pb.MsgApp)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testCandidateResetTerm(t, pb.MsgApp, storeLivenessEnabled)
+		})
 }
 
 // testCandidateResetTerm tests when a candidate receives a
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
-func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
+func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+	var a, b, c *raft
 
-	nt := newNetwork(a, b, c)
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(3)))
+	} else {
+		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
@@ -1695,11 +1714,29 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
 	// isolate 3 and increase term in rest
 	nt.isolate(3)
 
+	if storeLivenessEnabled {
+		// We need to withdraw from 1 to allow 2 to campaign and get elected.
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+	}
+
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// We need to grant support to 1, and withdraw it from 2 (the current
+		// leader) to allow 1 to campaign and get elected.
+		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(2)
+	}
+
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, a.state)
 	assert.Equal(t, pb.StateFollower, b.state)
+
+	if storeLivenessEnabled {
+		// We need to withdraw support from 1 to allow 3 to campaign.
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+	}
 
 	// trigger campaign in isolated c
 	c.resetRandomizedElectionTimeout()
@@ -2891,8 +2928,25 @@ func TestAddLearner(t *testing.T) {
 // TestAddNodeCheckQuorum tests that addNode does not trigger a leader election
 // immediately when checkQuorum is set.
 func TestAddNodeCheckQuorum(t *testing.T) {
-	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testAddNodeCheckQuorum(t, storeLivenessEnabled)
+		})
+}
+
+func testAddNodeCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+	var r *raft
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
+		r = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+	} else {
+		r = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
 	r.checkQuorum = true
 
 	r.becomeCandidate()
@@ -3886,13 +3940,26 @@ func TestLearnerCampaign(t *testing.T) {
 // n1 is leader with term 2
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
-func newPreVoteMigrationCluster(t *testing.T) *network {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-		withStoreLiveness(raftstoreliveness.Disabled{}))
+func newPreVoteMigrationCluster(
+	t *testing.T, storeLivenessEnabled bool, fabric *raftstoreliveness.LivenessFabric,
+) *network {
+	var n1, n2, n3 *raft
+
+	if storeLivenessEnabled {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(fabric.GetStoreLiveness(3)))
+	} else {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3904,12 +3971,22 @@ func newPreVoteMigrationCluster(t *testing.T) *network {
 	// to simulate a rolling restart process where it's possible to have a mixed
 	// version cluster with replicas with PreVote enabled, and replicas without.
 
-	nt := newNetwork(n1, n2, n3)
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	require.Equal(t, pb.StateLeader, n1.state)
+	require.Equal(t, pb.StateFollower, n2.state)
+	require.Equal(t, pb.StateFollower, n3.state)
 
 	// Cause a network partition to isolate n3.
 	nt.isolate(3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
+
+	if storeLivenessEnabled {
+		// We need to withdraw support from 1 before 3 can campaign and get elected.
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+	}
+
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
@@ -3923,6 +4000,12 @@ func newPreVoteMigrationCluster(t *testing.T) *network {
 	require.Equal(t, uint64(2), n2.Term)
 	require.Equal(t, uint64(4), n3.Term)
 
+	if storeLivenessEnabled {
+		// Restore the liveness support state to return a working cluster with all
+		// nodes having support.
+		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
+	}
+
 	// Enable prevote on n3, then recover the network
 	n3.preVote = true
 	nt.recover()
@@ -3931,7 +4014,20 @@ func newPreVoteMigrationCluster(t *testing.T) *network {
 }
 
 func TestPreVoteMigrationCanCompleteElection(t *testing.T) {
-	nt := newPreVoteMigrationCluster(t)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testPreVoteMigrationCanCompleteElection(t, storeLivenessEnabled)
+		})
+}
+
+func testPreVoteMigrationCanCompleteElection(t *testing.T, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+	}
+
+	nt := newPreVoteMigrationCluster(t, storeLivenessEnabled, fabric)
 
 	// n1 is leader with term 2
 	// n2 is follower with term 2
@@ -3942,8 +4038,19 @@ func TestPreVoteMigrationCanCompleteElection(t *testing.T) {
 	// simulate leader down
 	nt.isolate(1)
 
+	if storeLivenessEnabled {
+		// We need to withdraw support from 1 so 3 can campaign and get elected.
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+	}
+
 	// Call for elections from both n2 and n3.
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+
+	if storeLivenessEnabled {
+		// We need to withdraw support from 3 so 2 can campaign and get elected.
+		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(3)
+	}
+
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
 
 	// check state
@@ -3958,7 +4065,20 @@ func TestPreVoteMigrationCanCompleteElection(t *testing.T) {
 }
 
 func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
-	nt := newPreVoteMigrationCluster(t)
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testPreVoteMigrationWithFreeStuckPreCandidate(t, storeLivenessEnabled)
+		})
+}
+
+func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEnabled bool) {
+	var fabric *raftstoreliveness.LivenessFabric
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+	}
+
+	nt := newPreVoteMigrationCluster(t, storeLivenessEnabled, fabric)
 
 	// n1 is leader with term 2
 	// n2 is follower with term 2
@@ -3966,6 +4086,11 @@ func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
 	n3 := nt.peers[3].(*raft)
+
+	if storeLivenessEnabled {
+		// 1 needs to withdraw support for 3 before it can become a preCandidate.
+		nt.livenessFabric.WithdrawSupport(1, 3)
+	}
 
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
