@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -723,15 +724,18 @@ type handleSnapshotStats struct {
 }
 
 type handleRaftReadyStats struct {
-	tBegin, tEnd time.Time
+	tBegin crtime.Mono
+	tEnd   crtime.Mono
 
 	append logstore.AppendStats
 
-	tApplicationBegin, tApplicationEnd time.Time
-	apply                              applyCommittedEntriesStats
+	tApplicationBegin crtime.Mono
+	tApplicationEnd   crtime.Mono
+	apply             applyCommittedEntriesStats
 
-	tSnapBegin, tSnapEnd time.Time
-	snap                 handleSnapshotStats
+	tSnapBegin crtime.Mono
+	tSnapEnd   crtime.Mono
+	snap       handleSnapshotStats
 }
 
 // SafeFormat implements redact.SafeFormatter
@@ -822,8 +826,8 @@ func (r *Replica) handleRaftReady(
 	// Don't process anything if this fn returns false.
 	if fn := r.store.cfg.TestingKnobs.DisableProcessRaft; fn != nil && fn(r.store.StoreID()) {
 		return handleRaftReadyStats{
-			tBegin: timeutil.Now(),
-			tEnd:   timeutil.Now(),
+			tBegin: crtime.NowMono(),
+			tEnd:   crtime.NowMono(),
 		}, nil
 	}
 
@@ -892,10 +896,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// just a local, we'd be modifying the local but not the return value in the
 	// defer below.
 	stats = handleRaftReadyStats{
-		tBegin: timeutil.Now(),
+		tBegin: crtime.NowMono(),
 	}
 	defer func() {
-		stats.tEnd = timeutil.Now()
+		stats.tEnd = crtime.NowMono()
 	}()
 
 	if inSnap.Desc != nil {
@@ -1118,7 +1122,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
 			defer releaseMergeLock()
 
-			stats.tSnapBegin = timeutil.Now()
+			stats.tSnapBegin = crtime.NowMono()
 			if err := r.applySnapshot(ctx, inSnap, snap, app.HardState(), subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
@@ -1134,7 +1138,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					break
 				}
 			}
-			stats.tSnapEnd = timeutil.Now()
+			stats.tSnapEnd = crtime.NowMono()
 			stats.snap.applied = true
 
 			// lastIndexNotDurable, lastTermNotDurable and raftLogSize were updated in
@@ -1232,7 +1236,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
-	stats.tApplicationBegin = timeutil.Now()
+	stats.tApplicationBegin = crtime.NowMono()
 	if hasMsg(msgStorageApply) {
 		r.mu.raftTracer.MaybeTrace(msgStorageApply)
 		r.traceEntries(msgStorageApply.Entries, "committed, before applying any entries")
@@ -1275,7 +1279,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// Send MsgStorageApply's responses.
 		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
 	}
-	stats.tApplicationEnd = timeutil.Now()
+	stats.tApplicationEnd = crtime.NowMono()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
 	r.store.metrics.RaftApplyCommittedLatency.RecordValue(applicationElapsed)
 	r.store.metrics.RaftCommandsApplied.Inc(int64(len(msgStorageApply.Entries)))
