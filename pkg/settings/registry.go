@@ -517,11 +517,15 @@ var ReadableTypes = map[string]string{
 }
 
 // RedactedValue returns:
-//   - a string representation of the value, if the setting is reportable (or it
-//     is a string setting with an empty value);
-//   - "<redacted>" if the setting is not reportable;
+//   - a string representation of the value, if the setting is reportable;
+//   - "<redacted>" if the setting is not reportable, sensitive, or a string;
 //   - "<unknown>" if there is no setting with this name.
 func RedactedValue(key InternalKey, values *Values, forSystemTenant bool) string {
+	if k, ok := registry[key]; ok {
+		if k.Typ() == "s" || k.isSensitive() || !k.isReportable() {
+			return "<redacted>"
+		}
+	}
 	if setting, ok := LookupForReportingByKey(key, forSystemTenant); ok {
 		return setting.String(values)
 	}
