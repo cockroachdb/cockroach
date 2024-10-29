@@ -1725,10 +1725,10 @@ def go_deps():
         name = "com_github_cockroachdb_crlib",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/crlib",
-        sha256 = "6b60d27f36168c3133b8dd06ab6435a5ecbe68119fc1f44d8663fa3a06aa29b9",
-        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241015224233-894974b3ad94",
+        sha256 = "cb0ef1c7b33f4e6098c2e2a2db19997e956455a77af5f26d3a817a5e2350c3a9",
+        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241029125435-f5792c20cf89",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241015224233-894974b3ad94.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241029125435-f5792c20cf89.zip",
         ],
     )
     go_repository(
