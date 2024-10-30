@@ -239,11 +239,12 @@ func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb
 }
 
 // UpdateSubzoneConfig implements the scexec.Catalog interface.
+//
+// N.B. UpdateSubzoneConfig assumes that a subzone at index i in the subzones
+// list has the corresponding subzone span in the subzone span list at the same
+// index.
 func (d *txnDeps) UpdateSubzoneConfig(
-	ctx context.Context,
-	tableID descpb.ID,
-	subzones []zonepb.Subzone,
-	subzoneSpans []zonepb.SubzoneSpan,
+	ctx context.Context, tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
 ) error {
 	var newZc catalog.ZoneConfig
 	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), tableID)
@@ -260,16 +261,30 @@ func (d *txnDeps) UpdateSubzoneConfig(
 		rawBytes = oldZc.GetRawBytesInStorage()
 		zc = oldZc.ZoneConfigProto()
 	} else {
-		// If no zone config exists, create a new one that is a subzone placeholder.
+		// If no zone config exists, create a new one that is a s placeholder.
 		zc = zonepb.NewZoneConfig()
 		zc.DeleteTableConfig()
 	}
 
-	// Update the subzones in the zone config.
-	for _, s := range subzones {
-		zc.SetSubzone(s)
+	// Update the subzone in the zone config.
+	zc.SetSubzone(subzone)
+	var subzoneIdx int32
+	for i, s := range zc.Subzones {
+		if s.IndexID == subzone.IndexID && s.PartitionName == subzone.PartitionName {
+			subzoneIdx = int32(i)
+			break
+		}
 	}
-	zc.SubzoneSpans = subzoneSpans
+	// Update the subzone spans.
+	subzoneSpansToWrite := subzoneSpans
+	// If there are subzone spans that currently exist, merge those with the new
+	// spans we are updating. Otherwise, the zone config's set of subzone spans
+	// will be our input subzoneSpans.
+	if len(zc.SubzoneSpans) != 0 {
+		zc.SetSubzoneSpans(subzoneIdx, subzoneSpansToWrite)
+		subzoneSpansToWrite = zc.SubzoneSpans
+	}
+	zc.SubzoneSpans = subzoneSpansToWrite
 
 	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
 	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(),

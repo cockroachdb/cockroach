@@ -52,8 +52,11 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// getZoneConfigElem retrieves the scpb.Element for the zone config object.
-	getZoneConfigElem(b BuildCtx) scpb.Element
+	// getZoneConfigElem retrieves []scpb.Elements needed for modification for the
+	// zone config object. Having multiple elements needing to be modified becomes
+	// more relevant for subzone configs -- as configuring the zone on indexes
+	// and partitions can shift the subzone spans for other elements around.
+	getZoneConfigElem(b BuildCtx) []scpb.Element
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -1209,4 +1212,19 @@ func isCorrespondingTemporaryIndex(
 			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
 		}).MustGetZeroOrOneElement()
 	return maybeCorresponding != nil
+}
+
+// getAffectedSubzoneSpansWithIdx groups each subzone span by their subzoneIdxs
+// for a lookup of which subzone spans a particular subzone is referred to by.
+func getAffectedSubzoneSpansWithIdx(
+	subzonesSlice int, newSubzoneSpans []zonepb.SubzoneSpan,
+) map[int32][]zonepb.SubzoneSpan {
+	idxToSpans := make(map[int32][]zonepb.SubzoneSpan, subzonesSlice)
+	for i := range subzonesSlice {
+		idxToSpans[int32(i)] = []zonepb.SubzoneSpan{}
+	}
+	for _, s := range newSubzoneSpans {
+		idxToSpans[s.SubzoneIndex] = append(idxToSpans[s.SubzoneIndex], s)
+	}
+	return idxToSpans
 }

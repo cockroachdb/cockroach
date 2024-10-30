@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -1151,6 +1152,42 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 		}
 	}
 	return false
+}
+
+// SetSubzoneSpans merges the given subzoneSpans into the ZoneConfig. This is
+// done by removing all subzoneSpans with the given subzoneIndex in z, inserting
+// the new slice, and sorting the resulting list.
+//
+// N.B. We assume that the subzoneSpans slice has already been pre-filtered to
+// only contain spans for the given subzoneIdx.
+func (z *ZoneConfig) SetSubzoneSpans(subzoneIdx int32, subzoneSpans []SubzoneSpan) {
+	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
+	// We don't care to keep the z.SubzoneSpans slice nearly sorted as the amount
+	// of subzone spans is typically small enough that the optimization of a
+	// nearly-sorted slice is negligible.
+	for _, s := range z.SubzoneSpans {
+		if s.SubzoneIndex != subzoneIdx {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+
+	z.SubzoneSpans = append(filteredSpans, subzoneSpans...)
+	slices.SortFunc(z.SubzoneSpans, func(a, b SubzoneSpan) int {
+		// Our spans are non-overlapping; comparing `EndKey`s is not necessary.
+		return a.Key.Compare(b.Key)
+	})
+}
+
+// FilterSubzoneSpansByIdx retrieves all subzone spans with the given
+// SubzoneIndex.
+func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIdx int32) []SubzoneSpan {
+	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
+	for _, s := range z.SubzoneSpans {
+		if s.SubzoneIndex == subzoneIdx {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+	return filteredSpans
 }
 
 // DeleteIndexSubzones deletes all subzones that refer to the index with the

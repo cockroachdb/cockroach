@@ -6,6 +6,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -14,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -82,35 +82,23 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
-	var elem scpb.Element
-	if n.Discard {
-		// If we are discarding the zone config and a zone config did not previously
-		// exist for us to discard, then no-op.
-		if zco.isNoOp() {
-			return
-		}
-		elem = zco.getZoneConfigElem(b)
-		b.Drop(elem)
-	} else {
-		zco.incrementSeqNum()
-		elem = zco.getZoneConfigElem(b)
-		b.Add(elem)
-	}
-
 	// Log event for auditing
 	eventDetails := eventpb.CommonZoneConfigDetails{
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
 
-	var info logpb.EventPayload
 	if n.Discard {
-		info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+		// If we are discarding the zone config and a zone config did not previously
+		// exist for us to discard, then no-op.
+		if zco.isNoOp() {
+			return
+		}
+		dropZoneConfigElem(b, zco, eventDetails)
 	} else {
-		info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
-			ResolvedOldConfig: oldZone.String()}
+		zco.incrementSeqNum()
+		addZoneConfigElem(b, zco, oldZone, eventDetails)
 	}
-	b.LogEventForExistingPayload(elem, info)
 }
 
 func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
@@ -192,4 +180,30 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	}
 
 	return nil, errors.AssertionFailedf("unexpected zone config object")
+}
+
+func dropZoneConfigElem(
+	b BuildCtx, zco zoneConfigObject, eventDetails eventpb.CommonZoneConfigDetails,
+) {
+	elems := zco.getZoneConfigElem(b)
+	info := &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+	for _, e := range elems {
+		b.Drop(e)
+		b.LogEventForExistingPayload(e, info)
+	}
+}
+
+func addZoneConfigElem(
+	b BuildCtx,
+	zco zoneConfigObject,
+	oldZone *zonepb.ZoneConfig,
+	eventDetails eventpb.CommonZoneConfigDetails,
+) {
+	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+		ResolvedOldConfig: oldZone.String()}
+	elems := zco.getZoneConfigElem(b)
+	for _, e := range elems {
+		b.Add(e)
+		b.LogEventForExistingPayload(e, info)
+	}
 }

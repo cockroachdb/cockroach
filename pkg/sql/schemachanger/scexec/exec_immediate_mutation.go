@@ -236,7 +236,9 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 
 	for _, zcToUpdate := range s.modifiedZoneConfigs {
 		if zcToUpdate.isSubzoneConfig {
-			if err := c.UpdateSubzoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc.Subzones,
+			// TODO(before merge): unsatisfied with this; would it be better to
+			//  separate subzone configs from the modifiedZoneConfigs list?
+			if err := c.UpdateSubzoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc.Subzones[0],
 				zcToUpdate.zc.SubzoneSpans); err != nil {
 				return err
 			}
