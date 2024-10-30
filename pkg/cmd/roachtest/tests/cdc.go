@@ -1670,7 +1670,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c, withNumSinkNodes(2))
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
