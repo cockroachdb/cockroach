@@ -67,6 +67,7 @@ type rangeFeedConfig struct {
 	withMetadata          bool
 	withMatchingOriginIDs []uint32
 	rangeObserver         RangeObserver
+	consumerID            int64
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -135,6 +136,12 @@ func WithRangeObserver(observer RangeObserver) RangeFeedOption {
 func WithMetadata() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withMetadata = true
+	})
+}
+
+func WithConsumerID(cid int64) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.consumerID = cid
 	})
 }
 
@@ -620,6 +627,7 @@ func makeRangeFeedRequest(
 	withDiff bool,
 	withFiltering bool,
 	withMatchingOriginIDs []uint32,
+	consumerID int64,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -631,6 +639,7 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
+		ConsumerID:            consumerID,
 		WithDiff:              withDiff,
 		WithFiltering:         withFiltering,
 		WithMatchingOriginIDs: withMatchingOriginIDs,
