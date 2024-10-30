@@ -84,7 +84,7 @@ var (
 	// ranges left to be reverted, but some may not have writes and therefore the
 	// revert will be a no-op for those ranges.
 	metaReplicationCutoverProgress = metric.Metadata{
-		Name:        "physical_replication.cutover_progress",
+		Name:        "physical_replication.failover_progress",
 		Help:        "The number of ranges left to revert in order to complete an inflight cutover",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
