@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -69,7 +70,6 @@ var defaultInfluxMetadata = map[string]string{
 }
 
 const (
-	packageSeparator         = "→"
 	slackPercentageThreshold = 20.0
 	slackReportMax           = 3
 	skipComparison           = math.MaxFloat64
@@ -264,9 +264,9 @@ func (c *compare) postToSlack(
 					comparison.Delta == 0 {
 					continue
 				}
-				nameSplit := strings.Split(detail.BenchmarkName, packageSeparator)
+				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
 				ci := changeInfo{
-					BenchmarkName: nameSplit[0] + packageSeparator + truncateBenchmarkName(nameSplit[1], 32),
+					BenchmarkName: nameSplit[0] + util.PackageSeparator + truncateBenchmarkName(nameSplit[1], 32),
 					PercentChange: fmt.Sprintf("%.2f%%", comparison.Delta),
 				}
 				if math.Abs(comparison.Delta) > highestPercentChange {
@@ -415,7 +415,7 @@ func (c *compare) createBenchSeries() ([]*benchseries.ComparisonSeries, error) {
 					cmp = string(config.Value)
 				}
 			}
-			key := pkg + packageSeparator + string(rec.Name)
+			key := pkg + util.PackageSeparator + string(rec.Name)
 			// Update the name to include the package name. This is a workaround for
 			// `benchseries`, that currently does not support package names.
 			rec.Name = benchfmt.Name(key)
@@ -485,8 +485,8 @@ func (c *compare) pushToInfluxDB() error {
 				"experiment-commit": cs.HashPairs[experimentTime].NumHash,
 				"benchmarks-commit": residues["benchmarks-commit"],
 			}
-			pkg := strings.Split(benchmarkName, packageSeparator)[0]
-			benchmarkName = strings.Split(benchmarkName, packageSeparator)[1]
+			pkg := strings.Split(benchmarkName, util.PackageSeparator)[0]
+			benchmarkName = strings.Split(benchmarkName, util.PackageSeparator)[1]
 			tags := map[string]string{
 				"name":         benchmarkName,
 				"unit":         cs.Unit,
@@ -527,7 +527,7 @@ func processReportFile(builder *model.Builder, id, pkg, path string) error {
 	}
 	defer file.Close()
 	reader := benchfmt.NewReader(file, path)
-	return builder.AddMetrics(id, pkg+packageSeparator, reader)
+	return builder.AddMetrics(id, pkg+util.PackageSeparator, reader)
 }
 
 func truncateBenchmarkName(text string, maxLen int) string {
