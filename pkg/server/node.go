@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -425,6 +427,11 @@ type Node struct {
 		lastDiskSlow map[roachpb.StoreID]time.Time
 	}
 
+	perConsumerCatchupLimiterMu struct {
+		syncutil.Mutex
+		limiters map[int64]*perConsumerLimiter
+	}
+
 	// Event handler called in logStructuredEvent. Used in tests only.
 	onStructuredEvent func(ctx context.Context, event logpb.EventPayload)
 
@@ -604,6 +611,7 @@ func NewNode(
 		proxySender:           proxySender,
 		licenseEnforcer:       licenseEnforcer,
 	}
+	n.perConsumerCatchupLimiterMu.limiters = make(map[int64]*perConsumerLimiter)
 	n.diskSlowCoalescerMu.lastDiskSlow = make(map[roachpb.StoreID]time.Time)
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -2064,6 +2072,68 @@ type streamManager interface {
 	Error() chan error
 }
 
+// perConsumerLimiter is a ConcurrentRequestLimiter for a given mux rangefeed
+// consumer. It is stored in the Node as long as there are active MuxRangeFeed
+// requests the related ConsumerID.
+type perConsumerLimiter struct {
+	l limit.ConcurrentRequestLimiter
+	c int
+}
+
+func (n *Node) perConsumerCatchupScanLimiter(
+	consumerID int64, sv *settings.Values,
+) *limit.ConcurrentRequestLimiter {
+	n.perConsumerCatchupLimiterMu.Lock()
+	defer n.perConsumerCatchupLimiterMu.Unlock()
+	if _, ok := n.perConsumerCatchupLimiterMu.limiters[consumerID]; ok {
+		n.perConsumerCatchupLimiterMu.limiters[consumerID].c++
+	} else {
+		n.perConsumerCatchupLimiterMu.limiters[consumerID] = &perConsumerLimiter{
+			l: makePerConsumerScanLimiter(consumerID, sv),
+			c: 1,
+		}
+	}
+	return &n.perConsumerCatchupLimiterMu.limiters[consumerID].l
+}
+
+func (n *Node) releasePerConsumerCatchup(consumerID int64) {
+	n.perConsumerCatchupLimiterMu.Lock()
+	defer n.perConsumerCatchupLimiterMu.Unlock()
+	if l, ok := n.perConsumerCatchupLimiterMu.limiters[consumerID]; ok {
+		l.c--
+		if l.c == 0 {
+			delete(n.perConsumerCatchupLimiterMu.limiters, consumerID)
+		}
+	}
+}
+
+func makePerConsumerScanLimiter(
+	consumerID int64, sv *settings.Values,
+) limit.ConcurrentRequestLimiter {
+	getLimit := func() int {
+		if lim := kvserver.PerConsumerCatchupLimit.Get(sv); lim > 0 {
+			return int(lim)
+		}
+		// If the setting is disable with an in-flight limiter, set the
+		// limit to infinity.
+		return math.MaxInt
+	}
+	l := limit.MakeConcurrentRequestLimiter(
+		fmt.Sprintf("PerConsumerCatchupLimit-%d", consumerID),
+		getLimit())
+	kvserver.PerConsumerCatchupLimit.SetOnChange(sv, func(ctx context.Context) {
+		l.SetLimit(getLimit())
+	})
+	return l
+}
+
+// defaultRangefeedConsumerID returns a random ConsumerID. Used by
+// MuxRangeFeed calls where the user hasn't specified a consumer ID.
+func (n *Node) defaultRangefeedConsumerID() int64 {
+	return int64(builtins.GenerateUniqueInt(
+		builtins.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID())))
+}
+
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
@@ -2099,6 +2169,12 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 		})
 		return ev
 	}
+
+	var limiter *limit.ConcurrentRequestLimiter
+	var consumerID int64
+	defer func() {
+		n.releasePerConsumerCatchup(consumerID)
+	}()
 
 	for {
 		select {
@@ -2139,12 +2215,33 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 			sm.AddStream(req.StreamID, cancel)
 
+			// Get the per-consumer catchup limiter if it is
+			// enabled. We currently assume that a single
+			// MuxRangeFeed call will only contain streams for the
+			// same consumer.
+			if kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 {
+				if consumerID == 0 {
+					if req.ConsumerID == 0 {
+						req.ConsumerID = n.defaultRangefeedConsumerID()
+					}
+					consumerID = req.ConsumerID
+				}
+				if req.ConsumerID != 0 && consumerID != req.ConsumerID {
+					log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
+						req.ConsumerID, consumerID)
+				}
+
+				if limiter == nil {
+					limiter = n.perConsumerCatchupScanLimiter(consumerID, n.execCfg.SV())
+				}
+			}
+
 			// Rangefeed attempts to register rangefeed a request over the specified
 			// span. If registration fails, it returns an error. Otherwise, it returns
 			// nil without blocking on rangefeed completion. Events are then sent to
 			// the provided streamSink. If the rangefeed disconnects after being
 			// successfully registered, it calls streamSink.SendError with the error.
-			if _, err := n.stores.RangeFeed(streamCtx, req, streamSink); err != nil {
+			if _, err := n.stores.RangeFeed(streamCtx, req, streamSink, limiter); err != nil {
 				sm.SendBufferedError(
 					makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID, kvpb.NewError(err)))
 			}

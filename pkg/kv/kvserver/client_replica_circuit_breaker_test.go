@@ -489,7 +489,7 @@ func waitReplicaRangeFeed(
 		return stream.SendUnbuffered(&event)
 	}
 
-	_, err := r.RangeFeed(stream.ctx, req, stream, nil /* pacer */)
+	_, err := r.RangeFeed(stream.ctx, req, stream, nil /* pacer */, nil /* perConsumerCatchupLimiter */)
 	if err != nil {
 		return sendErrToStream(kvpb.NewError(err))
 	}
