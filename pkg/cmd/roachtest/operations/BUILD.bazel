@@ -31,6 +31,9 @@ go_library(
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/tests",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/hlc",
@@ -38,6 +41,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )
 
