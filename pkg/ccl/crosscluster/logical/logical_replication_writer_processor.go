@@ -133,7 +133,7 @@ var batchSizeSetting = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"logical_replication.stream_batch_size",
 	"target batch size for logical replication stream",
-	1<<20,
+	16<<20,
 )
 
 func newLogicalReplicationWriterProcessor(
