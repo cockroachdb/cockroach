@@ -60,6 +60,7 @@ go_test(
     srcs = [
         "data_test.go",
         "index_usage_stats_test.go",
+        "key_test.go",
         "main_test.go",
         "merge_spans_test.go",
         "metadata_replicas_test.go",
@@ -67,6 +68,7 @@ go_test(
         "span_config_conformance_report_test.go",
         "span_config_test.go",
         "span_group_test.go",
+        "span_test.go",
         "string_test.go",
         "tenant_test.go",
         "version_test.go",
