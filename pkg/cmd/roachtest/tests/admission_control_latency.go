@@ -589,7 +589,13 @@ type addNode struct{}
 var _ perturbation = addNode{}
 
 func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
-	return newMetamorphic(a, rng)
+	v := newMetamorphic(a, rng)
+	//TODO(#133606): With high vcpu and large writes, the test can fail due to
+	//the disk becoming saturated leading to 1-2s of fsync stall.
+	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
+		v.maxBlockBytes = 1024
+	}
+	return v
 }
 
 func (addNode) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -624,7 +630,13 @@ var _ perturbation = decommission{}
 
 func (d decommission) setupMetamorphic(rng *rand.Rand) variations {
 	d.drain = rng.Intn(2) == 0
-	return newMetamorphic(d, rng)
+	v := newMetamorphic(d, rng)
+	//TODO(#133606): With high vcpu and large writes, the test can fail due to
+	//the disk becoming saturated leading to 1-2s of fsync stall.
+	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
+		v.maxBlockBytes = 1024
+	}
+	return v
 }
 
 func (d decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
