@@ -94,6 +94,9 @@ func loadTestData(
 				minWallTime = minSStableTimestamps[i/scaled]
 			}
 			timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+			if timestamp.Less(hlc.MinTimestamp) {
+				timestamp = hlc.MinTimestamp
+			}
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 			value.InitChecksum(key)
 			if _, err := storage.MVCCPut(ctx, batch, key, timestamp, value, storage.MVCCWriteOptions{}); err != nil {
