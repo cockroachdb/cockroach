@@ -84,11 +84,11 @@ var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
 // signaled to cutover.
 var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	"bulkio.stream_ingestion.cutover_signal_poll_interval",
+	"bulkio.stream_ingestion.failover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
 	settings.NonNegativeDuration,
-	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
+	settings.WithName("physical_replication.consumer.failover_signal_poll_interval"),
 )
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(

@@ -42,7 +42,7 @@ const (
 )
 
 var alterReplicationCutoverHeader = colinfo.ResultColumns{
-	{Name: "cutover_time", Typ: types.Decimal},
+	{Name: "failover_time", Typ: types.Decimal},
 }
 
 // ResolvedTenantReplicationOptions represents options from an
@@ -605,12 +605,12 @@ func applyCutoverTime(
 	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
-		if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+		if progress.ReplicationStatus == jobspb.ReplicationFailingOver {
 			return errors.Newf("job %d already started cutting over to timestamp %s",
 				job.ID(), progress.CutoverTime)
 		}
 
-		progress.ReplicationStatus = jobspb.ReplicationPendingCutover
+		progress.ReplicationStatus = jobspb.ReplicationPendingFailover
 		// Update the sentinel being polled by the stream ingestion job to
 		// check if a complete has been signaled.
 		progress.CutoverTime = cutoverTimestamp

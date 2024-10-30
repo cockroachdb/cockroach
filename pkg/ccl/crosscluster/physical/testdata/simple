@@ -67,7 +67,7 @@ SHOW TENANTS
 2 destination replicating none
 
 query-sql as=destination-system
-SELECT id, name, source_tenant_name, cutover_time, status FROM [SHOW TENANTS WITH REPLICATION STATUS]
+SELECT id, name, source_tenant_name, failover_time, status FROM [SHOW TENANTS WITH REPLICATION STATUS]
 ----
 1 system <nil> <nil> ready
 2 destination source <nil> replicating

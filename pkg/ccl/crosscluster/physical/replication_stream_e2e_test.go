@@ -1163,7 +1163,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		c.Args.DestTenantName, futureTime.AsOfSystemTime()).Scan(&cutoverStr)
 	var showCutover string
-	c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT cutover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
+	c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT failover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
 		c.Args.DestTenantName)).Scan(&showCutover)
 	require.Equal(c.T, cutoverStr, showCutover)
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(c.T, showCutover)
