@@ -282,7 +282,8 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	var prs []string
 	var workOnRepoErrors []error
 	for _, repo := range reposToWorkOn {
-		repo.workOnRepoError = workOnRepo(repo)
+		err := workOnRepo(repo)
+		repo.workOnRepoError = err
 		if repo.workOnRepoError != nil {
 			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", repo.name(), err)
 			workOnRepoErrors = append(workOnRepoErrors, err)
