@@ -26,7 +26,10 @@ export const tableMetadataToRows = (
     );
     return {
       ...table,
-      nodesByRegion: nodesByRegion,
+      nodesByRegion: {
+        isLoading: nodesInfo.isLoading,
+        data: nodesByRegion,
+      },
       key: table.tableId.toString(),
       qualifiedNameWithSchema: `${table.schemaName}.${table.tableName}`,
     };

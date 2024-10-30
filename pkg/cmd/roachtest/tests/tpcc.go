@@ -669,7 +669,7 @@ func registerTPCC(r registry.Registry) {
 				// Increase the vmodule level around transaction pushes so that if we do
 				// see a transaction retry error, we can debug it. This may affect perf,
 				// so we should not use this as a performance test.
-				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2,lock_table_waiter=3,manager=2"},
+				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2,lock_table_waiter=2,manager=2"},
 				WorkloadInstances: func() (ret []workloadInstance) {
 					isoLevels := []string{"read_uncommitted", "read_committed", "repeatable_read", "snapshot", "serializable"}
 					for i, isoLevel := range isoLevels {

@@ -8,6 +8,9 @@ import { NodeID } from "src/types/clusterTypes";
 
 export type TableRow = TableMetadata & {
   qualifiedNameWithSchema: string;
-  nodesByRegion: Record<string, NodeID[]>;
+  nodesByRegion: {
+    isLoading: boolean;
+    data: Record<string, NodeID[]>;
+  };
   key: string;
 };
