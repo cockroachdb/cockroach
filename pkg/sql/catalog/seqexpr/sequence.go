@@ -80,10 +80,10 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 			if len(funcExpr.Exprs) == overload.Types.Length() {
 				paramTypes, ok := overload.Types.(tree.ParamTypes)
 				if !ok {
-					panic(pgerror.Newf(
+					return nil, pgerror.Newf(
 						pgcode.InvalidFunctionDefinition,
 						"%s has invalid argument types", funcExpr.Func.String(),
-					))
+					)
 				}
 				found = true
 				for i := 0; i < len(paramTypes); i++ {
@@ -98,10 +98,10 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 			}
 		}
 		if !found {
-			panic(pgerror.New(
+			return nil, pgerror.New(
 				pgcode.DatatypeMismatch,
 				"could not find matching function overload for given arguments",
-			))
+			)
 		}
 	}
 	return nil, nil
