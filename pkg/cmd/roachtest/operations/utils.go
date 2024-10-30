@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -24,11 +25,16 @@ import (
 // may not be mutable and should be excluded by most operations.
 var systemDBs = []string{"system", "information_schema", "crdb_internal", "defaultdb", "postgres"}
 
-// pickRandomDB picks a random DB that isn't one of `excludeDBs` on the
+// pickRandomDB returns roachtestflags.DBName if not empty.
+// Otherwise, picks a random DB that isn't one of `excludeDBs` on the
 // target cluster connected to by `conn`.
 func pickRandomDB(
 	ctx context.Context, o operation.Operation, conn *gosql.DB, excludeDBs []string,
 ) string {
+	if roachtestflags.DBName != "" {
+		return roachtestflags.DBName
+	}
+
 	rng, _ := randutil.NewPseudoRand()
 
 	// Pick a random table.
@@ -63,9 +69,15 @@ func pickRandomDB(
 	return dbNames[rng.Intn(len(dbNames))]
 }
 
+// pickRandomTable returns roachtestflags.TableName if not empty.
+// Otherwise, picks a random table from given database.
 func pickRandomTable(
 	ctx context.Context, o operation.Operation, conn *gosql.DB, dbName string,
 ) string {
+	if roachtestflags.TableName != "" {
+		return roachtestflags.TableName
+	}
+
 	rng, _ := randutil.NewPseudoRand()
 
 	// Pick a random table.
