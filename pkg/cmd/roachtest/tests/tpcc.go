@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -89,10 +88,6 @@ type tpccOptions struct {
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
-	//
-	// TODO(tbg): for better coverage at scale of the migration process, we should
-	// also be doing a rolling-restart into the new binary while the cluster
-	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
 	// If specified, assigned to StartOpts.ExtraArgs when starting cockroach.
 	ExtraStartArgs                []string
@@ -384,6 +379,12 @@ func tpccMaxRate(warehouses int) int {
 func maxSupportedTPCCWarehouses(
 	buildVersion version.Version, cloud string, nodes spec.ClusterSpec,
 ) int {
+	if cloud == spec.Local {
+		// Arbitrary number since the limit depends on the machine, local TPCC runs
+		// are usually used for dry runs and not actual performance testing.
+		return 15
+	}
+
 	var v *version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
@@ -410,9 +411,6 @@ func maxSupportedTPCCWarehouses(
 func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-	if c.IsLocal() {
-		headroomWarehouses = 10
-	}
 
 	// NB: this results in ~100GB of (actual) disk usage per node once things
 	// have settled down, and ~7.5k ranges. The import takes ~40 minutes.
@@ -504,7 +502,6 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
-	uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
 	mvt.OnStartup("maybe enable tenant features", enableTenantFeatures)
 	mvt.OnStartup("load TPCC dataset", importTPCC)
 	mvt.OnStartup("load bank dataset", importLargeBank)
