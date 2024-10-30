@@ -68,9 +68,6 @@ func (lu *ldapUtil) Bind(ctx context.Context, userDN string, ldapPwd string) (er
 func (lu *ldapUtil) Search(
 	ctx context.Context, conf ldapConfig, username string,
 ) (userDN string, err error) {
-	if err := lu.Bind(ctx, conf.ldapBindDN, conf.ldapBindPassword); err != nil {
-		return "", errors.Wrap(err, searchFailureMessage)
-	}
 	// TODO(souravcrl): Currently search could be performed at subtree level but
 	// this should be configurable through HBA conf using any of the scopes
 	// provided: https://github.com/go-ldap/ldap/blob/master/search.go#L17-L24
@@ -100,9 +97,6 @@ func (lu *ldapUtil) Search(
 func (lu *ldapUtil) ListGroups(
 	ctx context.Context, conf ldapConfig, userDN string,
 ) (_ []string, err error) {
-	if err := lu.Bind(ctx, conf.ldapBindDN, conf.ldapBindPassword); err != nil {
-		return nil, errors.Wrap(err, groupListFailureMessage)
-	}
 	// TODO(souravcrl): Currently list groups can only be performed at subtree
 	// level but this should be configurable through HBA conf using any of the
 	// scopes provided:
