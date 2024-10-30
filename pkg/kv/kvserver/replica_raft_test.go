@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -83,9 +83,9 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	now := timeutil.Now()
-	ts := func(s int) time.Time {
-		return now.Add(time.Duration(s) * time.Second)
+	now := crtime.NowMono()
+	ts := func(s int) crtime.Mono {
+		return now + crtime.Mono(time.Duration(s)*time.Second)
 	}
 
 	stats := handleRaftReadyStats{

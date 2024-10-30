@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 const rangeIDChunkSize = 1000
@@ -138,7 +138,7 @@ const (
 
 type raftScheduleState struct {
 	flags raftScheduleFlags
-	begin int64 // nanoseconds
+	begin crtime.Mono
 
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
 	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
@@ -384,8 +384,8 @@ func (ss *raftSchedulerShard) worker(
 		ss.Unlock()
 
 		// Record the scheduling latency for the range.
-		lat := nowNanos() - state.begin
-		metrics.RaftSchedulerLatency.RecordValue(lat)
+		lat := state.begin.Elapsed()
+		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
 
 		// Process requests first. This avoids a scenario where a tick and a
 		// "quiesce" message are processed in the same iteration and intervening
@@ -463,7 +463,7 @@ func (s *raftScheduler) NewEnqueueBatch() *raftSchedulerBatch {
 }
 
 func (ss *raftSchedulerShard) enqueue1Locked(
-	addFlags raftScheduleFlags, id roachpb.RangeID, now int64,
+	addFlags raftScheduleFlags, id roachpb.RangeID, now crtime.Mono,
 ) int {
 	ticks := int64((addFlags & stateRaftTick) / stateRaftTick) // 0 or 1
 
@@ -491,7 +491,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 }
 
 func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID) {
-	now := nowNanos()
+	now := crtime.NowMono()
 	hasPriority := s.priorityIDs.Contains(id)
 	shardIdx := shardIndex(id, len(s.shards), hasPriority)
 	shard := s.shards[shardIdx]
@@ -510,14 +510,14 @@ func (ss *raftSchedulerShard) enqueueN(addFlags raftScheduleFlags, ids ...roachp
 		return 0
 	}
 
-	now := nowNanos()
+	now := crtime.NowMono()
 	ss.Lock()
 	var count int
 	for i, id := range ids {
 		count += ss.enqueue1Locked(addFlags, id, now)
 		if (i+1)%enqueueChunkSize == 0 {
 			ss.Unlock()
-			now = nowNanos()
+			now = crtime.NowMono()
 			ss.Lock()
 		}
 	}
@@ -573,7 +573,4 @@ var _ rac2.Scheduler = &racV2Scheduler{}
 // ScheduleControllerEvent implements rac2.Scheduler.
 func (s *racV2Scheduler) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 	(*raftScheduler)(s).EnqueueRACv2RangeController(rangeID)
-}
-func nowNanos() int64 {
-	return timeutil.Now().UnixNano()
 }

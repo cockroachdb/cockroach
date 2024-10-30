@@ -8,6 +8,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"runtime/pprof"
 	"slices"
 	"time"
@@ -62,7 +63,7 @@ var writerWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.flush_worker_per_proc",
 	"the maximum number of workers per processor to use to flush each batch",
-	32,
+	128,
 	settings.NonNegativeInt,
 )
 
@@ -115,6 +116,10 @@ type logicalReplicationWriterProcessor struct {
 	dlqClient DeadLetterQueueClient
 
 	purgatory purgatory
+
+	seenKeys  map[uint64]int64
+	dupeCount int64
+	seenEvery log.EveryN
 }
 
 var (
@@ -253,6 +258,7 @@ func newLogicalReplicationWriterProcessor(
 		},
 		dlqClient: InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
+		seenEvery: log.Every(1 * time.Minute),
 	}
 	lrw.purgatory = purgatory{
 		deadline:    func() time.Duration { return retryQueueAgeLimit.Get(&flowCtx.Cfg.Settings.SV) },
@@ -673,6 +679,30 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		}
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
+
+	// If the seen map is nil or has hit 2M items, reset it.
+	if lrw.seenKeys == nil || len(lrw.seenKeys) > 2<<20 {
+		lrw.seenKeys = make(map[uint64]int64, 2<<20)
+	}
+
+	h := fnv.New64a()
+	logged := false
+	for i := range kvs {
+		h.Reset()
+		_, _ = h.Write(kvs[i].KeyValue.Key)
+		hashed := h.Sum64() + uint64(kvs[i].KeyValue.Value.Timestamp.WallTime)
+		c := lrw.seenKeys[hashed]
+		lrw.seenKeys[hashed] = c + 1
+
+		if c > 0 {
+			lrw.dupeCount++
+			if !logged && lrw.seenEvery.ShouldLog() {
+				logged = true // don't check ShouldLog again for rest of loop.
+				log.Infof(ctx, "duplicate delivery of key %s@%d (%d prior times); %d total recent dupes.",
+					kvs[i].KeyValue.Key, kvs[i].KeyValue.Value.Timestamp.WallTime, c, lrw.dupeCount)
+			}
+		}
+	}
 
 	minChunk := 64
 	if lrw.FlowCtx != nil {
