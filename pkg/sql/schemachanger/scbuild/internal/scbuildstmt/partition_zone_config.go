@@ -38,7 +38,7 @@ func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return pzo.tableZoneConfigObj.zoneConfig
 }
 
-func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 	subzones := []zonepb.Subzone{*pzo.partitionSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -54,15 +54,36 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 		panic(err)
 	}
 
-	elem := &scpb.PartitionZoneConfig{
-		TableID:       pzo.tableID,
-		IndexID:       pzo.indexID,
-		PartitionName: pzo.partitionName,
-		Subzone:       *pzo.partitionSubzone,
-		SubzoneSpans:  ss,
-		SeqNum:        pzo.seqNum,
+	// Although the issued DDL is a subzone config change with pzo, this change
+	// TODO
+	idxToSpansMap := getSubzoneSpansWithIdx(ss)
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzones {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			if len(sub.PartitionName) > 0 {
+				elem := &scpb.PartitionZoneConfig{
+					TableID:       pzo.tableID,
+					IndexID:       catid.IndexID(sub.IndexID),
+					PartitionName: sub.PartitionName,
+					Subzone:       sub,
+					SubzoneSpans:  spans,
+					SeqNum:        pzo.seqNum,
+				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+			} else {
+				elem := &scpb.IndexZoneConfig{
+					TableID:      pzo.tableID,
+					IndexID:      catid.IndexID(sub.IndexID),
+					Subzone:      sub,
+					SubzoneSpans: spans,
+					SeqNum:       pzo.seqNum,
+				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+			}
+		}
 	}
-	return elem
+
+	return szCfgsToUpdate
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
@@ -101,10 +122,6 @@ func (pzo *partitionZoneConfigObj) retrieveCompleteZoneConfig(
 	if getInheritedDefault {
 		zc, err = pzo.getInheritedDefaultZoneConfig(b)
 	} else {
-		//zc, err = pzo.tableZoneConfigObj.getZoneConfig(b, false /* inheritDefaultRange */)
-		//if err != nil {
-		//	return nil, nil, err
-		//}
 		placeholder, err = pzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {

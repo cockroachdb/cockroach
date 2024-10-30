@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -1151,6 +1152,30 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 		}
 	}
 	return false
+}
+
+// SetSubzoneSpan merges the given subzoneSpans into the ZoneConfig. This is
+// done by removing all subzoneSpans with the given subzoneIndex, inserting
+// the new set, and sorting the resulting list.
+//
+// N.B. We assume that the input set of subzoneSpans is for 1 subzone; this
+// means that the subzoneIndex will be the same for each span in the input.
+func (z *ZoneConfig) SetSubzoneSpan(subzoneSpans []SubzoneSpan) {
+	if len(subzoneSpans) == 0 {
+		return
+	}
+	subzoneIdx := subzoneSpans[0].SubzoneIndex
+	var filteredSpans []SubzoneSpan
+	for _, s := range z.SubzoneSpans {
+		if s.SubzoneIndex != subzoneIdx {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+
+	z.SubzoneSpans = append(filteredSpans, subzoneSpans...)
+	slices.SortFunc(z.SubzoneSpans, func(a, b SubzoneSpan) int {
+		return a.Key.Compare(b.Key)
+	})
 }
 
 // DeleteIndexSubzones deletes all subzones that refer to the index with the

@@ -34,7 +34,7 @@ func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 	subzones := []zonepb.Subzone{*izo.indexSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -50,14 +50,36 @@ func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 		panic(err)
 	}
 
-	elem := &scpb.IndexZoneConfig{
-		TableID:      izo.tableID,
-		IndexID:      izo.indexID,
-		Subzone:      *izo.indexSubzone,
-		SubzoneSpans: ss,
-		SeqNum:       izo.seqNum,
+	// Although the issued DDL is a subzone config change with izo, this change
+	// TODO
+	idxToSpansMap := getSubzoneSpansWithIdx(ss)
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzones {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			if len(sub.PartitionName) > 0 {
+				elem := &scpb.PartitionZoneConfig{
+					TableID:       izo.tableID,
+					IndexID:       catid.IndexID(sub.IndexID),
+					PartitionName: sub.PartitionName,
+					Subzone:       sub,
+					SubzoneSpans:  spans,
+					SeqNum:        izo.seqNum,
+				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+			} else {
+				elem := &scpb.IndexZoneConfig{
+					TableID:      izo.tableID,
+					IndexID:      catid.IndexID(sub.IndexID),
+					Subzone:      sub,
+					SubzoneSpans: spans,
+					SeqNum:       izo.seqNum,
+				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+			}
+		}
 	}
-	return elem
+
+	return szCfgsToUpdate
 }
 
 func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {

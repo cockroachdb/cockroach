@@ -820,24 +820,21 @@ func (s *TestState) UpdateZoneConfig(
 
 // UpdateSubzoneConfig implements the scexec.Catalog interface.
 func (s *TestState) UpdateSubzoneConfig(
-	ctx context.Context,
-	tableID descpb.ID,
-	subzones []zonepb.Subzone,
-	subzoneSpans []zonepb.SubzoneSpan,
+	ctx context.Context, tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
 ) error {
 	if s.catalogChanges.zoneConfigsToUpdate == nil {
 		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
 	}
 	var zc *zonepb.ZoneConfig
 	if czc, ok := s.catalogChanges.zoneConfigsToUpdate[tableID]; ok {
-		czc.Subzones = subzones
-		czc.SubzoneSpans = subzoneSpans
 		zc = czc
 	} else {
 		zc = zonepb.NewZoneConfig()
 		zc.DeleteTableConfig()
-		zc.Subzones = subzones
-		zc.SubzoneSpans = subzoneSpans
+	}
+	zc.SetSubzone(subzone)
+	for _, ss := range subzoneSpans {
+		zc.SetSubzoneSpan(ss)
 	}
 	s.catalogChanges.zoneConfigsToUpdate[tableID] = zc
 	return nil

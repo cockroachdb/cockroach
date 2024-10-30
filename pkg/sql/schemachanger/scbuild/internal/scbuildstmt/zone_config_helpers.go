@@ -52,9 +52,6 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// getZoneConfigElem retrieves the scpb.Element for the zone config object.
-	getZoneConfigElem(b BuildCtx) scpb.Element
-
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
 	getTargetID() catid.DescID
@@ -1209,4 +1206,18 @@ func isCorrespondingTemporaryIndex(
 			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
 		}).MustGetZeroOrOneElement()
 	return maybeCorresponding != nil
+}
+
+// getSubzoneSpansWithIdx groups each subzone span by its subzoneIdx for a
+// fast lookup of which subzone spans a particular subzone is referred to by.
+func getSubzoneSpansWithIdx(subzoneSpans []zonepb.SubzoneSpan) map[int32][]zonepb.SubzoneSpan {
+	idxToSpans := make(map[int32][]zonepb.SubzoneSpan)
+	for _, ss := range subzoneSpans {
+		if spans, ok := idxToSpans[ss.SubzoneIndex]; ok {
+			idxToSpans[ss.SubzoneIndex] = append(spans, ss)
+		} else {
+			idxToSpans[ss.SubzoneIndex] = []zonepb.SubzoneSpan{ss}
+		}
+	}
+	return idxToSpans
 }
