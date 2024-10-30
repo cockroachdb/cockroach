@@ -2204,7 +2204,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				// TODO(yuzefovich): the planObserver logic in
 				// planAndRunChecksInParallel will need to be adjusted when we switch to
 				// using the DistSQL spec factory.
-				for i := cascadesIdx; i < len(plan.checkPlans); i++ {
+				for i := checksIdx; i < len(plan.checkPlans); i++ {
 					if plan.checkPlans[i].plan.isPhysicalPlan() {
 						runParallelChecks = false
 						break
@@ -2212,7 +2212,8 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 				}
 			}
 			if runParallelChecks {
-				if err := dsp.planAndRunChecksInParallel(ctx, plan.checkPlans, planner, evalCtxFactory, recv); err != nil {
+				checksToRun := plan.checkPlans[checksIdx:]
+				if err := dsp.planAndRunChecksInParallel(ctx, checksToRun, planner, evalCtxFactory, recv); err != nil {
 					recv.SetError(err)
 					return false
 				}
@@ -2245,7 +2246,8 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 		}
 
 		// Finally, run triggers.
-		for ; triggersIdx < len(plan.triggers); triggersIdx++ {
+		numTriggers := len(plan.triggers)
+		for ; triggersIdx < numTriggers; triggersIdx++ {
 			trigger := &plan.triggers[triggersIdx]
 			hasBuffer, numBufferedRows := checkPostQueryBuffer(plan.triggers[triggersIdx])
 			if hasBuffer && numBufferedRows == 0 {
