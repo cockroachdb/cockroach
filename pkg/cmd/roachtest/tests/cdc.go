@@ -725,13 +725,14 @@ type opt func(ct *cdcTester)
 // N.B. this allocates a workload + sink only node, without it, workload and sink will be on the same node.
 func withNumSinkNodes(num int) opt {
 	return func(ct *cdcTester) {
-		ct.workloadNode = ct.cluster.Node(ct.cluster.Spec().NodeCount - num)
-		ct.sinkNodes = ct.cluster.Range(ct.cluster.Spec().NodeCount-num+1, ct.cluster.Spec().NodeCount)
+		ct.crdbNodes = ct.cluster.Range(1, ct.cluster.Spec().NodeCount-num-1)
+		ct.workloadNode = ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		ct.sinkNodes = ct.cluster.Range(ct.cluster.Spec().NodeCount-num, ct.cluster.Spec().NodeCount-1)
 	}
 }
 
 func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...opt) cdcTester {
-	// By convention the nodes are split up like [crdb..., workload, sink...]. The sink nodes are always the last numSinkNodes ones.
+	// By convention the nodes are split up like [crdb..., sink..., workload].
 	// N.B.:
 	//    - If it's a single node cluster everything shares node 1.
 	//    - If the sink is not provisioned through the withNumSinkNodes opt, it shares a node with the workload node.
