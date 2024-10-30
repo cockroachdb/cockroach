@@ -201,8 +201,10 @@ func TestRaftTracing(t *testing.T) {
 				expectedMessages := []string{
 					`replica_proposal_buf.* flushing proposal to Raft`,
 					`replica_proposal_buf.* registering local trace`,
+					// Note that we don't assert that the 1->3 MsgApp goes through, as
+					// the ordering may change between 1->2 and 1->3. It should be
+					// sufficient to just check one of them for tracing.
 					`replica_raft.* 1->2 MsgApp`,
-					`replica_raft.* 1->3 MsgApp`,
 					`replica_raft.* AppendThread->1 MsgStorageAppendResp`,
 					`ack-ing replication success to the client`,
 				}
