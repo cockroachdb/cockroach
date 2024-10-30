@@ -12,6 +12,7 @@ import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -248,7 +249,9 @@ func (ssh *supporterStateHandler) finishUpdate(ssfu *supporterStateForUpdate) {
 // handleHeartbeat handles a single heartbeat message. It updates the inProgress
 // view of supporterStateForUpdate only if there are any changes, and returns
 // a heartbeat response message.
-func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Message {
+func (ssfu *supporterStateForUpdate) handleHeartbeat(
+	ctx context.Context, msg *slpb.Message,
+) slpb.Message {
 	from := msg.From
 	ss, ok := ssfu.getSupportFor(from)
 	if !ok {
@@ -257,6 +260,7 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Mes
 	ssNew := handleHeartbeat(ss, msg)
 	if ss != ssNew {
 		ssfu.inProgress.supportFor[from] = ssNew
+		logSupportForChange(ctx, ss, ssNew)
 	}
 	return slpb.Message{
 		Type:       slpb.MsgHeartbeatResp,
@@ -270,16 +274,28 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Mes
 // handleHeartbeat contains the core logic for updating the epoch and expiration
 // of a support requester upon receiving a heartbeat.
 func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState {
+	assert(!msg.Expiration.IsEmpty(), "requested support with zero expiration")
 	if ss.Epoch == msg.Epoch {
 		ss.Expiration.Forward(msg.Expiration)
 	} else if ss.Epoch < msg.Epoch {
-		assert(
-			ss.Expiration.Less(msg.Expiration), "support expiration regression across epochs",
-		)
+		assert(ss.Expiration.Less(msg.Expiration), "support expiration regression across epochs")
 		ss.Epoch = msg.Epoch
 		ss.Expiration = msg.Expiration
 	}
 	return ss
+}
+
+// logSupportForChange logs the old and new support state after handling a
+// heartbeat.
+func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.SupportState) {
+	assert(!ssNew.Expiration.IsEmpty(), "requested support with zero expiration")
+	if ss.Epoch == ssNew.Epoch && !ss.Expiration.IsEmpty() {
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			log.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
+		}
+	} else {
+		log.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
+	}
 }
 
 // Functions for withdrawing support.
@@ -287,7 +303,9 @@ func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
 // The function returns the number of stores for which support was withdrawn.
-func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (numWithdrawn int) {
+func (ssfu *supporterStateForUpdate) withdrawSupport(
+	ctx context.Context, now hlc.ClockTimestamp,
+) (numWithdrawn int) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
@@ -298,6 +316,7 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) (nu
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
 			ssfu.inProgress.supportFor[id] = ssNew
+			log.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
 			meta := ssfu.getMeta()
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
