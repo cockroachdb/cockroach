@@ -394,6 +394,11 @@ type testingRCRange struct {
 	snapshots []testingTrackerSnapshot
 	raftLog   raft.MemoryStorage
 
+	// mu is ordered after RaftMu.
+	//
+	// This is because we hold RaftMu when calling into the RangeController,
+	// which in turn may call back out to the testingRCRange for state
+	// information, as it mocks the dependencies of the RangeController.
 	mu struct {
 		syncutil.Mutex
 		r testingRange
@@ -506,26 +511,37 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 }
 
 func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av AdmittedVector) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, replDesc := range sortReplicasLocked(r) {
-		replica := r.mu.r.replicaSet[replDesc.ReplicaID]
-		if replica.desc.StoreID == storeID {
-			for _, v := range av.Admitted {
-				// Ensure that Match doesn't lag behind the highest index in the
-				// AdmittedVector.
-				replica.info.Match = max(replica.info.Match, v)
+	var replicaID roachpb.ReplicaID
+	var found bool
+	func() {
+		// We need to ensure that r.mu isn't held before (and while) holding
+		// RaftMu, in order to order the locks correctly (RaftMu before
+		// testingRCRange.mu).
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for _, replDesc := range sortReplicasLocked(r) {
+			replica := r.mu.r.replicaSet[replDesc.ReplicaID]
+			if replica.desc.StoreID == storeID {
+				for _, v := range av.Admitted {
+					// Ensure that Match doesn't lag behind the highest index in the
+					// AdmittedVector.
+					replica.info.Match = max(replica.info.Match, v)
+				}
+				replicaID = replica.desc.ReplicaID
+				r.mu.r.replicaSet[replicaID] = replica
+				found = true
+				break
 			}
-			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
-			func() {
-				r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
-				defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
-				r.rc.AdmitRaftMuLocked(ctx, replica.desc.ReplicaID, av)
-			}()
-			return
 		}
+	}()
+
+	if !found {
+		panic("replica not found")
 	}
+
+	r.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+	defer r.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+	r.rc.AdmitRaftMuLocked(ctx, replicaID, av)
 }
 
 type testingRange struct {
