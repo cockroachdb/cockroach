@@ -246,8 +246,8 @@ var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-// concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
-var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
+// ConcurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
+var ConcurrentRangefeedItersLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.concurrent_catchup_iterators",
 	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
@@ -1683,11 +1683,11 @@ func NewStore(
 			int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
-		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
+		"rangefeedIterLimiter", int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
 	)
-	concurrentRangefeedItersLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+	ConcurrentRangefeedItersLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.ConcurrentRangefeedIters.SetLimit(
-			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
+			int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
 	authorizer := cfg.TestingKnobs.TenantRateKnobs.Authorizer
@@ -3241,7 +3241,10 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream,
+	streamCtx context.Context,
+	args *kvpb.RangeFeedRequest,
+	stream rangefeed.Stream,
+	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) error {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
@@ -3269,7 +3272,7 @@ func (s *Store) RangeFeed(
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(streamCtx, args, stream, pacer)
+	return repl.RangeFeed(streamCtx, args, stream, pacer, perConsumerCatchupLimiter)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for
