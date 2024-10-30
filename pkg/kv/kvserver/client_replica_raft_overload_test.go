@@ -59,6 +59,11 @@ func TestReplicaRaftOverload(t *testing.T) {
 	{
 		_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 1.0`)
 		require.NoError(t, err)
+		// NB: Follower pausing is only enabled when the flow control mode is set to
+		// 'apply_to_elastic'. This is because the follower pausing mechanism is subsumed
+		// by RACv2 when the flow control mode is set to 'apply_to_all'.
+		_, err = tc.ServerConn(0).Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_elastic'`)
+		require.NoError(t, err)
 	}
 	k := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
