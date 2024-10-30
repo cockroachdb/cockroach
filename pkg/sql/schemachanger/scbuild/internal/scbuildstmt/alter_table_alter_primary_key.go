@@ -69,8 +69,6 @@ func alterPrimaryKey(
 
 	// TODO (xiang): This section contains all fall-back cases and need to
 	// be removed to fully support `ALTER PRIMARY KEY`.
-	fallBackIfShardedIndexExists(b, t, tbl.TableID)
-	fallBackIfPartitionedIndexExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t.n, tbl.TableID)
 	fallBackIfSubZoneConfigExists(b, t.n, tbl.TableID)
 
@@ -396,42 +394,6 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 	}
 
 	return true
-}
-
-// fallBackIfPartitionedIndexExists panics with an unimplemented error
-// if there exists partitioned indexes on the table.
-func fallBackIfPartitionedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
-	scpb.ForEachIndexPartitioning(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, _ *scpb.IndexPartitioning) {
-		panic(scerrors.NotImplementedErrorf(t.n,
-			"ALTER PRIMARY KEY on a table with index partitioning is not yet supported"))
-	})
-}
-
-// fallBackIfShardedIndexExists panics with an unimplemented
-// error if there exists sharded indexes on the table.
-func fallBackIfShardedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
-	var hasSecondary bool
-	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-		hasSecondary = true
-		if idx.Sharding != nil {
-			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded secondary "+
-				"indexes is not yet supported."))
-		}
-	})
-	// Primary index sharding only matters if there are secondary indexes: even
-	// if we drop the sharding on the primary, we need to maintain it on the
-	// secondaries if they exist.
-	if !hasSecondary {
-		return
-	}
-	scpb.ForEachPrimaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
-		if idx.Sharding != nil {
-			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded primary "+
-				"indexes is not yet supported."))
-		}
-	})
 }
 
 // fallBackIfRegionalByRowTable panics with an unimplemented
