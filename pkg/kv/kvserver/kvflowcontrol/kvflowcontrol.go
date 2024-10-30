@@ -41,7 +41,7 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	modeDict[ApplyToElastic], /* default value */
+	modeDict[ApplyToAll], /* default value */
 	modeDict,
 )
 
