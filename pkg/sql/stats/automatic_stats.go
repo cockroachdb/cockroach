@@ -984,7 +984,9 @@ func (r *Refresher) refreshStats(
 		usingExtremes,
 	)
 
-	log.Infof(ctx, "automatically executing %q", stmt)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.Infof(ctx, "automatically executing %q", stmt)
+	}
 	_ /* rows */, err := r.internalDB.Executor().Exec(
 		ctx,
 		"create-stats",
