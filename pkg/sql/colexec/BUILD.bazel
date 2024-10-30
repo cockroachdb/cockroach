@@ -77,6 +77,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
+        "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
         "//pkg/util/intsets",
