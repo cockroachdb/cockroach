@@ -8,6 +8,7 @@ package producer
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
@@ -68,6 +69,8 @@ type eventStream struct {
 	lastCheckpointLen  int
 
 	debug streampb.DebugProducerStatus
+
+	consumerReady atomic.Bool
 }
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
@@ -233,6 +236,9 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 	s.debug.Flushes.EmitWaitNanos.Add(emitWait)
 	s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
 
+	s.consumerReady.Store(true)
+	defer s.consumerReady.Store(false)
+
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -388,7 +394,13 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 }
 
 func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
-	if s.seb.size > int(s.spec.Config.BatchByteSize) {
+	// If the consumer is ready to ingest, flush at a lower threshold. This
+	// ensures the consumer always has work to do.
+	//
+	// If the consumer is not ready, the larger batch delays the flush call and
+	// preventing the slow consumer from blocking rangefeed progress, avoiding
+	// catchup scans.
+	if (s.seb.size > int(s.spec.Config.BatchByteSize)) || s.consumerReady.Load() && s.seb.size > minBatchByteSize {
 		return s.flushBatch(ctx)
 	}
 	return nil
@@ -497,6 +509,7 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 }
 
 const defaultBatchSize = 1 << 20
+const minBatchByteSize = 1 << 20
 
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
