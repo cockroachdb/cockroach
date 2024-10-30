@@ -49,11 +49,27 @@ var isResponseMsg = [...]bool{
 	pb.MsgFortifyLeaderResp: true,
 }
 
+// isMsgFromLeader contains message types that come from the leader of the
+// message's term.
 var isMsgFromLeader = [...]bool{
 	pb.MsgApp: true,
 	// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
 	// Message.Term until we address #127348 and #127349.
 	// pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
+}
+
+// isMsgIndicatingLeader contains message types that indicate that there is a
+// leader at the message's term, even if the message is not from the leader
+// itself.
+//
+// TODO(nvanbenschoten): remove this when we address the TODO above.
+var isMsgIndicatingLeader = [...]bool{
+	pb.MsgApp:             true,
+	pb.MsgSnap:            true,
 	pb.MsgHeartbeat:       true,
 	pb.MsgTimeoutNow:      true,
 	pb.MsgFortifyLeader:   true,
@@ -75,6 +91,10 @@ func IsResponseMsg(msgt pb.MessageType) bool {
 
 func IsMsgFromLeader(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isMsgFromLeader[:])
+}
+
+func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
+	return isMsgInArray(msgt, isMsgIndicatingLeader[:])
 }
 
 func IsLocalMsgTarget(id pb.PeerID) bool {

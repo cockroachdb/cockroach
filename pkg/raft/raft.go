@@ -1064,8 +1064,7 @@ func (r *raft) setTerm(term uint64) {
 	assertTrue(term > r.Term, "term cannot regress")
 	r.Term = term
 	r.Vote = None
-	r.lead = None
-	r.leadEpoch = 0
+	r.resetLead()
 }
 
 func (r *raft) setVote(id pb.PeerID) {
@@ -1086,7 +1085,7 @@ func (r *raft) setLead(lead pb.PeerID) {
 
 func (r *raft) resetLead() {
 	r.lead = None
-	r.leadEpoch = 0
+	r.resetLeadEpoch()
 }
 
 func (r *raft) setLeadEpoch(leadEpoch pb.Epoch) {
@@ -1537,13 +1536,21 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if IsMsgFromLeader(m.Type) {
-				// We've just received a message from a leader which was elected
-				// at a higher term. The old leader is no longer fortified, so it's
-				// safe to de-fortify at this point.
+			if IsMsgIndicatingLeader(m.Type) {
+				// We've just received a message that indicates that a new leader
+				// was elected at a higher term, but the message may not be from the
+				// leader itself. Either way, the old leader is no longer fortified,
+				// so it's safe to de-fortify at this point.
 				r.deFortify(m.From, m.Term)
-				r.becomeFollower(m.Term, m.From)
+				var lead pb.PeerID
+				if IsMsgFromLeader(m.Type) {
+					lead = m.From
+				}
+				r.becomeFollower(m.Term, lead)
 			} else {
+				// We've just received a message that does not indicate that a new
+				// leader was elected at a higher term. All it means is that some
+				// other peer has this term.
 				r.becomeFollower(m.Term, None)
 			}
 		}
