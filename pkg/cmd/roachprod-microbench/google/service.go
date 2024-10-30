@@ -160,7 +160,7 @@ func (srv *Service) createRawSheet(
 
 		// Column: Benchmark name.
 		vals = append(vals, strCell("name"))
-		metadata = append(metadata, withSize(400))
+		metadata = append(metadata, withSize(600))
 
 		// Columns: Metric names.
 		for _, run := range runs {
@@ -269,7 +269,7 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 		if len(info.nonZeroVals) == 0 {
 			noChanges := fmt.Sprintf("no change in %s", info.metric.Name)
 			vals = append(vals, strCell(noChanges))
-			metadata = append(metadata, withSize(200))
+			metadata = append(metadata, withSize(400))
 			continue
 		}
 
@@ -308,7 +308,7 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 			},
 		})
 		vals = append(vals, &sheets.CellData{})
-		metadata = append(metadata, withSize(200), withSize(100))
+		metadata = append(metadata, withSize(400), withSize(100))
 
 		deltaCol := int64(len(vals)) - 1
 		cf := condFormatting(props.SheetId, deltaCol, smallerBetter)
