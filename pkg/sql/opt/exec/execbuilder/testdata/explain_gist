@@ -171,3 +171,28 @@ SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
           table: ?@?
           spans: 1+ spans
           limit
+
+# Regression test for #108979. Correctly decode inverted filters.
+query T nosort
+SELECT crdb_internal.decode_plan_gist('AgGwAgQAgQIAAgAEBQITsAICAxgGDA==')
+----
+• top-k
+│ order
+│
+└── • filter
+    │
+    └── • index join
+        │ table: ?@?
+        │
+        └── • inverted filter
+            │
+            └── • scan
+                  table: ?@?
+                  spans: 1+ spans
+
+# Regression test for #109560. Incorrectly formed plan gist should not cause
+# internal error.
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('Ag8f')
+----
+• union all
