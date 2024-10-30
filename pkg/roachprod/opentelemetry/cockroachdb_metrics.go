@@ -1102,7 +1102,7 @@ var cockroachdbMetrics = map[string]string{
 	"physical_replication_commit_latency_bucket":                  "physical_replication.commit_latency.bucket",
 	"physical_replication_commit_latency_count":                   "physical_replication.commit_latency.count",
 	"physical_replication_commit_latency_sum":                     "physical_replication.commit_latency.sum",
-	"physical_replication_cutover_progress":                       "physical_replication.cutover_progress",
+	"physical_replication_failover_progress":                      "physical_replication.failover_progress",
 	"physical_replication_distsql_replan_count":                   "physical_replication.distsql_replan_count",
 	"physical_replication_events_ingested":                        "physical_replication.events_ingested",
 	"physical_replication_flush_hist_nanos":                       "physical_replication.flush_hist_nanos",
