@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build/engflow"
@@ -181,6 +182,18 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 			}
 		}
 	}
+
+	sort.Slice(failedTests, func(i, j int) bool {
+		t1 := failedTests[i]
+		t2 := failedTests[2]
+		if t1.label < t2.label {
+			return true
+		} else if t1.label == t2.label {
+			return t1.name < t2.name
+		} else {
+			return false
+		}
+	})
 
 	if len(failedTests) != 0 {
 		_, err := f.WriteString(`| Label | TestName | Status | Link |

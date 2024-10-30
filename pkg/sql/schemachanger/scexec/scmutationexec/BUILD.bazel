@@ -22,6 +22,7 @@ go_library(
         "stats.go",
         "table.go",
         "trigger.go",
+        "zone_config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",
     visibility = ["//visibility:public"],

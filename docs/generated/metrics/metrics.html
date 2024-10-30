@@ -250,6 +250,7 @@
 <tr><td>STORAGE</td><td>kv.rangefeed.processors_goroutine</td><td>Number of active RangeFeed processors using goroutines</td><td>Processors</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>kv.rangefeed.processors_scheduler</td><td>Number of active RangeFeed processors using scheduler</td><td>Processors</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>kv.rangefeed.registrations</td><td>Number of active RangeFeed registrations</td><td>Registrations</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>kv.rangefeed.scheduled_processor.queue_timeout</td><td>Number of times the RangeFeed processor shutdown because of a queue send timeout</td><td>Failure Count</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>kv.rangefeed.scheduler.normal.latency</td><td>KV RangeFeed normal scheduler latency</td><td>Latency</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>kv.rangefeed.scheduler.normal.queue_size</td><td>Number of entries in the KV RangeFeed normal scheduler queue</td><td>Pending Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>kv.rangefeed.scheduler.system.latency</td><td>KV RangeFeed system scheduler latency</td><td>Latency</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
