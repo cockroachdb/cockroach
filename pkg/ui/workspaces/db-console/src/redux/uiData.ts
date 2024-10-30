@@ -57,11 +57,6 @@ export class OptInAttributes {
 // was last dismissed.
 export const VERSION_DISMISSED_KEY = "version_dismissed";
 
-// LICENSE_UPDATE_DISMISSED_KEY is the uiData key on the server that tracks when the licence
-// update banner was last dismissed. This banner notifies the user that we've changed our
-// licensing if they're deployed without an active license.
-export const LICENSE_UPDATE_DISMISSED_KEY = "license_update_dismissed";
-
 // INSTRUCTIONS_BOX_COLLAPSED_KEY is the uiData key on the server that tracks whether the
 // instructions box on the cluster viz has been collapsed or not.
 export const INSTRUCTIONS_BOX_COLLAPSED_KEY =
