@@ -108,71 +108,65 @@ root
            ├── columns: <none>
            ├── fetch columns: k:32 child.x:33
            ├── update-mapping:
-           │    ├── k_new:55 => k:28
-           │    └── x_new:56 => child.x:29
+           │    └── x_new:37 => child.x:29
            ├── input binding: &2
-           ├── project
-           │    ├── columns: k_new:55 x_new:56 k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
-           │    ├── barrier
-           │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
-           │    │    └── select
-           │    │         ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
-           │    │         ├── barrier
-           │    │         │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
-           │    │         │    └── project
-           │    │         │         ├── columns: "check-rows":54 k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53
-           │    │         │         ├── project
-           │    │         │         │    ├── columns: f:53 k:32 child.x:33 x_old:36 x_new:37 old:38 new:39
-           │    │         │         │    ├── barrier
-           │    │         │         │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39
-           │    │         │         │    │    └── project
-           │    │         │         │    │         ├── columns: new:39 k:32 child.x:33 x_old:36 x_new:37 old:38
-           │    │         │         │    │         ├── project
-           │    │         │         │    │         │    ├── columns: old:38 k:32 child.x:33 x_old:36 x_new:37
-           │    │         │         │    │         │    ├── inner-join (hash)
-           │    │         │         │    │         │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37
-           │    │         │         │    │         │    │    ├── scan child
-           │    │         │         │    │         │    │    │    └── columns: k:32 child.x:33
-           │    │         │         │    │         │    │    ├── select
-           │    │         │         │    │         │    │    │    ├── columns: x_old:36 x_new:37
-           │    │         │         │    │         │    │    │    ├── with-scan &1
-           │    │         │         │    │         │    │    │    │    ├── columns: x_old:36 x_new:37
-           │    │         │         │    │         │    │    │    │    └── mapping:
-           │    │         │         │    │         │    │    │    │         ├──  xy.x:5 => x_old:36
-           │    │         │         │    │         │    │    │    │         └──  x_new:26 => x_new:37
-           │    │         │         │    │         │    │    │    └── filters
-           │    │         │         │    │         │    │    │         └── x_old:36 IS DISTINCT FROM x_new:37
-           │    │         │         │    │         │    │    └── filters
-           │    │         │         │    │         │    │         └── child.x:33 = x_old:36
-           │    │         │         │    │         │    └── projections
-           │    │         │         │    │         │         └── ((k:32, child.x:33) AS k, x) [as=old:38]
-           │    │         │         │    │         └── projections
-           │    │         │         │    │              └── ((k:32, x_new:37) AS k, x) [as=new:39]
-           │    │         │         │    └── projections
-           │    │         │         │         └── f(new:39, old:38, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:53]
-           │    │         │         └── projections
-           │    │         │              └── CASE WHEN f:53 IS DISTINCT FROM new:39 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":54]
-           │    │         └── filters
-           │    │              └── f:53 IS DISTINCT FROM NULL
-           │    └── projections
-           │         ├── (f:53).k [as=k_new:55]
-           │         └── (f:53).x [as=x_new:56]
+           ├── barrier
+           │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
+           │    └── select
+           │         ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
+           │         ├── barrier
+           │         │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
+           │         │    └── project
+           │         │         ├── columns: "check-rows":54 k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53
+           │         │         ├── project
+           │         │         │    ├── columns: f:53 k:32 child.x:33 x_old:36 x_new:37 old:38 new:39
+           │         │         │    ├── barrier
+           │         │         │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39
+           │         │         │    │    └── project
+           │         │         │    │         ├── columns: new:39 k:32 child.x:33 x_old:36 x_new:37 old:38
+           │         │         │    │         ├── project
+           │         │         │    │         │    ├── columns: old:38 k:32 child.x:33 x_old:36 x_new:37
+           │         │         │    │         │    ├── inner-join (hash)
+           │         │         │    │         │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37
+           │         │         │    │         │    │    ├── scan child
+           │         │         │    │         │    │    │    └── columns: k:32 child.x:33
+           │         │         │    │         │    │    ├── select
+           │         │         │    │         │    │    │    ├── columns: x_old:36 x_new:37
+           │         │         │    │         │    │    │    ├── with-scan &1
+           │         │         │    │         │    │    │    │    ├── columns: x_old:36 x_new:37
+           │         │         │    │         │    │    │    │    └── mapping:
+           │         │         │    │         │    │    │    │         ├──  xy.x:5 => x_old:36
+           │         │         │    │         │    │    │    │         └──  x_new:26 => x_new:37
+           │         │         │    │         │    │    │    └── filters
+           │         │         │    │         │    │    │         └── x_old:36 IS DISTINCT FROM x_new:37
+           │         │         │    │         │    │    └── filters
+           │         │         │    │         │    │         └── child.x:33 = x_old:36
+           │         │         │    │         │    └── projections
+           │         │         │    │         │         └── ((k:32, child.x:33) AS k, x) [as=old:38]
+           │         │         │    │         └── projections
+           │         │         │    │              └── ((k:32, x_new:37) AS k, x) [as=new:39]
+           │         │         │    └── projections
+           │         │         │         └── f(new:39, old:38, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:53]
+           │         │         └── projections
+           │         │              └── CASE WHEN f:53 IS DISTINCT FROM new:39 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":54]
+           │         └── filters
+           │              └── f:53 IS DISTINCT FROM NULL
            └── f-k-checks
                 └── f-k-checks-item: child(x) -> xy(x)
                      └── anti-join (hash)
-                          ├── columns: x:57
+                          ├── columns: x:55
                           ├── select
-                          │    ├── columns: x:57
+                          │    ├── columns: x:55
                           │    ├── with-scan &2
-                          │    │    ├── columns: x:57
+                          │    │    ├── columns: x:55
                           │    │    └── mapping:
-                          │    │         └──  x_new:56 => x:57
+                          │    │         └──  x_new:37 => x:55
                           │    └── filters
-                          │         └── x:57 IS NOT NULL
+                          │         └── x:55 IS NOT NULL
                           ├── scan xy
-                          │    └── columns: xy.x:58
+                          │    └── columns: xy.x:56
                           └── filters
-                               └── x:57 = xy.x:58
+                               └── x:55 = xy.x:56
 
 build-post-queries format=(hide-all,show-columns)
 DELETE FROM xy WHERE x = 1;
@@ -332,71 +326,65 @@ root
            ├── columns: <none>
            ├── fetch columns: k:52 child.x:53
            ├── update-mapping:
-           │    ├── k_new:75 => k:48
-           │    └── x_new:76 => child.x:49
+           │    └── x_new:57 => child.x:49
            ├── input binding: &2
-           ├── project
-           │    ├── columns: k_new:75 x_new:76 k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
-           │    ├── barrier
-           │    │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
-           │    │    └── select
-           │    │         ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
-           │    │         ├── barrier
-           │    │         │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
-           │    │         │    └── project
-           │    │         │         ├── columns: "check-rows":74 k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73
-           │    │         │         ├── project
-           │    │         │         │    ├── columns: f:73 k:52 child.x:53 x_old:56 x_new:57 old:58 new:59
-           │    │         │         │    ├── barrier
-           │    │         │         │    │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59
-           │    │         │         │    │    └── project
-           │    │         │         │    │         ├── columns: new:59 k:52 child.x:53 x_old:56 x_new:57 old:58
-           │    │         │         │    │         ├── project
-           │    │         │         │    │         │    ├── columns: old:58 k:52 child.x:53 x_old:56 x_new:57
-           │    │         │         │    │         │    ├── inner-join (hash)
-           │    │         │         │    │         │    │    ├── columns: k:52 child.x:53 x_old:56 x_new:57
-           │    │         │         │    │         │    │    ├── scan child
-           │    │         │         │    │         │    │    │    └── columns: k:52 child.x:53
-           │    │         │         │    │         │    │    ├── select
-           │    │         │         │    │         │    │    │    ├── columns: x_old:56 x_new:57
-           │    │         │         │    │         │    │    │    ├── with-scan &1
-           │    │         │         │    │         │    │    │    │    ├── columns: x_old:56 x_new:57
-           │    │         │         │    │         │    │    │    │    └── mapping:
-           │    │         │         │    │         │    │    │    │         ├──  xy.x:7 => x_old:56
-           │    │         │         │    │         │    │    │    │         └──  upsert_x:46 => x_new:57
-           │    │         │         │    │         │    │    │    └── filters
-           │    │         │         │    │         │    │    │         └── x_old:56 IS DISTINCT FROM x_new:57
-           │    │         │         │    │         │    │    └── filters
-           │    │         │         │    │         │    │         └── child.x:53 = x_old:56
-           │    │         │         │    │         │    └── projections
-           │    │         │         │    │         │         └── ((k:52, child.x:53) AS k, x) [as=old:58]
-           │    │         │         │    │         └── projections
-           │    │         │         │    │              └── ((k:52, x_new:57) AS k, x) [as=new:59]
-           │    │         │         │    └── projections
-           │    │         │         │         └── f(new:59, old:58, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:73]
-           │    │         │         └── projections
-           │    │         │              └── CASE WHEN f:73 IS DISTINCT FROM new:59 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":74]
-           │    │         └── filters
-           │    │              └── f:73 IS DISTINCT FROM NULL
-           │    └── projections
-           │         ├── (f:73).k [as=k_new:75]
-           │         └── (f:73).x [as=x_new:76]
+           ├── barrier
+           │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
+           │    └── select
+           │         ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
+           │         ├── barrier
+           │         │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73 "check-rows":74
+           │         │    └── project
+           │         │         ├── columns: "check-rows":74 k:52 child.x:53 x_old:56 x_new:57 old:58 new:59 f:73
+           │         │         ├── project
+           │         │         │    ├── columns: f:73 k:52 child.x:53 x_old:56 x_new:57 old:58 new:59
+           │         │         │    ├── barrier
+           │         │         │    │    ├── columns: k:52 child.x:53 x_old:56 x_new:57 old:58 new:59
+           │         │         │    │    └── project
+           │         │         │    │         ├── columns: new:59 k:52 child.x:53 x_old:56 x_new:57 old:58
+           │         │         │    │         ├── project
+           │         │         │    │         │    ├── columns: old:58 k:52 child.x:53 x_old:56 x_new:57
+           │         │         │    │         │    ├── inner-join (hash)
+           │         │         │    │         │    │    ├── columns: k:52 child.x:53 x_old:56 x_new:57
+           │         │         │    │         │    │    ├── scan child
+           │         │         │    │         │    │    │    └── columns: k:52 child.x:53
+           │         │         │    │         │    │    ├── select
+           │         │         │    │         │    │    │    ├── columns: x_old:56 x_new:57
+           │         │         │    │         │    │    │    ├── with-scan &1
+           │         │         │    │         │    │    │    │    ├── columns: x_old:56 x_new:57
+           │         │         │    │         │    │    │    │    └── mapping:
+           │         │         │    │         │    │    │    │         ├──  xy.x:7 => x_old:56
+           │         │         │    │         │    │    │    │         └──  upsert_x:46 => x_new:57
+           │         │         │    │         │    │    │    └── filters
+           │         │         │    │         │    │    │         └── x_old:56 IS DISTINCT FROM x_new:57
+           │         │         │    │         │    │    └── filters
+           │         │         │    │         │    │         └── child.x:53 = x_old:56
+           │         │         │    │         │    └── projections
+           │         │         │    │         │         └── ((k:52, child.x:53) AS k, x) [as=old:58]
+           │         │         │    │         └── projections
+           │         │         │    │              └── ((k:52, x_new:57) AS k, x) [as=new:59]
+           │         │         │    └── projections
+           │         │         │         └── f(new:59, old:58, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:73]
+           │         │         └── projections
+           │         │              └── CASE WHEN f:73 IS DISTINCT FROM new:59 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":74]
+           │         └── filters
+           │              └── f:73 IS DISTINCT FROM NULL
            └── f-k-checks
                 └── f-k-checks-item: child(x) -> xy(x)
                      └── anti-join (hash)
-                          ├── columns: x:77
+                          ├── columns: x:75
                           ├── select
-                          │    ├── columns: x:77
+                          │    ├── columns: x:75
                           │    ├── with-scan &2
-                          │    │    ├── columns: x:77
+                          │    │    ├── columns: x:75
                           │    │    └── mapping:
-                          │    │         └──  x_new:76 => x:77
+                          │    │         └──  x_new:57 => x:75
                           │    └── filters
-                          │         └── x:77 IS NOT NULL
+                          │         └── x:75 IS NOT NULL
                           ├── scan xy
-                          │    └── columns: xy.x:78
+                          │    └── columns: xy.x:76
                           └── filters
-                               └── x:77 = xy.x:78
+                               └── x:75 = xy.x:76
 
 build-post-queries format=(hide-all,show-columns)
 INSERT INTO xy VALUES (1, 2) ON CONFLICT (x) DO UPDATE SET y = 3;
@@ -491,71 +479,65 @@ root
            ├── columns: <none>
            ├── fetch columns: k:53 child.x:54
            ├── update-mapping:
-           │    ├── k_new:76 => k:49
-           │    └── x_new:77 => child.x:50
+           │    └── x_new:58 => child.x:50
            ├── input binding: &2
-           ├── project
-           │    ├── columns: k_new:76 x_new:77 k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
-           │    ├── barrier
-           │    │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
-           │    │    └── select
-           │    │         ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
-           │    │         ├── barrier
-           │    │         │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
-           │    │         │    └── project
-           │    │         │         ├── columns: "check-rows":75 k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74
-           │    │         │         ├── project
-           │    │         │         │    ├── columns: f:74 k:53 child.x:54 x_old:57 x_new:58 old:59 new:60
-           │    │         │         │    ├── barrier
-           │    │         │         │    │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60
-           │    │         │         │    │    └── project
-           │    │         │         │    │         ├── columns: new:60 k:53 child.x:54 x_old:57 x_new:58 old:59
-           │    │         │         │    │         ├── project
-           │    │         │         │    │         │    ├── columns: old:59 k:53 child.x:54 x_old:57 x_new:58
-           │    │         │         │    │         │    ├── inner-join (hash)
-           │    │         │         │    │         │    │    ├── columns: k:53 child.x:54 x_old:57 x_new:58
-           │    │         │         │    │         │    │    ├── scan child
-           │    │         │         │    │         │    │    │    └── columns: k:53 child.x:54
-           │    │         │         │    │         │    │    ├── select
-           │    │         │         │    │         │    │    │    ├── columns: x_old:57 x_new:58
-           │    │         │         │    │         │    │    │    ├── with-scan &1
-           │    │         │         │    │         │    │    │    │    ├── columns: x_old:57 x_new:58
-           │    │         │         │    │         │    │    │    │    └── mapping:
-           │    │         │         │    │         │    │    │    │         ├──  xy.x:7 => x_old:57
-           │    │         │         │    │         │    │    │    │         └──  upsert_x:47 => x_new:58
-           │    │         │         │    │         │    │    │    └── filters
-           │    │         │         │    │         │    │    │         └── x_old:57 IS DISTINCT FROM x_new:58
-           │    │         │         │    │         │    │    └── filters
-           │    │         │         │    │         │    │         └── child.x:54 = x_old:57
-           │    │         │         │    │         │    └── projections
-           │    │         │         │    │         │         └── ((k:53, child.x:54) AS k, x) [as=old:59]
-           │    │         │         │    │         └── projections
-           │    │         │         │    │              └── ((k:53, x_new:58) AS k, x) [as=new:60]
-           │    │         │         │    └── projections
-           │    │         │         │         └── f(new:60, old:59, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:74]
-           │    │         │         └── projections
-           │    │         │              └── CASE WHEN f:74 IS DISTINCT FROM new:60 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":75]
-           │    │         └── filters
-           │    │              └── f:74 IS DISTINCT FROM NULL
-           │    └── projections
-           │         ├── (f:74).k [as=k_new:76]
-           │         └── (f:74).x [as=x_new:77]
+           ├── barrier
+           │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
+           │    └── select
+           │         ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
+           │         ├── barrier
+           │         │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74 "check-rows":75
+           │         │    └── project
+           │         │         ├── columns: "check-rows":75 k:53 child.x:54 x_old:57 x_new:58 old:59 new:60 f:74
+           │         │         ├── project
+           │         │         │    ├── columns: f:74 k:53 child.x:54 x_old:57 x_new:58 old:59 new:60
+           │         │         │    ├── barrier
+           │         │         │    │    ├── columns: k:53 child.x:54 x_old:57 x_new:58 old:59 new:60
+           │         │         │    │    └── project
+           │         │         │    │         ├── columns: new:60 k:53 child.x:54 x_old:57 x_new:58 old:59
+           │         │         │    │         ├── project
+           │         │         │    │         │    ├── columns: old:59 k:53 child.x:54 x_old:57 x_new:58
+           │         │         │    │         │    ├── inner-join (hash)
+           │         │         │    │         │    │    ├── columns: k:53 child.x:54 x_old:57 x_new:58
+           │         │         │    │         │    │    ├── scan child
+           │         │         │    │         │    │    │    └── columns: k:53 child.x:54
+           │         │         │    │         │    │    ├── select
+           │         │         │    │         │    │    │    ├── columns: x_old:57 x_new:58
+           │         │         │    │         │    │    │    ├── with-scan &1
+           │         │         │    │         │    │    │    │    ├── columns: x_old:57 x_new:58
+           │         │         │    │         │    │    │    │    └── mapping:
+           │         │         │    │         │    │    │    │         ├──  xy.x:7 => x_old:57
+           │         │         │    │         │    │    │    │         └──  upsert_x:47 => x_new:58
+           │         │         │    │         │    │    │    └── filters
+           │         │         │    │         │    │    │         └── x_old:57 IS DISTINCT FROM x_new:58
+           │         │         │    │         │    │    └── filters
+           │         │         │    │         │    │         └── child.x:54 = x_old:57
+           │         │         │    │         │    └── projections
+           │         │         │    │         │         └── ((k:53, child.x:54) AS k, x) [as=old:59]
+           │         │         │    │         └── projections
+           │         │         │    │              └── ((k:53, x_new:58) AS k, x) [as=new:60]
+           │         │         │    └── projections
+           │         │         │         └── f(new:60, old:59, 'tr_child', 'BEFORE', 'ROW', 'UPDATE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:74]
+           │         │         └── projections
+           │         │              └── CASE WHEN f:74 IS DISTINCT FROM new:60 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":75]
+           │         └── filters
+           │              └── f:74 IS DISTINCT FROM NULL
            └── f-k-checks
                 └── f-k-checks-item: child(x) -> xy(x)
                      └── anti-join (hash)
-                          ├── columns: x:78
+                          ├── columns: x:76
                           ├── select
-                          │    ├── columns: x:78
+                          │    ├── columns: x:76
                           │    ├── with-scan &2
-                          │    │    ├── columns: x:78
+                          │    │    ├── columns: x:76
                           │    │    └── mapping:
-                          │    │         └──  x_new:77 => x:78
+                          │    │         └──  x_new:58 => x:76
                           │    └── filters
-                          │         └── x:78 IS NOT NULL
+                          │         └── x:76 IS NOT NULL
                           ├── scan xy
-                          │    └── columns: xy.x:79
+                          │    └── columns: xy.x:77
                           └── filters
-                               └── x:78 = xy.x:79
+                               └── x:76 = xy.x:77
 
 # ------------------------------------------------------------------------------
 # Row-level AFTER triggers.
@@ -672,60 +654,55 @@ root
  │    └── delete child
  │         ├── columns: <none>
  │         ├── fetch columns: k:13 child.x:14
- │         └── project
- │              ├── columns: k_new:33 x_new:34 k:13 child.x:14 new:17 f:31 "check-rows":32
- │              ├── barrier
- │              │    ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
- │              │    └── select
- │              │         ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
- │              │         ├── barrier
- │              │         │    ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
- │              │         │    └── project
- │              │         │         ├── columns: "check-rows":32 k:13 child.x:14 new:17 f:31
- │              │         │         ├── project
- │              │         │         │    ├── columns: f:31 k:13 child.x:14 new:17
- │              │         │         │    ├── barrier
- │              │         │         │    │    ├── columns: k:13 child.x:14 new:17
- │              │         │         │    │    └── project
- │              │         │         │    │         ├── columns: new:17 k:13 child.x:14
- │              │         │         │    │         ├── select
- │              │         │         │    │         │    ├── columns: k:13 child.x:14
- │              │         │         │    │         │    ├── scan child
- │              │         │         │    │         │    │    └── columns: k:13 child.x:14
- │              │         │         │    │         │    └── filters
- │              │         │         │    │         │         ├── child.x:14 = 1
- │              │         │         │    │         │         └── child.x:14 IS DISTINCT FROM CAST(NULL AS INT8)
- │              │         │         │    │         └── projections
- │              │         │         │    │              └── ((k:13, child.x:14) AS k, x) [as=new:17]
- │              │         │         │    └── projections
- │              │         │         │         └── f(new:17, NULL, 'tr_child', 'BEFORE', 'ROW', 'INSERT', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:31]
- │              │         │         └── projections
- │              │         │              └── CASE WHEN f:31 IS DISTINCT FROM new:17 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":32]
- │              │         └── filters
- │              │              └── f:31 IS DISTINCT FROM NULL
- │              └── projections
- │                   ├── (f:31).k [as=k_new:33]
- │                   └── (f:31).x [as=x_new:34]
+ │         └── barrier
+ │              ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │              └── select
+ │                   ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │                   ├── barrier
+ │                   │    ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │                   │    └── project
+ │                   │         ├── columns: "check-rows":32 k:13 child.x:14 new:17 f:31
+ │                   │         ├── project
+ │                   │         │    ├── columns: f:31 k:13 child.x:14 new:17
+ │                   │         │    ├── barrier
+ │                   │         │    │    ├── columns: k:13 child.x:14 new:17
+ │                   │         │    │    └── project
+ │                   │         │    │         ├── columns: new:17 k:13 child.x:14
+ │                   │         │    │         ├── select
+ │                   │         │    │         │    ├── columns: k:13 child.x:14
+ │                   │         │    │         │    ├── scan child
+ │                   │         │    │         │    │    └── columns: k:13 child.x:14
+ │                   │         │    │         │    └── filters
+ │                   │         │    │         │         ├── child.x:14 = 1
+ │                   │         │    │         │         └── child.x:14 IS DISTINCT FROM CAST(NULL AS INT8)
+ │                   │         │    │         └── projections
+ │                   │         │    │              └── ((k:13, child.x:14) AS k, x) [as=new:17]
+ │                   │         │    └── projections
+ │                   │         │         └── f(new:17, NULL, 'tr_child', 'BEFORE', 'ROW', 'INSERT', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:31]
+ │                   │         └── projections
+ │                   │              └── CASE WHEN f:31 IS DISTINCT FROM new:17 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a mutated row in a cascade operation', e'changing the rows updated or deleted by a foreign-key cascade can cause\nconstraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":32]
+ │                   └── filters
+ │                        └── f:31 IS DISTINCT FROM NULL
  └── after-triggers
       └── barrier
-           ├── columns: x_old:35 y_old:36 old:37 new:38 f:52
+           ├── columns: x_old:33 y_old:34 old:35 new:36 f:50
            └── project
-                ├── columns: f:52 x_old:35 y_old:36 old:37 new:38
+                ├── columns: f:50 x_old:33 y_old:34 old:35 new:36
                 ├── project
-                │    ├── columns: new:38 x_old:35 y_old:36 old:37
+                │    ├── columns: new:36 x_old:33 y_old:34 old:35
                 │    ├── project
-                │    │    ├── columns: old:37 x_old:35 y_old:36
+                │    │    ├── columns: old:35 x_old:33 y_old:34
                 │    │    ├── with-scan &1
-                │    │    │    ├── columns: x_old:35 y_old:36
+                │    │    │    ├── columns: x_old:33 y_old:34
                 │    │    │    └── mapping:
-                │    │    │         ├──  xy.x:5 => x_old:35
-                │    │    │         └──  y:6 => y_old:36
+                │    │    │         ├──  xy.x:5 => x_old:33
+                │    │    │         └──  y:6 => y_old:34
                 │    │    └── projections
-                │    │         └── ((x_old:35, y_old:36) AS x, y) [as=old:37]
+                │    │         └── ((x_old:33, y_old:34) AS x, y) [as=old:35]
                 │    └── projections
-                │         └── NULL [as=new:38]
+                │         └── NULL [as=new:36]
                 └── projections
-                     └── f(new:38, old:37, 'tr', 'AFTER', 'ROW', 'DELETE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:52]
+                     └── f(new:36, old:35, 'tr', 'AFTER', 'ROW', 'DELETE', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:50]
 
 build-post-queries format=(hide-all,show-columns)
 UPSERT INTO xy VALUES (1, 2);

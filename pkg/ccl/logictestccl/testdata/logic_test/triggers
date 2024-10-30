@@ -2586,7 +2586,108 @@ SELECT * FROM child;
 4  3
 
 statement ok
+DROP TRIGGER mod ON parent;
+
+subtest cascade_diamond
+
+# Create a diamond cascade structure.
+statement ok
 DROP TABLE child;
+DELETE FROM parent WHERE True;
+
+statement ok
+CREATE TABLE child (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+CREATE TABLE child2 (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TABLE grandchild (
+  k INT PRIMARY KEY,
+  v INT REFERENCES child(v) ON UPDATE CASCADE ON DELETE CASCADE,
+  v2 INT REFERENCES child2(v) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO grandchild VALUES (1, 1, 1), (2, 2, 2), (3, 2, 2), (4, 3, 3);
+
+# Update the parent table, which should cascade to the children and grandchild.
+# Note that both child tables cascade to the grandchild.
+#
+# Regression test for #133784 and #133792.
+query T noticetrace
+UPDATE parent SET k = k + 10 WHERE k < 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (1) -> (11)
+NOTICE: BEFORE UPDATE ON parent: (2) -> (12)
+NOTICE: BEFORE UPDATE ON child: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON parent: (1) -> (11)
+NOTICE: AFTER UPDATE ON parent: (2) -> (12)
+NOTICE: AFTER UPDATE ON child: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: BEFORE UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: BEFORE UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: BEFORE UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: AFTER UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: AFTER UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+
+query II rowsort
+SELECT * FROM child;
+----
+1  11
+2  12
+3  3
+
+query II rowsort
+SELECT * FROM child2;
+----
+1  11
+2  12
+3  3
+
+query III rowsort
+SELECT * FROM grandchild;
+----
+1  11  11
+2  12  12
+3  12  12
+4  3   3
+
+statement ok
+DROP TABLE grandchild;
+DROP TABLE child;
+DROP TABLE child2;
 DROP TABLE parent;
 DROP FUNCTION g;
 DROP FUNCTION h;
