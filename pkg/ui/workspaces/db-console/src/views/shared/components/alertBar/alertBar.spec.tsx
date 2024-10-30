@@ -77,7 +77,7 @@ describe("AlertBar", () => {
       "Your license key expired on September 15th, 2024. " +
         `The cluster will be throttled on ${gracePeriodEnd.format(
           "MMMM Do, YYYY",
-        )} unless the license is renewed. Learn more`,
+        )} unless a new license key is added. Learn more`,
     );
   });
 
