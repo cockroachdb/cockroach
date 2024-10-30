@@ -240,14 +240,11 @@ func TestDLQCreation(t *testing.T) {
 	slices.Sort(actualDQLTables)
 	require.Equal(t, expectedDLQTables, actualDQLTables)
 
-	// Verify enum creation
-	enumRow := [][]string{
-		{dlqSchemaName, "mutation_type", "{insert,update,delete}"},
-	}
+	// Verify that no custom enums were created
 	sqlDB.CheckQueryResults(t,
-		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, defaultDbName, dlqSchemaName), enumRow)
+		fmt.Sprintf(`SHOW ENUMS FROM %s.%s`, defaultDbName, dlqSchemaName), [][]string{})
 	sqlDB.CheckQueryResults(t,
-		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, dbAName, dlqSchemaName), enumRow)
+		fmt.Sprintf(`SHOW ENUMS FROM %s.%s`, dbAName, dlqSchemaName), [][]string{})
 }
 
 func TestDLQLogging(t *testing.T) {
