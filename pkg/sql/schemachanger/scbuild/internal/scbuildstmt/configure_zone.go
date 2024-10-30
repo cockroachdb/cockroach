@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,23 +82,38 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
-	elem := zco.addZoneConfigToBuildCtx(b)
+	var elem scpb.Element
+	if n.Discard {
+		// If we are discarding the zone config and a zone config did not previously
+		// exist for us to discard, then no-op.
+		if zco.isNoOp() {
+			return
+		}
+		elem = zco.getZoneConfigElem(b)
+		b.Drop(elem)
+	} else {
+		zco.incrementSeqNum()
+		elem = zco.getZoneConfigElem(b)
+		b.Add(elem)
+	}
 
 	// Log event for auditing
 	eventDetails := eventpb.CommonZoneConfigDetails{
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
-	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
-		ResolvedOldConfig: oldZone.String()}
+
+	var info logpb.EventPayload
+	if n.Discard {
+		info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+	} else {
+		info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+			ResolvedOldConfig: oldZone.String()}
+	}
 	b.LogEventForExistingPayload(elem, info)
 }
 
 func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
-	if n.Discard {
-		return nil, scerrors.NotImplementedErrorf(n, "discarding zone configurations is not "+
-			"supported in the DSC")
-	}
 	zs := n.ZoneSpecifier
 	// We are a database object.
 	if n.Database != "" {
@@ -151,6 +167,13 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	// We are a table object.
 	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
 		return &tzo, nil
+	}
+
+	// TODO(annie): remove this when we add support for discarding subzone
+	// configs.
+	if n.Discard {
+		return nil, scerrors.NotImplementedErrorf(n, "discarding zone configurations on "+
+			"subzones are not supported in the DSC")
 	}
 
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}

@@ -52,9 +52,8 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// addZoneConfigToBuildCtx adds the zone config to the build context and
-	// returns the added element for logging.
-	addZoneConfigToBuildCtx(b BuildCtx) scpb.Element
+	// getZoneConfigElem retrieves the scpb.Element for the zone config object.
+	getZoneConfigElem(b BuildCtx) scpb.Element
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -72,6 +71,13 @@ type zoneConfigObjBuilder interface {
 	// setZoneConfigToWrite fills our object with the zone config/subzone config
 	// we will be writing to KV.
 	setZoneConfigToWrite(zone *zonepb.ZoneConfig)
+
+	// incrementSeqNum increments the seqNum by 1.
+	incrementSeqNum()
+
+	// isNoOp returns true if the zone config object is a no-op. This is defined
+	// by our object having no zone config yet.
+	isNoOp() bool
 }
 
 type zoneConfigRetriever interface {
@@ -154,8 +160,37 @@ func resolvePhysicalTableName(b BuildCtx, n *tree.SetZoneConfig) {
 
 // maybeMultiregionErrorWithHint returns an error if the user is trying to
 // update a zone config value that's protected for multi-region databases.
-func maybeMultiregionErrorWithHint(options tree.KVOptions) error {
+func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tree.KVOptions) error {
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
+	// The request is to discard the zone configuration. Error in cases where
+	// the zone configuration being discarded was created by the multi-region
+	// abstractions.
+	if options == nil {
+		needToError := false
+		// Determine if this zone config that we're trying to discard is
+		// supposed to be there. zco is either a database or a table.
+		_, isDB := zco.(*databaseZoneConfigObj)
+		if isDB {
+			needToError = true
+		} else {
+			var err error
+			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(b, zco.getTargetID())
+			if err != nil {
+				return err
+			}
+		}
+
+		if needToError {
+			// User is trying to update a zone config value that's protected for
+			// multi-region databases. Return the constructed error.
+			err := errors.WithDetail(errors.Newf(
+				"attempting to discard the zone configuration of a multi-region entity"),
+				"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
+			)
+			return errors.WithHint(err, hint)
+		}
+	}
+
 	// This is clearly an n^2 operation, but since there are only a single
 	// digit number of zone config keys, it's likely faster to do it this way
 	// than incur the memory allocation of creating a map.
@@ -172,6 +207,44 @@ func maybeMultiregionErrorWithHint(options tree.KVOptions) error {
 		}
 	}
 	return nil
+}
+
+// blockDiscardOfZoneConfigForMultiRegionObject determines if discarding the
+// zone configuration of a multi-region table, index or partition should be
+// blocked. We only block the discard if the multi-region abstractions have
+// created the zone configuration. Note that this function relies on internal
+// knowledge of which table locality patterns write zone configurations. We do
+// things this way to avoid having to read the zone configurations directly and
+// do a more explicit comparison (with a generated zone configuration). If, down
+// the road, the rules around writing zone configurations change, the tests in
+// multi_region_zone_configs will fail and this function will need updating.
+func blockDiscardOfZoneConfigForMultiRegionObject(b BuildCtx, tblID catid.DescID) (bool, error) {
+	tableElems := b.QueryByID(tblID)
+
+	// It's a table zone config that the user is trying to discard. This
+	// should only be present on GLOBAL and REGIONAL BY TABLE tables in a
+	// specified region.
+	globalElem := tableElems.FilterTableLocalityGlobal().MustGetZeroOrOneElement()
+	primaryRegionElem := tableElems.FilterTableLocalityPrimaryRegion().MustGetZeroOrOneElement()
+	secondaryRegionElem := tableElems.FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+
+	if globalElem != nil {
+		return true, nil
+	} else if secondaryRegionElem != nil {
+		return true, nil
+	} else if primaryRegionElem != nil {
+		// For REGIONAL BY TABLE tables, no need to error if a user-specified
+		// region does not exist.
+		return false, nil
+	} else if RBRElem != nil {
+		// For REGIONAL BY ROW tables, no need to error if we're setting a
+		// table level zone config.
+		return false, nil
+	} else {
+		return false, errors.AssertionFailedf(
+			"unknown table locality %s", b.QueryByID(tblID))
+	}
 }
 
 // isMultiRegionTable returns True if this table is a multi-region table,
@@ -1018,6 +1091,11 @@ func prepareZoneConfig(
 
 	// No zone was found. Use an empty zone config that inherits from its parent.
 	if partialZone == nil {
+		// If we are trying to discard a zone config that doesn't exist in
+		// system.zones, make this a no-op.
+		if n.Discard {
+			return nil, nil, nil
+		}
 		partialZone = zonepb.NewZoneConfig()
 	}
 	currentZone := protoutil.Clone(partialZone).(*zonepb.ZoneConfig)
@@ -1047,6 +1125,11 @@ func prepareZoneConfig(
 			return nil, nil, err
 		}
 		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
+	}
+
+	if n.Discard {
+		partialZone.DeleteTableConfig()
+		return nil, partialZone, nil
 	}
 
 	// Determine where to load the configuration.

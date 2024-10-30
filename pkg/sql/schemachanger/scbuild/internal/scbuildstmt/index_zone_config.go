@@ -22,17 +22,19 @@ type indexZoneConfigObj struct {
 	tableZoneConfigObj
 	indexID      catid.IndexID
 	indexSubzone *zonepb.Subzone
-	seqNum       uint32
 }
 
 var _ zoneConfigObject = &indexZoneConfigObj{}
+
+func (izo *indexZoneConfigObj) isNoOp() bool {
+	return izo.indexSubzone == nil
+}
 
 func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
-	izo.seqNum += 1
+func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	subzones := []zonepb.Subzone{*izo.indexSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -55,7 +57,6 @@ func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element 
 		SubzoneSpans: ss,
 		SeqNum:       izo.seqNum,
 	}
-	b.Add(elem)
 	return elem
 }
 

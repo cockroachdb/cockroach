@@ -76,12 +76,19 @@ var (
 		Measurement: "Pending Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaQueueTimeout = metric.Metadata{
+		Name:        "kv.rangefeed.scheduled_processor.queue_timeout",
+		Help:        "Number of times the RangeFeed processor shutdown because of a queue send timeout",
+		Measurement: "Failure Count",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
 	RangeFeedCatchUpScanNanos              *metric.Counter
 	RangeFeedBudgetExhausted               *metric.Counter
+	RangefeedProcessorQueueTimeout         *metric.Counter
 	RangeFeedBudgetBlocked                 *metric.Counter
 	RangeFeedRegistrations                 *metric.Gauge
 	RangeFeedClosedTimestampMaxBehindNanos *metric.Gauge
@@ -106,6 +113,7 @@ func (*Metrics) MetricStruct() {}
 func NewMetrics() *Metrics {
 	return &Metrics{
 		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
 		RangeFeedBudgetBlocked:                 metric.NewCounter(metaRangeFeedBudgetBlocked),
 		RangeFeedRegistrations:                 metric.NewGauge(metaRangeFeedRegistrations),
