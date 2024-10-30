@@ -4078,6 +4078,7 @@ FROM
 	var nonPublicEnums []string
 	var nonPublicEnumMembers []string
 	var possibleBodyReferences []string
+	var possibleBodyFuncReferences []string
 	var possibleParamReferences []string
 	var possibleParamReferencesWithDefaults []string
 	var possibleReturnReferences []string
@@ -4197,10 +4198,11 @@ FROM
 				}
 				args = argIn.String()
 			}
-			possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
+			possibleBodyFuncReferences = append(possibleBodyFuncReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
 		}
 	}
 
+	hasFuncRefs := false
 	placeholderMap := template.FuncMap{
 		"UniqueName": func() *tree.Name {
 			name := tree.Name(fmt.Sprintf("udf_%s", og.newUniqueSeqNumSuffix()))
@@ -4247,7 +4249,16 @@ FROM
 		},
 		"BodyRefs": func() (string, error) {
 			refs, err := PickAtLeast(og.params.rng, 1, possibleBodyReferences)
+			if len(possibleBodyFuncReferences) > 0 {
+				funcRefs, secondErr := PickAtLeast(og.params.rng, 1, possibleBodyFuncReferences)
+				hasFuncRefs = len(funcRefs) > 0
+				refs = append(refs, funcRefs...)
+				err = errors.CombineErrors(err, secondErr)
+			}
 			if useBodyRefs && err == nil {
+				og.params.rng.Shuffle(len(refs), func(i, j int) {
+					refs[i], refs[j] = refs[j], refs[i]
+				})
 				return strings.Join(refs, " AND "), nil
 			}
 			return "TRUE", nil //nolint:returnerrcheck
@@ -4292,10 +4303,15 @@ FROM
 		}
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
 		{pgcode.DuplicateFunction, fnDuplicate},
-	}), nil
+	})
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		{pgcode.InvalidFunctionDefinition, hasFuncRefs},
+	})
+
+	return opStmt, nil
 }
 
 func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
