@@ -44,8 +44,8 @@ var Mode = settings.RegisterEnumSetting(
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
 	metamorphic.ConstantWithTestChoice(
 		"kvadmission.flow_control.mode",
-		modeDict[ApplyToElastic], /* default value */
-		modeDict[ApplyToAll],     /* other value */
+		modeDict[ApplyToAll],     /* default value */
+		modeDict[ApplyToElastic], /* other value */
 	),
 	modeDict,
 )
