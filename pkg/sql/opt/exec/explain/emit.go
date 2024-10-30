@@ -569,7 +569,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					var duration string
-					if e.ob.flags.Deflake.Has(DeflakeVolatile) {
+					if e.ob.flags.Deflake.HasAny(DeflakeVolatile) {
 						duration = "<hidden>"
 					} else {
 						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
@@ -581,7 +581,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 					var forecastStr string
 					if s.Forecast {
-						if e.ob.flags.Deflake.Has(DeflakeVolatile) {
+						if e.ob.flags.Deflake.HasAny(DeflakeVolatile) {
 							forecastStr = "; using stats forecast"
 						} else {
 							timeSinceStats := timeutil.Since(s.ForecastAt)

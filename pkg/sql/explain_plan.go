@@ -107,7 +107,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			if e.options.Mode == tree.ExplainDistSQL {
 				flags := execinfrapb.DiagramFlags{
 					ShowInputTypes:    e.options.Flags[tree.ExplainFlagTypes],
-					MakeDeterministic: e.flags.Deflake.Has(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
+					MakeDeterministic: e.flags.Deflake.HasAny(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
 				}
 				diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
 				if err != nil {

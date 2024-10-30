@@ -2219,3 +2219,128 @@ vectorized: true
       missing stats
       table: cards@cards_pkey
       spans: FULL SCAN
+
+# Test that STRAIGHT JOIN is not as strong a hint as LOOKUP JOIN when exploring.
+
+statement ok
+CREATE TABLE t119035 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a, b)
+)
+
+query T
+EXPLAIN (OPT, MEMO)
+SELECT * FROM (VALUES (1, 10), (2, 20), (3, 30)) as v(x, y)
+INNER STRAIGHT JOIN t119035 ON a > x
+----
+memo (optimized, ~10KB, required=[presentation: info:10] [distribution: test])
+ ├── G1: (explain G2 [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
+ │    └── [presentation: info:10] [distribution: test]
+ │         ├── best: (explain G2="[presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]" [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
+ │         └── cost: 1196.99
+ ├── G2: (inner-join G3 G4 G5)
+ │    ├── [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]
+ │    │    ├── best: (inner-join G3="[distribution: test]" G4="[distribution: test]" G5)
+ │    │    └── cost: 1196.97
+ │    └── []
+ │         ├── best: (inner-join G3 G4 G5)
+ │         └── cost: 1196.97
+ ├── G3: (values G6 id=v1)
+ │    ├── [distribution: test]
+ │    │    ├── best: (values G6 id=v1)
+ │    │    └── cost: 0.04
+ │    └── []
+ │         ├── best: (values G6 id=v1)
+ │         └── cost: 0.04
+ ├── G4: (scan t119035,cols=(3-5)) (scan t119035@t119035_a_b_idx,cols=(3-5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan t119035,cols=(3-5))
+ │    │    └── cost: 1149.22
+ │    └── []
+ │         ├── best: (scan t119035,cols=(3-5))
+ │         └── cost: 1149.22
+ ├── G5: (filters G7)
+ ├── G6: (scalar-list G8 G9 G10)
+ ├── G7: (gt G11 G12)
+ ├── G8: (tuple G13)
+ ├── G9: (tuple G14)
+ ├── G10: (tuple G15)
+ ├── G11: (variable a)
+ ├── G12: (variable column1)
+ ├── G13: (scalar-list G16 G17)
+ ├── G14: (scalar-list G18 G19)
+ ├── G15: (scalar-list G20 G21)
+ ├── G16: (const 1)
+ ├── G17: (const 10)
+ ├── G18: (const 2)
+ ├── G19: (const 20)
+ ├── G20: (const 3)
+ └── G21: (const 30)
+inner-join (cross)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── values
+ │    ├── (1, 10)
+ │    ├── (2, 20)
+ │    └── (3, 30)
+ ├── scan t119035
+ └── filters
+      └── a > column1
+
+query T
+EXPLAIN (OPT, MEMO)
+SELECT * FROM (VALUES (1, 10), (2, 20), (3, 30)) as v(x, y)
+INNER LOOKUP JOIN t119035 ON a > x
+----
+memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
+ ├── G1: (explain G2 [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
+ │    └── [presentation: info:10] [distribution: test]
+ │         ├── best: (explain G2="[presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]" [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
+ │         └── cost: 2172.81
+ ├── G2: (inner-join G3 G4 G5) (lookup-join G3 G6 t119035@t119035_a_b_idx,outCols=(1-5))
+ │    ├── [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]
+ │    │    ├── best: (lookup-join G3="[distribution: test]" G6 t119035@t119035_a_b_idx,outCols=(1-5))
+ │    │    └── cost: 2172.79
+ │    └── []
+ │         ├── best: (lookup-join G3 G6 t119035@t119035_a_b_idx,outCols=(1-5))
+ │         └── cost: 2172.79
+ ├── G3: (values G7 id=v1)
+ │    ├── [distribution: test]
+ │    │    ├── best: (values G7 id=v1)
+ │    │    └── cost: 0.04
+ │    └── []
+ │         ├── best: (values G7 id=v1)
+ │         └── cost: 0.04
+ ├── G4: (scan t119035,cols=(3-5)) (scan t119035@t119035_a_b_idx,cols=(3-5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan t119035,cols=(3-5))
+ │    │    └── cost: 1149.22
+ │    └── []
+ │         ├── best: (scan t119035,cols=(3-5))
+ │         └── cost: 1149.22
+ ├── G5: (filters G8)
+ ├── G6: (filters)
+ ├── G7: (scalar-list G9 G10 G11)
+ ├── G8: (gt G12 G13)
+ ├── G9: (tuple G14)
+ ├── G10: (tuple G15)
+ ├── G11: (tuple G16)
+ ├── G12: (variable a)
+ ├── G13: (variable column1)
+ ├── G14: (scalar-list G17 G18)
+ ├── G15: (scalar-list G19 G20)
+ ├── G16: (scalar-list G21 G22)
+ ├── G17: (const 1)
+ ├── G18: (const 10)
+ ├── G19: (const 2)
+ ├── G20: (const 20)
+ ├── G21: (const 3)
+ └── G22: (const 30)
+inner-join (lookup t119035@t119035_a_b_idx)
+ ├── flags: force lookup join (into right side)
+ ├── values
+ │    ├── (1, 10)
+ │    ├── (2, 20)
+ │    └── (3, 30)
+ └── filters (true)
