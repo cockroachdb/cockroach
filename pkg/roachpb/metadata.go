@@ -1006,3 +1006,18 @@ func (h *GCHint) advanceGCTimestamp(gcThreshold hlc.Timestamp) bool {
 	h.GCTimestamp, h.GCTimestampNext = hlc.Timestamp{}, hlc.Timestamp{}
 	return true
 }
+
+type RangeDescriptorsByStartKey []RangeDescriptor
+
+func (r RangeDescriptorsByStartKey) Len() int {
+	return len(r)
+}
+func (r RangeDescriptorsByStartKey) Less(i, j int) bool {
+	return r[i].StartKey.AsRawKey().Less(r[j].StartKey.AsRawKey())
+}
+
+func (r RangeDescriptorsByStartKey) Swap(i, j int) {
+	tmp := r[i]
+	r[i] = r[j]
+	r[j] = tmp
+}
