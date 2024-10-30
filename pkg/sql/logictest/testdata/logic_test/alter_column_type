@@ -205,7 +205,7 @@ INSERT INTO t2 VALUES ('5')
 # Verify ALTER COLUMN TYPE from INT to STRING works correctly.
 # Column order should stay the same.
 statement ok
-CREATE TABLE t3 (id int, id2 int, id3 int)
+CREATE TABLE t3 (id int, id2 int, id3 int, family f1 (id3, id2, id))
 
 statement ok
 INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
@@ -220,6 +220,19 @@ id     INT8    true   NULL            ·  {t3_pkey}  false
 id2    STRING  true   NULL            ·  {t3_pkey}  false
 id3    INT8    true   NULL            ·  {t3_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
+
+query TT colnames
+show create table t3
+----
+table_name  create_statement
+t3          CREATE TABLE public.t3 (
+              id INT8 NULL,
+              id2 STRING NULL,
+              id3 INT8 NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (id3, id2, id, rowid)
+            )
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -985,6 +998,19 @@ c2     CHAR(4) true   NULL            ·  {t_bytes_pkey}  false
 c3     UUID    true   NULL            ·  {t_bytes_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t_bytes_pkey}  true
 
+query TT colnames
+show create table t_bytes
+----
+table_name  create_statement
+t_bytes     CREATE TABLE public.t_bytes (
+              c1 STRING NULL,
+              c2 CHAR(4) NULL,
+              c3 UUID NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (c1, c2, c3, rowid)
+            )
+
 statement ok
 DROP TABLE t_bytes;
 
@@ -1047,6 +1073,18 @@ SHOW COLUMNS FROM t_decimal;
 c1     DECIMAL(7,2)  true   NULL            ·  {t_decimal_pkey}  false
 c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
 rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
+
+query TT colnames
+show create table t_decimal
+----
+table_name  create_statement
+t_decimal   CREATE TABLE public.t_decimal (
+              c1 DECIMAL(7,2) NULL,
+              c2 DECIMAL(10,2) NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
+              FAMILY f1 (c1, c2, rowid)
+            )
 
 statement ok
 DROP TABLE t_decimal;
