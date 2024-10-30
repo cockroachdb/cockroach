@@ -39,5 +39,6 @@ func registerAdmission(r registry.Registry) {
 	registerIntentResolutionOverload(r)
 	registerElasticIO(r)
 	registerDiskBandwidthOverload(r)
+	registerAdmissionMixedVersion(r)
 	registerLatencyTests(r)
 }
