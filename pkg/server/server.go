@@ -588,6 +588,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.Elastic
+	goschedstats.RegisterSettings(st)
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
 	stopper.AddCloser(stop.CloserFn(func() {
 		goschedstats.UnregisterRunnableCountCallback(cbID)
