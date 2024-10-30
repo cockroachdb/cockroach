@@ -1263,6 +1263,9 @@ func (r *raft) becomeCandidate() {
 	if r.state == pb.StateLeader {
 		panic("invalid transition [leader -> candidate]")
 	}
+	// We vote for ourselves when we become a candidate. We shouldn't do so if
+	// we're already fortified.
+	assertTrue(!r.supportingFortifiedLeader(), "shouldn't become a candidate if we're supporting a fortified leader")
 	r.step = stepCandidate
 	r.reset(r.Term + 1)
 	r.tick = r.tickElection
@@ -1276,8 +1279,8 @@ func (r *raft) becomePreCandidate() {
 	if r.state == pb.StateLeader {
 		panic("invalid transition [leader -> pre-candidate]")
 	}
-	assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
-		"should not be supporting a fortified leader when becoming pre-candidate; leader exempted",
+	assertTrue(!r.supportingFortifiedLeader(),
+		"should not fortifying a leader when becoming pre-candidate",
 	)
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
@@ -1347,13 +1350,11 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Infof("%x is unpromotable and can not campaign", r.id)
 		return
 	}
-	// NB: The leader is allowed to bump its term by calling an election. Note that
-	// we must take care to ensure the leader's support expiration doesn't regress.
-	//
-	// TODO(arul): add special handling for the r.lead == r.id case with an
-	// assertion to ensure the LeaderSupportExpiration is in the past before
-	// campaigning.
-	if r.supportingFortifiedLeader() && r.lead != r.id {
+	// NB: Even an old leader that has since stepped down needs to de-fortify
+	// itself before it can campaign at a higher term. That's because candidates
+	// always vote for themselves, and casting a vote isn't allowed if the
+	// candidate is fortifying a leader.
+	if r.supportingFortifiedLeader() {
 		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
@@ -1478,12 +1479,6 @@ func (r *raft) Step(m pb.Message) error {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
 			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
 			inFortifyLease := r.supportingFortifiedLeader() &&
-				// NB: A fortified leader is allowed to bump its term. It'll need to
-				// re-fortify once if it gets elected at the higher term though, so the
-				// leader must take care to not regress its supported expiration.
-				// However, at the follower, we grant the fortified leader our vote at
-				// the higher term.
-				r.lead != m.From &&
 				// NB: If the peer that's campaigning has an entry in its log with a
 				// higher term than what we're aware of, then this conclusively proves
 				// that a new leader was elected at a higher term. We never heard from
