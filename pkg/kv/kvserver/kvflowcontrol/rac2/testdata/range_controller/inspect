@@ -23,7 +23,9 @@ inspect range_id=1
         "available_send_elastic_tokens": "8388608"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -55,7 +57,9 @@ inspect range_id=1
         "available_send_elastic_tokens": "8388608"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -69,7 +73,9 @@ inspect range_id=1
         "available_send_elastic_tokens": "8388608"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -83,7 +89,9 @@ inspect range_id=1
         "available_send_elastic_tokens": "8388608"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -143,7 +151,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608"
     },
     {
       "stream": {
@@ -181,7 +191,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608"
     },
     {
       "stream": {
@@ -219,7 +231,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608"
     }
   ]
 }
@@ -276,7 +290,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608"
     },
     {
       "stream": {
@@ -314,7 +330,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "8388608",
+      "total_send_deducted_tokens": "8388608"
     }
   ]
 }
@@ -366,7 +384,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "5242880",
+      "total_send_deducted_tokens": "5242880"
     },
     {
       "stream": {
@@ -388,7 +408,9 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "2097152",
+      "total_send_deducted_tokens": "2097152"
     }
   ]
 }

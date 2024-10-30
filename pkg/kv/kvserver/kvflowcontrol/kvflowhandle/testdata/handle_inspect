@@ -24,7 +24,9 @@ echo
         "available_send_elastic_tokens": "0"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -61,7 +63,9 @@ echo
             "index": "43"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -98,7 +102,9 @@ echo
             "index": "47"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -120,7 +126,9 @@ echo
             "index": "47"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -142,7 +150,9 @@ echo
             "index": "47"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -179,7 +189,9 @@ echo
             "index": "47"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -201,7 +213,9 @@ echo
             "index": "47"
           }
         }
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
@@ -222,7 +236,9 @@ echo
         "available_send_elastic_tokens": "0"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     },
     {
       "stream": {
@@ -236,7 +252,9 @@ echo
         "available_send_elastic_tokens": "0"
       },
       "tracked_deductions": [
-      ]
+      ],
+      "total_eval_deducted_tokens": "0",
+      "total_send_deducted_tokens": "0"
     }
   ]
 }
