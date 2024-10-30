@@ -1,4 +1,4 @@
-# Yaml for creating and configuring the drt-scale cluster. This also configures Datadog.
+# Yaml for creating and configuring the drt-scale-restore cluster. This also configures Datadog.
 # Build the roachprod and roachtest binaries (using --cross) before running this script
 environment:
   ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
@@ -6,10 +6,10 @@ environment:
   ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
   ROACHPROD_GCE_DNS_ZONE: drt
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
-  CLUSTER: drt-scale
-  WORKLOAD_CLUSTER: workload-scale
-  CLUSTER_NODES: 150
-  WORKLOAD_NODES: 9
+  CLUSTER: drt-scale-restore
+  WORKLOAD_CLUSTER: workload-scale-restore
+  CLUSTER_NODES: 60
+  WORKLOAD_NODES: 1
 
 targets:
   # crdb cluster specs
@@ -119,46 +119,23 @@ targets:
           - $WORKLOAD_CLUSTER
           - artifacts/roachprod
           - roachprod
-      - command: put
-        args:
-          - $WORKLOAD_CLUSTER
-          - artifacts/roachtest
-          - roachtest-operations
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         args:
-          - cct_tpcc_400k # suffix added to script name tpcc_init_cct_tpcc_400k.sh
+          - cct_tpcc_3k # suffix added to script name tpcc_init_cct_tpcc_3k.sh
           - false # determines whether to execute the script immediately on workload node
         flags:
-          warehouses: 400000
+          warehouses: 3000
           db: cct_tpcc
-      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
-        args:
-          - cct_tpcc_2000k # suffix added to script name tpcc_init_cct_tpcc_2000k.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          warehouses: 2000000
-          db: cct_tpcc_big
       - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
         args:
-          - cct_tpcc_400k # suffix added to script name tpcc_run_400k.sh
+          - cct_tpcc_3k # suffix added to script name tpcc_run_3k.sh
           - false # determines whether to execute the script immediately on workload node
         flags:
           db: cct_tpcc
-          warehouses: 400000
-          max-rate: 10000
-          workers: 5000
-          conns: 5000
+          warehouses: 3000
+          max-rate: 100
+          workers: 50
+          conns: 50
           duration: 12h
           ramp: 10m
           wait: 0
-      - script: "pkg/cmd/drtprod/scripts/tpch_init.sh"
-        args:
-          - scale_factor_1000 # suffix added to script name tpch_init_scale_factor_1000.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          scale-factor: 1000
-      - script: "pkg/cmd/drtprod/scripts/generate_tpch_run.sh"
-        args:
-          - scale_factor_1000
-        flags:
-          scale-factor: 1000
