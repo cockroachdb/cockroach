@@ -1097,3 +1097,16 @@ statement ok
 SET inject_retry_errors_enabled=false
 
 subtest end
+
+
+# Addresses a bug where parsing nextval expressions with extra values could end
+# end up with a panic when rewriting sequence expressions.
+subtest 133399
+
+statement ok
+CREATE TABLE v_133399 (c01 INT);
+
+statement error pgcode 42804 could not find matching function overload for given arguments
+CREATE TABLE t_133399 AS (SELECT * FROM v_133399 WINDOW window_name AS (ROWS c01 BETWEEN nextval ('abc', 'abc', 'abc') AND c01 PRECEDING));
+
+subtest end
