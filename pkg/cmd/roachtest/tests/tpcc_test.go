@@ -21,6 +21,8 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		buildVersion *version.Version
 		expected     int
 	}{
+		{spec.Local, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), 15},
+
 		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), 1300},
 		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0-rc.1`), 1250},
 		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0`), 1250},
@@ -28,7 +30,6 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		{spec.AWS, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0-rc.1`), 2100},
 		{spec.AWS, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0`), 2100},
 
-		{spec.Local, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), expectPanic},
 		{spec.GCE, spec.MakeClusterSpec(5, spec.CPU(160)), version.MustParse(`v2.1.0`), expectPanic},
 		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v1.0.0`), expectPanic},
 	}
