@@ -78,6 +78,7 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 	// Build each trigger function invocation in order, applying optimization
 	// barriers to ensure correct evaluation order.
 	f := mb.b.factory
+	canModifyRows := true
 	for i := range triggers {
 		trigger := triggers[i]
 		triggerScope.expr = f.ConstructBarrier(triggerScope.expr)
@@ -119,6 +120,7 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 			mb.ensureNoRowsModifiedByTrigger(
 				triggerScope, triggers[i].Name(), eventType, triggerFnColID, oldColID, newColID,
 			)
+			canModifyRows = false
 		}
 
 		// BEFORE triggers can return a NULL value to indicate that the row should
@@ -137,7 +139,18 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 	// INSERT and UPDATE triggers can modify the row to be inserted or updated
 	// via the return value of the trigger function.
 	if eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate {
-		mb.applyChangesFromTriggers(triggerScope, eventType, tableTyp, visibleColOrds, newColID)
+		// If the trigger cannot modify rows, avoid changing the mutation columns.
+		// This is necessary to avoid adding extra checks during cascades, which
+		// could cause spurious constraint-violation errors.
+		//
+		// For example, in a "diamond" cascade pattern, an update to one table
+		// cascades to two others, which both cascade to a single grandchild table.
+		// Once both cascades complete, the database is in a consistent state. If a
+		// spurious check runs in between the two cascades, it could observe a
+		// constraint violation.
+		if canModifyRows {
+			mb.applyChangesFromTriggers(triggerScope, eventType, tableTyp, visibleColOrds, newColID)
+		}
 	}
 	mb.outScope = triggerScope
 	return true
