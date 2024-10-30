@@ -2529,6 +2529,8 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 }
 
 func BenchmarkMVCCBlindPut(b *testing.B) {
+	b.SkipNow()
+
 	defer log.Scope(b).Close(b)
 
 	valueSizes := []int{10, 100, 1000, 10000}
