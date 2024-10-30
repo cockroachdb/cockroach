@@ -7,27 +7,10 @@ import "@testing-library/cypress/add-commands";
 import { SQLPrivilege, User } from "./types";
 
 Cypress.Commands.add("login", (username: string, password: string) => {
-  cy.request({
-    method: "POST",
-    url: "/api/v2/login/",
-    form: true,
-    body: {
-      username: username,
-      password: password,
-    },
-    failOnStatusCode: true,
-  }).then(({ body }) => {
-    if ("session" in body) {
-      // Set the returned session token as a cookie, emulating the 'Set-Cookie'
-      // response header currently returned from CRDB:
-      // Set-Cookie: session=REDACTED; Path=/; HttpOnly
-      cy.setCookie("session", body.session, { path: "/", httpOnly: true });
-    } else {
-      throw new Error(
-        `Unexpected response from /api/v2/login: ${JSON.stringify(body)}`,
-      );
-    }
-  });
+  cy.visit("/");
+  cy.get('input[name="username"]').type(username);
+  cy.get('input[name="password"]').type(password);
+  cy.findByText("Log in").click();
 });
 
 // Gets a user from the users.json fixture with the given privileges.
