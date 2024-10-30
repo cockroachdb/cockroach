@@ -341,6 +341,11 @@ func (e *Enforcer) GetTelemetryDeadline() (deadline, lastPing time.Time, ok bool
 
 	ptr := e.telemetryStatusReporter.Load()
 	lastTelemetryDataReceived := (*ptr).GetLastSuccessfulTelemetryPing()
+	pingOverrideForTesting := envutil.EnvOrDefaultInt64("COCKROACH_LAST_SUCCESSFUL_TELEMETRY_PING", lastTelemetryDataReceived.Unix())
+	if pingOverrideForTesting < lastTelemetryDataReceived.Unix() {
+		lastTelemetryDataReceived = timeutil.Unix(pingOverrideForTesting, 0)
+	}
+
 	throttleTS := lastTelemetryDataReceived.Add(e.getMaxTelemetryInterval())
 	return throttleTS, lastTelemetryDataReceived, true
 }
