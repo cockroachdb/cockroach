@@ -209,6 +209,8 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 	return m
 }
 
+// AddLabels adds (or updates) the given labels to the given VMs.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
 	return p.editLabels(l, vms, labels, false /*removeLabels*/)
 }
