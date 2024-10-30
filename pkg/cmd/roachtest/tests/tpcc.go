@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -410,10 +409,10 @@ func maxSupportedTPCCWarehouses(
 // by the mixed-version framework which chooses a random predecessor version
 // and upgrades until it reaches the current version.
 func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
-	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
-	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-	if c.IsLocal() {
-		headroomWarehouses = 10
+	headroomWarehouses := 10
+	if !c.IsLocal() {
+		maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
+		headroomWarehouses = int(float64(maxWarehouses) * 0.7)
 	}
 
 	// NB: this results in ~100GB of (actual) disk usage per node once things
@@ -506,7 +505,6 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
-	uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
 	mvt.OnStartup("maybe enable tenant features", enableTenantFeatures)
 	mvt.OnStartup("load TPCC dataset", importTPCC)
 	mvt.OnStartup("load bank dataset", importLargeBank)
