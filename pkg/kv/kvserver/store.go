@@ -4096,6 +4096,12 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 	}
 }
 
+// TestingStoreLivenessMessageHandler returns the store's store liveness
+// message handler for testing purposes.
+func (s *Store) TestingStoreLivenessMessageHandler() storeliveness.MessageHandler {
+	return s.storeLiveness.(*storeliveness.SupportManager)
+}
+
 // getRootMemoryMonitorForKV returns a BytesMonitor to use for KV memory
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
