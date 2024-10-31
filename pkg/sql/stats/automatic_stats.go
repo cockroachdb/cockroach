@@ -46,7 +46,7 @@ var AutomaticPartialStatisticsClusterMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	catpb.AutoPartialStatsEnabledSettingName,
 	"automatic partial statistics collection mode",
-	false,
+	true,
 	settings.WithPublic)
 
 // UseStatisticsOnSystemTables controls the cluster setting for enabling
