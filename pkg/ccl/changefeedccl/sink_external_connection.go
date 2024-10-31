@@ -65,9 +65,11 @@ func validateExternalConnectionSinkURI(
 	}
 
 	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
-		wrapSink := knobs.WrapSink
-		knobs.WrapSink = nil
-		defer func() { knobs.WrapSink = wrapSink }()
+		newCfg := *serverCfg
+		newKnobs := *knobs
+		newKnobs.WrapSink = nil
+		newCfg.TestingKnobs.Changefeed = &newKnobs
+		serverCfg = &newCfg
 	}
 
 	// Validate the URI by creating a canary sink.
