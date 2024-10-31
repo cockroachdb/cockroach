@@ -298,6 +298,16 @@ func isConstraintWithoutIndexName(e scpb.Element) bool {
 	return false
 }
 
+func isTriggerDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.TriggerName, *scpb.TriggerEnabled, *scpb.TriggerTiming,
+		*scpb.TriggerEvents, *scpb.TriggerTransition, *scpb.TriggerWhen,
+		*scpb.TriggerFunctionCall, *scpb.TriggerDeps:
+		return true
+	}
+	return false
+}
+
 func isData(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.DatabaseData:
