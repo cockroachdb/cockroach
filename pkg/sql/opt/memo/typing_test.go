@@ -104,6 +104,9 @@ func TestTypingComparisonAssumptions(t *testing.T) {
 				if op == op2 {
 					return nil
 				}
+				if op.OverloadPreference != op2.OverloadPreference {
+					return nil
+				}
 				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)

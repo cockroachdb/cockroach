@@ -55,7 +55,7 @@ type zoneEntry struct {
 	placeholder *zonepb.ZoneConfig
 
 	// combined merges the zone and placeholder configs into a combined config.
-	// If both have subzone information, the placeholder information is preferred.
+	// If both have subzone information, the placeholder information is preference.
 	// This may never happen, but while the existing code gives preference to the
 	// placeholder, there appear to be no guarantees that there can be no overlap.
 	//

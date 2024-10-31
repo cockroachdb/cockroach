@@ -93,7 +93,7 @@ func TestVariadicFunctions(t *testing.T) {
 type testOverload struct {
 	paramTypes ParamTypes
 	retType    *types.T
-	pref       bool
+	OverloadPreference
 }
 
 func (to *testOverload) params() TypeList {
@@ -104,8 +104,8 @@ func (to *testOverload) returnType() ReturnTyper {
 	return FixedReturnType(to.retType)
 }
 
-func (to testOverload) preferred() bool {
-	return to.pref
+func (to testOverload) preference() OverloadPreference {
+	return to.OverloadPreference
 }
 
 func (to *testOverload) outParamInfo() (RoutineType, []int32, TypeList) {
@@ -116,8 +116,8 @@ func (to *testOverload) defaultExprs() Exprs {
 	return nil
 }
 
-func (to testOverload) withPreferred(pref bool) *testOverload {
-	to.pref = pref
+func (to testOverload) preferred() *testOverload {
+	to.OverloadPreference = OverloadPreferencePreferred
 	return &to
 }
 
@@ -166,14 +166,14 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 
 	unaryIntFn := makeTestOverload(types.Int, types.Int)
-	unaryIntFnPref := makeTestOverload(types.Int, types.Int).withPreferred(true)
+	unaryIntFnPref := makeTestOverload(types.Int, types.Int).preferred()
 	unaryFloatFn := makeTestOverload(types.Float, types.Float)
 	unaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal)
 	unaryStringFn := makeTestOverload(types.String, types.String)
 	unaryIntervalFn := makeTestOverload(types.Interval, types.Interval)
 	unaryTimestampFn := makeTestOverload(types.Timestamp, types.Timestamp)
 	binaryIntFn := makeTestOverload(types.Int, types.Int, types.Int)
-	binaryIntFnPref := makeTestOverload(types.Int, types.Int, types.Int).withPreferred(true)
+	binaryIntFnPref := makeTestOverload(types.Int, types.Int, types.Int).preferred()
 	binaryFloatFn := makeTestOverload(types.Float, types.Float, types.Float)
 	binaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal, types.Decimal)
 	binaryStringFn := makeTestOverload(types.String, types.String, types.String)
