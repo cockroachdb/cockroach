@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
+        "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

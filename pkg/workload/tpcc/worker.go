@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -165,6 +166,8 @@ type worker struct {
 	permIdx  int
 
 	counters txCounters
+
+	workerSem *quotapool.IntPool
 }
 
 func newWorker(
@@ -174,6 +177,7 @@ func newWorker(
 	hists *histogram.Histograms,
 	counters txCounters,
 	warehouse int,
+	workerSem *quotapool.IntPool,
 ) (*worker, error) {
 	w := &worker{
 		config:    config,
@@ -183,6 +187,7 @@ func newWorker(
 		deckPerm:  append([]int(nil), config.deck...),
 		permIdx:   len(config.deck),
 		counters:  counters,
+		workerSem: workerSem,
 	}
 	for i := range w.txs {
 		var err error
@@ -195,6 +200,11 @@ func newWorker(
 }
 
 func (w *worker) run(ctx context.Context) error {
+	sem, err := w.workerSem.Acquire(ctx, 1)
+	if err != nil {
+		return err
+	}
+	defer sem.Release()
 	// 5.2.4.2: the required mix is achieved by selecting each new transaction
 	// uniformly at random from a deck whose content guarantees the required
 	// transaction mix. Each pass through a deck must be made in a different
