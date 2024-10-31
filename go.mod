@@ -40,7 +40,7 @@ require (
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.56.3
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.2
 )
 
 // If any of the following dependencies get updated as a side-effect
@@ -96,7 +96,7 @@ require (
 	github.com/BurntSushi/toml v1.2.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
-	github.com/DataExMachina-dev/side-eye-go v0.0.0-20240528211710-5eb9c7a69e1d
+	github.com/DataExMachina-dev/side-eye-go v0.0.0-20241031164610-10913fb1f575
 	github.com/IBM/sarama v1.42.1
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
@@ -146,7 +146,7 @@ require (
 	github.com/containerd/containerd v1.6.18
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/dave/dst v0.24.0
-	github.com/davecgh/go-spew v1.1.1
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v24.0.6+incompatible
 	github.com/docker/go-connections v0.4.0
@@ -216,7 +216,7 @@ require (
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
 	github.com/pkg/errors v0.9.1
-	github.com/pmezard/go-difflib v1.0.0
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.42.0
@@ -412,7 +412,7 @@ require (
 	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
