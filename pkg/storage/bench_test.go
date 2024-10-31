@@ -1279,6 +1279,7 @@ func runMVCCConditionalPut(
 			if err := batch.Commit(true); err != nil {
 				b.Fatalf("failed commit: %v", err)
 			}
+			batch.Close()
 		}
 		expected = value.TagAndDataBytes()
 	}
@@ -1295,6 +1296,7 @@ func runMVCCConditionalPut(
 		if err := batch.Commit(true); err != nil {
 			b.Fatalf("failed commit: %v", err)
 		}
+		batch.Close()
 	}
 
 	b.StopTimer()
@@ -1323,6 +1325,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 		if err := batch.Commit(true); err != nil {
 			b.Fatalf("failed commit: %v", err)
 		}
+		batch.Close()
 	}
 
 	b.StopTimer()
@@ -1349,6 +1352,7 @@ func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSiz
 		if err := batch.Commit(true); err != nil {
 			b.Fatalf("failed commit: %v", err)
 		}
+		batch.Close()
 	}
 
 	b.StopTimer()
@@ -1375,6 +1379,7 @@ func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, val
 		if err := wb.Commit(true); err != nil {
 			b.Fatalf("failed commit: %v", err)
 		}
+		wb.Close()
 	}
 
 	b.StopTimer()
