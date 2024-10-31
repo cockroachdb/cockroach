@@ -91,6 +91,7 @@ type variations struct {
 	workload             workloadType
 	acceptableChange     float64
 	cloud                registry.CloudSet
+	specOptions          []spec.Option
 }
 
 const NUM_REGIONS = 3
@@ -186,14 +187,7 @@ func registerLatencyTests(r registry.Registry) {
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	opts := []spec.Option{spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem)}
-	// TODO(baptist): This is ugly to use reflection here. The better change
-	// would be to have the perturbation expose the options it wants to add to
-	// the cluster spec. If there is any additional instances where we need to
-	// differentiate the tests, convert to that.
-	if reflect.TypeOf(v.perturbation) == reflect.TypeOf(&slowDisk{}) {
-		opts = append(opts, spec.ReuseNone())
-	}
+	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem))
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
@@ -431,6 +425,7 @@ func (s *slowDisk) setupMetamorphic(rng *rand.Rand) variations {
 	s.slowLiveness = rng.Intn(2) == 0
 	s.walFailover = rng.Intn(2) == 0
 	v.perturbation = s
+	v.specOptions = []spec.Option{spec.ReuseNone()}
 	return v.randomize(rng)
 }
 
