@@ -4910,6 +4910,14 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 		b.Put("b", "b")
 		return txn.CommitInBatch(ctx, b)
 	}))
+
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.Tracer(), "get-a-get-b", tracing.WithForceRealSpan())
+	sp.SetRecordingType(tracingpb.RecordingVerbose)
+	defer func() {
+		rec := sp.FinishAndGetConfiguredRecording()
+		t.Log(rec)
+	}()
+
 	tup, err := db.Get(ctx, "a")
 	require.NoError(t, err)
 	require.NotNil(t, tup.Value)

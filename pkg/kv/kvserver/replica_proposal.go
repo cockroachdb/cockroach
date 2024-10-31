@@ -254,7 +254,6 @@ func (proposal *ProposalData) useReplicationAdmissionControl() bool {
 func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposalResult) {
 	tagged := strings.Contains(proposal.Request.String(), `Put ["a"], Put ["b"], EndTxn(commit)`)
 	if tagged {
-		time.Sleep(100 * time.Millisecond)
 		proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
 	} else {
 		proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
