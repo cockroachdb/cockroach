@@ -1425,7 +1425,9 @@ func (t *logicTest) handleWaitForInitErr(ts testserver.TestServer, err error) {
 		if walkErr != nil {
 			t.t().Logf("error while walking logs directory: %v", walkErr)
 		} else if foundSnappyErr {
-			ts.Stop()
+			if ts != nil {
+				ts.Stop()
+			}
 			t.t().Skip("ignoring init did not finish for node error due to snappy error")
 		}
 	}
