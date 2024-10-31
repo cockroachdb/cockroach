@@ -2002,7 +2002,7 @@ update assn_cast
       │    │    │         └── d_comp:15
       │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
-      │    │         ├── ' ' [as=c_new:19]
+      │    │         ├── '' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
       │    │         ├── 1 [as=i_new:21]
       │    │         └── 2 [as=s_new:22]
@@ -2039,7 +2039,7 @@ update assn_cast
       │    │    │         └── d_comp:15
       │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
-      │    │         ├── ' ' [as=c_new:19]
+      │    │         ├── '' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
       │    │         └── 1 [as=i_new:21]
       │    └── projections
@@ -2258,7 +2258,7 @@ update assn_cast
       │    │    │         └── d_comp:15
       │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
-      │    │         ├── ' ' [as=c_new:19]
+      │    │         ├── '' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
       │    └── projections
       │         ├── assignment-cast: CHAR [as=c_cast:21]
@@ -2290,7 +2290,7 @@ update assn_cast
       │    │    │         └── d_comp:15
       │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
-      │    │         ├── ' ' [as=c_new:19]
+      │    │         ├── '' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
       │    └── projections
       │         ├── assignment-cast: CHAR [as=c_cast:21]
@@ -2436,7 +2436,7 @@ update assn_cast
       │    │    │    │              └── 1 [as="?column?":25]
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ' ' [as=c_new:26]
+      │    │         └── '' [as=c_new:26]
       │    └── projections
       │         ├── assignment-cast: CHAR [as=c_cast:27]
       │         │    └── c_new:26

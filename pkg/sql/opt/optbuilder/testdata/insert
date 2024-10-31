@@ -1357,7 +1357,7 @@ insert assn_cast
       │    ├── columns: c_cast:12!null qc_cast:13!null s_cast:14!null column3:10!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
-      │    │    └── (' ', 'foo', 1, 2)
+      │    │    └── ('', 'foo', 1, 2)
       │    └── projections
       │         ├── assignment-cast: CHAR [as=c_cast:12]
       │         │    └── column1:8
@@ -1385,7 +1385,7 @@ insert assn_cast
       │    ├── columns: c_cast:11!null qc_cast:12!null column3:10!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null
-      │    │    └── (' ', 'foo', 1)
+      │    │    └── ('', 'foo', 1)
       │    └── projections
       │         ├── assignment-cast: CHAR [as=c_cast:11]
       │         │    └── column1:8
