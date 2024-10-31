@@ -37,7 +37,7 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, len(noCatchupReg.buf), 2)
 	go noCatchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.GetAndClearEvents())
 	noCatchupReg.disconnect(nil)
 
 	// Registration with catchup scan.
@@ -53,7 +53,7 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, len(catchupReg.buf), 2)
 	go catchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, catchupReg.waitForCaughtUp(ctx))
-	events := catchupReg.Events()
+	events := catchupReg.GetAndClearEvents()
 	require.Equal(t, 5, len(events))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
 	catchupReg.disconnect(nil)
@@ -69,7 +69,7 @@ func TestRegistrationBasic(t *testing.T) {
 	discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 	disconnectReg.disconnect(discErr)
 	require.Equal(t, discErr.GoError(), disconnectReg.WaitForError(t))
-	require.Equal(t, 2, len(disconnectReg.Events()))
+	require.Equal(t, 2, len(disconnectReg.GetAndClearEvents()))
 
 	// External Disconnect before output loop.
 	disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
@@ -79,7 +79,7 @@ func TestRegistrationBasic(t *testing.T) {
 	disconnectEarlyReg.disconnect(discErr)
 	go disconnectEarlyReg.runOutputLoop(ctx, 0)
 	require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForError(t))
-	require.Equal(t, 0, len(disconnectEarlyReg.Events()))
+	require.Equal(t, 0, len(disconnectEarlyReg.GetAndClearEvents()))
 
 	// Overflow.
 	overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
@@ -89,7 +89,7 @@ func TestRegistrationBasic(t *testing.T) {
 	}
 	go overflowReg.runOutputLoop(ctx, 0)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), overflowReg.WaitForError(t))
-	require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
+	require.Equal(t, cap(overflowReg.buf), len(overflowReg.GetAndClearEvents()))
 
 	// Stream Error.
 	streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
@@ -128,7 +128,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		require.NotZero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
 
 		// Compare the events sent on the registration's Stream to the expected events.
-		require.Equal(t, expEvents(withFiltering), r.Events())
+		require.Equal(t, expEvents(withFiltering), r.GetAndClearEvents())
 	})
 }
 
@@ -167,8 +167,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2)}, rAC.Events())
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1)}, originFiltering.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2)}, rAC.GetAndClearEvents())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1)}, originFiltering.GetAndClearEvents())
 	require.Nil(t, rAC.Error())
 	require.Nil(t, originFiltering.Error())
 }
@@ -234,13 +234,13 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(ctx, spAC, ev5, logicalOpMetadata{omitInRangefeeds: true}, nil /* alloc */)
 
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4), noPrev(ev5)}, rAB.Events())
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev2, ev4, ev5}, rBC.Events())
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev3}, rCD.Events())
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4), noPrev(ev5)}, rAC.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4), noPrev(ev5)}, rAB.GetAndClearEvents())
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev2, ev4, ev5}, rBC.GetAndClearEvents())
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev3}, rCD.GetAndClearEvents())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4), noPrev(ev5)}, rAC.GetAndClearEvents())
 	// Registration rACFiltering doesn't receive ev5 because both withFiltering
 	// (for the registration) and OmitInRangefeeds (for the event) are true.
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, rACFiltering.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, rACFiltering.GetAndClearEvents())
 	require.Nil(t, rAB.Error())
 	require.Nil(t, rBC.Error())
 	require.Nil(t, rCD.Error())
@@ -281,7 +281,7 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(ctx, spCD, ev2, logicalOpMetadata{}, nil /* alloc */)
 	reg.PublishToOverlapping(ctx, spAC, ev1, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, rAB.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, rAB.GetAndClearEvents())
 
 	// Disconnect from rAB without error.
 	reg.Disconnect(ctx, spAB)
@@ -335,7 +335,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Nil(t, r.Events())
+	require.Nil(t, r.GetAndClearEvents())
 
 	// Publish a value with a timestamp equal to the registration's start
 	// timestamp. Should be ignored.
@@ -344,7 +344,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Nil(t, r.Events())
+	require.Nil(t, r.GetAndClearEvents())
 
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
@@ -353,7 +353,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, r.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, r.GetAndClearEvents())
 
 	r.disconnect(nil)
 }

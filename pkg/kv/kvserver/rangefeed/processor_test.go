@@ -82,7 +82,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 1},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 
 		// Test the processor's operation filter.
@@ -104,7 +104,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 5},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 
 		// Test value with one registration.
@@ -121,25 +121,25 @@ func TestProcessorBasic(t *testing.T) {
 					},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 
 		// Test value to non-overlapping key with one registration.
 		p.ConsumeLogicalOps(ctx,
 			writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
 
 		// Test intent that is aborted with one registration.
 		txn1 := uuid.MakeV4()
 		// Write intent.
 		p.ConsumeLogicalOps(ctx, writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
 		// Abort.
 		p.ConsumeLogicalOps(ctx, abortIntentOp(txn1))
 		h.syncEventC()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
 		require.Equal(t, 0, h.rts.intentQ.Len())
 
 		// Test intent that is committed with one registration.
@@ -147,7 +147,7 @@ func TestProcessorBasic(t *testing.T) {
 		// Write intent.
 		p.ConsumeLogicalOps(ctx, writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
 		// Forward closed timestamp. Should now be stuck on intent.
 		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
 		h.syncEventAndRegistrations()
@@ -158,7 +158,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 9},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 		// Update the intent. Should forward resolved timestamp.
 		p.ConsumeLogicalOps(ctx, updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
@@ -170,7 +170,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 11},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 		// Commit intent. Should forward resolved timestamp to closed timestamp.
 		p.ConsumeLogicalOps(ctx,
@@ -191,7 +191,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 15},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 
 		// Add another registration with withDiff = true and withFiltering = true.
@@ -217,7 +217,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 15},
 				),
 			},
-			r2Stream.Events(),
+			r2Stream.GetAndClearEvents(),
 		)
 
 		// Test the processor's new operation filter.
@@ -241,14 +241,14 @@ func TestProcessorBasic(t *testing.T) {
 				hlc.Timestamp{WallTime: 20},
 			),
 		}
-		require.Equal(t, chEventAM, r1Stream.Events())
+		require.Equal(t, chEventAM, r1Stream.GetAndClearEvents())
 		chEventCZ := []*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
 				roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
 				hlc.Timestamp{WallTime: 20},
 			),
 		}
-		require.Equal(t, chEventCZ, r2Stream.Events())
+		require.Equal(t, chEventCZ, r2Stream.GetAndClearEvents())
 
 		// Test value with two registration that overlaps both.
 		p.ConsumeLogicalOps(ctx,
@@ -263,8 +263,8 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, valEvent, r1Stream.Events())
-		require.Equal(t, valEvent, r2Stream.Events())
+		require.Equal(t, valEvent, r1Stream.GetAndClearEvents())
+		require.Equal(t, valEvent, r2Stream.GetAndClearEvents())
 
 		// Test value that only overlaps the second registration.
 		p.ConsumeLogicalOps(ctx,
@@ -279,8 +279,8 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
-		require.Equal(t, valEvent2, r2Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.GetAndClearEvents())
+		require.Equal(t, valEvent2, r2Stream.GetAndClearEvents())
 
 		// Test committing intent with OmitInRangefeeds that overlaps two
 		// registration (one withFiltering = true and one withFiltering = false).
@@ -297,7 +297,7 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, valEvent3, r1Stream.Events())
+		require.Equal(t, valEvent3, r1Stream.GetAndClearEvents())
 		// r2Stream should not see the event.
 		// Cancel the first registration.
 		r1Stream.Cancel()
@@ -374,7 +374,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 					hlc.Timestamp{WallTime: 1},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 
 		// Add another registration with withOmitRemote = true.
@@ -400,7 +400,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 					hlc.Timestamp{WallTime: 1},
 				),
 			},
-			r2Stream.Events(),
+			r2Stream.GetAndClearEvents(),
 		)
 
 		txn2 := uuid.MakeV4()
@@ -419,8 +419,8 @@ func TestProcessorOmitRemote(t *testing.T) {
 			),
 		}
 
-		require.Equal(t, valEvent3, r1Stream.Events())
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r2Stream.Events())
+		require.Equal(t, valEvent3, r1Stream.GetAndClearEvents())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r2Stream.GetAndClearEvents())
 	})
 }
 
@@ -465,7 +465,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 					hlc.Timestamp{WallTime: 0},
 				),
 			},
-			r1Stream.Events(),
+			r1Stream.GetAndClearEvents(),
 		)
 		require.Equal(t,
 			[]*kvpb.RangeFeedEvent{
@@ -474,7 +474,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 					hlc.Timestamp{WallTime: 0},
 				),
 			},
-			r2Stream.Events(),
+			r2Stream.GetAndClearEvents(),
 		)
 
 		// Block its Send method and fill up the registration's input channel.
@@ -504,7 +504,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 		// Wait for just the unblocked registration to catch up.
 		h.syncEventAndRegistrationsSpan(spXY)
-		require.Equal(t, toFill+1, len(r2Stream.Events()))
+		require.Equal(t, toFill+1, len(r2Stream.GetAndClearEvents()))
 		require.Equal(t, 2, p.Len())
 
 		// Unblock the send channel. The events should quickly be consumed.
@@ -515,7 +515,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		// exactly one event to be dropped, but it is possible that multiple events
 		// were dropped due to rapid event consumption before the r1's outputLoop
 		// began consuming from its event buffer.
-		require.LessOrEqual(t, len(r1Stream.Events()), toFill)
+		require.LessOrEqual(t, len(r1Stream.GetAndClearEvents()), toFill)
 		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.WaitForError(t))
 		testutils.SucceedsSoon(t, func() error {
 			if act, exp := p.Len(), 1; exp != act {
@@ -624,7 +624,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 
 		// Count consumed values
 		consumedOps := 0
-		for _, e := range r1Stream.Events() {
+		for _, e := range r1Stream.GetAndClearEvents() {
 			if e.Val != nil {
 				consumedOps++
 			}
@@ -702,7 +702,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 				hlc.Timestamp{},
 			),
 		}
-		require.Equal(t, chEvent, r1Stream.Events())
+		require.Equal(t, chEvent, r1Stream.GetAndClearEvents())
 
 		// The resolved timestamp should still not be initialized.
 		require.False(t, h.rts.IsInit())
@@ -734,7 +734,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 				hlc.Timestamp{WallTime: 18},
 			),
 		}
-		require.Equal(t, chEvent, r1Stream.Events())
+		require.Equal(t, chEvent, r1Stream.GetAndClearEvents())
 	})
 }
 
@@ -1078,7 +1078,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 		// Verify that no registrations were given operations
 		// from before they registered.
 		for s, expFirstIdx := range regs {
-			events := s.Events()
+			events := s.GetAndClearEvents()
 			require.IsType(t, &kvpb.RangeFeedCheckpoint{}, events[0].GetValue())
 			require.IsType(t, &kvpb.RangeFeedValue{}, events[1].GetValue())
 
@@ -1468,7 +1468,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 		// Wait for the initial checkpoint.
 		h.syncEventAndRegistrations()
-		require.Len(t, stream.Events(), 1)
+		require.Len(t, stream.GetAndClearEvents(), 1)
 
 		// Block the registration consumer, and spawn a goroutine to post events to
 		// the stream, which should block. The rangefeed pipeline buffers a few
@@ -1504,7 +1504,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 		// Wait for the final checkpoint event.
 		h.syncEventAndRegistrations()
-		events := stream.Events()
+		events := stream.GetAndClearEvents()
 		require.Equal(t, &kvpb.RangeFeedEvent{
 			Checkpoint: &kvpb.RangeFeedCheckpoint{
 				Span:       span.AsRawSpanWithNoLocals(),

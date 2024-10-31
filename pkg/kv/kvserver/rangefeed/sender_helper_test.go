@@ -35,8 +35,8 @@ func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
 	c.count.Add(-1)
 }
 
-func (c *testRangefeedCounter) get() int32 {
-	return c.count.Load()
+func (c *testRangefeedCounter) get() int {
+	return int(c.count.Load())
 }
 
 // testServerStream mocks grpc server stream for testing.
