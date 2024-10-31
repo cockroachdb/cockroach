@@ -249,9 +249,11 @@ func TestExplainGist(t *testing.T) {
 			}
 			_, err = sqlDB.Exec("SELECT crdb_internal.decode_plan_gist($1);", gist)
 			if err != nil {
-				// We might be still in the process of cancelling the previous
-				// DROP operation - ignore this particular error.
-				if !testutils.IsError(err, "descriptor is being dropped") {
+				// We might be still in the process of cancelling the previous DROP
+				// operation or hit the statement timeout - ignore this particular
+				// error.
+				if !testutils.IsError(err, "descriptor is being dropped") &&
+					!sqltestutils.IsClientSideQueryCanceledErr(err) {
 					t.Fatal(err)
 				}
 				continue
