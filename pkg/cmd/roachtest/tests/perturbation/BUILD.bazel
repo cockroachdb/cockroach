@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "perturbation",
+    srcs = [
+        "addNode.go",
+        "backfill.go",
+        "decommission.go",
+        "elasticWorkload.go",
+        "framework.go",
+        "partition.go",
+        "restart.go",
+        "slowDisk.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests/perturbation",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/test",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/util/randutil",
+        "//pkg/util/retry",
+        "//pkg/util/timeutil",
+        "//pkg/workload/cli",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
