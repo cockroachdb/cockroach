@@ -508,8 +508,9 @@ func evaluateCommand(
 		} else {
 			resp = trunc(reply.String())
 		}
+		s := args.String()
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
-			args.Method(), trunc(args.String()), h.Txn, resp, err)
+			args.Method(), trunc(s), h.Txn, resp, err)
 	}
 	return pd, err
 }

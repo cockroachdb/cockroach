@@ -4889,7 +4889,7 @@ func TestRangeMigration(t *testing.T) {
 func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	ctx := context.Background()
 	args := base.TestServerArgs{}
-	args.Knobs.Store = &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true}
+	args.Knobs.Store = &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: false}
 	s, _, db := serverutils.StartServer(t, args)
 
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
