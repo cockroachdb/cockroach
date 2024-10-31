@@ -1016,6 +1016,10 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				require.NoError(t, err)
 				// Test implicit transactions first.
 				blockSchemaChange.Swap(true)
+				defer func() {
+					close(waitForTimeout)
+					blockSchemaChange.Swap(false)
+				}()
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
@@ -1030,8 +1034,6 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 					err = txn.Commit()
 					require.NoError(t, err)
 				}
-				close(waitForTimeout)
-				blockSchemaChange.Swap(false)
 			})
 	}
 }
