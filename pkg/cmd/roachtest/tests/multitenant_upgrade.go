@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -156,13 +157,10 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		wg.Add(len(tenants))
 
 		for _, tenant := range tenants {
-			h.Background(
-				fmt.Sprintf("%s: %s", desc, tenant.name),
-				func(ctx context.Context, l *logger.Logger) error {
-					defer wg.Done()
-					return fn(ctx, l, tenant)
-				},
-			)
+			h.Go(func(ctx context.Context, l *logger.Logger) error {
+				defer wg.Done()
+				return fn(ctx, l, tenant)
+			}, task.Name(fmt.Sprintf("%s: %s", desc, tenant.name)))
 		}
 
 		returnCh := make(chan struct{})
