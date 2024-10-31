@@ -152,6 +152,12 @@ func cdcTimestampBuiltin(
 	preferredOverloadReturnType *types.T,
 	tsFn func(rowEvalCtx *rowEvalContext) hlc.Timestamp,
 ) *tree.ResolvedFunctionDefinition {
+	pref := func(t *types.T) tree.OverloadPreference {
+		if preferredOverloadReturnType.Identical(t) {
+			return tree.OverloadPreferencePreferred
+		}
+		return tree.OverloadPreferenceNone
+	}
 	def := tree.NewFunctionDefinition(
 		fnName,
 		cdcFnProps,
@@ -163,9 +169,9 @@ func cdcTimestampBuiltin(
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 					return eval.TimestampToDecimalDatum(tsFn(rowEvalCtx)), nil
 				},
-				Info:              doc + " as HLC timestamp",
-				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType.Identical(types.Decimal),
+				Info:               doc + " as HLC timestamp",
+				Volatility:         v,
+				OverloadPreference: pref(types.Decimal),
 			},
 			{
 				Types:      tree.ParamTypes{},
@@ -174,9 +180,9 @@ func cdcTimestampBuiltin(
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 					return tree.MakeDTimestampTZ(tsFn(rowEvalCtx).GoTime(), time.Microsecond)
 				},
-				Info:              doc + " as TIMESTAMPTZ",
-				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType.Identical(types.TimestampTZ),
+				Info:               doc + " as TIMESTAMPTZ",
+				Volatility:         v,
+				OverloadPreference: pref(types.TimestampTZ),
 			},
 			{
 				Types:      tree.ParamTypes{},
@@ -185,9 +191,9 @@ func cdcTimestampBuiltin(
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
 					return tree.MakeDTimestamp(tsFn(rowEvalCtx).GoTime(), time.Microsecond)
 				},
-				Info:              doc + " as TIMESTAMP",
-				Volatility:        v,
-				PreferredOverload: preferredOverloadReturnType.Identical(types.Timestamp),
+				Info:               doc + " as TIMESTAMP",
+				Volatility:         v,
+				OverloadPreference: pref(types.Timestamp),
 			},
 		},
 	)
