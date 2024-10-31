@@ -111,7 +111,7 @@ func Run(ctx context.Context, cfg Config) error {
 	{
 		sender := cfg.DB.NonTransactionalSender()
 		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-		pff = rangefeedFactory(distSender.RangeFeedSpans)
+		pff = rangefeedFactory(distSender.RangeFeed)
 	}
 
 	bf := func() kvevent.Buffer {

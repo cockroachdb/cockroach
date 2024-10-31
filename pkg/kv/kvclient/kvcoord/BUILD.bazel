@@ -81,7 +81,6 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/shuffle",
-        "//pkg/util/span",
         "//pkg/util/startup",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
