@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -83,7 +82,7 @@ func (p *workPool) workRemaining() []testWithCount {
 //
 // cr is used for its information about how many clusters with a given tag currently exist.
 func (p *workPool) selectTestForCluster(
-	ctx context.Context, s spec.ClusterSpec, cr *clusterRegistry, cloud spec.Cloud,
+	ctx context.Context, l *logger.Logger, s spec.ClusterSpec, cr *clusterRegistry, cloud spec.Cloud,
 ) testToRunRes {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -101,14 +100,14 @@ func (p *workPool) selectTestForCluster(
 	candidateScore := 0
 	var candidate testWithCount
 	for _, tc := range testsWithCounts {
-		score := scoreTestAgainstCluster(tc, tag, cr)
+		score := scoreTestAgainstCluster(l, tc, tag, cr)
 		if score > candidateScore {
 			candidateScore = score
 			candidate = tc
 		}
 	}
 
-	p.decTestLocked(ctx, candidate.spec.Name)
+	p.decTestLocked(ctx, l, candidate.spec.Name)
 
 	runNum := p.count - candidate.count + 1
 	return testToRunRes{
@@ -177,7 +176,7 @@ func (p *workPool) selectTest(
 
 		tc := p.mu.tests[candidateIdx]
 		runNum := p.count - tc.count + 1
-		p.decTestLocked(ctx, tc.spec.Name)
+		p.decTestLocked(ctx, l, tc.spec.Name)
 		ttr = testToRunRes{
 			spec:            tc.spec,
 			runCount:        p.count,
@@ -206,13 +205,16 @@ func (p *workPool) selectTest(
 //
 // cr is used for its information about how many clusters with a given tag
 // currently exist.
-func scoreTestAgainstCluster(tc testWithCount, tag string, cr *clusterRegistry) int {
+func scoreTestAgainstCluster(
+	l *logger.Logger, tc testWithCount, tag string, cr *clusterRegistry,
+) int {
 	t := tc.spec
 	testPolicy := t.Cluster.ReusePolicy
 	if tag != "" && testPolicy != (spec.ReusePolicyTagged{Tag: tag}) {
-		log.Fatalf(context.TODO(),
+		l.Fatalf(
 			"incompatible test and cluster. Cluster tag: %s. Test policy: %+v",
-			tag, t.Cluster.ReusePolicy)
+			tag, t.Cluster.ReusePolicy,
+		)
 	}
 	score := 0
 	if _, ok := testPolicy.(spec.ReusePolicyAny); ok {
@@ -253,7 +255,7 @@ func (p *workPool) findCompatibleTestsLocked(
 
 // decTestLocked decrements a test's remaining count and removes it
 // from the workPool if it was exhausted.
-func (p *workPool) decTestLocked(ctx context.Context, name string) {
+func (p *workPool) decTestLocked(ctx context.Context, l *logger.Logger, name string) {
 	idx := -1
 	for idx = range p.mu.tests {
 		if p.mu.tests[idx].spec.Name == name {
@@ -261,7 +263,7 @@ func (p *workPool) decTestLocked(ctx context.Context, name string) {
 		}
 	}
 	if idx == -1 {
-		log.Fatalf(ctx, "failed to find test: %s", name)
+		l.FatalfCtx(ctx, "failed to find test: %s", name)
 	}
 	tc := &p.mu.tests[idx]
 	tc.count--

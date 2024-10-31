@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -161,10 +160,10 @@ func registerImportTPCC(r registry.Registry) {
 			// runner copies it into an appropriate directory path.
 			dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
 			if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-				log.Errorf(ctx, "failed to create perf dir: %+v", err)
+				t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
 			}
 			if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 			}
 			return nil
 		})
@@ -328,10 +327,10 @@ func registerImportTPCH(r registry.Registry) {
 					// runner copies it into an appropriate directory path.
 					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
 					if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-						log.Errorf(ctx, "failed to create perf dir: %+v", err)
+						t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
 					}
 					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+						t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
 				})
