@@ -975,6 +975,43 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 
+	// If this is a binary operator with one untyped literal or placeholder,
+	// check for a binary operator with parameter types matching the type of the
+	// opposite argument.
+	if inBinOp && len(s.exprs) == 2 {
+		var typ *types.T
+		numConsts := s.constIdxs.Len()
+		numPlaceholders := s.placeholderIdxs.Len()
+		if (numConsts == 1 && numPlaceholders == 0) ||
+			(numConsts == 0 && numPlaceholders == 1) {
+			// If one argument is a constant then it assumes the same type
+			// as the other argument. This matches Postgres's behavior. See
+			// the documentation about "unknown" types (this is how Postgres
+			// initially types constant values):
+			// https://www.postgresql.org/docs/17/typeconv-oper.html.
+			if s.typedExprs[0] != nil {
+				typ = s.typedExprs[0].ResolvedType()
+			} else if s.typedExprs[1] != nil {
+				typ = s.typedExprs[1].ResolvedType()
+			}
+		}
+		if typ != nil {
+			exactOverloads := filterOverloads(s.overloadIdxs, s.overloads,
+				func(ov overloadImpl) bool {
+					typs := ov.params().Types()
+					return typ.Oid() == typs[0].Oid() && typ.Oid() == typs[1].Oid()
+				})
+			if len(exactOverloads) == 1 {
+				prevOverloadIdxs := s.overloadIdxs
+				s.overloadIdxs = exactOverloads
+				if ok, err := checkReturn(ctx, semaCtx, s); ok {
+					return err
+				}
+				s.overloadIdxs = prevOverloadIdxs
+			}
+		}
+	}
+
 	if !s.constIdxs.Empty() {
 		allConstantsAreHomogenous := false
 		if ok, err := filterAttempt(ctx, semaCtx, s, func() {
@@ -1228,6 +1265,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// we prefer overloads where we infer the type of the NULL to be the same as the
 	// other argument. This is used to differentiate the behavior of
 	// STRING[] || NULL and STRING || NULL.
+	// TODO(mgartner): I think we can remove this heuristic in favor of the rule
+	// applied above that types untyped literals and placeholders based on the
+	// input types of overloads.
 	if inBinOp && len(s.exprs) == 2 {
 		if ok, err := filterAttempt(ctx, semaCtx, s, func() {
 			var err error
