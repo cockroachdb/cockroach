@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/humanizeutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

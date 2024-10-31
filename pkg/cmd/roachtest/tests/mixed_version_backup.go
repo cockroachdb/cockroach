@@ -1700,6 +1700,7 @@ func (d *BackupRestoreTestDriver) computeTableContents(
 	}
 
 	if err := eg.Wait(); err != nil {
+		l.ErrorfCtx(ctx, "Error loading system table content %s", err)
 		return nil, err
 	}
 
