@@ -2685,8 +2685,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 			)
 			testRNG := mvt.RNG()
 
-			uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
-
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
 			if err != nil {
