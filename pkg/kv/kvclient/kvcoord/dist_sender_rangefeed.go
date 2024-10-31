@@ -693,6 +693,7 @@ func (ds *DistSender) partialRangeFeed(
 				token.Desc().RangeID, active.StartAfter, active.Span, timeutil.Since(active.Resolved.GoTime()), err)
 		}
 		active.setLastError(err)
+		metrics.Errors.RangefeedRestartRanges.Inc(1)
 
 		errInfo, err := handleRangefeedError(ctx, metrics, err, active.ParentRangefeedMetadata.fromManualSplit)
 		if err != nil {
@@ -730,8 +731,6 @@ type rangefeedErrorInfo struct {
 func handleRangefeedError(
 	ctx context.Context, metrics *DistSenderRangeFeedMetrics, err error, spawnedFromManualSplit bool,
 ) (rangefeedErrorInfo, error) {
-	metrics.Errors.RangefeedRestartRanges.Inc(1)
-
 	if err == nil {
 		return rangefeedErrorInfo{}, nil
 	}
