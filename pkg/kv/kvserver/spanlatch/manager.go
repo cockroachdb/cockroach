@@ -639,11 +639,11 @@ func (m *Manager) Poison(lg *Guard) {
 // dependent latch acquisition attempts can complete if not blocked on any other
 // owned latches.
 func (m *Manager) Release(ctx context.Context, lg *Guard) {
+	m.remove(ctx, lg)
 	lg.done.signal()
 	if lg.snap != nil {
 		lg.snap.close()
 	}
-	m.remove(ctx, lg)
 
 	var held time.Duration
 	if lg.acquireTime != 0 {
