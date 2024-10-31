@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { DatabaseMetadata } from "src/api/databases/getDatabaseMetadataApi";
+import { NodeStatus } from "src/api/nodesApi";
 import { NodeID, StoreID } from "src/types/clusterTypes";
 import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
 
@@ -12,7 +13,7 @@ import { DatabaseRow } from "./databaseTypes";
 export const rawDatabaseMetadataToDatabaseRows = (
   raw: DatabaseMetadata[],
   nodesInfo: {
-    nodeIDToRegion: Record<NodeID, string>;
+    nodeStatusByID: Record<NodeID, NodeStatus>;
     storeIDToNodeID: Record<StoreID, NodeID>;
     isLoading: boolean;
   },
@@ -20,7 +21,7 @@ export const rawDatabaseMetadataToDatabaseRows = (
   return raw.map((db: DatabaseMetadata): DatabaseRow => {
     const nodesByRegion = mapStoreIDsToNodeRegions(
       db.storeIds,
-      nodesInfo?.nodeIDToRegion,
+      nodesInfo?.nodeStatusByID,
       nodesInfo?.storeIDToNodeID,
     );
     return {
