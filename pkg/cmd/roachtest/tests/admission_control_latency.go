@@ -91,6 +91,7 @@ type variations struct {
 	workload             workloadType
 	acceptableChange     float64
 	cloud                registry.CloudSet
+	profileOptions       []profileOptionFunc
 }
 
 const NUM_REGIONS = 3
@@ -146,6 +147,15 @@ func newMetamorphic(p perturbation, rng *rand.Rand) variations {
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
+	// We use a slightly higher min latency of 50ms to avoid collecting too many
+	// profiles in some tests.
+	v.profileOptions = []profileOptionFunc{
+		profDbName("target"),
+		profMinimumLatency(50 * time.Millisecond),
+		profMinNumExpectedStmts(1000),
+		profProbabilityToInclude(0.001),
+		profMultipleFromP99(10),
+	}
 	return v
 }
 
@@ -171,6 +181,13 @@ func setupFull(p perturbation) variations {
 	v.cloud = registry.OnlyGCE
 	v.mem = spec.Standard
 	v.perturbation = p
+	v.profileOptions = []profileOptionFunc{
+		profDbName("target"),
+		profMinimumLatency(30 * time.Millisecond),
+		profMinNumExpectedStmts(1000),
+		profProbabilityToInclude(0.001),
+		profMultipleFromP99(10),
+	}
 	return v
 }
 
@@ -196,6 +213,16 @@ func setupDev(p perturbation) variations {
 	v.cloud = registry.AllClouds
 	v.mem = spec.Standard
 	v.perturbation = p
+
+	// We more aggressively collect profiles in dev tests since they run for
+	// short durations.
+	v.profileOptions = []profileOptionFunc{
+		profDbName("target"),
+		profMinimumLatency(20 * time.Millisecond),
+		profMinNumExpectedStmts(100),
+		profProbabilityToInclude(0.01),
+		profMultipleFromP99(10),
+	}
 	return v
 }
 
@@ -329,7 +356,12 @@ type elasticWorkload struct{}
 var _ perturbation = elasticWorkload{}
 
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
-	return newMetamorphic(e, rng)
+	v := newMetamorphic(e, rng)
+	// NB: Running an elastic workload can sometimes increase the latency of
+	// almost all regular requests. To prevent this, we set the min latency to
+	// 100ms instead of the default.
+	v.profileOptions = append(v.profileOptions, profMinimumLatency(100*time.Millisecond))
+	return v
 }
 
 func (e elasticWorkload) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -871,7 +903,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Begin profiling halfway through the workload.
 	waitDuration(ctx, v.validationDuration/2)
 	t.L().Printf("profiling slow statements")
-	require.NoError(t, profileTopStatements(ctx, c, t.L(), "target"))
+	require.NoError(t, profileTopStatements(ctx, c, t.L(), v.profileOptions...))
 	waitDuration(ctx, v.validationDuration/2)
 
 	// Collect the baseline after the workload has stabilized.
