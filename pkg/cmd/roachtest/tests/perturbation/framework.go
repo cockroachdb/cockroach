@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tests
+package perturbation
 
 import (
 	"bytes"
@@ -177,7 +177,7 @@ func register(r registry.Registry, p perturbation) {
 	addDev(r, p)
 }
 
-func registerLatencyTests(r registry.Registry) {
+func RegisterTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.

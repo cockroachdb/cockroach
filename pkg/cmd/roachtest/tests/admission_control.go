@@ -5,7 +5,9 @@
 
 package tests
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+)
 
 func registerAdmission(r registry.Registry) {
 	// TODO(irfansharif): Can we write these tests using cgroups instead?
@@ -39,5 +41,4 @@ func registerAdmission(r registry.Registry) {
 	registerIntentResolutionOverload(r)
 	registerElasticIO(r)
 	registerDiskBandwidthOverload(r)
-	registerLatencyTests(r)
 }
