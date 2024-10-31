@@ -2352,7 +2352,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
