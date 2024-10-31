@@ -329,6 +329,9 @@ func (f *PlanGistFactory) encodeNodeColumnOrdinals(vals []exec.NodeColumnOrdinal
 
 func (f *PlanGistFactory) decodeNodeColumnOrdinals() []exec.NodeColumnOrdinal {
 	l := f.decodeInt()
+	if l < 0 {
+		return nil
+	}
 	vals := make([]exec.NodeColumnOrdinal, l)
 	return vals
 }
@@ -339,6 +342,9 @@ func (f *PlanGistFactory) encodeResultColumns(vals colinfo.ResultColumns) {
 
 func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
 	numCols := f.decodeInt()
+	if numCols < 0 {
+		return nil
+	}
 	return make(colinfo.ResultColumns, numCols)
 }
 
@@ -461,6 +467,9 @@ func (f *PlanGistFactory) encodeRows(rows [][]tree.TypedExpr) {
 
 func (f *PlanGistFactory) decodeRows() [][]tree.TypedExpr {
 	numRows := f.decodeInt()
+	if numRows < 0 {
+		return nil
+	}
 	return make([][]tree.TypedExpr, numRows)
 }
 

@@ -196,3 +196,9 @@ query T nosort
 SELECT crdb_internal.decode_external_plan_gist('Ag8f')
 ----
 • union all
+
+# Regression test for #133015. Gracefully handle decoding negative integers.
+query T
+SELECT crdb_internal.decode_external_plan_gist('Aifvzn5p':::STRING)
+----
+• create view
