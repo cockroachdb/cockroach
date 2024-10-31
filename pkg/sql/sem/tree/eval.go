@@ -1541,6 +1541,10 @@ func makeLeFn(a, b *types.T, v volatility.V) *CmpOp {
 func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 	return makeCmpOpOverload(treecmp.IsNotDistinctFrom, a, b, true, v)
 }
+func unpreferred(cmp *CmpOp) *CmpOp {
+	cmp.OverloadPreference = OverloadPreferenceUnpreferred
+	return cmp
+}
 
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
@@ -1567,6 +1571,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeEqFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeEqFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeEqFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeEqFn(types.Time, types.Time, volatility.Leakproof),
 		makeEqFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeEqFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1627,6 +1635,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLtFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLtFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeLtFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeLtFn(types.Time, types.Time, volatility.Leakproof),
 		makeLtFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLtFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1686,6 +1698,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLeFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLeFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeLeFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeLeFn(types.Time, types.Time, volatility.Leakproof),
 		makeLeFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLeFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1766,6 +1782,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeIsFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeIsFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeIsFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeIsFn(types.Time, types.Time, volatility.Leakproof),
 		makeIsFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeIsFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1834,6 +1854,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
 		makeEvalTupleIn(types.RefCursor, volatility.Leakproof),
 		makeEvalTupleIn(types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeEvalTupleIn(types.BPChar, volatility.Leakproof)),
 		makeEvalTupleIn(types.Time, volatility.Leakproof),
 		makeEvalTupleIn(types.TimeTZ, volatility.Leakproof),
 		makeEvalTupleIn(types.Timestamp, volatility.Leakproof),
