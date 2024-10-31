@@ -50,6 +50,7 @@ func newCountAggregator(
 		ag,
 		post,
 		[]*types.T{types.Int},
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */

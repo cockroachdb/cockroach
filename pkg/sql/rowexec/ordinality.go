@@ -48,6 +48,7 @@ func newOrdinalityProcessor(
 		o,
 		post,
 		colTypes,
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */

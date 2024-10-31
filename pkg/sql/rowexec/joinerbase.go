@@ -8,6 +8,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -43,6 +44,7 @@ type joinerBase struct {
 func (jb *joinerBase) init(
 	ctx context.Context,
 	self execinfra.RowSource,
+	txn *kv.Txn,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	leftTypes []*types.T,
@@ -89,11 +91,11 @@ func (jb *joinerBase) init(
 		evalCtx = flowCtx.NewEvalCtx()
 	}
 	if err := jb.ProcessorBase.InitWithEvalCtx(
-		ctx, self, post, outputTypes, flowCtx, evalCtx, processorID, nil /* memMonitor */, opts,
+		ctx, self, post, outputTypes, txn, flowCtx, evalCtx, processorID, nil /* memMonitor */, opts,
 	); err != nil {
 		return nil, err
 	}
-	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(txn)
 	return evalCtx, jb.onCond.Init(ctx, onExpr, onCondTypes, semaCtx, evalCtx)
 }
 

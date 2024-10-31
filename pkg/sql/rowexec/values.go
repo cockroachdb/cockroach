@@ -59,7 +59,7 @@ func newValuesProcessor(
 		v.typs[i] = spec.Columns[i].Type
 	}
 	if err := v.Init(
-		ctx, v, post, v.typs, flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{},
+		ctx, v, post, v.typs, flowCtx.GetTxn(), flowCtx, processorID, nil /* memMonitor */, execinfra.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}

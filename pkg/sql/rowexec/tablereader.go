@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -34,6 +35,7 @@ type tableReader struct {
 	execinfra.ProcessorBase
 	execinfra.SpansWithCopy
 
+	txn             *kv.Txn
 	limitHint       rowinfra.RowLimit
 	parallelize     bool
 	batchBytesLimit rowinfra.BytesLimit
@@ -98,6 +100,7 @@ func newTableReader(
 
 	tr := trPool.Get().(*tableReader)
 
+	tr.txn = flowCtx.GetTxn()
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	tr.parallelize = spec.Parallelize
 	tr.batchBytesLimit = batchBytesLimit
@@ -105,7 +108,7 @@ func newTableReader(
 
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init below.
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(tr.txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
 			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
@@ -125,6 +128,7 @@ func newTableReader(
 		tr,
 		post,
 		resultTypes,
+		tr.txn,
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */
@@ -144,7 +148,7 @@ func newTableReader(
 	if err := fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:                        flowCtx.Txn,
+			Txn:                        tr.txn,
 			Reverse:                    spec.Reverse,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
@@ -188,7 +192,7 @@ func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) {
-	if tr.FlowCtx.Txn == nil {
+	if tr.txn == nil {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
@@ -216,7 +220,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 			ctx, tr.Spans, nil /* spanIDs */, bytesLimit, tr.limitHint,
 		)
 	} else {
-		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
+		initialTS := tr.txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB.KV(), initialTS, tr.maxTimestampAge, tr.Spans,
 			bytesLimit, tr.limitHint, tr.FlowCtx.EvalCtx.QualityOfService(),
@@ -336,7 +340,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx(), tr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx(), tr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 

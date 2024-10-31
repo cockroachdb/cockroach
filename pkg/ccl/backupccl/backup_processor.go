@@ -174,7 +174,7 @@ func newBackupDataProcessor(
 		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 		memAcc: &ba,
 	}
-	if err := bp.Init(ctx, bp, post, backupOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := bp.Init(ctx, bp, post, backupOutputTypes, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,

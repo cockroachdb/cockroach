@@ -57,7 +57,7 @@ func (s *sorterBase) init(
 	// The processor will overflow to disk if this limit is not enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, redact.Sprintf("%s-limited", processorName))
 	if err := s.ProcessorBase.Init(
-		ctx, self, post, input.OutputTypes(), flowCtx, processorID, memMonitor, opts,
+		ctx, self, post, input.OutputTypes(), flowCtx.GetTxn(), flowCtx, processorID, memMonitor, opts,
 	); err != nil {
 		memMonitor.Stop(ctx)
 		return err

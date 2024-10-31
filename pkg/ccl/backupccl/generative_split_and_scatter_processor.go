@@ -307,7 +307,7 @@ func newGenerativeSplitAndScatterProcessor(
 		doneScatterCh:     make(chan entryNode, numNodes*maxConcurrentRestoreWorkers),
 		routingDatumCache: newRoutingDatumCache(),
 	}
-	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil, // there are no inputs to drain
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

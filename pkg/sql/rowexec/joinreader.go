@@ -401,6 +401,7 @@ func newJoinReader(
 	evalCtx, err := jr.joinerBase.init(
 		ctx,
 		jr,
+		jr.txn,
 		flowCtx,
 		processorID,
 		leftTypes,

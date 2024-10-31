@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -764,13 +765,14 @@ func (pb *ProcessorBase) Init(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
+	txn *kv.Txn,
 	flowCtx *FlowCtx,
 	processorID int32,
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, txn, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
 	)
 }
 
@@ -783,6 +785,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
+	txn *kv.Txn,
 	flowCtx *FlowCtx,
 	evalCtx *eval.Context,
 	processorID int32,
@@ -793,7 +796,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(txn)
 	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
 		return err
 	}

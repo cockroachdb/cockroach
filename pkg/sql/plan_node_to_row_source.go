@@ -113,6 +113,7 @@ func (p *planNodeToRowSource) Init(
 		p,
 		post,
 		p.outputTypes,
+		flowCtx.GetTxn(),
 		flowCtx,
 		flowCtx.EvalCtx,
 		processorID,

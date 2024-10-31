@@ -400,6 +400,7 @@ func newTTLProcessor(
 		ttlProcessor,
 		&execinfrapb.PostProcessSpec{},
 		[]*types.T{},
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */

@@ -159,6 +159,7 @@ func newWindower(
 		w,
 		post,
 		w.outputTypes,
+		flowCtx.GetTxn(),
 		flowCtx,
 		w.evalCtx,
 		processorID,

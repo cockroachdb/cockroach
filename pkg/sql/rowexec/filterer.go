@@ -52,6 +52,7 @@ func newFiltererProcessor(
 		f,
 		post,
 		types,
+		flowCtx.GetTxn(),
 		flowCtx,
 		f.evalCtx,
 		processorID,

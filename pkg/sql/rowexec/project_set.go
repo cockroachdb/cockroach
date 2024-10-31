@@ -87,11 +87,14 @@ func newProjectSetProcessor(
 		gens:      make([]eval.ValueGenerator, len(spec.Exprs)),
 		done:      make([]bool, len(spec.Exprs)),
 	}
+	txn := flowCtx.GetTxn()
+	ps.evalCtx.Txn = txn
 	if err := ps.InitWithEvalCtx(
 		ctx,
 		ps,
 		post,
 		outputTypes,
+		txn,
 		flowCtx,
 		ps.evalCtx,
 		processorID,
@@ -108,7 +111,7 @@ func newProjectSetProcessor(
 	}
 
 	// Initialize exprHelper.
-	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)
+	semaCtx := ps.FlowCtx.NewSemaContext(txn)
 	err := ps.eh.Init(ctx, len(ps.spec.Exprs), ps.input.OutputTypes(), semaCtx, ps.evalCtx)
 	if err != nil {
 		return nil, err
@@ -204,7 +207,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			// Store the generator before Start so that it'll be closed even if
 			// Start returns an error.
 			ps.gens[i] = gen
-			if err := gen.Start(ps.Ctx(), ps.FlowCtx.Txn); err != nil {
+			if err := gen.Start(ps.Ctx(), ps.evalCtx.Txn); err != nil {
 				return nil, nil, err
 			}
 		}

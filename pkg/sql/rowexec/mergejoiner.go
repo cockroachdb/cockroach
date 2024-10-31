@@ -69,7 +69,7 @@ func newMergeJoiner(
 	}
 
 	if _, err := m.joinerBase.init(
-		ctx, m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		ctx, m /* self */, flowCtx.GetTxn(), flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, false /* outputContinuationColumn */, post,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{leftSource, rightSource},

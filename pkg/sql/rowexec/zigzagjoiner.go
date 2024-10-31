@@ -8,6 +8,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -227,6 +228,8 @@ import (
 type zigzagJoiner struct {
 	joinerBase
 
+	txn *kv.Txn
+
 	cancelChecker cancelchecker.CancelChecker
 
 	// numTables stores the number of tables involved in the join.
@@ -283,11 +286,11 @@ func newZigzagJoiner(
 	if spec.Type != descpb.InnerJoin {
 		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
 	}
-	z := &zigzagJoiner{}
+	z := &zigzagJoiner{txn: flowCtx.GetTxn()}
 
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init (via joinerBase.init below).
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(z.txn)
 	for _, fetchSpec := range []fetchpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
 		for i := range fetchSpec.KeyAndSuffixColumns {
 			if err := typedesc.EnsureTypeIsHydrated(
@@ -303,6 +306,7 @@ func newZigzagJoiner(
 	_, err := z.joinerBase.init(
 		ctx,
 		z, /* self */
+		z.txn,
 		flowCtx,
 		processorID,
 		leftColumnTypes,
@@ -462,7 +466,7 @@ func (z *zigzagJoiner) setupInfo(
 	if err := fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:                        flowCtx.Txn,
+			Txn:                        flowCtx.GetTxn(),
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockDurability:             spec.LockingDurability,
@@ -909,7 +913,7 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
-	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

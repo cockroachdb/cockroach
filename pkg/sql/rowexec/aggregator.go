@@ -119,7 +119,8 @@ func (ag *aggregatorBase) init(
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
 	ag.inputTypes = input.OutputTypes()
-	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+	txn := flowCtx.GetTxn()
+	semaCtx := flowCtx.NewSemaContext(txn)
 	pAlloc := execagg.MakeParamTypesAllocator(spec.Aggregations)
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
@@ -152,7 +153,7 @@ func (ag *aggregatorBase) init(
 	}
 
 	return ag.ProcessorBase.InitWithEvalCtx(
-		ctx, self, post, ag.outputTypes, flowCtx, ag.evalCtx, processorID, memMonitor,
+		ctx, self, post, ag.outputTypes, txn, flowCtx, ag.evalCtx, processorID, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,

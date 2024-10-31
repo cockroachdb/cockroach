@@ -151,7 +151,7 @@ func newRestoreDataProcessor(
 	}
 
 	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0)
-	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

@@ -176,7 +176,7 @@ func newSampleAggregator(
 	}
 
 	if err := s.Init(
-		ctx, nil, post, input.OutputTypes(), flowCtx, processorID, memMonitor,
+		ctx, nil, post, input.OutputTypes(), flowCtx.GetTxn(), flowCtx, processorID, memMonitor,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				s.close()

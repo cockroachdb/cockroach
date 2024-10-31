@@ -59,7 +59,7 @@ func newBulkRowWriterProcessor(
 		input:          input,
 	}
 	if err := c.Init(
-		ctx, c, &execinfrapb.PostProcessSpec{}, CTASPlanResultTypes, flowCtx, processorID,
+		ctx, c, &execinfrapb.PostProcessSpec{}, CTASPlanResultTypes, flowCtx.Txn, flowCtx, processorID,
 		nil /* memMonitor */, execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
 	); err != nil {
 		return nil, err

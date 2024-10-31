@@ -204,7 +204,7 @@ func NewColBatchDirectScan(
 	// should be able to modify the BatchRequest, but alas.
 	fetchSpec := spec.FetchSpec
 	fetcher := row.NewDirectKVBatchFetcher(
-		flowCtx.Txn,
+		base.txn,
 		bsHeader,
 		&fetchSpec,
 		spec.Reverse,

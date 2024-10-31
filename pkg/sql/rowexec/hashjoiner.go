@@ -125,6 +125,7 @@ func newHashJoiner(
 	if _, err := h.joinerBase.init(
 		ctx,
 		h,
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		leftTypes,

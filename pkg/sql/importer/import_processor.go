@@ -145,7 +145,7 @@ func newReadImportDataProcessor(
 		spec:   spec,
 		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,

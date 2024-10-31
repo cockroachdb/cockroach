@@ -8,6 +8,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -59,6 +60,8 @@ const (
 
 type invertedJoiner struct {
 	execinfra.ProcessorBase
+
+	txn *kv.Txn
 
 	fetchSpec fetchpb.IndexFetchSpec
 
@@ -173,6 +176,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
+		txn:                  flowCtx.GetTxn(),
 		fetchSpec:            spec.FetchSpec,
 		input:                input,
 		inputTypes:           input.OutputTypes(),
@@ -220,7 +224,7 @@ func newInvertedJoiner(
 
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init below.
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(ij.txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
 			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
@@ -232,7 +236,7 @@ func newInvertedJoiner(
 	// Always make a copy of the eval context since it might be mutated later.
 	evalCtx := flowCtx.NewEvalCtx()
 	if err := ij.ProcessorBase.InitWithEvalCtx(
-		ctx, ij, post, outputColTypes, flowCtx, evalCtx, processorID, nil, /* memMonitor */
+		ctx, ij, post, outputColTypes, ij.txn, flowCtx, evalCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -248,7 +252,7 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(ij.txn)
 	onExprColTypes := make([]*types.T, 0, len(ij.inputTypes)+len(rightColTypes))
 	onExprColTypes = append(onExprColTypes, ij.inputTypes...)
 	onExprColTypes = append(onExprColTypes, rightColTypes...)
@@ -290,7 +294,7 @@ func newInvertedJoiner(
 	if err := fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:                        flowCtx.Txn,
+			Txn:                        ij.txn,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockDurability:             spec.LockingDurability,
@@ -794,7 +798,7 @@ func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = ij.rowsRead
-	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx(), ij.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx(), ij.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

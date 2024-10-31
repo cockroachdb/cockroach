@@ -133,6 +133,7 @@ func newStreamIngestionFrontierProcessor(
 		sf,
 		post,
 		input.OutputTypes(),
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */

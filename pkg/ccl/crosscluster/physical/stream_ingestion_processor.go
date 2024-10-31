@@ -344,7 +344,7 @@ func newStreamIngestionDataProcessor(
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),
 	}
-	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

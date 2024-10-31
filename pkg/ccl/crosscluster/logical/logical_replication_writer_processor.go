@@ -271,7 +271,7 @@ func newLogicalReplicationWriterProcessor(
 		debug:       &lrw.debug,
 	}
 
-	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
+	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx.GetTxn(), flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

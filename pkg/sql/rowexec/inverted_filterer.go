@@ -96,8 +96,9 @@ func newInvertedFilterer(
 		// ExprHelper later.
 		evalCtx = flowCtx.NewEvalCtx()
 	}
+	txn := flowCtx.GetTxn()
 	if err := ifr.ProcessorBase.InitWithEvalCtx(
-		ctx, ifr, post, outputColTypes, flowCtx, evalCtx, processorID, nil, /* memMonitor */
+		ctx, ifr, post, outputColTypes, txn, flowCtx, evalCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ifr.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -127,7 +128,7 @@ func newInvertedFilterer(
 	}
 
 	if spec.PreFiltererSpec != nil {
-		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(txn)
 		var exprHelper execinfrapb.ExprHelper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
 		if err := exprHelper.Init(ctx, spec.PreFiltererSpec.Expression, colTypes, semaCtx, evalCtx); err != nil {

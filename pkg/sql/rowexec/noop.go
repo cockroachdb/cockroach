@@ -54,6 +54,7 @@ func newNoopProcessor(
 		n,
 		post,
 		input.OutputTypes(),
+		flowCtx.GetTxn(),
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */

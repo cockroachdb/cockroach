@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -37,6 +38,7 @@ type colBatchScanBase struct {
 	execinfra.SpansWithCopy
 
 	flowCtx                *execinfra.FlowCtx
+	txn                    *kv.Txn
 	processorID            int32
 	limitHint              rowinfra.RowLimit
 	batchBytesLimit        rowinfra.BytesLimit
@@ -67,7 +69,7 @@ func (s *colBatchScanBase) drainMeta() []execinfrapb.ProducerMetadata {
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.flowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	if !s.flowCtx.Gateway {
@@ -184,6 +186,7 @@ func newColBatchScanBase(
 
 	*s = colBatchScanBase{
 		SpansWithCopy:          s.SpansWithCopy,
+		txn:                    flowCtx.GetTxn(),
 		flowCtx:                flowCtx,
 		processorID:            processorID,
 		limitHint:              limitHint,
@@ -325,7 +328,7 @@ func NewColBatchScan(
 		return nil, nil, err
 	}
 	kvFetcher := row.NewKVFetcher(
-		flowCtx.Txn,
+		base.txn,
 		bsHeader,
 		spec.Reverse,
 		tableArgs.RequiresRawMVCCValues(),
