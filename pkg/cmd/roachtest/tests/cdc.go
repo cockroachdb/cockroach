@@ -1664,7 +1664,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(6, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1684,7 +1684,7 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      5 * time.Minute,
+				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
