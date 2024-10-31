@@ -576,7 +576,7 @@ func (p *Provider) editLabels(
 		if remove {
 			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s", key))
 		} else {
-			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s,Value=%s", key, vm.SanitizeLabel(value)))
+			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s,Value=%s", key, value))
 		}
 	}
 	args = append(args, tagArgs...)
@@ -602,7 +602,8 @@ func (p *Provider) editLabels(
 	return g.Wait()
 }
 
-// AddLabels adds the given labels to the given VMs.
+// AddLabels adds (or updates) the given labels to the given VMs.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
 	return p.editLabels(l, vms, labels, false)
 }

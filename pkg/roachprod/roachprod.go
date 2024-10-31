@@ -1510,6 +1510,8 @@ func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
 	return cloud.DestroyCluster(l, c)
 }
 
+// AddLabels adds (or updates) the given labels to the VMs corresponding to the given cluster.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
