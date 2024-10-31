@@ -67,7 +67,7 @@ func registerElasticIO(r registry.Registry) {
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
-			setAdmissionControl(ctx, t, c, true)
+			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.CRDBNodes())
@@ -128,7 +128,7 @@ func registerElasticIO(r registry.Registry) {
 					// We want to use the mean of the last 2m of data to avoid short-lived
 					// spikes causing failures.
 					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
 						if latestSampleMeanL0Sublevels > subLevelThreshold {
 							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
 						}

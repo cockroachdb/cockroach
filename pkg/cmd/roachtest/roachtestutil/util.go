@@ -3,12 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tests
+package roachtestutil
 
 import (
 	"archive/zip"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,13 +17,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -34,7 +36,7 @@ import (
 func WaitForReady(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
 ) {
-	client := roachtestutil.DefaultHTTPClient(c, t.L())
+	client := DefaultHTTPClient(c, t.L())
 	checkReady := func(ctx context.Context, url string) error {
 		resp, err := client.Get(ctx, url)
 		if err != nil {
@@ -70,9 +72,9 @@ func WaitForReady(
 	))
 }
 
-// setAdmissionControl sets the admission control cluster settings on the
+// SetAdmissionControl sets the admission control cluster settings on the
 // given cluster.
-func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
+func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	val := "true"
@@ -105,10 +107,10 @@ func UsingRuntimeAssertions(t test.Test) bool {
 	return t.Cockroach() == t.RuntimeAssertionsCockroach()
 }
 
-// maybeUseMemoryBudget returns a StartOpts with the specified --max-sql-memory
+// MaybeUseMemoryBudget returns a StartOpts with the specified --max-sql-memory
 // if runtime assertions are enabled, and the default values otherwise.
 // A scheduled backup will not begin at the start of the roachtest.
-func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
+func MaybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
 	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	if UsingRuntimeAssertions(t) {
 		// When running tests with runtime assertions enabled, increase
@@ -123,7 +125,7 @@ func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
 
 // Returns the mean over the last n samples. If n > len(items), returns the mean
 // over the entire items slice.
-func getMeanOverLastN(n int, items []float64) float64 {
+func GetMeanOverLastN(n int, items []float64) float64 {
 	count := n
 	if len(items) < n {
 		count = len(items)
@@ -137,13 +139,13 @@ func getMeanOverLastN(n int, items []float64) float64 {
 	return sum / float64(count)
 }
 
-// profileTopStatements enables profile collection on the top statements from
+// ProfileTopStatements enables profile collection on the top statements from
 // the cluster that exceed 10ms latency and are more than 10x the P99 up to this
 // point. Top statements are defined as ones that have executed frequently
 // enough to matter.
 // NB: This doesn't really work well. The data in statement_statistics is not
 // very accurate so we often use the minimum latency of 10ms.
-func profileTopStatements(
+func ProfileTopStatements(
 	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, dbName string,
 ) error {
 	db := cluster.Conn(ctx, logger, 1)
@@ -205,9 +207,9 @@ FROM (
 	return nil
 }
 
-// downloadProfiles downloads all profiles from the cluster and saves them to
+// DownloadProfiles downloads all profiles from the cluster and saves them to
 // the given artifacts directory to the stmtbundle sub-directory.
-func downloadProfiles(
+func DownloadProfiles(
 	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, outputDir string,
 ) error {
 	stmtDir := filepath.Join(outputDir, "stmtbundle")
@@ -226,7 +228,7 @@ func downloadProfiles(
 		return err
 	}
 
-	client := roachtestutil.DefaultHTTPClient(cluster, logger)
+	client := DefaultHTTPClient(cluster, logger)
 	urlPrefix := `https://` + adminUIAddrs[0] + `/_admin/v1/stmtbundle/`
 
 	var diagID string
@@ -311,12 +313,64 @@ const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
 
 var workloadDurationRegex = regexp.MustCompile(`^\d+[mhsMHS]$`)
 
-// getEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
+// GetEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
 // returns value set if valid else returns default duration.
-func getEnvWorkloadDurationValueOrDefault(defaultDuration string) string {
+func GetEnvWorkloadDurationValueOrDefault(defaultDuration string) string {
 	envWorkloadDurationFlag := os.Getenv(EnvWorkloadDurationFlag)
 	if envWorkloadDurationFlag != "" && workloadDurationRegex.MatchString(envWorkloadDurationFlag) {
 		return " --duration=" + envWorkloadDurationFlag
 	}
 	return " --duration=" + defaultDuration
+}
+
+// MeasureQPS will measure the approx QPS at the time this command is run. The
+// duration is the interval to measure over. Setting too short of an interval
+// can mean inaccuracy in results. Setting too long of an interval may mean the
+// impact is blurred out.
+func MeasureQPS(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	duration time.Duration,
+	nodes option.NodeListOption,
+) float64 {
+	totalOpsCompleted := func() int {
+		// NB: We mgight not be able to hold the connection open during the full duration.
+		var dbs []*gosql.DB
+		for _, nodeId := range nodes {
+			db := c.Conn(ctx, t.L(), nodeId)
+			defer db.Close()
+			dbs = append(dbs, db)
+		}
+		// Count the inserts before sleeping.
+		var total atomic.Int64
+		group := ctxgroup.WithContext(ctx)
+		for _, db := range dbs {
+			group.Go(func() error {
+				var v float64
+				if err := db.QueryRowContext(
+					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
+				).Scan(&v); err != nil {
+					return err
+				}
+				total.Add(int64(v))
+				return nil
+			})
+		}
+
+		require.NoError(t, group.Wait())
+		return int(total.Load())
+	}
+
+	// Measure the current time and the QPS now.
+	startTime := timeutil.Now()
+	beforeOps := totalOpsCompleted()
+	// Wait for the duration minus the first query time.
+	select {
+	case <-ctx.Done():
+		return 0
+	case <-time.After(duration - timeutil.Since(startTime)):
+		afterOps := totalOpsCompleted()
+		return float64(afterOps-beforeOps) / duration.Seconds()
+	}
 }
