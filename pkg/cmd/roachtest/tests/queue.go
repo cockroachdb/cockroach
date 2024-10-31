@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -46,7 +47,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
+			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())
 			batch := " --batch 100"
 			init := ""

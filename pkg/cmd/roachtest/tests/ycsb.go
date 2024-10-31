@@ -78,7 +78,7 @@ func registerYCSB(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			var args string
-			args += " --ramp=" + ifLocal(c, "0s", "2m")
+			args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
@@ -86,8 +86,8 @@ func registerYCSB(r registry.Registry) {
 				args += " --request-distribution=uniform"
 			}
 
-			defaultDuration := ifLocal(c, "10s", "30m")
-			args += getEnvWorkloadDurationValueOrDefault(defaultDuration)
+			defaultDuration := roachtestutil.IfLocal(c, "10s", "30m")
+			args += roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
 			cmd := fmt.Sprintf(
 				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
 					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+

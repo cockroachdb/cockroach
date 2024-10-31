@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	spec2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -213,7 +214,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(c.Spec().NodeCount - 1))
@@ -307,7 +308,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		t.L().Printf("resuming workload")
 		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, roachtestutil.IfLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}
@@ -421,7 +422,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(len(killed)))
@@ -512,7 +513,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		t.L().Printf("resuming workload")
 		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, roachtestutil.IfLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}

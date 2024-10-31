@@ -126,7 +126,7 @@ func runAdmissionControlSnapshotOverloadIO(
 	t.Status(fmt.Sprintf("configuring cluster settings (<%s)", 30*time.Second))
 	{
 		// Defensive, since admission control is enabled by default.
-		setAdmissionControl(ctx, t, c, true)
+		roachtestutil.SetAdmissionControl(ctx, t, c, true)
 		// Ensure ingest splits and excises are enabled. (Enabled by default in v24.1+)
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled = 'true'"); err != nil {
@@ -287,7 +287,7 @@ func runAdmissionControlSnapshotOverloadIO(
 				// We want to use the mean of the last 2m of data to avoid short-lived
 				// spikes causing failures.
 				if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-					latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+					latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
 					if latestSampleMeanL0Sublevels > sublevelThreshold {
 						t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
 					}

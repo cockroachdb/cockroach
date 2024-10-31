@@ -101,7 +101,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 
 	t.Status(fmt.Sprintf("waiting %s for baseline workload throughput", initialDuration))
 	wait(c.NewMonitor(ctx, c.CRDBNodes()), initialDuration)
-	qpsInitial := measureQPS(ctx, t, c, 10*time.Second, c.Node(1))
+	qpsInitial := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
 	if cfg.writeCapBytes >= 0 {
@@ -127,7 +127,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	}
 
 	wait(c.NewMonitor(ctx, c.CRDBNodes()), limitDuration)
-	qpsFinal := measureQPS(ctx, t, c, 10*time.Second, c.Node(1))
+	qpsFinal := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	qpsRelative := qpsFinal / qpsInitial
 	t.Status(fmt.Sprintf("initial qps=%f final qps=%f (%f%%)", qpsInitial, qpsFinal, 100*qpsRelative))
 	for _, cancel := range cancels {

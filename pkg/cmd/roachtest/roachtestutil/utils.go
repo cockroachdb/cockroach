@@ -6,13 +6,23 @@
 package roachtestutil
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SystemInterfaceSystemdUnitName is a convenience function that
@@ -53,4 +63,137 @@ func Every(n time.Duration) EveryN {
 // ShouldLog returns whether it's been more than N time since the last event.
 func (e *EveryN) ShouldLog() bool {
 	return e.ShouldProcess(timeutil.Now())
+}
+
+// WaitForReady waits until the given nodes report ready via health checks.
+// This implies that the node has completed server startup, is heartbeating its
+// liveness record, and can serve SQL clients.
+func WaitForReady(
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+) {
+	client := DefaultHTTPClient(c, t.L())
+	checkReady := func(ctx context.Context, url string) error {
+		resp, err := client.Get(ctx, url)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return errors.Errorf("HTTP %d: %s", resp.StatusCode, body)
+		}
+		return nil
+	}
+
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), nodes)
+	require.NoError(t, err)
+
+	require.NoError(t, timeutil.RunWithTimeout(
+		ctx, "waiting for ready", time.Minute, func(ctx context.Context) error {
+			for i, adminAddr := range adminAddrs {
+				url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddr)
+
+				for err := checkReady(ctx, url); err != nil; err = checkReady(ctx, url) {
+					t.L().Printf("n%d not ready, retrying: %s", nodes[i], err)
+					time.Sleep(time.Second)
+				}
+				t.L().Printf("n%d is ready", nodes[i])
+			}
+			return nil
+		},
+	))
+}
+
+// SetAdmissionControl sets the admission control cluster settings on the
+// given cluster.
+func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+	val := "true"
+	if !enabled {
+		val = "false"
+	}
+	for _, setting := range []string{
+		"admission.kv.enabled",
+		"admission.sql_kv_response.enabled",
+		"admission.sql_sql_response.enabled",
+		"admission.elastic_cpu.enabled",
+	} {
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING "+setting+" = '"+val+"'"); err != nil {
+			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
+		}
+	}
+	if !enabled {
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.0"); err != nil {
+			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
+		}
+	}
+}
+
+// UsingRuntimeAssertions returns true if calls to `t.Cockroach()` for
+// this test will return the cockroach build with runtime
+// assertions.
+func UsingRuntimeAssertions(t test.Test) bool {
+	return t.Cockroach() == t.RuntimeAssertionsCockroach()
+}
+
+// MaybeUseMemoryBudget returns a StartOpts with the specified --max-sql-memory
+// if runtime assertions are enabled, and the default values otherwise.
+// A scheduled backup will not begin at the start of the roachtest.
+func MaybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
+	if UsingRuntimeAssertions(t) {
+		// When running tests with runtime assertions enabled, increase
+		// SQL's memory budget to avoid 'budget exceeded' failures.
+		startOpts.RoachprodOpts.ExtraArgs = append(
+			startOpts.RoachprodOpts.ExtraArgs,
+			fmt.Sprintf("--max-sql-memory=%d%%", budget),
+		)
+	}
+	return startOpts
+}
+
+// Returns the mean over the last n samples. If n > len(items), returns the mean
+// over the entire items slice.
+func GetMeanOverLastN(n int, items []float64) float64 {
+	count := n
+	if len(items) < n {
+		count = len(items)
+	}
+	sum := float64(0)
+	i := 0
+	for i < count {
+		sum += items[len(items)-1-i]
+		i++
+	}
+	return sum / float64(count)
+}
+
+// EnvWorkloadDurationFlag - environment variable to override
+// default run time duration of workload set in tests.
+// Usage: ROACHTEST_PERF_WORKLOAD_DURATION="5m".
+const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
+
+var workloadDurationRegex = regexp.MustCompile(`^\d+[mhsMHS]$`)
+
+// GetEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
+// returns value set if valid else returns default duration.
+func GetEnvWorkloadDurationValueOrDefault(defaultDuration string) string {
+	envWorkloadDurationFlag := os.Getenv(EnvWorkloadDurationFlag)
+	if envWorkloadDurationFlag != "" && workloadDurationRegex.MatchString(envWorkloadDurationFlag) {
+		return " --duration=" + envWorkloadDurationFlag
+	}
+	return " --duration=" + defaultDuration
+}
+
+func IfLocal(c cluster.Cluster, trueVal, falseVal string) string {
+	if c.IsLocal() {
+		return trueVal
+	}
+	return falseVal
 }
