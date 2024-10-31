@@ -1865,7 +1865,9 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 }
 
 func (c *clusterImpl) addLabels(labels map[string]string) error {
-	return roachprod.AddLabels(c.l, c.name, labels)
+	// N.B. we must sanitize the values; e.g., some test names can exceed the maximum length (63 chars in GCE).
+	// N.B. we don't sanitize the keys; unlike values, they are typically _not_ (dynamically) generated.
+	return roachprod.AddLabels(c.l, c.name, vm.SanitizeLabelValues(labels))
 }
 
 func (c *clusterImpl) removeLabels(labels []string) error {
