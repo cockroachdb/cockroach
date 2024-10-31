@@ -92,6 +92,7 @@ type variations struct {
 	cloud                registry.CloudSet
 	profileOptions       []roachtestutil.ProfileOptionFunc
 	specOptions          []spec.Option
+	clusterSettings      map[string]string
 }
 
 const NUM_REGIONS = 3
@@ -168,6 +169,9 @@ func setup(p perturbation, acceptableChange float64) variations {
 		roachtestutil.ProfMultipleFromP99(10),
 	}
 	v.acceptableChange = acceptableChange
+	v.clusterSettings = make(map[string]string)
+	// Enable raft tracing. Remove this once raft tracing is the default.
+	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
 	return v
 }
 
@@ -353,7 +357,10 @@ type backfill struct{}
 var _ perturbation = backfill{}
 
 func (b backfill) setup() variations {
-	return setup(b, 40.0)
+	v := setup(b, 40.0)
+	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
+	v.clusterSettings["bulkio.index_backfill.batch_size"] = "5000"
+	return v
 }
 
 func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
@@ -381,10 +388,6 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 
 	cmd := fmt.Sprintf(`ALTER DATABASE backfill CONFIGURE ZONE USING constraints='{"+node%d":1}', lease_preferences='[[-node%d]]', num_replicas=3`, target, target)
 	_, err := db.ExecContext(ctx, cmd)
-	require.NoError(t, err)
-
-	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING bulkio.index_backfill.batch_size = 5000")
 	require.NoError(t, err)
 
 	t.L().Printf("waiting for replicas to be in place")
@@ -496,6 +499,20 @@ var _ perturbation = restart{}
 
 func (r restart) setup() variations {
 	r.cleanRestart = true
+	v := setup(r, math.Inf(1))
+
+	// TODO(baptist): Remove this setting once #120073 is fixed.
+	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"
+
+	// NB: Prevent replicas from being removed from the store that is down. We
+	// could consider making the dead time a variation so some tests will move
+	// some of the replicas.
+	v.clusterSettings["server.time_until_store_dead"] = (v.perturbationDuration + time.Minute).String()
+
+	// TODO(kvoli,andrewbaptist): Re-introduce a lower than default suspect
+	// duration once RACv2 pull mode (send queue) is enabled.
+	// v.clusterSettings["server.time_after_store_suspect"] = (10 * time.Second).String()
+
 	return setup(r, math.Inf(1))
 }
 
@@ -503,7 +520,8 @@ func (r restart) setupMetamorphic(rng *rand.Rand) variations {
 	v := r.setup()
 	r.cleanRestart = rng.Intn(2) == 0
 	v.perturbation = r
-	return v.randomize(rng)
+	v = v.randomize(rng)
+	return v
 }
 
 func (r restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -559,6 +577,8 @@ func (p partition) setup() variations {
 	p.partitionSite = true
 	v := setup(p, math.Inf(1))
 	v.leaseType = registry.ExpirationLeases
+	// TODO(baptist): Remove this setting once #120073 is fixed.
+	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"
 	return v
 }
 
@@ -830,36 +850,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())
+	v.applyClusterSettings(ctx, t)
 	v.perturbation.startTargetNode(ctx, t, v)
-
-	func() {
-		// TODO(baptist): Remove this block once #120073 is fixed.
-		db := c.Conn(ctx, t.L(), 1)
-		defer db.Close()
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
-			t.Fatal(err)
-		}
-		// Enable raft tracing. Remove this once raft tracing is the default.
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING kv.raft.max_concurrent_traces = '10'`); err != nil {
-			t.Fatal(err)
-		}
-		// TODO(kvoli,andrewbaptist): Re-introduce a lower than default suspect
-		// duration once RACv2 pull mode (send queue) is enabled. e.g.,
-		//
-		//   `SET CLUSTER SETTING server.time_after_store_suspect = '10s'` (default 30s)
-		//   `SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'` (default apply_to_elastic)
-
-		// Avoid stores up-replicating away from the target node, reducing the
-		// backlog of work.
-		if _, err := db.ExecContext(
-			ctx,
-			fmt.Sprintf(
-				`SET CLUSTER SETTING server.time_until_store_dead = '%s'`, v.perturbationDuration+time.Minute)); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
 	// Wait for rebalancing to finish before starting to fill. This minimizes
 	// the time to finish.
@@ -941,6 +933,16 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
 	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
 	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes())
+}
+
+func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
+	db := v.Conn(ctx, t.L(), 1)
+	defer db.Close()
+	for key, value := range v.clusterSettings {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", key, value)); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // trackedStat is a collection of the relevant values from the histogram. The
