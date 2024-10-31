@@ -77,8 +77,8 @@ func (op *UnaryOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*UnaryOp) preferred() bool {
-	return false
+func (*UnaryOp) preference() OverloadPreference {
+	return OverloadPreferenceNone
 }
 
 func (*UnaryOp) outParamInfo() (RoutineType, []int32, TypeList) {
@@ -239,7 +239,7 @@ type BinOp struct {
 	CalledOnNullInput bool
 	EvalOp            BinaryEvalOp
 	Volatility        volatility.V
-	PreferredOverload bool
+	OverloadPreference
 
 	types   TypeList
 	retType ReturnTyper
@@ -259,8 +259,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (op *BinOp) preferred() bool {
-	return op.PreferredOverload
+func (op *BinOp) preference() OverloadPreference {
+	return op.OverloadPreference
 }
 
 func (op *BinOp) outParamInfo() (RoutineType, []int32, TypeList) {
@@ -1319,12 +1319,12 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 
 	treebin.JSONFetchVal: {overloads: []*BinOp{
 		{
-			LeftType:          types.Jsonb,
-			RightType:         types.String,
-			ReturnType:        types.Jsonb,
-			EvalOp:            &JSONFetchValStringOp{},
-			PreferredOverload: true,
-			Volatility:        volatility.Immutable,
+			LeftType:           types.Jsonb,
+			RightType:          types.String,
+			ReturnType:         types.Jsonb,
+			EvalOp:             &JSONFetchValStringOp{},
+			OverloadPreference: OverloadPreferencePreferred,
+			Volatility:         volatility.Immutable,
 		},
 		{
 			LeftType:   types.Jsonb,
@@ -1347,12 +1347,12 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 
 	treebin.JSONFetchText: {overloads: []*BinOp{
 		{
-			LeftType:          types.Jsonb,
-			RightType:         types.String,
-			ReturnType:        types.String,
-			PreferredOverload: true,
-			EvalOp:            &JSONFetchTextStringOp{},
-			Volatility:        volatility.Immutable,
+			LeftType:           types.Jsonb,
+			RightType:          types.String,
+			ReturnType:         types.String,
+			OverloadPreference: OverloadPreferencePreferred,
+			EvalOp:             &JSONFetchTextStringOp{},
+			Volatility:         volatility.Immutable,
 		},
 		{
 			LeftType:   types.Jsonb,
@@ -1392,7 +1392,7 @@ type CmpOp struct {
 
 	Volatility volatility.V
 
-	PreferredOverload bool
+	OverloadPreference
 }
 
 func (op *CmpOp) params() TypeList {
@@ -1409,8 +1409,8 @@ func (op *CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
-func (op *CmpOp) preferred() bool {
-	return op.PreferredOverload
+func (op *CmpOp) preference() OverloadPreference {
+	return op.OverloadPreference
 }
 
 func (op *CmpOp) outParamInfo() (RoutineType, []int32, TypeList) {
@@ -1732,8 +1732,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			},
 			CalledOnNullInput: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
-			PreferredOverload: true,
-			Volatility:        volatility.Leakproof,
+			OverloadPreference: OverloadPreferencePreferred,
+			Volatility:         volatility.Leakproof,
 		},
 		{
 			LeftType:  types.AnyArray,
