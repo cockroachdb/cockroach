@@ -107,7 +107,8 @@ var columnarBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"storage.columnar_blocks.enabled",
 	"set to true to enable columnar-blocks to store KVs in a columnar format",
-	false, // TODO(jackson): Metamorphicize this.
+	metamorphic.ConstantWithTestBool(
+		"storage.columnar_blocks.enabled", true /* defaultValue */),
 	settings.WithPublic,
 )
 
