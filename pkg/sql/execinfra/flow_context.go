@@ -51,6 +51,8 @@ type FlowCtx struct {
 	// higher-level txn (like backfills).
 	Txn *kv.Txn
 
+	UseLeafTxn bool
+
 	// MakeLeafTxn returns a new LeafTxn, different from Txn.
 	MakeLeafTxn func() (*kv.Txn, error)
 
@@ -97,6 +99,15 @@ type FlowCtx struct {
 	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
+}
+
+func (flowCtx *FlowCtx) GetTxn() *kv.Txn {
+	if flowCtx.UseLeafTxn && flowCtx.MakeLeafTxn != nil {
+		if txn, err := flowCtx.MakeLeafTxn(); err == nil {
+			return txn
+		}
+	}
+	return flowCtx.Txn
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.

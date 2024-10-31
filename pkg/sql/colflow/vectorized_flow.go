@@ -1130,6 +1130,19 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.
 		factory := coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
+		if flowCtx.Local && opt == flowinfra.FuseNormally {
+			var hasEagerCancellation bool
+			for _, pSpec := range processorSpecs {
+				for _, iSpec := range pSpec.Input {
+					if iSpec.Type == execinfrapb.InputSyncSpec_PARALLEL_UNORDERED {
+						hasEagerCancellation = true
+					}
+				}
+			}
+			if hasEagerCancellation {
+				flowCtx.UseLeafTxn = true
+			}
+		}
 		for i := range processorSpecs {
 			hasLocalInput := false
 			for j := range processorSpecs[i].Input {
