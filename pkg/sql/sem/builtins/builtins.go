@@ -1934,9 +1934,9 @@ var regularBuiltins = map[string]builtinDefinition{
 
 	"quote_literal": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType:        tree.FixedReturnType(types.String),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{{Name: "val", Typ: types.String}},
+			ReturnType:         tree.FixedReturnType(types.String),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := tree.MustBeDString(args[0])
 				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
@@ -1968,9 +1968,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Category: builtinconstants.CategoryString,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType:        tree.FixedReturnType(types.String),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{{Name: "val", Typ: types.String}},
+			ReturnType:         tree.FixedReturnType(types.String),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.NewDString("NULL"), nil
@@ -2722,9 +2722,9 @@ months and years, use the timestamptz subtraction operator.`,
 	"statement_timestamp": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(evalCtx.GetStmtTimestamp(), time.Microsecond)
 			},
@@ -2887,9 +2887,9 @@ value if you rely on the HLC for accuracy.`,
 	"clock_timestamp": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond)
 			},
@@ -9385,12 +9385,17 @@ func getTimeAdditionalDesc(preferTZOverload bool) (string, string) {
 }
 
 func txnTSOverloads(preferTZOverload bool) []tree.Overload {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return []tree.Overload{
 		{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimestamp(time.Microsecond), nil
 			},
@@ -9398,9 +9403,9 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 			Volatility: volatility.Stable,
 		},
 		{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.Timestamp),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.Timestamp),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimestampNoZone(time.Microsecond), nil
 			},
@@ -9418,13 +9423,18 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 }
 
 func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return append(
 		[]tree.Overload{
 			{
-				Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-				ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-				PreferredOverload: preferTZOverload,
+				Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+				ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+				OverloadPreference: tzPref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 					prec := int32(tree.MustBeDInt(args[0]))
 					if prec < 0 || prec > 6 {
@@ -9436,9 +9446,9 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 				Volatility: volatility.Stable,
 			},
 			{
-				Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-				ReturnType:        tree.FixedReturnType(types.Timestamp),
-				PreferredOverload: !preferTZOverload,
+				Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+				ReturnType:         tree.FixedReturnType(types.Timestamp),
+				OverloadPreference: pref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 					prec := int32(tree.MustBeDInt(args[0]))
 					if prec < 0 || prec > 6 {
@@ -9486,13 +9496,18 @@ func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 }
 
 func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimeTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTime(time.Microsecond), nil
 			},
@@ -9500,9 +9515,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.Time),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.Time),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimeNoZone(time.Microsecond), nil
 			},
@@ -9510,9 +9525,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+			ReturnType:         tree.FixedReturnType(types.TimeTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {
@@ -9524,9 +9539,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-			ReturnType:        tree.FixedReturnType(types.Time),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+			ReturnType:         tree.FixedReturnType(types.Time),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {

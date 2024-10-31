@@ -160,7 +160,7 @@ func NewFunctionDefinition(
 	overloads := make([]*Overload, len(def))
 
 	for i := range def {
-		if def[i].PreferredOverload {
+		if def[i].OverloadPreference == OverloadPreferencePreferred {
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
 			break
@@ -486,7 +486,7 @@ func combineOverloads(a, b []QualifiedOverload, path SearchPath) []QualifiedOver
 	if foundUDFOverload {
 		for i, overload := range result {
 			copiedOverload := *overload.Overload
-			copiedOverload.PreferredOverload = false
+			copiedOverload.OverloadPreference = OverloadPreferenceNone
 			result[i] = QualifiedOverload{
 				Schema:   overload.Schema,
 				Overload: &copiedOverload,
