@@ -58,10 +58,10 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 		streamCtx, cancel := context.WithCancel(context.Background())
 		ubs.AddStream(streamID, cancel)
 		// Note that kvpb.NewError(nil) == nil.
-		require.Equal(t, testRangefeedCounter.get(), int32(1))
+		require.Equal(t, 1, testRangefeedCounter.get())
 		ubs.SendBufferedError(makeMuxRangefeedErrorEvent(streamID, rangeID,
 			kvpb.NewError(nil)))
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, 0, testRangefeedCounter.get())
 		require.Equal(t, context.Canceled, streamCtx.Err())
 		expectedErrEvent := &kvpb.MuxRangeFeedEvent{
 			StreamID: streamID,
@@ -92,13 +92,13 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			{2, 2, &kvpb.NodeUnavailableError{}},
 		}
 
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, 0, testRangefeedCounter.get())
 
 		for _, muxError := range testRangefeedCompletionErrors {
 			ubs.AddStream(muxError.streamID, func() {})
 		}
 
-		require.Equal(t, testRangefeedCounter.get(), int32(3))
+		require.Equal(t, 3, testRangefeedCounter.get())
 
 		var wg sync.WaitGroup
 		for _, muxError := range testRangefeedCompletionErrors {
@@ -125,7 +125,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 				return errors.Newf("expected error %v not found", muxError)
 			})
 		}
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, 0, testRangefeedCounter.get())
 	})
 }
 
@@ -203,7 +203,7 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 	defer ubs.Stop()
 
 	ubs.AddStream(1, func() {})
-	require.Equal(t, testRangefeedCounter.get(), int32(1))
+	require.Equal(t, 1, testRangefeedCounter.get())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
