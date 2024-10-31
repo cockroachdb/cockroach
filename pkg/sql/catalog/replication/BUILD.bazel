@@ -35,6 +35,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
