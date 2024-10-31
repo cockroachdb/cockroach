@@ -27,7 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -315,6 +318,38 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 	}
 
 	return true
+}
+
+func maybeAdjustVirtualIndexScanForExplain(
+	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
+) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
+	idx := index.(*optVirtualIndex)
+	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
+		// If we picked the virtual index, check that we can actually use it.
+		spans := params.IndexConstraint.Spans
+		for i := 0; i < spans.Count(); i++ {
+			if !spans.Get(i).HasSingleKey(ctx, evalCtx) {
+				// We'll have to fall back to the full scan of the virtual
+				// table, so adjust the index choice accordingly (and be careful
+				// to not modify the existing struct just to be safe).
+				idxCopy := *idx
+				idxCopy.idx = nil
+				// Also adjust the scan params since under the hood we'll
+				// effectively perform the "full scan" of the primary index of
+				// the virtual table (while filtering out rows that don't fall
+				// within the index constraint).
+				params.IndexConstraint = nil
+				// Include the detail about the filtering mentioned above.
+				extraAttribute = "virtual table filter"
+				return &idxCopy, params, extraAttribute
+			}
+		}
+	}
+	return idx, params, extraAttribute
+}
+
+func init() {
+	explain.MaybeAdjustVirtualIndexScan = maybeAdjustVirtualIndexScanForExplain
 }
 
 // getSchema is part of the virtualSchemaDef interface.
