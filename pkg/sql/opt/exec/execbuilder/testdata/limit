@@ -546,8 +546,8 @@ vectorized: true
 │ count: 10
 │
 └── • virtual table
-      table: pg_type@pg_type_oid_idx
-      spans: [/1 - /1000]
+      table: pg_type@primary
+      virtual table filter
 
 # Regression test for #69685 - a limit cannot be pushed below a window function
 # if its order-by references the window function.

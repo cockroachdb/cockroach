@@ -956,7 +956,7 @@ func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([
 	if !external {
 		cat = p.optPlanningCtx.catalog
 	}
-	return explain.DecodePlanGistToRows(ctx, gist, cat)
+	return explain.DecodePlanGistToRows(ctx, p.EvalContext(), gist, cat)
 }
 
 // makeQueryIndexRecommendation builds a statement and walks through it to find

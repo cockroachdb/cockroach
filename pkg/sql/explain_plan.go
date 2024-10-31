@@ -225,7 +225,7 @@ func emitExplain(
 		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
-	return explain.Emit(ctx, explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
