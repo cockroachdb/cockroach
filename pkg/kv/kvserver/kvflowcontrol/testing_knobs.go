@@ -32,6 +32,16 @@ type TestingKnobs struct {
 	// mode, while also having the ability to switch between the two
 	// apply_to_(elastic|all) modes.
 	OverridePullPushMode func() bool
+	// OverrideBypassAdmitWaitForEval is used to override the behavior of the
+	// WaitForEval. When set to true, WaitForEval will return immediately and
+	// pretend that the request was admitted. Otherwise, when set to false, or
+	// unset, WaitForEval will behave normally.
+	OverrideBypassAdmitWaitForEval func() bool
+	// OverrideAlwaysRefreshSendStreamStats is used to override the behavior of
+	// the send stream stats refresh. When set to true, the send stream stats
+	// will always be refreshed on a HandleRaftEventRaftMuLocked call. Otherwise,
+	// when set to false, the default behavior will be used.
+	OverrideAlwaysRefreshSendStreamStats bool
 }
 
 // TestingKnobsV1 are the testing knobs that appply to replication flow control
