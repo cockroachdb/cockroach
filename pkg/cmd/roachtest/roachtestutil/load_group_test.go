@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tests
+package roachtestutil
 
 import (
 	"fmt"
@@ -16,11 +16,11 @@ import (
 func TestLoadGroups(t *testing.T) {
 	for _, tc := range []struct {
 		numZones, numRoachNodes, numLoadNodes int
-		loadGroups                            loadGroupList
+		loadGroups                            LoadGroupList
 	}{
 		{
 			3, 9, 3,
-			loadGroupList{
+			LoadGroupList{
 				{
 					option.NodeListOption{1, 2, 3},
 					option.NodeListOption{4},
@@ -37,7 +37,7 @@ func TestLoadGroups(t *testing.T) {
 		},
 		{
 			3, 9, 1,
-			loadGroupList{
+			LoadGroupList{
 				{
 					option.NodeListOption{1, 2, 3, 4, 5, 6, 7, 8, 9},
 					option.NodeListOption{10},
@@ -46,7 +46,7 @@ func TestLoadGroups(t *testing.T) {
 		},
 		{
 			4, 8, 2,
-			loadGroupList{
+			LoadGroupList{
 				{
 					option.NodeListOption{1, 2, 3, 4},
 					option.NodeListOption{9},
@@ -61,7 +61,7 @@ func TestLoadGroups(t *testing.T) {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
 				l := option.NodeLister{NodeCount: tc.numRoachNodes + tc.numLoadNodes, Fatalf: t.Fatalf}
-				lg := makeLoadGroups(l, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
+				lg := MakeLoadGroups(l, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})
 	}
@@ -69,13 +69,13 @@ func TestLoadGroups(t *testing.T) {
 		require.Panics(t, func() {
 
 			numZones, numRoachNodes, numLoadNodes := 2, 4, 3
-			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
+			MakeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
 		}, "Failed to panic when number of load nodes exceeded number of zones")
 	})
 	t.Run("panics with unequal zones per load node", func(t *testing.T) {
 		require.Panics(t, func() {
 			numZones, numRoachNodes, numLoadNodes := 4, 4, 3
-			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
+			MakeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
 		}, "Failed to panic when number of zones is not divisible by number of load nodes")
 	})
 }
