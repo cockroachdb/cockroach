@@ -8,6 +8,7 @@ package builtins
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -176,8 +177,16 @@ func init() {
 			},
 		)
 	})
-	// Add casts between the same type.
-	for typOID, def := range castBuiltins {
+	// Add casts between the same type in deterministic order.
+	typOIDs := make([]oid.Oid, 0, len(castBuiltins))
+	for typOID := range castBuiltins {
+		typOIDs = append(typOIDs, typOID)
+	}
+	sort.Slice(typOIDs, func(i, j int) bool {
+		return typOIDs[i] < typOIDs[j]
+	})
+	for _, typOID := range typOIDs {
+		def := castBuiltins[typOID]
 		typ := types.OidToType[typOID]
 		if !shouldMakeFromCastBuiltin(typ) {
 			continue
