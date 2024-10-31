@@ -163,15 +163,11 @@ func TestRunNewVsOld(t *testing.T) {
 	}
 }
 
-// BenchmarkRun benchmarks the old and implementations of Run with different
+// BenchmarkRun benchmarks Run with different
 // data distributions.
 func BenchmarkRun(b *testing.B) {
 	ctx := context.Background()
-	runGC := func(eng storage.Engine, old bool, spec randomRunGCTestSpec) (Info, error) {
-		runGCFunc := Run
-		if old {
-			runGCFunc = runGCOld
-		}
+	runGC := func(eng storage.Engine, spec randomRunGCTestSpec) (Info, error) {
 		snap := eng.NewSnapshot()
 		defer snap.Close()
 		ttl := time.Duration(spec.ttlSec) * time.Second
@@ -179,7 +175,7 @@ func BenchmarkRun(b *testing.B) {
 		if spec.intentAgeSec > 0 {
 			intentThreshold = time.Duration(spec.intentAgeSec) * time.Second
 		}
-		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
+		return Run(ctx, spec.ds.desc(), snap, spec.now,
 			CalculateThreshold(spec.now, ttl), RunOptions{
 				LockAgeThreshold:    intentThreshold,
 				TxnCleanupThreshold: txnCleanupThreshold,
@@ -194,14 +190,14 @@ func BenchmarkRun(b *testing.B) {
 				return nil
 			})
 	}
-	makeTest := func(old bool, spec randomRunGCTestSpec, rng *rand.Rand) func(b *testing.B) {
+	makeTest := func(spec randomRunGCTestSpec, rng *rand.Rand) func(b *testing.B) {
 		return func(b *testing.B) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			ms := spec.ds.dist(b.N, rng).setupTest(b, eng, *spec.ds.desc())
 			b.SetBytes(int64(float64(ms.Total()) / float64(b.N)))
 			b.ResetTimer()
-			_, err := runGC(eng, old, spec)
+			_, err := runGC(eng, spec)
 			b.StopTimer()
 			require.NoError(b, err)
 		}
@@ -223,16 +219,14 @@ func BenchmarkRun(b *testing.B) {
 	specs := specsWithTTLs(fewVersionsTinyRows, ts100, ttls)
 	specs = append(specs, specsWithTTLs(someVersionsMidSizeRows, ts100, ttls)...)
 	specs = append(specs, specsWithTTLs(lotsOfVersionsMidSizeRows, ts100, ttls)...)
-	for _, old := range []bool{true, false} {
-		b.Run(fmt.Sprintf("old=%v", old), func(b *testing.B) {
-			rng, seed := randutil.NewTestRand()
-			b.Logf("Using benchmark seed: %d", seed)
+	b.Run("old=false", func(b *testing.B) {
+		rng, seed := randutil.NewTestRand()
+		b.Logf("Using benchmark seed: %d", seed)
 
-			for _, spec := range specs {
-				b.Run(fmt.Sprint(spec.ds), makeTest(old, spec, rng))
-			}
-		})
-	}
+		for _, spec := range specs {
+			b.Run(fmt.Sprint(spec.ds), makeTest(spec, rng))
+		}
+	})
 }
 
 func TestNewVsInvariants(t *testing.T) {
