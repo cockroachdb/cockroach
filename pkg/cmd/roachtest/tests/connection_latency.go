@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -82,14 +83,14 @@ func runConnectionLatencyTest(
 
 	if numZones > 1 {
 		numLoadNodes := numZones
-		loadGroups := makeLoadGroups(c, numZones, numNodes, numLoadNodes)
-		cockroachUsEast := loadGroups[0].loadNodes
-		cockroachUsWest := loadGroups[1].loadNodes
-		cockroachEuWest := loadGroups[2].loadNodes
+		loadGroups := roachtestutil.MakeLoadGroups(c, numZones, numNodes, numLoadNodes)
+		cockroachUsEast := loadGroups[0].LoadNodes
+		cockroachUsWest := loadGroups[1].LoadNodes
+		cockroachEuWest := loadGroups[2].LoadNodes
 
-		runWorkload(loadGroups[0].roachNodes, cockroachUsEast, regionUsEast)
-		runWorkload(loadGroups[1].roachNodes, cockroachUsWest, regionUsWest)
-		runWorkload(loadGroups[2].roachNodes, cockroachEuWest, regionEuWest)
+		runWorkload(loadGroups[0].RoachNodes, cockroachUsEast, regionUsEast)
+		runWorkload(loadGroups[1].RoachNodes, cockroachUsWest, regionUsWest)
+		runWorkload(loadGroups[2].RoachNodes, cockroachEuWest, regionEuWest)
 	} else {
 		// Run only on the load node.
 		runWorkload(c.Range(1, numNodes), c.Node(numNodes+1), regionUsCentral)

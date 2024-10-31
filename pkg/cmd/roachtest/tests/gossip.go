@@ -292,7 +292,7 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
-		WaitForReady(ctx, t, c, c.All())
+		roachtestutil.WaitForReady(ctx, t, c, c.All())
 		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 			t.Fatal(err)
 		}
@@ -327,7 +327,7 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
-		WaitForReady(ctx, t, c, c.All())
+		roachtestutil.WaitForReady(ctx, t, c, c.All())
 		g.checkConnectedAndFunctional(ctx, t, c)
 		t.L().Printf("%d: OK\n", i)
 

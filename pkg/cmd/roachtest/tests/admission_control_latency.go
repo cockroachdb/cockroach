@@ -843,7 +843,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// Wait for the first 3/4 of the duration and then measure the QPS in
 		// the last 1/4.
 		waitDuration(ctx, v.fillDuration*3/4)
-		clusterMaxRate <- int(measureQPS(ctx, t, c, v.fillDuration*1/4, v.stableNodes()))
+		clusterMaxRate <- int(roachtestutil.MeasureQPS(ctx, t, c, v.fillDuration*1/4, v.stableNodes()))
 		return nil
 	})
 	// Start filling the system without a rate.
@@ -871,7 +871,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Begin profiling halfway through the workload.
 	waitDuration(ctx, v.validationDuration/2)
 	t.L().Printf("profiling slow statements")
-	require.NoError(t, profileTopStatements(ctx, c, t.L(), "target"))
+	require.NoError(t, roachtestutil.ProfileTopStatements(ctx, c, t.L(), "target"))
 	waitDuration(ctx, v.validationDuration/2)
 
 	// Collect the baseline after the workload has stabilized.
@@ -901,7 +901,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
 
 	t.Status("T5: validating results")
-	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
+	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
 	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.PerfArtifactsDir(), baselineStats, perturbationStats,
 		afterStats))
