@@ -492,7 +492,7 @@ func evaluateCommand(
 		return result.Result{}, errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if log.ExpensiveLogEnabled(ctx, 2) {
+	if rec.GetRangeID() == 5 && log.ExpensiveLogEnabled(ctx, 2) {
 		trunc := func(s string) string {
 			const maxLen = 256
 			if len(s) > maxLen {

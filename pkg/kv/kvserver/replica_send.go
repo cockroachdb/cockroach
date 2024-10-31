@@ -1353,6 +1353,10 @@ func (ec *endCmds) done(
 	// this method is called and the Guard is not set. Consider removing this
 	// check and upgrading the previous observation to an invariant.
 	if ec.g != nil {
+		if ec.repl.RangeID == 5 && len(ec.g.Req.Requests) == 3 {
+			log.Infof(ctx, "TBG finishing %v", ec.g)
+			ctx = context.WithValue(ctx, 5, 5)
+		}
 		ec.repl.concMgr.FinishReq(ctx, ec.g)
 	}
 }

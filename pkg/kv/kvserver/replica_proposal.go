@@ -252,11 +252,17 @@ func (proposal *ProposalData) useReplicationAdmissionControl() bool {
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
 func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposalResult) {
-	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
-	proposal.signalProposalResult(pr)
-	if strings.Contains(proposal.Request.String(), `Put ["a"], Put ["b"], EndTxn(commit)`) {
+	tagged := strings.Contains(proposal.Request.String(), `Put ["a"], Put ["b"], EndTxn(commit)`)
+	if tagged {
+		time.Sleep(100 * time.Millisecond)
+		proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
+	} else {
+		proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
+	}
+	if tagged {
 		log.Infof(ctx, "TBG released latch for %s", proposal.Request.String())
 	}
+	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
 		proposal.sp.Finish()
 		proposal.sp = nil

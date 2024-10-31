@@ -643,7 +643,7 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 	if lg.snap != nil {
 		lg.snap.close()
 	}
-	m.remove(lg)
+	m.remove(ctx, lg)
 
 	var held time.Duration
 	if lg.acquireTime != 0 {
@@ -661,7 +661,7 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 }
 
 // remove removes the latches owned by the provided Guard from the Manager.
-func (m *Manager) remove(lg *Guard) {
+func (m *Manager) remove(ctx context.Context, lg *Guard) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
@@ -673,7 +673,12 @@ func (m *Manager) remove(lg *Guard) {
 				if latch.inReadSet() {
 					sm.readSet.remove(latch)
 				} else {
+					pre := sm.trees[a].length
 					sm.trees[a].Delete(latch)
+					post := sm.trees[a].length
+					if ctx.Value(5) != nil {
+						log.Infof(ctx, "TBG deleted %v (%d)", latch, pre-post)
+					}
 				}
 			}
 		}
