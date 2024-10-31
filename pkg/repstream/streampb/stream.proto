@@ -243,6 +243,10 @@ message StreamEvent {
     // ScanningRangeCount is the number of ranges that have yet to complete the
     // initial scan. ScanningRangeCount <= RangeCount.
     int64 scanning_range_count = 2;
+    
+    // LaggingRangeCount is the number of ranges that are signficantly behind,
+    // after completing the initial scan.
+    int64 lagging_range_count = 3;
   }
 
   // Checkpoint represents stream checkpoint.
