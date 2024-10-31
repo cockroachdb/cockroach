@@ -2,7 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "perturbation",
-    srcs = ["framework.go"],
+    srcs = [
+        "addNode.go",
+        "backfill.go",
+        "decommission.go",
+        "elasticWorkload.go",
+        "framework.go",
+        "partition.go",
+        "restart.go",
+        "slowDisk.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests/perturbation",
     visibility = ["//visibility:public"],
     deps = [
