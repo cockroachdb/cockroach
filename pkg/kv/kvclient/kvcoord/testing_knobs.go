@@ -53,6 +53,11 @@ type ClientTestingKnobs struct {
 	// metamorphicRouteToLeaseholderFirst.
 	RouteToLeaseholderFirst bool
 
+	// ReplicaCircuitBreakerTokenFilter, if set, is invoked with the replica
+	// circuit breaker token before each request is tracked by its dist sender
+	// circuit breaker.
+	ReplicaCircuitBreakerTokenFilter func(token *replicaCircuitBreakerToken)
+
 	// CommitWaitFilter allows tests to instrument the beginning of a transaction
 	// commit wait sleep.
 	CommitWaitFilter func()

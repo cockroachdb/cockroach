@@ -711,6 +711,11 @@ type DistSender struct {
 
 	routeToLeaseholderFirst bool
 
+	// replicaCircuitBreakerTokenFilter, if set, is invoked with the replica
+	// circuit breaker token before each request is tracked by its dist sender
+	// circuit breaker.
+	replicaCircuitBreakerTokenFilter func(token *replicaCircuitBreakerToken)
+
 	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for
 	// replicas. When not set, replicas on nodes with unhealthy connections are
@@ -833,6 +838,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.routeToLeaseholderFirst = cfg.TestingKnobs.RouteToLeaseholderFirst || metamorphicRouteToLeaseholderFirst
+	ds.replicaCircuitBreakerTokenFilter = cfg.TestingKnobs.ReplicaCircuitBreakerTokenFilter
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
@@ -2721,6 +2727,9 @@ func (ds *DistSender) sendToReplicas(
 		tBegin := timeutil.Now() // for slow log message
 		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).
 			Track(ctx, ba, withCommit, tBegin.UnixNano())
+		if ds.replicaCircuitBreakerTokenFilter != nil {
+			ds.replicaCircuitBreakerTokenFilter(&cbToken)
+		}
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr
@@ -3071,7 +3080,12 @@ func (ds *DistSender) sendToReplicas(
 					inTransferRetry.Next()
 				}
 			default:
-				if ambiguousError != nil {
+				// Check whether the error on the batch response indicates the request
+				// successfully evaluated on the server. If that's the case, we don't
+				// need to propagate ambiguity from prior attempts.
+				if ds.detectErrorIndicatesSuccessfulEvaluation(br.Error) {
+					return br, nil
+				} else if ambiguousError != nil {
 					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
 						ambiguousError, br.Error.GoError())
 				}
@@ -3101,6 +3115,25 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+// detectErrorIndicatesSuccessfulEvaluation detects whether the supplied error
+// corresponds to a request successfully evaluating on the server or not.
+// Returning an error is a legit response in a variety of cases[1]; in such
+// cases, the request doesn't need to be re-evaluated on other replicas.
+// Moreover, any ambiguity from previous evaluation attempts can be safely
+// ignored.
+//
+// [1] E.g. A QueryIntent request can be configured to return an error if the
+// intent it was looking for is not found.
+func (ds *DistSender) detectErrorIndicatesSuccessfulEvaluation(pErr *kvpb.Error) bool {
+	// TODO(arul): This should be extended to include other errors, such as
+	// TransactionRetryErrors.
+	switch pErr.GetDetail().(type) {
+	case *kvpb.IntentMissingError:
+		return true
+	}
+	return false
 }
 
 // getLocalityComparison takes two nodeIDs as input and returns the locality

@@ -211,6 +211,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/caller",
+        "//pkg/util/circuit",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/grpcutil",
