@@ -238,6 +238,18 @@ withdraw-support 1 3
 2 x 1 x
 3 x 1 1
 
+# At this point we can't campaign because we are not supported by a quorum.
+campaign 1
+----
+DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
+
+grant-support 3 1
+----
+  1 2 3
+1 3 1 x
+2 x 1 x
+3 3 1 1
+
 campaign 1
 ----
 INFO 1 is starting a new election at term 2

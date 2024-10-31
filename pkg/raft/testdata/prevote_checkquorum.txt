@@ -228,6 +228,18 @@ withdraw-support 1 3
 2 x 1 1
 3 x 1 1
 
+# At this point we can't campaign because we are not supported by a quorum.
+campaign 1
+----
+DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
+
+grant-support 3 1
+----
+  1 2 3
+1 2 1 x
+2 x 1 1
+3 2 1 1
+
 # Node 3 is now the leader. Even though the leader is active, nodes 1 and 2 can
 # still win a prevote and election if they both explicitly campaign, since the
 # PreVote+CheckQuorum recent leader condition only applies to follower voters.
@@ -264,9 +276,9 @@ stabilize
 withdraw-support 2 3
 ----
   1 2 3
-1 1 1 x
+1 2 1 x
 2 x 1 x
-3 x 1 1
+3 2 1 1
 
 campaign 2
 ----
