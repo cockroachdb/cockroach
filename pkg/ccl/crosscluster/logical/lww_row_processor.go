@@ -15,11 +15,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -37,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,11 +50,26 @@ type sqlRowProcessor struct {
 	decoder  cdcevent.Decoder
 	querier  querier
 	settings *cluster.Settings
+	sd       *sessiondata.SessionData
+	spec     execinfrapb.LogicalReplicationWriterSpec
 	ie       isql.Executor
 	lastRow  cdcevent.Row
+	db       descs.DB
 
 	// testing knobs.
 	failureInjector
+}
+
+// RowProcessor knows how to process a single row from an event stream.
+type RowProcessor interface {
+	// ProcessRow processes a single KV update by inserting or deleting a row.
+	// Txn argument can be nil. The provided value is the "previous value",
+	// before the change was applied on the source.
+	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
+	GetLastRow() cdcevent.Row
+	SetSyntheticFailurePercent(uint32)
+	ReportMutations(*stats.Refresher)
+	Close(context.Context)
 }
 
 // A querier handles rows for any table that has previously been added
@@ -200,8 +219,11 @@ func makeSQLProcessorFromQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
+	db descs.DB,
 	ie isql.Executor,
 	querier querier,
+	sd *sessiondata.SessionData,
+	spec execinfrapb.LogicalReplicationWriterSpec,
 ) (*sqlRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
 	tableDescsBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(tableConfigByDestID))
@@ -229,7 +251,10 @@ func makeSQLProcessorFromQuerier(
 		querier:  querier,
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		settings: settings,
+		db:       db,
 		ie:       ie,
+		sd:       sd,
+		spec:     spec,
 	}, nil
 }
 
@@ -257,6 +282,41 @@ func (p *failureInjector) injectFailure() error {
 		}
 	}
 	return nil
+}
+
+func (srp *sqlRowProcessor) HandleBatch(
+	ctx context.Context, batch []streampb.StreamEvent_KV,
+) (batchStats, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "sqlRowProcessor.HandleBatch")
+	defer sp.Finish()
+
+	stats := batchStats{}
+	var err error
+	if len(batch) == 1 {
+		if srp.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(batch[0].KeyValue.Value.RawBytes) == 0 {
+			return stats, nil
+		}
+		s, err := srp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
+		if err != nil {
+			return stats, err
+		}
+		stats.Add(s)
+	} else {
+		err = srp.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, kv := range batch {
+				if srp.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(kv.KeyValue.Value.RawBytes) == 0 {
+					continue
+				}
+				s, err := srp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
+				if err != nil {
+					return err
+				}
+				stats.Add(s)
+			}
+			return nil
+		}, isql.WithSessionData(srp.sd))
+	}
+	return stats, err
 }
 
 func (srp *sqlRowProcessor) ProcessRow(
@@ -381,7 +441,10 @@ func makeSQLProcessor(
 	settings *cluster.Settings,
 	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	jobID jobspb.JobID,
+	db descs.DB,
 	ie isql.Executor,
+	sd *sessiondata.SessionData,
+	spec execinfrapb.LogicalReplicationWriterSpec,
 ) (*sqlRowProcessor, error) {
 
 	needUDFQuerier := false
@@ -406,11 +469,11 @@ func makeSQLProcessor(
 		udfQuerier = makeApplierQuerier(ctx, settings, tableConfigByDestID, jobID, ie)
 	}
 
-	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigByDestID, ie, &muxQuerier{
+	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigByDestID, db, ie, &muxQuerier{
 		shouldUseUDF: shouldUseUDF,
 		lwwQuerier:   lwwQuerier,
 		udfQuerier:   udfQuerier,
-	})
+	}, sd, spec)
 
 }
 
