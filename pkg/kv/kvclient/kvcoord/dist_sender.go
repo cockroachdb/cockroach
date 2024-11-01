@@ -111,6 +111,12 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderAsyncInProgress = metric.Metadata{
+		Name:        "distsender.batches.async.in_progress",
+		Help:        "Number of partial batches currently being executed asynchronously",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncThrottledCount = metric.Metadata{
 		Name:        "distsender.batches.async.throttled",
 		Help:        "Number of partial batches not sent asynchronously due to throttling",
@@ -389,6 +395,7 @@ type DistSenderMetrics struct {
 	CrossZoneBatchRequestBytes         *metric.Counter
 	CrossZoneBatchResponseBytes        *metric.Counter
 	AsyncSentCount                     *metric.Counter
+	AsyncInProgress                    *metric.Gauge
 	AsyncThrottledCount                *metric.Counter
 	SentCount                          *metric.Counter
 	LocalSentCount                     *metric.Counter
@@ -435,6 +442,7 @@ func MakeDistSenderMetrics() DistSenderMetrics {
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
 		AsyncSentCount:                     metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncInProgress:                    metric.NewGauge(metaDistSenderAsyncInProgress),
 		AsyncThrottledCount:                metric.NewCounter(metaDistSenderAsyncThrottledCount),
 		SentCount:                          metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:                     metric.NewCounter(metaTransportLocalSentCount),
@@ -2020,6 +2028,8 @@ func (ds *DistSender) sendPartialBatchAsync(
 		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
+			ds.metrics.AsyncInProgress.Inc(1)
+			defer ds.metrics.AsyncInProgress.Dec(1)
 			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
 			resp.positions = positions
 			responseCh <- resp
