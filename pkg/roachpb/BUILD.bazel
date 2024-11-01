@@ -84,6 +84,7 @@ go_test(
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/storage/enginepb",
+        "//pkg/testutils",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
