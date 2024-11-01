@@ -21,8 +21,8 @@ func MakeSet(dims int) Set {
 // MakeSetFromRawData constructs a new vector set from a raw slice of vectors.
 // The vectors in the slice have the given number of dimensions and are laid out
 // contiguously in row-wise order.
-// NB: The data slice is directly used rather than copied; any outside changes
-// to it will be reflected in the vector set.
+// NB: The data slice is directly used rather than copied; do not use it outside
+// the context of this vector set after this point.
 func MakeSetFromRawData(data []float32, dims int) Set {
 	if len(data)%dims != 0 {
 		panic(errors.AssertionFailedf(
@@ -100,14 +100,12 @@ func (vs *Set) AddSet(vectors *Set) {
 	vs.Count += vectors.Count
 }
 
-// AddZero adds the given count of zero vectors to this set.
-func (vs *Set) AddZero(count int) {
+// AddUndefined adds the given number of vectors to this set. The vectors should
+// be set to defined values before use.
+func (vs *Set) AddUndefined(count int) {
 	vs.Data = slices.Grow(vs.Data, count*vs.Dims)
 	vs.Count += count
-	start := len(vs.Data)
-	end := vs.Count * vs.Dims
-	vs.Data = vs.Data[:end]
-	num32.Zero(vs.Data[start:end])
+	vs.Data = vs.Data[:vs.Count*vs.Dims]
 }
 
 // ReplaceWithLast removes the vector at the given offset from the set,
@@ -128,4 +126,31 @@ func (vs *Set) EnsureCapacity(capacity int) {
 	if vs.Count < capacity {
 		vs.Data = slices.Grow(vs.Data, (capacity-vs.Count)*vs.Dims)
 	}
+}
+
+// Centroid calculates the mean of each dimension across all vectors in the set
+// and writes the resulting averages to the provided centroid slice. The slice
+// must be pre-allocated by the caller, with its length set to the number of
+// dimensions (Dims field) of the vectors in the set.
+func (vs *Set) Centroid(centroid T) T {
+	if len(centroid) != vs.Dims {
+		panic(errors.AssertionFailedf(
+			"centroid dims %d cannot differ from vector set dims %d", len(centroid), vs.Dims))
+	}
+
+	if vs.Count == 0 {
+		// Return vector of zeros.
+		num32.Zero(centroid)
+		return centroid
+	}
+
+	data := vs.Data
+	copy(centroid, data)
+	data = data[vs.Dims:]
+	for len(data) > 0 {
+		num32.Add(centroid, data[:vs.Dims])
+		data = data[vs.Dims:]
+	}
+	num32.Scale(1/float32(vs.Count), centroid)
+	return centroid
 }
