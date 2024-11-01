@@ -68,8 +68,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -6459,6 +6461,110 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		}
 		cancel()
 	}
+}
+
+// TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart verifies that
+// a changefeed over a large number of quiesced ranges is able to quickly
+// advance its resolved timestamp after a rolling restart. At the lowest level,
+// the test ensures that lease acquisitions required to advance the closed
+// timestamp of the constituent changefeed ranges is fast.
+func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	opts := makeOptions()
+	defer addCloudStorageOptions(t, &opts)()
+	opts.forceRootUserConnection = true
+	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
+	defer testingUseFastRetry()()
+	const numNodes = 3
+
+	stickyVFSRegistry := fs.NewStickyRegistry()
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
+	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		perServerKnobs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					Changefeed: &TestingKnobs{},
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+			},
+			ExternalIODir: opts.externalIODir,
+			UseDatabase:   "d",
+		}
+	}
+
+	tc := serverutils.StartCluster(t, numNodes,
+		base.TestClusterArgs{
+			ServerArgsPerNode: perServerKnobs,
+			ServerArgs: base.TestServerArgs{
+				// Test uses SPLIT AT, which isn't currently supported for
+				// secondary tenants. Tracked with #76378.
+				DefaultTestTenant: base.TODOTestTenantDisabled,
+			},
+			ReusableListenerReg: listenerReg,
+		})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(1)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
+
+	// Create a table with 1000 ranges.
+	sqlDB.ExecMultiple(t,
+		`CREATE DATABASE d;`,
+		`CREATE TABLE d.foo (k INT PRIMARY KEY);`,
+		`INSERT INTO d.foo (k) SELECT * FROM generate_series(1, 1000);`,
+		`ALTER TABLE d.foo SPLIT AT (SELECT * FROM generate_series(1, 1000));`,
+	)
+
+	// Wait for ranges to quiesce.
+	testutils.SucceedsSoon(t, func() error {
+		for i := range tc.NumServers() {
+			store, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
+			require.NoError(t, err)
+			numQuiescent := store.Metrics().QuiescentCount.Value()
+			numQualifyForQuiesence := store.Metrics().LeaseEpochCount.Value()
+			if numQuiescent < numQualifyForQuiesence {
+				return errors.Newf(
+					"waiting for ranges to quiesce on node %d; quiescent: %d; should quiesce: %d",
+					tc.Server(i).NodeID(), numQuiescent, numQualifyForQuiesence,
+				)
+			}
+		}
+		return nil
+	})
+
+	// Capture the pre-restart timestamp. We'll use this as the start time for the
+	// changefeed later.
+	var tsLogical string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsLogical)
+
+	// Perform the rolling restart.
+	require.NoError(t, tc.Restart())
+
+	sinkType := randomSinkTypeWithOptions(opts)
+	f, closeSink := makeFeedFactoryWithOptions(t, sinkType, tc, tc.ServerConn(0), opts)
+	defer closeSink()
+	// The end time is captured post restart. The changefeed spans from before the
+	// restart to after.
+	endTime := tc.Server(0).Clock().Now().AddDuration(5 * time.Second)
+	testFeed := feed(t, f, `CREATE CHANGEFEED FOR d.foo WITH cursor=$1, end_time=$2`,
+		tsLogical, eval.TimestampToDecimalDatum(endTime).String())
+	defer closeFeed(t, testFeed)
+
+	defer DiscardMessages(testFeed)()
+
+	// Ensure the changeefeed is able to complete in a reasonable amount of time.
+	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitForStatus(func(s jobs.Status) bool {
+		return s == jobs.StatusSucceeded
+	}))
 }
 
 func TestChangefeedPropagatesTerminalError(t *testing.T) {

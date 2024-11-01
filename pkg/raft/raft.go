@@ -2658,8 +2658,25 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.setTerm(state.Term)
 	r.setVote(state.Vote)
-	r.setLead(state.Lead)
-	r.setLeadEpoch(state.LeadEpoch)
+	if state.LeadEpoch != 0 {
+		// A non-zero lead epoch indicates that the leader fortified its term.
+		// Fortification promises should hold true across restarts, so we need to
+		// restore both the lead and the lead epoch.
+		//
+		// In cases where the leader wasn't fortified prior to the restart, we
+		// eschew loading the leader known to this peer before shutdown. This
+		// maintains parity with how raft restarts worked before the fortification
+		// protocol was introduced. While it isn't incorrect to load the leader, it
+		// does trip the inHeartbeatLease condition without considerable care.
+		// Tripping the inHeartbeatLease condition can delay leader elections by 2s.
+		// This is known to be a source of regressions, which become meaningful when
+		// the 2s delay stacks by a O(ranges) factor. Epoch based leases which are
+		// quiesced before a restart are particularly vulnerable to such
+		// regressions. Not loading the leader if the leader wasn't fortified is a
+		// way by which we avoid this known and possibly other unknown regressions.
+		r.setLead(state.Lead)
+		r.setLeadEpoch(state.LeadEpoch)
+	}
 }
 
 // atRandomizedElectionTimeout returns true if r.electionElapsed modulo the
