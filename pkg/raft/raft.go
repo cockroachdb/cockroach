@@ -1167,19 +1167,6 @@ func (r *raft) tickElection() {
 		// re-fortified, which means we'll only ever skip the initial part of the
 		// election timeout once per fortified -> no longer fortified transition.
 		r.deFortify(r.id, r.Term)
-		// The peer was supporting a leader who had fortified until now, but that
-		// support has been withdrawn. As a result:
-		// 1. We don't want to wait out an entire election timeout before
-		//    campaigning.
-		// 2. But we do want to take advantage of randomized election timeouts built
-		//    into raft to prevent hung elections.
-		// We achieve both of these goals by "forwarding" electionElapsed to begin
-		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
-		r.logger.Debugf(
-			"%d setting election elapsed to start from %d ticks after store liveness support expired",
-			r.id, r.electionTimeout,
-		)
-		r.electionElapsed = r.electionTimeout
 	} else {
 		r.electionElapsed++
 	}
@@ -2450,7 +2437,23 @@ func (r *raft) deFortify(from pb.PeerID, term uint64) {
 			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
 		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
-	r.resetLeadEpoch()
+
+	if r.leadEpoch != 0 {
+		r.resetLeadEpoch()
+
+		// The peer is  not fortifying the leader anymore. As a result:
+		// 1. We don't want to wait out an entire election timeout before
+		//    campaigning.
+		// 2. But we do want to take advantage of randomized election timeouts built
+		//    into raft to prevent hung elections.
+		// We achieve both of these goals by "forwarding" electionElapsed to begin
+		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
+		r.logger.Debugf(
+			"%d setting election elapsed to start from %d ticks after store liveness support expired",
+			r.id, r.electionTimeout,
+		)
+		r.electionElapsed = r.electionTimeout
+	}
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
