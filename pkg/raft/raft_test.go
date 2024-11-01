@@ -1984,7 +1984,7 @@ func testLeaderStepdownWhenQuorumLost(t *testing.T, storeLivenessEnabled bool) {
 	sm.becomeLeader()
 	assert.Equal(t, pb.StateLeader, sm.state)
 
-	for i := int64(0); i < sm.electionTimeout+1; i++ {
+	for i := int64(0); i < sm.electionTimeout; i++ {
 		sm.tick()
 	}
 
