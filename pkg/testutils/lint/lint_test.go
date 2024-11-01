@@ -1655,7 +1655,11 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestImportNames", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `^(import|\s+)(\w+ )?"database/sql"$`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir, "git", "grep", "-nE",
+			`^(import|\s+)(\w+ )?"database/sql"$`, "--",
+			"*.go", ":!*_generated_test.go", ":!*_generated.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
