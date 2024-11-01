@@ -24,6 +24,55 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func TestEqEstimate(t *testing.T) {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	emptyHist := &Histogram{}
+	emptyHist.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
+
+	if eq := emptyHist.EqEstimate(ctx, tree.NewDInt(0)); eq != 0 {
+		t.Errorf("expected %f but found %f", 0.0, eq)
+	}
+
+	//   0  1  3  3   4  5   0  0   40  35
+	// <--- 1 --- 10 --- 25 --- 30 ---- 42
+	histData := []cat.HistogramBucket{
+		{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(1)},
+		{NumRange: 3, DistinctRange: 2, NumEq: 3, UpperBound: tree.NewDInt(10)},
+		{NumRange: 4, DistinctRange: 2, NumEq: 5, UpperBound: tree.NewDInt(25)},
+		{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
+		{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
+	}
+	h := &Histogram{}
+	h.Init(&evalCtx, opt.ColumnID(1), histData)
+
+	testData := []struct {
+		datum    tree.Datum
+		expected float64
+	}{
+		{tree.NewDInt(1), 1},
+		{tree.NewDInt(9), 3.0 / 2},
+		{tree.NewDInt(10), 3},
+		{tree.NewDInt(11), 4.0 / 2},
+		{tree.NewDInt(25), 5},
+		{tree.NewDInt(28), 0},
+		{tree.NewDInt(30), 0},
+		{tree.NewDInt(35), 40.0 / 7},
+		{tree.NewDInt(42), 35},
+		// Use an all-bucket average for values outside the bounds of the
+		// histogram.
+		{tree.NewDInt(0), h.ValuesCount() / h.DistinctValuesCount()},
+		{tree.NewDInt(43), h.ValuesCount() / h.DistinctValuesCount()},
+	}
+
+	for i, tc := range testData {
+		if eq := h.EqEstimate(ctx, tc.datum); eq != tc.expected {
+			t.Errorf("testcase %d: expected %f but found %f", i, tc.expected, eq)
+		}
+	}
+}
+
 func TestCanFilter(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())

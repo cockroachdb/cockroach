@@ -121,6 +121,66 @@ func (h *Histogram) ValuesCount() float64 {
 	return count
 }
 
+// EqEstimate returns the estimated number of rows that equal the given
+// datum. If the datum is equal to a bucket's upperbound, it returns the
+// bucket's NumEq. If the datum falls in the range of a bucket's upper and lower
+// bounds, it returns the bucket's NumRange divided by the bucket's
+// DistinctRange. Otherwise, if the datum does not fall into any bucket in the
+// histogram or any comparison between the datum and a bucket's upperbound
+// results in an error, then it returns the total number of values in the
+// histogram divided by the total number of distinct values.
+func (h *Histogram) EqEstimate(ctx context.Context, d tree.Datum) float64 {
+	// Find the bucket belonging to the datum. It is the first bucket where the
+	// datum is less than or equal to the upperbound.
+	bucketIdx := binarySearch(len(h.buckets), func(i int) (bool, error) {
+		cmp, err := d.Compare(ctx, h.evalCtx, h.upperBound(i))
+		return cmp <= 0, err
+	})
+	if bucketIdx < len(h.buckets) {
+		if cmp, err := d.Compare(ctx, h.evalCtx, h.upperBound(bucketIdx)); err == nil {
+			if cmp == 0 {
+				return h.numEq(bucketIdx)
+			}
+			if bucketIdx != 0 {
+				if h.distinctRange(bucketIdx) == 0 {
+					// Avoid dividing by zero.
+					return 0
+				}
+				return h.numRange(bucketIdx) / h.distinctRange(bucketIdx)
+			}
+			// The value d is less than the upper bound of the first bucket, so
+			// it is outside the bounds of the histogram. Fallback to the total
+			// number of values divided by the total number of distinct values.
+		}
+	}
+	totalDistinct := h.DistinctValuesCount()
+	if totalDistinct == 0 {
+		// Avoid dividing by zero.
+		return 0
+	}
+	return h.ValuesCount() / h.DistinctValuesCount()
+}
+
+// binarySearch extends sort.Search to allow the search function to return an
+// error. It returns the smallest index i in [0, n) at which f(i) is true,
+// assuming that on the range [0, n), f(i) == true implies f(i+1) == true. If
+// there is no such index, or if f returns an error for any invocation, it
+// returns n.
+func binarySearch(n int, f func(int) (bool, error)) (idx int) {
+	defer func() {
+		if r := recover(); r != nil {
+			idx = n
+		}
+	}()
+	return sort.Search(n, func(i int) bool {
+		res, err := f(i)
+		if err != nil {
+			panic(err)
+		}
+		return res
+	})
+}
+
 // DistinctValuesCount returns the estimated number of distinct values in the
 // histogram.
 func (h *Histogram) DistinctValuesCount() float64 {

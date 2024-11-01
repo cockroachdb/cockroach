@@ -53,6 +53,22 @@
 =>
 (GenerateInvertedIndexScans $scanPrivate $filters)
 
+# GenerateMinimalInvertedIndexScans is similar to GenerateInvertedIndexScans. It
+# differs by trying to generate an inverted index scan that spans the fewest
+# index keys, rather than generating scans that span all index keys in the
+# expression and performing set operations on them before an index-join.
+[GenerateMinimalInvertedIndexScans, Explore]
+(Select
+    $input:(Scan
+        $scanPrivate:* &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+    )
+    $filters:*
+)
+=>
+(GenerateMinimalInvertedIndexScans $input $scanPrivate $filters)
+
 # GenerateTrigramSimilarityInvertedIndexScans generates scans on inverted
 # trigram indexes that are constrained by similarity filters (e.g.,
 # `s & % 'foo'`). It is similar conceptually to GenerateInvertedIndexScans, but

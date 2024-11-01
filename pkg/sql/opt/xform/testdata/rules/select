@@ -8517,6 +8517,426 @@ project
  └── projections
       └── 1 [as="?column?":15]
 
+
+# --------------------------------------------------
+# GenerateMinimalInvertedIndexScans
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE min (
+  k INT PRIMARY KEY,
+  j JSON,
+  a INT[],
+  INVERTED INDEX j_idx (j),
+  INVERTED INDEX a_idx (a)
+)
+----
+
+# Histogram boundaries are for arrays with values 1, 2, 3, and 4, including some
+# empty arrays. The row_count is lower than the sum of the histogram buckets
+# num_eq's because some rows can have multiple inverted index entries, for
+# example `{1, 2}`. There are:
+#
+#   - 2000 rows total
+#   - 10 empty arrays
+#   - 1990 arrays encoded into 2020 index entries
+#
+# Histogram boundaries are for JSON values `[]`, `{}`, `[1]`, `[2]`, `[3]`,
+# `{"a": "b"}`, `{"c": "d"}`, and `{"e": "f"}`. The row_count is lower than the
+# sum of the histogram buckets num_eq's because some rows can have multiple
+# inverted index entries, for example `{"a": "b", "c": "d"}`. There are:
+#
+#   - 2000 rows total
+#   - 10 empty arrays
+#   - 990 arrays encoded into 1110 index entries
+#   - 10 empty objects
+#   - 990 objects encoded into 1110 index entries
+#
+exec-ddl
+ALTER TABLE min INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 3,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x43"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1990,
+        "num_range": 0,
+        "upper_bound": "\\x89"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x8a"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x8b"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x8c"
+      }
+    ]
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000138"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000139"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0200"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0400"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x37000300012a0600"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 990,
+        "num_range": 0,
+        "upper_bound": "\\x3761000112620001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "\\x3763000112640001"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "\\x3765000112660001"
+      }
+    ]
+  }
+]'
+----
+
+# Scan over 3 since there are fewer rows containing 3 than 1.
+# TODO(mgartner): The remaining filters could be reduced.
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min WHERE a @> '{1}' AND a @> '{3}'
+----
+select
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@a_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /7/1
+ │         │    └── spans: [3, 3]
+ │         └── key: (1)
+ └── filters
+      ├── a:3 @> ARRAY[1] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── a:3 @> ARRAY[3] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Scan over 2 since there are fewer rows containing 2 than 1.
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min WHERE a @> '{1, 2}'
+----
+select
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@a_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /7/1
+ │         │    └── spans: [2, 2]
+ │         └── key: (1)
+ └── filters
+      └── a:3 @> ARRAY[1,2] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@a_idx WHERE a @> '{2}' AND (a @> '{1}' OR a @> '{3}')
+----
+select
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@a_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /7/1
+ │         │    └── spans: [2, 2]
+ │         ├── flags: force-index=a_idx
+ │         └── key: (1)
+ └── filters
+      ├── a:3 @> ARRAY[2] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── (a:3 @> ARRAY[1]) OR (a:3 @> ARRAY[3]) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@a_idx WHERE (a @> '{2}' OR a @> '{4}') AND a @> '{1}'
+----
+select
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: true, unique: false
+ │         │    └── union spans
+ │         │         ├── [2, 2]
+ │         │         └── [4, 4]
+ │         ├── key: (1)
+ │         └── scan min@a_idx,inverted
+ │              ├── columns: k:1!null a_inverted_key:7!null
+ │              ├── inverted constraint: /7/1
+ │              │    └── spans
+ │              │         ├── [2, 2]
+ │              │         └── [4, 4]
+ │              └── flags: force-index=a_idx
+ └── filters
+      ├── (a:3 @> ARRAY[2]) OR (a:3 @> ARRAY[4]) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── a:3 @> ARRAY[1] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# TODO(mgartner): Scanning [2 - 3] would be better, but the current
+# implementation can only estimate the row count for single-value spans.
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@a_idx WHERE (a @> '{2}' OR a @> '{3}') AND a @> '{1}'
+----
+index-join min
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: false
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: false
+      │         │    └── union spans: [2, 4)
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: [1, 1]
+      ├── key: (1)
+      └── scan min@a_idx,inverted
+           ├── columns: k:1!null a_inverted_key:7!null
+           ├── inverted constraint: /7/1
+           │    └── spans: [1, 4)
+           └── flags: force-index=a_idx
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@a_idx WHERE a @> '{2, 3}' AND a @> '{1}'
+----
+select
+ ├── columns: k:1!null j:2 a:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@a_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /7/1
+ │         │    └── spans: [2, 2]
+ │         ├── flags: force-index=a_idx
+ │         └── key: (1)
+ └── filters
+      ├── a:3 @> ARRAY[2,3] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+      └── a:3 @> ARRAY[1] [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# The rule only applies when there are multiple spans to reduce.
+opt expect-not=GenerateMinimalInvertedIndexScans format=hide-all
+SELECT * FROM min WHERE a @> '{1}'
+----
+select
+ ├── scan min
+ └── filters
+      └── a @> ARRAY[1]
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@j_idx WHERE j @> '[1]' AND j @> '[3]'
+----
+select
+ ├── columns: k:1!null j:2!null a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@j_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: [Arr/3, Arr/3]
+ │         ├── flags: force-index=j_idx
+ │         └── key: (1)
+ └── filters
+      ├── j:2 @> '[1]' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── j:2 @> '[3]' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@j_idx WHERE j @> '[2]' AND j @> '[3]'
+----
+select
+ ├── columns: k:1!null j:2!null a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@j_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: [Arr/3, Arr/3]
+ │         ├── flags: force-index=j_idx
+ │         └── key: (1)
+ └── filters
+      ├── j:2 @> '[2]' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── j:2 @> '[3]' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# The rule only applies when there are multiple spans to reduce.
+opt expect-not=GenerateMinimalInvertedIndexScans format=hide-all
+SELECT * FROM min WHERE j @> '[3]'
+----
+index-join min
+ └── scan min@j_idx,inverted
+      └── inverted constraint: /6/1
+           └── spans: [Arr/3, Arr/3]
+
+# The rule does not apply when for a disjunction of spans.
+opt expect-not=GenerateMinimalInvertedIndexScans format=hide-all
+SELECT * FROM b WHERE j @> '[3]' OR j @> '[[1, 2]]'
+----
+select
+ ├── index-join b
+ │    └── inverted-filter
+ │         ├── inverted expression: /9
+ │         │    ├── tight: false, unique: true
+ │         │    ├── union spans: [Arr/3, Arr/3]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: true, unique: true
+ │         │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
+ │         │         └── span expression
+ │         │              ├── tight: true, unique: true
+ │         │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
+ │         └── scan b@j_inv_idx,inverted
+ │              └── inverted constraint: /9/1
+ │                   └── spans
+ │                        ├── [Arr/3, Arr/3]
+ │                        ├── [Arr/Arr/1, Arr/Arr/1]
+ │                        └── [Arr/Arr/2, Arr/Arr/2]
+ └── filters
+      └── (j @> '[3]') OR (j @> '[[1, 2]]')
+
+opt expect=GenerateMinimalInvertedIndexScans disable=GenerateInvertedIndexZigzagJoins
+SELECT * FROM min@j_idx WHERE j->'a' = '"b"' AND j->'c' = '"d"'
+----
+select
+ ├── columns: k:1!null j:2 a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@j_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: ["c"/"d", "c"/"d"]
+ │         ├── flags: force-index=j_idx
+ │         └── key: (1)
+ └── filters
+      ├── (j:2->'a') = '"b"' [outer=(2), immutable]
+      └── (j:2->'c') = '"d"' [outer=(2), immutable]
+
+opt expect=GenerateMinimalInvertedIndexScans
+SELECT * FROM min@j_idx WHERE j->'a' = '"b"' AND j->'c' = '"d"' AND j->'e' = '"f"'
+----
+select
+ ├── columns: k:1!null j:2 a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join min
+ │    ├── columns: k:1!null j:2 a:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan min@j_idx,inverted
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: ["e"/"f", "e"/"f"]
+ │         ├── flags: force-index=j_idx
+ │         └── key: (1)
+ └── filters
+      ├── (j:2->'a') = '"b"' [outer=(2), immutable]
+      ├── (j:2->'c') = '"d"' [outer=(2), immutable]
+      └── (j:2->'e') = '"f"' [outer=(2), immutable]
+
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------
@@ -9674,7 +10094,7 @@ ALTER TABLE b INJECT STATISTICS '[
 
 # Query only the primary key with a remaining filter. 2+ paths in containment
 # query should favor zigzag joins.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 project
@@ -9697,7 +10117,7 @@ project
       └── filters (true)
 
 # Query requiring a zigzag join with a remaining filter.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 inner-join (lookup b)
@@ -9715,7 +10135,7 @@ inner-join (lookup b)
  │    └── filters (true)
  └── filters (true)
 
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 inner-join (lookup b)
@@ -9735,7 +10155,7 @@ inner-join (lookup b)
       └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Three or more paths. Should generate zigzag joins.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":[{"b":"c", "d":3}, 5]}'
 ----
 inner-join (lookup b)
@@ -9812,7 +10232,7 @@ ALTER TABLE c INJECT STATISTICS '[
 
 # We need a remaining filter since only two of the three values
 # are covered by the zigzag join.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
 ----
 project
@@ -9836,7 +10256,7 @@ project
            └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # Regression test for #95270. We should not need any remaining filter.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[1,2]
 ----
 project
@@ -9859,7 +10279,7 @@ project
       └── filters (true)
 
 # The first path can't be used for a zigzag join, but the second two can.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":{}, "b":2, "c":3}'
 ----
 inner-join (lookup b)
@@ -9915,7 +10335,7 @@ select
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # GenerateInvertedIndexZigzagJoins propagates row-level locking information.
-opt expect=GenerateInvertedIndexZigzagJoins
+opt expect=GenerateInvertedIndexZigzagJoins disable=GenerateMinimalInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
 inner-join (lookup b)
@@ -9944,26 +10364,23 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── inverted-filter
-      ├── columns: k:1!null
-      ├── inverted expression: /9
-      │    ├── tight: true, unique: true
-      │    ├── union spans: empty
-      │    └── INTERSECTION
-      │         ├── span expression
-      │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["a"/"b", "a"/"b"]
-      │         └── span expression
-      │              ├── tight: true, unique: true
-      │              └── union spans: ["c"/"d", "c"/"d"]
+ └── select
+      ├── columns: k:1!null j:4!null
+      ├── immutable
       ├── key: (1)
-      └── scan b@j_inv_idx,inverted
-           ├── columns: k:1!null j_inverted_key:9!null
-           ├── inverted constraint: /9/1
-           │    └── spans
-           │         ├── ["a"/"b", "a"/"b"]
-           │         └── ["c"/"d", "c"/"d"]
-           └── flags: no-zigzag-join
+      ├── fd: (1)-->(4)
+      ├── index-join b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx,inverted
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /9/1
+      │         │    └── spans: ["c"/"d", "c"/"d"]
+      │         ├── flags: no-zigzag-join
+      │         └── key: (1)
+      └── filters
+           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 exec-ddl
 CREATE TABLE inv_zz_partial (
