@@ -55,7 +55,7 @@ CREATE TABLE f (
 # --------------------------------------------------
 
 # The left AND right sides of the join already produce key columns
-build-cascades expect=SplitDisjunctionOfJoinTerms
+build-post-queries expect=SplitDisjunctionOfJoinTerms
 SELECT t1.*, t2.* FROM a t1, a t2 WHERE t1.a1 = t2.a3 OR t1.a2 = t2.a4 OR t1.a1 = t2.a4
 ----
 root
@@ -324,7 +324,7 @@ project
                      └── b3:9
 
 # More than one disjunction in the filter
-build-cascades expect=SplitDisjunctionOfJoinTerms
+build-post-queries expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM a, c WHERE (a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
 ----
 root
@@ -350,7 +350,7 @@ root
            └── filters
                 └── (((a1:1 = c1:7) OR (a2:2 = c2:8)) OR (a3:3 = c3:9)) OR (a4:4 = c4:10) [outer=(1-4,7-10)]
 
-build-cascades expect=SplitDisjunctionOfJoinTerms
+build-post-queries expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM a, c WHERE (a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
 ----
 root
@@ -443,7 +443,7 @@ project
            └── const-agg [as=d4:11, outer=(11)]
                 └── d4:11
 
-build-cascades expect=SplitDisjunctionOfJoinTerms
+build-post-queries expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM b, d WHERE (b1 = b2 OR b3 = d3 OR b4 = d4 OR d1 = d2)
 ----
 root
@@ -3813,7 +3813,7 @@ project
            └── (a1:1 = c1:14) OR (a1:1 = c2:15) [outer=(1,14,15), constraints=(/1: (/NULL - ])]
 
 # Outer Select is Join
-build-cascades expect=SplitDisjunctionOfJoinTerms
+build-post-queries expect=SplitDisjunctionOfJoinTerms
 SELECT * FROM a JOIN (SELECT * FROM b WHERE b1 > 0 AND NOT EXISTS (SELECT 1 FROM c WHERE c1=b1))
                        AS foo on a1=foo.b1 OR a2=foo.b2
 ----

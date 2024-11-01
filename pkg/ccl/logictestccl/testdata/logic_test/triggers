@@ -4,6 +4,9 @@
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, foo INT NOT VISIBLE, y INT, bar INT NOT VISIBLE);
 
+statement ok
+CREATE TABLE ab (a INT, foo INT NOT VISIBLE, b INT);
+
 # ==============================================================================
 # Trigger functions cannot be directly invoked.
 # ==============================================================================
@@ -1908,6 +1911,535 @@ statement ok
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
+# Test row-level AFTER triggers.
+# ==============================================================================
+
+subtest after_row
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+# Test a basic INSERT trigger.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic UPDATE trigger.
+statement ok
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic DELETE trigger.
+statement ok
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Triggers can be defined to operate on multiple events.
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+# UPSERT operations can fire both INSERT and UPDATE triggers.
+#
+# First, insert some rows without conflicts.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Repeat, but with some conflicting rows.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: UPDATE: old: (1,2), new: (1,12)
+NOTICE: UPDATE: old: (3,4), new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+5  6
+
+# Example with the explicit UPSERT syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, -2), (3, -4), (5, -6), (7, -8);
+----
+NOTICE: UPDATE: old: (1,12), new: (1,-2)
+NOTICE: UPDATE: old: (3,14), new: (3,-4)
+NOTICE: UPDATE: old: (5,6), new: (5,-6)
+NOTICE: INSERT: old: <NULL>, new: (7,-8)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  -2
+3  -4
+5  -6
+7  -8
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# The return value of an AFTER trigger is ignored.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN ROW(1000, -10000);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level AFTER triggers with a WHEN clause.
+# ==============================================================================
+
+subtest after_row_where
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN ((NEW).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  2
+3  3
+4  4
+
+statement ok
+CREATE TRIGGER foo2 AFTER UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  11
+2  12
+3  13
+4  14
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test interaction between row-level BEFORE and AFTER triggers.
+# ==============================================================================
+
+subtest before_after_row
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% %: % -> %', TG_WHEN, TG_OP, OLD, NEW;
+    IF NEW IS NOT NULL AND TG_WHEN = 'BEFORE' THEN
+      NEW.x := (NEW).x * 10;
+      RAISE NOTICE 'changing the row to %', NEW;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The AFTER trigger should observe the effect of the BEFORE trigger.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: BEFORE INSERT: <NULL> -> (1,2)
+NOTICE: changing the row to (10,2)
+NOTICE: BEFORE INSERT: <NULL> -> (3,4)
+NOTICE: changing the row to (30,4)
+NOTICE: AFTER INSERT: <NULL> -> (10,2)
+NOTICE: AFTER INSERT: <NULL> -> (30,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+10  2
+30  4
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level trigger interaction with FK cascades and checks.
+# ==============================================================================
+
+subtest cascades_fire_triggers
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (k INT PRIMARY KEY, v INT REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% % ON %: % -> %', TG_WHEN, TG_OP, TG_TABLE_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+UPDATE parent SET k = k * 10 WHERE k = 2 OR k = 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+DELETE FROM parent WHERE k = 20 OR k = 30;
+----
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+subtest before_trigger_fires_cascades
+
+# Create a trigger function that will map inserts into the "ab" table into
+# updates and delete on the "parent" table.
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    from_k INT := (NEW).a;
+    to_k INT := (NEW).b;
+  BEGIN
+    IF to_k IS NULL THEN
+      RAISE NOTICE 'delete from parent in trigger where k = %', from_k;
+      DELETE FROM parent WHERE k = from_k;
+    ELSE
+      RAISE NOTICE 'update parent.k to % in trigger where k = %', to_k, from_k;
+      UPDATE parent SET k = to_k WHERE k = from_k;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON ab FOR EACH ROW EXECUTE FUNCTION h();
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+INSERT INTO ab VALUES (2, 20), (3, 30);
+----
+NOTICE: update parent.k to 20 in trigger where k = 2
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: update parent.k to 30 in trigger where k = 3
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+INSERT INTO ab VALUES (20, NULL), (30, NULL);
+----
+NOTICE: delete from parent in trigger where k = 20
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: delete from parent in trigger where k = 30
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DROP TRIGGER foo ON ab;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+subtest after_trigger_fires_cascades
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR DELETE ON ab FOR EACH ROW EXECUTE FUNCTION h();
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+INSERT INTO ab VALUES (2, 20), (3, 30);
+----
+NOTICE: update parent.k to 20 in trigger where k = 2
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: update parent.k to 30 in trigger where k = 3
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+# TODO(#132971): We should fire the BEFORE trigger on child.
+query T noticetrace
+INSERT INTO ab VALUES (20, NULL), (30, NULL);
+----
+NOTICE: delete from parent in trigger where k = 20
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: delete from parent in trigger where k = 30
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DROP TRIGGER foo ON ab;
+
+statement ok
+DROP FUNCTION h;
+
+statement ok
+DELETE FROM ab WHERE True;
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+# FK checks happen before AFTER triggers that were fired by the main query.
+subtest fk_checks_before_triggers
+
+# Create a second child table with no cascade behavior.
+statement ok
+CREATE TABLE child2 (k INT PRIMARY KEY, v INT REFERENCES parent(k));
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+# Create procedures to print when a FK violation is encountered.
+statement ok
+CREATE PROCEDURE wrap_parent_update(k_old INT, k_new INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF k_new IS NULL THEN
+      DELETE FROM parent WHERE k = k_old;
+    ELSE
+      UPDATE parent SET k = k_new WHERE k = k_old;
+    END IF;
+  EXCEPTION WHEN foreign_key_violation THEN
+    RAISE NOTICE 'FK violation updating parent from % to %', k_old, k_new;
+  END
+$$;
+
+statement ok
+CREATE PROCEDURE wrap_child2_insert(k INT, v INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO child2 VALUES (k, v);
+  EXCEPTION WHEN foreign_key_violation THEN
+    RAISE NOTICE 'FK violation inserting (%, %) into child2', k, v;
+  END
+$$;
+
+# Try deleting a referenced row in the parent table.
+query T noticetrace
+CALL wrap_parent_update(2, NULL);
+----
+NOTICE: BEFORE DELETE ON parent: (2) -> <NULL>
+NOTICE: FK violation updating parent from 2 to <NULL>
+
+# Try updating a referenced row in the parent table.
+query T noticetrace
+CALL wrap_parent_update(2, 10);
+----
+NOTICE: BEFORE UPDATE ON parent: (2) -> (10)
+NOTICE: FK violation updating parent from 2 to 10
+
+# Try inserting a row with no reference into the child2 table.
+query T noticetrace
+CALL wrap_child2_insert(10, 10);
+----
+NOTICE: BEFORE INSERT ON child2: <NULL> -> (10,10)
+NOTICE: FK violation inserting (10, 10) into child2
+
+statement ok
+DROP PROCEDURE wrap_parent_update;
+DROP PROCEDURE wrap_child2_insert;
+DROP TABLE child;
+DROP TABLE child2;
+DROP TABLE parent;
+DROP FUNCTION g;
+
+# ==============================================================================
 # Test order of execution.
 # ==============================================================================
 
@@ -1962,10 +2494,99 @@ statement ok
 DROP TRIGGER d_trig ON xy;
 
 statement ok
+DELETE FROM xy WHERE True;
+
+subtest after_row_order
+
+statement ok
+CREATE TRIGGER c_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER d_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER b_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER a_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: a_trig: old: <NULL>, new: (1,2)
+NOTICE: b_trig: old: <NULL>, new: (1,2)
+NOTICE: c_trig: old: <NULL>, new: (1,2)
+NOTICE: d_trig: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER a_trig ON xy;
+
+statement ok
+DROP TRIGGER b_trig ON xy;
+
+statement ok
+DROP TRIGGER c_trig ON xy;
+
+statement ok
+DROP TRIGGER d_trig ON xy;
+
+statement ok
 DROP FUNCTION g;
 
 statement ok
 DROP FUNCTION h;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+subtest before_after_row_order
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% %: old: %, new: %', TG_WHEN, TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# First, all BEFORE triggers are executed. Then, the mutation is executed.
+# Finally, the AFTER triggers are executed using the buffer.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: BEFORE INSERT: old: <NULL>, new: (1,2)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (3,4)
+NOTICE: AFTER INSERT: old: <NULL>, new: (1,2)
+NOTICE: AFTER INSERT: old: <NULL>, new: (3,4)
+
+# Notice that BEFORE INSERT triggers fire for every input row, while
+# AFTER INSERT triggers fire only for those that did not encounter conflicts.
+query T noticetrace
+UPSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+----
+NOTICE: BEFORE INSERT: old: <NULL>, new: (1,2)
+NOTICE: BEFORE UPDATE: old: (1,2), new: (1,2)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (3,4)
+NOTICE: BEFORE UPDATE: old: (3,4), new: (3,4)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (5,6)
+NOTICE: AFTER UPDATE: old: (1,2), new: (1,2)
+NOTICE: AFTER UPDATE: old: (3,4), new: (3,4)
+NOTICE: AFTER INSERT: old: <NULL>, new: (5,6)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
 
 statement ok
 DELETE FROM xy WHERE True;

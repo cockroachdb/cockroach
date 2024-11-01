@@ -136,6 +136,15 @@ type mutationBuilder struct {
 	// the table.
 	partialIndexDelColIDs opt.OptionalColList
 
+	// triggerColIDs is the set of column IDs used to project the OLD and NEW rows
+	// for row-level AFTER triggers, and possibly also contains the canary column.
+	// It is only populated if the mutation statement has row-level AFTER
+	// triggers.
+	//
+	// NOTE: triggerColIDs may contain columns both contained and not contained in
+	// the lists above.
+	triggerColIDs opt.ColSet
+
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
 	// an insert; otherwise it's an update.
@@ -184,6 +193,9 @@ type mutationBuilder struct {
 
 	// cascades contains foreign key check cascades; see buildFK* methods.
 	cascades memo.FKCascades
+
+	// afterTriggers contains AFTER triggers; see buildRowLevelAfterTriggers.
+	afterTriggers *memo.AfterTriggers
 
 	// withID is nonzero if we need to buffer the input for FK or uniqueness
 	// checks.
@@ -1071,12 +1083,16 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		CheckCols:                  checkEmptyList(mb.checkColIDs),
 		PartialIndexPutCols:        checkEmptyList(mb.partialIndexPutColIDs),
 		PartialIndexDelCols:        checkEmptyList(mb.partialIndexDelColIDs),
+		TriggerCols:                mb.triggerColIDs,
 		FKCascades:                 mb.cascades,
+		AfterTriggers:              mb.afterTriggers,
 		UniqueWithTombstoneIndexes: mb.uniqueWithTombstoneIndexes.Ordered(),
 	}
 
-	// If we didn't actually plan any checks or cascades, don't buffer the input.
-	if len(mb.uniqueChecks) > 0 || len(mb.fkChecks) > 0 || len(mb.cascades) > 0 {
+	// If we didn't actually plan any checks, cascades, or triggers, don't buffer
+	// the input.
+	if len(mb.uniqueChecks) > 0 || len(mb.fkChecks) > 0 ||
+		len(mb.cascades) > 0 || mb.afterTriggers != nil {
 		private.WithID = mb.withID
 	}
 

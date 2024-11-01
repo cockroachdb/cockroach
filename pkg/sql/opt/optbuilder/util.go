@@ -797,3 +797,17 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 func (b *Builder) addBarrier(s *scope) {
 	s.expr = b.factory.ConstructBarrier(s.expr)
 }
+
+// projectColWithMetadataName projects a new anonymous column with the given
+// metadata name in the given scope. The other columns in the scope are passed
+// through. It returns the column ID of the new column.
+func (b *Builder) projectColWithMetadataName(
+	s *scope, name string, typ *types.T, scalar opt.ScalarExpr,
+) opt.ColumnID {
+	passThroughCols := s.colSet()
+	colName := scopeColName("").WithMetadataName(name)
+	col := b.synthesizeColumn(s, colName, typ, nil /* expr */, scalar /* scalar */)
+	proj := memo.ProjectionsExpr{b.factory.ConstructProjectionsItem(scalar, col.id)}
+	s.expr = b.factory.ConstructProject(s.expr, proj, passThroughCols)
+	return col.id
+}

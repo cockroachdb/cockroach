@@ -2039,7 +2039,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 		{
-			plan:                    planComponents{cascades: []cascadeMetadata{{}}},
+			plan:                    planComponents{cascades: []postQueryMetadata{{}}},
 			prohibitParallelization: true,
 		},
 		{

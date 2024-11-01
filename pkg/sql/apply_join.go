@@ -368,7 +368,7 @@ func runPlanInsidePlan(
 	}
 
 	plannerCopy.autoCommit = false
-	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+	execCfg.DistSQLPlanner.PlanAndRunPostQueries(
 		ctx,
 		&plannerCopy,
 		func(usedConcurrently bool) *extendedEvalContext {

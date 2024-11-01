@@ -1559,6 +1559,12 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 			c.Child(p.FKCascades[i].FKConstraint.Name())
 		}
 	}
+	if p.AfterTriggers != nil {
+		c := tp.Childf("after-triggers")
+		for i := range p.AfterTriggers.Triggers {
+			c.Child(p.AfterTriggers.Triggers[i].Name().Normalize())
+		}
+	}
 }
 
 // ColumnString returns the column in the same format as formatColSimple.

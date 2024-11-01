@@ -73,6 +73,7 @@ func (c *CustomFuncs) neededMutationCols(
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
+	cols.UnionWith(private.TriggerCols)
 
 	if private.WithID != 0 {
 		for i := range uniqueChecks {

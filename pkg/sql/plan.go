@@ -426,17 +426,20 @@ type planComponents struct {
 	mainRowCount int64
 
 	// cascades contains metadata for all cascades.
-	cascades []cascadeMetadata
+	cascades []postQueryMetadata
 
 	// checkPlans contains all the plans for queries that are to be executed after
 	// the main query (for example, foreign key checks).
 	checkPlans []checkPlan
+
+	// triggers contains metadata for all triggers.
+	triggers []postQueryMetadata
 }
 
-type cascadeMetadata struct {
-	exec.Cascade
-	// plan for the cascade. This plan is not populated upfront; it is created
-	// only when it needs to run, after the main query (and previous cascades).
+type postQueryMetadata struct {
+	exec.PostQuery
+	// plan for the cascade/triggers. This plan is not populated upfront; it is
+	// created only when it needs to run, after the main query.
 	plan planMaybePhysical
 }
 
@@ -457,6 +460,9 @@ func (p *planComponents) close(ctx context.Context) {
 	}
 	for i := range p.checkPlans {
 		p.checkPlans[i].plan.Close(ctx)
+	}
+	for i := range p.triggers {
+		p.triggers[i].plan.Close(ctx)
 	}
 }
 
