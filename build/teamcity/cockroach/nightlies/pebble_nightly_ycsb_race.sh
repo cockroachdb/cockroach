@@ -8,7 +8,7 @@
 #
 # This script runs the Pebble Nightly YCSB A benchmark with the race flag.
 # It is used to detect data races which may have been introduced to the latest
-# Pebble master branch.
+# Pebble crl-release-24.3 branch.
 #
 # It is run by the Pebble Nightly YCSB A race TeamCity build
 # configuration.
