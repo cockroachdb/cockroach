@@ -7289,11 +7289,11 @@ CREATE TABLE crdb_internal.active_range_feeds (
   diff BOOL,
   node_id INT,
   range_id INT,
-  created INT,
+  created TIMESTAMPTZ,
   range_start STRING,
   range_end STRING,
   resolved DECIMAL,
-	resolved_age INTERVAL,
+  resolved_age INTERVAL,
   last_event TIMESTAMPTZ,
   catchup BOOL,
   num_errs INT,
@@ -7302,16 +7302,29 @@ CREATE TABLE crdb_internal.active_range_feeds (
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return p.execCfg.DistSender.ForEachActiveRangeFeed(
 			func(rfCtx kvcoord.RangeFeedContext, rf kvcoord.PartialRangeFeed) error {
-				var lastEvent tree.Datum
-				if rf.LastValueReceived.IsZero() {
-					lastEvent = tree.DNull
-				} else {
-					e, err := tree.MakeDTimestampTZ(rf.LastValueReceived, time.Microsecond)
-					if err != nil {
-						return err
+				now := p.EvalContext().GetStmtTimestamp()
+				timestampOrNull := func(t time.Time) (tree.Datum, error) {
+					if t.IsZero() {
+						return tree.DNull, nil
 					}
-					lastEvent = e
+					return tree.MakeDTimestampTZ(t, time.Microsecond)
 				}
+				age := func(t time.Time) tree.Datum {
+					if t.Unix() == 0 {
+						return tree.DNull
+					}
+					return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+				}
+
+				lastEvent, err := timestampOrNull(rf.LastValueReceived)
+				if err != nil {
+					return err
+				}
+				createdAt, err := timestampOrNull(rf.CreatedTime)
+				if err != nil {
+					return err
+				}
+
 				var lastErr tree.Datum
 				if rf.LastErr == nil {
 					lastErr = tree.DNull
@@ -7326,13 +7339,11 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
 					tree.NewDInt(tree.DInt(rf.RangeID)),
-					tree.NewDInt(tree.DInt(rf.CreatedTime.UTC().UnixNano())),
+					createdAt,
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
 					eval.TimestampToDecimalDatum(rf.Resolved),
-					tree.NewDInterval(duration.Age(
-						p.EvalContext().GetStmtTimestamp(), rf.Resolved.GoTime()), types.DefaultIntervalTypeMetadata,
-					),
+					age(rf.Resolved.GoTime()),
 					lastEvent,
 					tree.MakeDBool(tree.DBool(rf.InCatchup)),
 					tree.NewDInt(tree.DInt(rf.NumErrs)),
@@ -9444,7 +9455,7 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 	state STRING,
 	recv_time INTERVAL,
 	last_recv_time INTERVAL,
-	ingest_time INTERVAL, 
+	ingest_time INTERVAL,
 	flush_time INTERVAL,
 	flush_count INT,
 	flush_kvs INT,
