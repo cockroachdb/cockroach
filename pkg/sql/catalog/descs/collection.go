@@ -1135,7 +1135,7 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 // GetAllDatabaseDescriptorsMap returns the results of GetAllDatabaseDescriptors
 func (tc *Collection) GetAllDatabaseDescriptorsMap(
 	ctx context.Context, txn *kv.Txn,
-) (ret map[descpb.ID]catalog.DatabaseDescriptor, _ error) {
+) (map[descpb.ID]catalog.DatabaseDescriptor, error) {
 	descriptors, err := tc.GetAllDatabaseDescriptors(ctx, txn)
 	result := map[descpb.ID]catalog.DatabaseDescriptor{}
 	if err != nil {
