@@ -424,6 +424,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 			for _, s := range toRestart {
 				s.release()
 			}
+			m.metrics.Errors.RangefeedFatalErrors.Inc(int64(len(toRestart)))
 			return err
 		}
 
@@ -527,7 +528,6 @@ func (m *rangefeedMuxer) restartActiveRangeFeeds(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
 
 	// Release catchup scan reservation if any -- we will acquire another
@@ -544,7 +544,10 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.ParentRangefeedMetadata.fromManualSplit, true)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
+		m.metrics.Errors.RangefeedFatalErrors.Inc(1)
 		return err
+	} else {
+		m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	}
 
 	if log.V(1) {

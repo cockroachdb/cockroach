@@ -258,7 +258,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
-
+	metaDistSenderRangefeedFatalError = metric.Metadata{
+		Name:        "distsender.rangefeed.fatal_errors",
+		Help:        `Number of rangefeeds that were stopped due to fatal errors`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderCircuitBreakerReplicasCount = metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.count",
 		Help:        `Number of replicas currently tracked by DistSender circuit breakers`,
@@ -510,6 +515,7 @@ func makeDistSenderCircuitBreakerMetrics() DistSenderCircuitBreakerMetrics {
 // rangeFeedErrorCounters are various error related counters for rangefeed.
 type rangeFeedErrorCounters struct {
 	RangefeedRestartRanges *metric.Counter
+	RangefeedFatalErrors   *metric.Counter
 	RangefeedErrorCatchup  *metric.Counter
 	RetryErrors            map[int32]*metric.Counter
 	SendErrors             *metric.Counter
@@ -544,6 +550,7 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 
 	return rangeFeedErrorCounters{
 		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedFatalErrors:   metric.NewCounter(metaDistSenderRangefeedFatalError),
 		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
 		RetryErrors:            retryCounters,
 		SendErrors:             metric.NewCounter(retryMeta("send")),
