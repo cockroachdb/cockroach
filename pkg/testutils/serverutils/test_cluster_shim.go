@@ -43,6 +43,9 @@ type TestClusterInterface interface {
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
 
+	// Restart stops and then starts all servers in the cluster.
+	Restart() error
+
 	// StopServer stops a single server.
 	StopServer(idx int)
 
