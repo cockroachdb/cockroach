@@ -131,8 +131,8 @@ export const AlertBar = ({
         <div className={cx("alert-bar", "alert--warning")}>
           Your license key expired on{" "}
           {licenseExpiryDate.format("MMMM Do, YYYY")}. The cluster will be
-          throttled on {gracePeriodEnd.format("MMMM Do, YYYY")} unless the
-          license is renewed. <a href={throttlingFaqs}>Learn more</a>
+          throttled on {gracePeriodEnd.format("MMMM Do, YYYY")} unless a new
+          license key is added. <a href={throttlingFaqs}>Learn more</a>
         </div>
       );
     }
