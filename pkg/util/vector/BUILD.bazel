@@ -28,6 +28,7 @@ go_test(
     ],
     embed = [":vector"],
     deps = [
+        "//pkg/util/num32",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

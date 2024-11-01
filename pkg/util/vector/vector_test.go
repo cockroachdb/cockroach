@@ -154,7 +154,6 @@ func TestNum32Functions(t *testing.T) {
 }
 
 func TestPointwiseOps(t *testing.T) {
-	// Test L1, L2, Cosine distance.
 	testCases := []struct {
 		v1    T
 		v2    T

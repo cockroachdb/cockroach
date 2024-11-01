@@ -8,6 +8,7 @@ package vector
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,6 +89,11 @@ func TestVectorSet(t *testing.T) {
 	require.Equal(t, []float32{1, 2, 3, 4}, vs7.Data)
 	require.Equal(t, 0, vs9.Count)
 	require.Equal(t, []float32{}, vs9.Data)
+
+	// AsMatrix.
+	vs10 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+	mat := vs10.AsMatrix()
+	require.Equal(t, num32.Matrix{Rows: 3, Cols: 2, Stride: 2, Data: vs10.Data}, mat)
 
 	// Check that invalid operations will panic.
 	vs11 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
