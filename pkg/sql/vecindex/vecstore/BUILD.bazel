@@ -1,0 +1,69 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "vecstore_proto",
+    srcs = ["vecstore.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/quantize:quantize_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "vecstore_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore",
+    proto = ":vecstore_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/quantize",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_library(
+    name = "vecstore",
+    srcs = [
+        "in_memory_store.go",
+        "partition.go",
+        "search_set.go",
+        "store.go",
+        "vecstorepb.go",
+    ],
+    embed = [":vecstore_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/util/container/heap",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "vecstore_test",
+    srcs = [
+        "in_memory_store_test.go",
+        "partition_test.go",
+        "search_set_test.go",
+        "vecstorepb_test.go",
+    ],
+    embed = [":vecstore"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
+    ],
+)

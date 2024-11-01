@@ -1,0 +1,76 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.vecstore;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore";
+
+import "sql/vecindex/quantize/quantize.proto";
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// ChildKey points to a child partition by its key or to an original full-size
+// vector stored in a primary index. Each quantized vector in a partition is
+// associated with a child key.
+message ChildKey {
+  // PartitionKey references a child partition in the next lower level of the
+  // K-means tree. This field is only set in branch/root partitions.
+  uint64 partition_key = 1 [(gogoproto.casttype) = "PartitionKey"];
+  // PrimaryKey is the primary key of the row in the primary index that stores
+  // the original full-size vector. This field is only set in leaf partitions.
+  bytes primary_key = 2 [(gogoproto.casttype) = "PrimaryKey"];
+}
+
+// CVStats track coefficient of variation statistics that measure the "spread"
+// of vectors at a given level of the K-means tree.
+message CVStats {
+  // Mean is the average of CV values at a given level of the K-means tree.
+  double mean = 1;
+  // Variance is the statistical variance of CV values at a given level of the
+  // K-means tree.
+  double variance = 2;
+}
+
+// IndexStats tracks index-wide estimated statistics. As the index is updated,
+// the stats are periodically updated. This is best effort; the statistics are
+// not guaranteed to be exactly accurate.
+message IndexStats {
+  option (gogoproto.goproto_stringer) = false;
+  // NumPartitions tracks the total number of partitions in the index. Unlike
+  // the other statistics, this number is exact rather than an estimate.
+  int64 num_partitions = 1;
+  // VectorsPerPartition is the estimated average number of vectors in each
+  // partition.
+  double vectors_per_partition = 2;
+  // CVStats is a list of statistics for each non-leaf level of the K-means
+  // tree that determine how many partitions to search at each level.
+  repeated CVStats c_v_stats = 3 [(gogoproto.nullable) = false];
+}
+
+// StoreProto serializes the fields of the in-memory store.
+message StoreProto {
+  int64 dims = 1 [(gogoproto.casttype) = "int"];
+  int64 seed = 2;
+  repeated PartitionProto partitions = 3 [(gogoproto.nullable) = false];
+  uint64 next_key = 4 [(gogoproto.casttype) = "PartitionKey"];
+  repeated VectorProto vectors = 5 [(gogoproto.nullable) = false];
+  IndexStats stats = 6 [(gogoproto.nullable) = false];
+}
+
+// PartitionProto serializes the fields of a partition.
+message PartitionProto {
+  uint64 partition_key = 1 [(gogoproto.casttype) = "PartitionKey"];
+  quantize.RaBitQuantizedVectorSet ra_bit_q = 2;
+  quantize.UnQuantizedVectorSet un_quantized = 3;
+  repeated ChildKey child_keys = 4 [(gogoproto.nullable) = false];
+  uint64 level = 5 [(gogoproto.casttype) = "Level"];
+}
+
+// Vector serializes an original, full-size vector and its primary key.
+message VectorProto {
+  bytes primary_key = 1 [(gogoproto.casttype) = "PrimaryKey"];
+  repeated float vector = 2;
+}
