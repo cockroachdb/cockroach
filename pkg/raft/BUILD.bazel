@@ -39,7 +39,6 @@ go_test(
         "interaction_test.go",
         "log_test.go",
         "log_unstable_test.go",
-        "node_bench_test.go",
         "node_test.go",
         "raft_flow_control_test.go",
         "raft_paper_test.go",
