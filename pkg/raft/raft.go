@@ -1161,25 +1161,14 @@ func (r *raft) tickElection() {
 			// There's a fortified leader and we're supporting it.
 			return
 		}
-		// We're no longer supporting the fortified leader. Let's make this
-		// de-fortification explicit. Doing so ensures that we don't enter this
-		// conditional again unless the term changes or the follower is
-		// re-fortified, which means we'll only ever skip the initial part of the
+		// We're no longer supporting the fortified leader. Calling r.deFortify()
+		// will forward the electionElapsed to electionTimeout which means that
+		// this peer can immediately vote in elections. Moreover, r.deFortify()
+		// will reset leadEpoch to 0 which ensures that we don't enter this
+		// conditional block again unless the term changes or the follower is
+		// re-fortified. This means we'll only ever skip the initial part of the
 		// election timeout once per fortified -> no longer fortified transition.
 		r.deFortify(r.id, r.Term)
-		// The peer was supporting a leader who had fortified until now, but that
-		// support has been withdrawn. As a result:
-		// 1. We don't want to wait out an entire election timeout before
-		//    campaigning.
-		// 2. But we do want to take advantage of randomized election timeouts built
-		//    into raft to prevent hung elections.
-		// We achieve both of these goals by "forwarding" electionElapsed to begin
-		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
-		r.logger.Debugf(
-			"%d setting election elapsed to start from %d ticks after store liveness support expired",
-			r.id, r.electionTimeout,
-		)
-		r.electionElapsed = r.electionTimeout
 	} else {
 		r.electionElapsed++
 	}
@@ -2443,11 +2432,13 @@ func (r *raft) handleDeFortify(m pb.Message) {
 // [3] Note that this may not be the term being de-fortified. The term being
 // de-fortified is r.Term, which is the term of the peer being de-fortified.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
+	if r.leadEpoch == 0 {
+		return // we're not currently fortified, so de-fortification is a no-op
+	}
+
 	assertTrue(
-		// We're not currently fortified, so de-fortification is a no-op...
-		r.leadEpoch == 0 ||
-			// ...OR we were fortified at a lower term that has since advanced...
-			term > r.Term ||
+		// We were fortified at a lower term that has since advanced...
+		term > r.Term ||
 			// ...OR the current term is being explicitly de-fortified by the leader...
 			(term == r.Term && from == r.lead) ||
 			// ...OR we've unilaterally decided to de-fortify because we are no longer
@@ -2455,7 +2446,23 @@ func (r *raft) deFortify(from pb.PeerID, term uint64) {
 			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
 		"can only defortify at current term if told by the leader or if fortification has expired",
 	)
+
 	r.resetLeadEpoch()
+
+	if r.state != pb.StateLeader {
+		// The peer is not fortifying the leader anymore. As a result:
+		// 1. We don't want to wait out an entire election timeout before
+		//    campaigning.
+		// 2. But we do want to take advantage of randomized election timeouts built
+		//    into raft to prevent hung elections.
+		// We achieve both of these goals by "forwarding" electionElapsed to begin
+		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
+		r.logger.Debugf(
+			"%d setting election elapsed to start from %d ticks after store liveness support expired",
+			r.id, r.electionTimeout,
+		)
+		r.electionElapsed = r.electionTimeout
+	}
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
