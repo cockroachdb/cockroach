@@ -2515,6 +2515,18 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
+	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnForTypeChange.name)
+	if err != nil {
+		return nil, err
+	}
+
+	// We could potentially fail since colIsRefByComputed cannot catch the case
+	// of a contention with an ongoing alter primary key schema change.
+	hasOngoingAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	if newType != nil {
 		// Ignoring the error here intentionally, as we want to carry on with
@@ -2522,18 +2534,37 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		kind, _ := schemachange.ClassifyConversion(context.Background(), columnForTypeChange.typ, newType)
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.CannotCoerce, condition: kind == schemachange.ColumnConversionImpossible},
-			{code: pgcode.FeatureNotSupported, condition: kind != schemachange.ColumnConversionTrivial},
 		})
+
+		// We will remove this as we complete the alter type epic.
+		// This is a restriction in the legacy schema changer only,
+		// where alter type cannot be executed inside a transaction.
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	stmt.expectedExecErrors.addAll(codesWithConditions{
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
-		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
+		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed || hasOngoingAlterPKSchemaChange},
 	})
+
+	// TODO(#134008): Remove this with the PR that fixes this bug.
+	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+
+	// We fail if the column we are attempting to alter has a TTL expression.
+	stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
+
+	// We fail if the column we are attempting to alter is used as an
+	// identity column and we try to convert it to a non-int.
+	stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+
+	// We could fail since we don't specify the USING expression, so it's
+	// possible that we could pick a data type that doesn't have an automatic cast.
+	stmt.potentialExecErrors.add(pgcode.DatatypeMismatch)
 
 	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
 		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
+
 }
 
 func (og *operationGenerator) alterTableAlterPrimaryKey(
