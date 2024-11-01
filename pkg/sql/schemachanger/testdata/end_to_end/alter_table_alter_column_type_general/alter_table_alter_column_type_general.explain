@@ -32,7 +32,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         └── 16 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnFamilyOrderFollowsColumnID":2,"ColumnID":3,"IsNullable":true,"TableID":104}}
  │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
@@ -94,7 +94,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         └── 21 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnFamilyOrderFollowsColumnID":2,"ColumnID":3,"IsNullable":true,"TableID":104}}
  │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}

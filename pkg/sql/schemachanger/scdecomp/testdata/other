@@ -316,6 +316,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -345,6 +346,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
     computeExpr: null
     elementCreationMetadata:
@@ -374,6 +376,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
     computeExpr: null
     elementCreationMetadata:
@@ -403,6 +406,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -432,6 +436,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:
@@ -602,6 +607,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -631,6 +637,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 2
     computeExpr: null
     elementCreationMetadata:
@@ -660,6 +667,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
     computeExpr: null
     elementCreationMetadata:
@@ -689,6 +697,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
     computeExpr: null
     elementCreationMetadata:
@@ -718,6 +727,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -747,6 +757,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:

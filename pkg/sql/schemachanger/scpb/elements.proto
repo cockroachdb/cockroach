@@ -237,6 +237,10 @@ message ColumnType {
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
   ElementCreationMetadata element_creation_metadata= 11;
+  // If non-zero, the column will be added to the column family after the column with
+  // this ID. This is used for operations like 'ALTER COLUMN .. TYPE', where
+  // maintaining column family order is necessary when replacing columns.
+  uint32 column_family_order_follows_column_id = 12 [(gogoproto.customname) = "ColumnFamilyOrderFollowsColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 }
 
 message ColumnComputeExpression {
