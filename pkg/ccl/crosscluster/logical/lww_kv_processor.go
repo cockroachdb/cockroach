@@ -14,18 +14,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,7 +40,9 @@ type kvRowProcessor struct {
 	lastRow cdcevent.Row
 	alloc   *tree.DatumAlloc
 	cfg     *execinfra.ServerConfig
+	spec    execinfrapb.LogicalReplicationWriterSpec
 	evalCtx *eval.Context
+	sd      *sessiondata.SessionData
 
 	dstBySrc map[descpb.ID]descpb.ID
 	writers  map[descpb.ID]*kvTableWriter
@@ -44,12 +50,16 @@ type kvRowProcessor struct {
 	failureInjector
 }
 
+var _ BatchHandler = &kvRowProcessor{}
+
 // newKVRowProcessor returns a RowProcessor that operates by writing KV pairs
 // directly to the db, bypassing SQL Query execution.
 func newKVRowProcessor(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
+	sd *sessiondata.SessionData,
+	spec execinfrapb.LogicalReplicationWriterSpec,
 	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 ) (*kvRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
@@ -76,7 +86,9 @@ func newKVRowProcessor(
 
 	p := &kvRowProcessor{
 		cfg:      cfg,
+		spec:     spec,
 		evalCtx:  evalCtx,
+		sd:       sd,
 		dstBySrc: dstBySrc,
 		writers:  make(map[descpb.ID]*kvTableWriter, len(procConfigByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
@@ -87,120 +99,23 @@ func newKVRowProcessor(
 
 var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 
-func (p *kvRowProcessor) ProcessRow(
-	ctx context.Context, txn isql.Txn, keyValue roachpb.KeyValue, prevValue roachpb.Value,
+func (p *kvRowProcessor) HandleBatch(
+	ctx context.Context, batch []streampb.StreamEvent_KV,
 ) (batchStats, error) {
-	var err error
-	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
-	if err != nil {
-		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
-	}
+	ctx, sp := tracing.ChildSpan(ctx, "kvRowProcessor.HandleBatch")
+	defer sp.Finish()
 
-	row, err := p.decoder.DecodeKV(ctx, keyValue, cdcevent.CurrentRow, keyValue.Value.Timestamp, false)
-	if err != nil {
-		p.lastRow = cdcevent.Row{}
-		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
-	}
-	p.lastRow = row
-
-	if err = p.injectFailure(); err != nil {
-		return batchStats{}, err
-	}
-
-	var s batchStats
-	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue, &s, 0); err != nil {
-		return s, err
-	}
-	return s, nil
-
-}
-
-func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
-	for _, w := range p.writers {
-		if w.unreportedMutations > 0 && w.leased != nil {
-			if desc := w.leased.Underlying(); desc != nil {
-				refresher.NotifyMutation(desc.(catalog.TableDescriptor), w.unreportedMutations)
-				w.unreportedMutations = 0
-			}
+	if len(batch) == 1 {
+		stats := batchStats{}
+		if p.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(batch[0].KeyValue.Value.RawBytes) == 0 {
+			return stats, nil
 		}
-	}
-}
-
-// maxRefreshCount is the maximum number of times we will retry a KV batch that has failed with a
-// ConditionFailedError with HadNewerOriginTimetamp=true.
-const maxRefreshCount = 10
-
-func (p *kvRowProcessor) processParsedRow(
-	ctx context.Context,
-	txn isql.Txn,
-	row cdcevent.Row,
-	k roachpb.KeyValue,
-	prevValue roachpb.Value,
-	s *batchStats,
-	refreshCount int,
-) error {
-	dstTableID, ok := p.dstBySrc[row.TableID]
-	if !ok {
-		return errors.AssertionFailedf("replication configuration missing for table %d / %q", row.TableID, row.TableName)
-	}
-
-	makeBatch := func(txn *kv.Txn) *kv.Batch {
-		b := txn.NewBatch()
-		b.Header.WriteOptions = originID1Options
-		b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
-		b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
-		return b
-	}
-
-	if txn == nil {
-		if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			b := makeBatch(txn)
-
-			if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
-				return err
-			}
-			return txn.CommitInBatch(ctx, b)
-		}); err != nil {
-			if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
-				// If OriginTimestampOlderThan is set, then this was the LWW
-				// loser. We ignore the error and move onto the next row row we have
-				// to process.
-				if condErr.OriginTimestampOlderThan.IsSet() {
-					s.kvWriteTooOld++
-					return nil
-				}
-				// If HadNewerOriginTimestamp is true, it implies that the row we
-				// are processing was the LWW winner but the previous value from the
-				// rangefeed event doesn't represent what was on disk. In this case,
-				// we use the ActualValue returned in the error and retry the
-				// request. We don't do this via the retry queue because we want to
-				// do it without delay since we are likely to succeed on the first
-				// retry unless the key has a high rate of cross-cluster writes.
-				if condErr.HadNewerOriginTimestamp {
-					// We limit the number of times we hit this in a row, but we
-					// don't expect to hit this many times in a row. Any
-					// intervening write that would invalidate our refreshed
-					// expected value is likely to have been written at a higher
-					// MVCC timestamp and thus we would get a LWW failure rather
-					// than another refresh attempt.
-					//
-					// However, this does protect us against the job just
-					// running forever in the case of some bug in the above
-					// reasoning or our ConditionalPut code.
-					if refreshCount > maxRefreshCount {
-						return errors.Wrapf(err, "max refresh count (%d) reached", maxRefreshCount)
-					}
-					s.kvWriteValueRefreshes++
-					var refreshedValue roachpb.Value
-					if condErr.ActualValue != nil {
-						refreshedValue = *condErr.ActualValue
-					}
-					return p.processParsedRow(ctx, txn, row, k, refreshedValue, s, refreshCount+1)
-				}
-			}
-			return err
+		s, err := p.processRow(ctx, nil, nil, batch[0].KeyValue, batch[0].PrevValue)
+		if err != nil {
+			return stats, err
 		}
-		return nil
+		stats.Add(s)
+		return stats, err
 	}
 	// TODO(ssd,dt): There are two levels of batching we may care about: putting multiple
 	// batches (each generated by 1 row) into a single transaction or putting multiple rows into
@@ -219,7 +134,129 @@ func (p *kvRowProcessor) processParsedRow(
 	// But, even then, since a LWW failure often means we are now processing duplicates, we may
 	// want batch handling with a bit of hysteresis that prevents constantly building
 	// multi-batch transactions that are likely to fail.
-	return errors.AssertionFailedf("TODO: multi-row transactions not supported by the kvRowProcessor")
+	return batchStats{}, errors.AssertionFailedf("TODO: multi-row transactions not supported by the kvRowProcessor")
+}
+
+func (p *kvRowProcessor) processRow(
+	ctx context.Context,
+	txn isql.Txn,
+	b *kv.Batch,
+	keyValue roachpb.KeyValue,
+	prevValue roachpb.Value,
+) (batchStats, error) {
+	var err error
+	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
+	if err != nil {
+		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
+	}
+
+	row, err := p.decoder.DecodeKV(ctx, keyValue, cdcevent.CurrentRow, keyValue.Value.Timestamp, false)
+	if err != nil {
+		p.lastRow = cdcevent.Row{}
+		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
+	}
+	dstTableID, ok := p.dstBySrc[row.TableID]
+	if !ok {
+		return batchStats{}, errors.AssertionFailedf("replication configuration missing for table %d / %q", row.TableID, row.TableName)
+	}
+
+	p.lastRow = row
+
+	if err = p.injectFailure(); err != nil {
+		return batchStats{}, err
+	}
+
+	if txn == nil {
+		var s batchStats
+		if err := p.processOneRow(ctx, dstTableID, row, keyValue, prevValue, &s, 0); err != nil {
+			return batchStats{}, err
+		}
+		return s, nil
+	}
+
+	return batchStats{}, p.addToBatch(ctx, txn.KV(), b, dstTableID, row, keyValue, prevValue)
+}
+
+func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
+	for _, w := range p.writers {
+		if w.unreportedMutations > 0 && w.leased != nil {
+			if desc := w.leased.Underlying(); desc != nil {
+				refresher.NotifyMutation(desc.(catalog.TableDescriptor), w.unreportedMutations)
+				w.unreportedMutations = 0
+			}
+		}
+	}
+}
+
+// maxRefreshCount is the maximum number of times we will retry a KV batch that has failed with a
+// ConditionFailedError with HadNewerOriginTimetamp=true.
+const maxRefreshCount = 10
+
+func makeKVBatch(txn *kv.Txn) *kv.Batch {
+	b := txn.NewBatch()
+	b.Header.WriteOptions = originID1Options
+	b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
+	b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
+	return b
+}
+
+func (p *kvRowProcessor) processOneRow(
+	ctx context.Context,
+	dstTableID descpb.ID,
+	row cdcevent.Row,
+	k roachpb.KeyValue,
+	prevValue roachpb.Value,
+	s *batchStats,
+	refreshCount int,
+) error {
+	if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := makeKVBatch(txn)
+
+		if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
+			return err
+		}
+		return txn.CommitInBatch(ctx, b)
+	}); err != nil {
+		if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+			// If OriginTimestampOlderThan is set, then this was the LWW
+			// loser. We ignore the error and move onto the next row row we have
+			// to process.
+			if condErr.OriginTimestampOlderThan.IsSet() {
+				s.kvWriteTooOld++
+				return nil
+			}
+			// If HadNewerOriginTimestamp is true, it implies that the row we
+			// are processing was the LWW winner but the previous value from the
+			// rangefeed event doesn't represent what was on disk. In this case,
+			// we use the ActualValue returned in the error and retry the
+			// request. We don't do this via the retry queue because we want to
+			// do it without delay since we are likely to succeed on the first
+			// retry unless the key has a high rate of cross-cluster writes.
+			if condErr.HadNewerOriginTimestamp {
+				// We limit the number of times we hit this in a row, but we
+				// don't expect to hit this many times in a row. Any
+				// intervening write that would invalidate our refreshed
+				// expected value is likely to have been written at a higher
+				// MVCC timestamp and thus we would get a LWW failure rather
+				// than another refresh attempt.
+				//
+				// However, this does protect us against the job just
+				// running forever in the case of some bug in the above
+				// reasoning or our ConditionalPut code.
+				if refreshCount > maxRefreshCount {
+					return errors.Wrapf(err, "max refresh count (%d) reached", maxRefreshCount)
+				}
+				s.kvWriteValueRefreshes++
+				var refreshedValue roachpb.Value
+				if condErr.ActualValue != nil {
+					refreshedValue = *condErr.ActualValue
+				}
+				return p.processOneRow(ctx, dstTableID, row, k, refreshedValue, s, refreshCount+1)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (p *kvRowProcessor) addToBatch(
