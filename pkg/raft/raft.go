@@ -1483,7 +1483,8 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+			inHeartbeatLease := r.checkQuorum && r.lead != None && r.leadEpoch == 0 &&
+				r.electionElapsed < r.electionTimeout
 			inFortifyLease := r.supportingFortifiedLeader() &&
 				// NB: If the peer that's campaigning has an entry in its log with a
 				// higher term than what we're aware of, then this conclusively proves
@@ -1492,32 +1493,26 @@ func (r *raft) Step(m pb.Message) error {
 				// However, any fortification we're providing to a leader that has been
 				// since dethroned is pointless.
 				m.LogTerm <= r.Term
+
 			if !force && (inHeartbeatLease || inFortifyLease) {
 				// If a server receives a Request{,Pre}Vote message but is still
 				// supporting a fortified leader, it does not update its term or grant
 				// its vote. Similarly, if a server receives a Request{,Pre}Vote message
 				// within the minimum election timeout of hearing from the current
 				// leader it does not update its term or grant its vote.
-				{
-					// Log why we're ignoring the Request{,Pre}Vote.
-					var inHeartbeatLeaseMsg redact.RedactableString
-					var inFortifyLeaseMsg redact.RedactableString
-					var sep redact.SafeString
-					if inHeartbeatLease {
-						inHeartbeatLeaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
-					}
-					if inFortifyLease {
-						inFortifyLeaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
-					}
-					if inFortifyLease && inHeartbeatLease {
-						sep = " and "
-					}
-					last := r.raftLog.lastEntryID()
-					// TODO(pav-kv): it should be ok to simply print the %+v of the
-					// lastEntryID.
-					r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s%s%s",
-						r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, inHeartbeatLeaseMsg, sep, inFortifyLeaseMsg)
+				//
+				// Log why we're ignoring the Request{,Pre}Vote.
+				var leaseMsg redact.RedactableString
+				if inHeartbeatLease {
+					leaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+				} else {
+					leaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
 				}
+
+				last := r.raftLog.lastEntryID()
+				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
+				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s",
+					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, leaseMsg)
 				return nil // don't update term/grant vote; early return
 			}
 			// If we're willing to vote in this election at a higher term, then make
