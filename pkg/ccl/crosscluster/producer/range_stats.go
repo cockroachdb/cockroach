@@ -17,7 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+const laggingSpanThreshold = 2 * time.Minute
 
 // rangeStatsPoller manages a goroutine that polls the total number of ranges
 // and their scanning status. Close must be called to avoid leaking the
@@ -82,6 +85,7 @@ func computeRangeStats(
 	frontier span.Frontier,
 	ranges rangedesc.IteratorFactory,
 ) (streampb.StreamEvent_RangeStats, error) {
+	now := timeutil.Now()
 	var stats streampb.StreamEvent_RangeStats
 	for _, initialSpan := range spans {
 		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100)
@@ -99,6 +103,9 @@ func computeRangeStats(
 				func(_ roachpb.Span, timestamp hlc.Timestamp) span.OpResult {
 					if timestamp.IsEmpty() {
 						stats.ScanningRangeCount += 1
+						return span.StopMatch
+					} else if timestamp.GoTime().Before(now.Add(-laggingSpanThreshold)) {
+						stats.LaggingRangeCount += 1
 						return span.StopMatch
 					}
 					return span.ContinueMatch
