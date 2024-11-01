@@ -69,9 +69,16 @@ var writerWorkers = settings.RegisterIntSetting(
 
 var minChunkSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
-	"logical_replication.consumer.flush_chunk_size",
-	"the minimum number of row updates to pass to each flush worker",
+	"logical_replication.consumer.flush_chunk_min_size",
+	"minimum number of row updates to pass to a flush worker at once",
 	64,
+	settings.NonNegativeInt,
+)
+var maxChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_max_size",
+	"maximum number of row updates to pass to a flush worker at once (repeated revisions of a row notwithstanding)",
+	1000,
 	settings.NonNegativeInt,
 )
 
@@ -82,7 +89,8 @@ type logicalReplicationWriterProcessor struct {
 
 	spec execinfrapb.LogicalReplicationWriterSpec
 
-	bh []BatchHandler
+	bh    []BatchHandler
+	stats []flushStats
 
 	configByTable map[descpb.ID]sqlProcessorTableConfig
 
@@ -611,6 +619,8 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
+	lrw.stats = make([]flushStats, poolSize)
+
 	for i := range lrw.bh {
 		var rp RowProcessor
 		var err error
@@ -729,48 +739,50 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		}
 	}
 
-	minChunk := 64
+	minChunk, maxChunk := minChunkSize.Default(), maxChunkSize.Default()
 	if lrw.FlowCtx != nil {
-		minChunk = int(minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
+		minChunk = minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
+		maxChunk = maxChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
 	}
+	chunks := make(chan []streampb.StreamEvent_KV)
 
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunk)
+	// Aim for a chunk size that gives each worker at least 10 chunks to do, but
+	// with a minimum chunk size and maximum target as well.
+	chunkSize := min(max(len(kvs)/(len(lrw.bh)*10), int(minChunk)), int(maxChunk))
+	requiredWorkers := max(1, min(len(kvs)/chunkSize), len(lrw.bh))
 
-	perChunkStats := make([]flushStats, len(lrw.bh))
-
-	todo := kvs
 	g := ctxgroup.WithContext(ctx)
-	for worker := range lrw.bh {
-		if len(todo) == 0 {
-			perChunkStats = perChunkStats[:worker]
-			break
-		}
-		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkSize, len(todo))
-		for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
-			chunkEnd++
-		}
-		chunk := todo[0:chunkEnd]
-		todo = todo[len(chunk):]
-		bh := lrw.bh[worker]
-
-		if err := ctx.Err(); err != nil {
-			// Bail early if ctx is canceled. NB: we break rather than return the err
-			// now since we still need to Wait() to avoid leaking a goroutine. We will
-			// re-check for any ctx errors after the Wait() in case all workers had
-			// completed without error as of this break.
-			break
-		}
-
+	for worker := range lrw.bh[:requiredWorkers] {
+		w := worker
 		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
-			if err != nil {
-				return err
+			for chunk := range chunks {
+				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
+				if err != nil {
+					return err
+				}
+				lrw.stats[w].Add(s)
 			}
-			perChunkStats[worker] = s
 			return nil
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(chunks)
+		for todo := kvs; len(todo) > 0; {
+			// The chunk should end after the first new key after chunk size.
+			chunkEnd := min(chunkSize, len(todo))
+			for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
+				chunkEnd++
+			}
+			chunk := todo[0:chunkEnd]
+			select {
+			case chunks <- chunk:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			todo = todo[len(chunk):]
+		}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return nil, 0, err
@@ -781,8 +793,9 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	var stats flushStats
-	for _, i := range perChunkStats {
-		stats.Add(i)
+	for i := range lrw.stats[:requiredWorkers] {
+		stats.Add(lrw.stats[i])
+		lrw.stats[i] = flushStats{}
 	}
 
 	if stats.notProcessed.count > 0 {
