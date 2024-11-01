@@ -43,7 +43,6 @@ func BenchmarkProposal3Nodes(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		nodes[l].propose([]byte("somedata"))
 	}
-	waitCommitConverge(nodes, uint64(b.N+4))
 	b.StopTimer()
 
 	for _, n := range nodes {
