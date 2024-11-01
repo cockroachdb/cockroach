@@ -185,7 +185,7 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 
 	sort.Slice(failedTests, func(i, j int) bool {
 		t1 := failedTests[i]
-		t2 := failedTests[2]
+		t2 := failedTests[j]
 		if t1.label < t2.label {
 			return true
 		} else if t1.label == t2.label {
