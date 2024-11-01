@@ -555,6 +555,7 @@ func handleRangefeedError(
 	switch {
 	case errors.Is(err, io.EOF):
 		// If we got an EOF, treat it as a signal to restart single range feed.
+		metrics.Errors.EOF.Inc(1)
 		return rangefeedErrorInfo{}, nil
 	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)):
 		// We shouldn't be seeing these errors if descriptors are correct, but if

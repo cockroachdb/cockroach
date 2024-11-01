@@ -517,6 +517,7 @@ type rangeFeedErrorCounters struct {
 	NodeNotFound           *metric.Counter
 	RangeNotFound          *metric.Counter
 	RangeKeyMismatch       *metric.Counter
+	EOF                    *metric.Counter
 	RetryUnknown           *metric.Counter
 }
 
@@ -550,6 +551,7 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 		NodeNotFound:           metric.NewCounter(retryMeta("node not found")),
 		RangeNotFound:          metric.NewCounter(retryMeta("range not found")),
 		RangeKeyMismatch:       metric.NewCounter(retryMeta("range key mismatch")),
+		EOF:                    metric.NewCounter(retryMeta("eof")),
 		RetryUnknown:           metric.NewCounter(retryMeta("unknown")),
 	}
 }
