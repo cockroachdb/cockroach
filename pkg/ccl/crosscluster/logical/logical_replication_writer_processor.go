@@ -69,9 +69,16 @@ var writerWorkers = settings.RegisterIntSetting(
 
 var minChunkSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
-	"logical_replication.consumer.flush_chunk_size",
-	"the minimum number of row updates to pass to each flush worker",
+	"logical_replication.consumer.flush_chunk_min_size",
+	"minimum number of row updates to pass to a flush worker at once",
 	64,
+	settings.NonNegativeInt,
+)
+var maxChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_max_size",
+	"maximum number of row updates to pass to a flush worker at once (repeated revisions of a row notwithstanding)",
+	1000,
 	settings.NonNegativeInt,
 )
 
@@ -82,7 +89,8 @@ type logicalReplicationWriterProcessor struct {
 
 	spec execinfrapb.LogicalReplicationWriterSpec
 
-	bh []BatchHandler
+	bh      []BatchHandler
+	bhStats []flushStats
 
 	configByTable map[descpb.ID]sqlProcessorTableConfig
 
@@ -729,48 +737,60 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		}
 	}
 
-	minChunk := 64
+	// Aim for a chunk size that gives each worker at least 4 chunks to do so that
+	// if it takes longer to process some keys in a chunk, the other 3/4 can be
+	// stolen by other workers. That said, we don't want tiny chunks that are more
+	// channel overhead than work, nor giant chunks, so bound it by the settings.
+	minChunk, maxChunk := minChunkSize.Default(), maxChunkSize.Default()
 	if lrw.FlowCtx != nil {
-		minChunk = int(minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
+		minChunk, maxChunk = minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV), maxChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
+	}
+	chunkSize := min(max(len(kvs)/(len(lrw.bh)*4), int(minChunk)), int(maxChunk))
+
+	// Figure out how many workers we can utilize from the pool for the number of
+	// chunks we expect (we could use fewer if chunks overshoot size target due to
+	// key revisions).
+	requiredWorkers := max(1, min(len(kvs)/chunkSize, len(lrw.bh)))
+	if len(lrw.bhStats) < requiredWorkers {
+		lrw.bhStats = make([]flushStats, requiredWorkers)
 	}
 
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunk)
-
-	perChunkStats := make([]flushStats, len(lrw.bh))
-
-	todo := kvs
+	// TODO(dt): consider keeping these goroutines running for lifetime of proc
+	// rather than starting new ones for each flush.
+	chunks := make(chan []streampb.StreamEvent_KV)
 	g := ctxgroup.WithContext(ctx)
-	for worker := range lrw.bh {
-		if len(todo) == 0 {
-			perChunkStats = perChunkStats[:worker]
-			break
-		}
-		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkSize, len(todo))
-		for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
-			chunkEnd++
-		}
-		chunk := todo[0:chunkEnd]
-		todo = todo[len(chunk):]
-		bh := lrw.bh[worker]
-
-		if err := ctx.Err(); err != nil {
-			// Bail early if ctx is canceled. NB: we break rather than return the err
-			// now since we still need to Wait() to avoid leaking a goroutine. We will
-			// re-check for any ctx errors after the Wait() in case all workers had
-			// completed without error as of this break.
-			break
-		}
-
+	for worker := range lrw.bh[:requiredWorkers] {
+		w := worker
+		lrw.bhStats[w] = flushStats{}
 		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
-			if err != nil {
-				return err
+			for chunk := range chunks {
+				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
+				if err != nil {
+					return err
+				}
+				lrw.bhStats[w].Add(s)
 			}
-			perChunkStats[worker] = s
 			return nil
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(chunks)
+		for todo := kvs; len(todo) > 0; {
+			// The chunk should end after the first new key after chunk size.
+			chunkEnd := min(chunkSize, len(todo))
+			for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
+				chunkEnd++
+			}
+			chunk := todo[0:chunkEnd]
+			select {
+			case chunks <- chunk:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			todo = todo[len(chunk):]
+		}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return nil, 0, err
@@ -780,9 +800,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, 0, err
 	}
 
+	// Collect the stats from every (possibly run) worker.
 	var stats flushStats
-	for _, i := range perChunkStats {
-		stats.Add(i)
+	for i := range lrw.bhStats[:requiredWorkers] {
+		stats.Add(lrw.bhStats[i])
 	}
 
 	if stats.notProcessed.count > 0 {
