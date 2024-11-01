@@ -343,6 +343,19 @@ var (
 		Usage: `A comma-separated list of tags to attach to telemetry data (e.g., key1:val1,key2:val2).`,
 	})
 
+	DBName string = ""
+	_             = registerRunOpsFlag(&DBName, FlagInfo{
+		Name: "db",
+		Usage: "Specify the name of the database to run the operation against (e.g., tpcc, tpch). If the given database " +
+			"does not exist, the operation fails. If not provided, a random database is selected, excluding system-created databases",
+	})
+
+	TableName string = ""
+	_                = registerRunOpsFlag(&TableName, FlagInfo{
+		Name: "db-table",
+		Usage: "Specifies the name of the database table to run the operation against, using the database provided in the --db flag. " +
+			"If the table does not exist, the operation fails. If not provided, a random table is selected.",
+	})
 	SideEyeApiToken string = ""
 	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
 		Name: "side-eye-token",
