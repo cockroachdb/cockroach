@@ -120,6 +120,11 @@ func JoinOnConstraintID(a, b NodeVars, relationIDVar, constraintID rel.Var) rel.
 	return joinOnConstraintIDUntyped(a.El, b.El, relationIDVar, constraintID)
 }
 
+// JoinOnTriggerID joins elements on trigger ID.
+func JoinOnTriggerID(a, b NodeVars, relationIDVar, triggerID rel.Var) rel.Clause {
+	return joinOnTriggerIDUntyped(a.El, b.El, relationIDVar, triggerID)
+}
+
 // ColumnInIndex requires that a column exists within an index.
 func ColumnInIndex(
 	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
@@ -254,6 +259,16 @@ var (
 			return rel.Clauses{
 				JoinOnDescIDUntyped(a, b, descID),
 				constraintID.Entities(screl.ConstraintID, a, b),
+			}
+		},
+	)
+	joinOnTriggerIDUntyped = screl.Schema.Def4(
+		"joinOnTriggerID", "a", "b", "desc-id", "trigger-id", func(
+			a, b, descID, triggerID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				JoinOnDescIDUntyped(a, b, descID),
+				triggerID.Entities(screl.TriggerID, a, b),
 			}
 		},
 	)
