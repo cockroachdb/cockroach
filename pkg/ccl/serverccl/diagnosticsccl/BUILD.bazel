@@ -9,6 +9,7 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
