@@ -1470,7 +1470,8 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+			inHeartbeatLease := r.checkQuorum && r.lead != None && r.leadEpoch == 0 &&
+				r.electionElapsed < r.electionTimeout
 			inFortifyLease := r.supportingFortifiedLeader() &&
 				// NB: A fortified leader is allowed to bump its term. It'll need to
 				// re-fortify once if it gets elected at the higher term though, so the
