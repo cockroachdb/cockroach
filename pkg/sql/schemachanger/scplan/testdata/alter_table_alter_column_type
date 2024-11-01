@@ -202,6 +202,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       TableID: 104
     *scop.UpsertColumnType
       ColumnType:
+        ColumnFamilyOrderFollowsColumnID: 2
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true
@@ -342,6 +343,7 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
       TableID: 104
     *scop.UpsertColumnType
       ColumnType:
+        ColumnFamilyOrderFollowsColumnID: 2
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true

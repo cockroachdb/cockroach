@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -95,6 +96,23 @@ func (i *immediateVisitor) addNewColumnType(
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
 			if fam.ID == op.ColumnType.FamilyID {
+				// If the column family order was specified, find the spot in the column
+				// family we will insert the new column at.
+				if op.ColumnType.ColumnFamilyOrderFollowsColumnID != 0 {
+					var foundColumnID bool
+					for j, id := range fam.ColumnIDs {
+						if id == op.ColumnType.ColumnFamilyOrderFollowsColumnID {
+							foundColumnID = true
+							fam.ColumnIDs = append(fam.ColumnIDs[:j+1], append([]catid.ColumnID{col.ID}, fam.ColumnIDs[j+1:]...)...)
+							fam.ColumnNames = append(fam.ColumnNames[:j+1], append([]string{col.Name}, fam.ColumnNames[j+1:]...)...)
+							break
+						}
+					}
+					// If the column ID wasn't found, we fall through and just append to the end.
+					if foundColumnID {
+						break
+					}
+				}
 				fam.ColumnIDs = append(fam.ColumnIDs, col.ID)
 				fam.ColumnNames = append(fam.ColumnNames, col.Name)
 				break

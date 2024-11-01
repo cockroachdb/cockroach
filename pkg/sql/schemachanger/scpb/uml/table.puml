@@ -85,6 +85,7 @@ ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
+ColumnType :  ColumnFamilyOrderFollowsColumnID
 
 object CompositeType
 
