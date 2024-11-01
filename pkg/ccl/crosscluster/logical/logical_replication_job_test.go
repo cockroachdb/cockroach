@@ -1455,6 +1455,7 @@ func TestFlushErrorHandling(t *testing.T) {
 	lrw.purgatory.debug = &streampb.DebugLogicalConsumerStatus{}
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
+	lrw.bhStats = make([]flushStats, 1)
 
 	lrw.purgatory.byteLimit = func() int64 { return 1 }
 	// One failure immediately means a 1-byte purgatory is full.
