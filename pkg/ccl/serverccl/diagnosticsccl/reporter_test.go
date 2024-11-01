@@ -125,6 +125,19 @@ func TestServerReport(t *testing.T) {
 		})
 	}
 
+	// We want to ensure that non-reportable settings, sensitive
+	// settings, and all string settings are redacted. Below we override
+	// one of each.
+	settingOverrides := []string{
+		`SET CLUSTER SETTING server.oidc_authentication.client_id = 'sensitive-client-id'`, // Sensitive setting.
+		`SET CLUSTER SETTING sql.log.user_audit = 'test_role NONE'`,                        // Non-reportable setting.
+		`SET CLUSTER SETTING changefeed.node_throttle_config = '{"message_rate": 0.5}'`,    // String setting.
+	}
+	for _, s := range settingOverrides {
+		_, err := rt.serverDB.Exec(s)
+		require.NoError(t, err)
+	}
+
 	expectedUsageReports := 0
 
 	clusterSecret := sql.ClusterSecret.Get(&rt.settings.SV)
@@ -196,7 +209,7 @@ func TestServerReport(t *testing.T) {
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
 	// plus version, reporting and secret settings are set in startup
 	// migrations.
-	expected, actual := 7, len(last.AlteredSettings)
+	expected, actual := 7+len(settingOverrides), len(last.AlteredSettings)
 	require.Equal(t, expected, actual, "expected %d changed settings, got %d: %v", expected, actual, last.AlteredSettings)
 
 	for key, expected := range map[string]string{
@@ -207,6 +220,9 @@ func TestServerReport(t *testing.T) {
 		"server.time_until_store_dead":             "1m30s",
 		"version":                                  clusterversion.Latest.String(),
 		"cluster.secret":                           "<redacted>",
+		"server.oidc_authentication.client_id":     "<redacted>",
+		"sql.log.user_audit":                       "<redacted>",
+		"changefeed.node_throttle_config":          "<redacted>",
 	} {
 		got, ok := last.AlteredSettings[key]
 		require.True(t, ok, "expected report of altered setting %q", key)
