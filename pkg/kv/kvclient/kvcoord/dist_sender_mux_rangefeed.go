@@ -415,7 +415,10 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
-		if _, err := handleRangefeedError(ctx, m.metrics, recvErr, false); err != nil {
+		//
+		// We don't incremenet error counters here because if it _is_ a retriable
+		// error, they will get incremented below.
+		if _, err := handleRangefeedError(ctx, m.metrics, recvErr, false, false); err != nil {
 			// Regardless of an error, release any resources (i.e. metrics) still
 			// being held by active stream.
 			for _, s := range toRestart {
@@ -538,7 +541,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		}
 	}()
 
-	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.ParentRangefeedMetadata.fromManualSplit)
+	errInfo, err := handleRangefeedError(ctx, m.metrics, reason, active.ParentRangefeedMetadata.fromManualSplit, true)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
 		return err

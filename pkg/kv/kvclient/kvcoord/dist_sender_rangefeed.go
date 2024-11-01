@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -546,8 +547,18 @@ type rangefeedErrorInfo struct {
 // Returns rangefeedErrorInfo describing how the error should be handled for the
 // range. Returns an error if the entire rangefeed should terminate.
 func handleRangefeedError(
-	ctx context.Context, metrics *DistSenderRangeFeedMetrics, err error, spawnedFromManualSplit bool,
+	ctx context.Context,
+	metrics *DistSenderRangeFeedMetrics,
+	err error,
+	spawnedFromManualSplit bool,
+	incrementErrorCounters bool,
 ) (rangefeedErrorInfo, error) {
+	maybeIncErrCounter := func(m *metric.Counter) {
+		if incrementErrorCounters {
+			m.Inc(1)
+		}
+	}
+
 	if err == nil {
 		return rangefeedErrorInfo{}, nil
 	}
@@ -555,27 +566,27 @@ func handleRangefeedError(
 	switch {
 	case errors.Is(err, io.EOF):
 		// If we got an EOF, treat it as a signal to restart single range feed.
-		metrics.Errors.EOF.Inc(1)
+		maybeIncErrCounter(metrics.Errors.EOF)
 		return rangefeedErrorInfo{}, nil
 	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)):
 		// We shouldn't be seeing these errors if descriptors are correct, but if
 		// we do, we'd rather evict descriptor before retrying.
-		metrics.Errors.StoreNotFound.Inc(1)
+		maybeIncErrCounter(metrics.Errors.StoreNotFound)
 		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
 		// These errors are likely to be unique to the replica that
 		// reported them, so no action is required before the next
 		// retry.
-		metrics.Errors.NodeNotFound.Inc(1)
+		maybeIncErrCounter(metrics.Errors.NodeNotFound)
 		return rangefeedErrorInfo{}, nil
 	case IsSendError(err):
-		metrics.Errors.SendErrors.Inc(1)
+		maybeIncErrCounter(metrics.Errors.SendErrors)
 		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)):
-		metrics.Errors.RangeNotFound.Inc(1)
+		maybeIncErrCounter(metrics.Errors.RangeNotFound)
 		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.RangeKeyMismatchError)(nil)):
-		metrics.Errors.RangeKeyMismatch.Inc(1)
+		maybeIncErrCounter(metrics.Errors.RangeKeyMismatch)
 		// If the retrying rangefeed was created after a manual split, but retried
 		// due to a rangekey mismatch error, the range descriptor cache that spawned
 		// the retrying rangefeed was stale, so carry over manualSplit flag to the
@@ -586,7 +597,7 @@ func handleRangefeedError(
 		if ok := errors.As(err, &t); !ok {
 			return rangefeedErrorInfo{}, errors.AssertionFailedf("wrong error type: %T", err)
 		}
-		metrics.Errors.GetRangeFeedRetryCounter(t.Reason).Inc(1)
+		maybeIncErrCounter(metrics.Errors.GetRangeFeedRetryCounter(t.Reason))
 		switch t.Reason {
 		case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 			kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
