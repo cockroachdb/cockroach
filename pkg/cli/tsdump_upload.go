@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -147,7 +148,7 @@ func doDDRequest(req *http.Request) error {
 		return err
 	}
 	if len(ddResp.Errors) > 0 {
-		return errors.Newf("tsdump: error response from datadog: %v", ddResp.Errors)
+		return errors.Newf("tsdump: error response from datadog (%d): %+v; request: %+v", resp.StatusCode, ddResp.Errors, req)
 	}
 	if resp.StatusCode > 299 {
 		return errors.Newf("tsdump: bad response status code: %+v", resp)
@@ -197,6 +198,8 @@ func dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 	return series, nil
 }
 
+var printLock syncutil.Mutex
+
 func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
 	var tags []string
 	// Hardcoded values
@@ -228,11 +231,19 @@ func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
 		}
 	}
 
-	fmt.Printf(
-		"\033[G\033[Ktsdump datadog upload: uploading metrics containing %d series including %s",
-		len(data),
-		data[0].Metric,
-	)
+	// Because the log below resets and overwrites the print line in
+	// order to avoid an explosion of logs filling the screen, it's
+	// necessary to wrap it in a mutex since `emitDataDogMetrics` is
+	// called concurrently.
+	func() {
+		printLock.Lock()
+		defer printLock.Unlock()
+		fmt.Printf(
+			"\033[G\033[Ktsdump datadog upload: uploading metrics containing %d series including %s",
+			len(data),
+			data[0].Metric,
+		)
+	}()
 
 	return d.flush(data)
 }
@@ -304,14 +315,29 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	var wg sync.WaitGroup
 	ch := make(chan []DatadogSeries, 4000)
-	var errorsInDDUpload []string
-	for i := 0; i < 1000; i++ {
+
+	// errorsInDDUpload wraps the error collection in a mutex since
+	// they're collected concurrently.
+	var errorsInDDUpload struct {
+		syncutil.Mutex
+		errors []string
+	}
+
+	// Note(davidh): This was previously set at 1000 and we'd get regular
+	// 400s from Datadog with the cryptic `Unable to decompress payload`
+	// error. I reduced this to 10 and was able to upload a 1.65GB tsdump
+	// in 3m10s without any errors (compared to 1m43s with 700 errors).
+	for i := 0; i < 10; i++ {
 		go func() {
 			for data := range ch {
 				err := d.emitDataDogMetrics(data)
 				if err != nil {
-					errorsInDDUpload = append(errorsInDDUpload,
-						fmt.Sprintf("retries exhausted for datadog upload for series %s with error %v\n", data[0].Metric, err))
+					func() {
+						errorsInDDUpload.Lock()
+						defer errorsInDDUpload.Unlock()
+						errorsInDDUpload.errors = append(errorsInDDUpload.errors,
+							fmt.Sprintf("retries exhausted for datadog upload for series %s with error %v\n", data[0].Metric, err))
+					}()
 					wg.Done()
 					return
 				}
@@ -339,8 +365,8 @@ func (d *datadogWriter) upload(fileName string) error {
 	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
 	dashboardLink := fmt.Sprintf(datadogDashboardURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID, fromUnixTimestamp, toUnixTimestamp)
 
-	if len(errorsInDDUpload) != 0 {
-		fmt.Printf("\n%d upload errors occurred:\n%s\n", len(errorsInDDUpload), strings.Join(errorsInDDUpload, "\n"))
+	if len(errorsInDDUpload.errors) != 0 {
+		fmt.Printf("\n%d upload errors occurred:\n%s\n", len(errorsInDDUpload.errors), strings.Join(errorsInDDUpload.errors, "\n"))
 	}
 	fmt.Println("\nupload id:", d.uploadID)
 	fmt.Printf("datadog dashboard link: %s\n", dashboardLink)
