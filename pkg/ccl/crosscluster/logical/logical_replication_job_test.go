@@ -1879,7 +1879,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
@@ -1892,15 +1892,17 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	dbA.Exec(t, "CREATE INDEX idx ON tab(payload)")
 
 	// But other schema changes are blocked.
-	dbA.ExpectErr(t,
-		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
-		"ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10",
-	)
+	expectedErr := "this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs"
+	cmd := "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10"
+	dbA.ExpectErr(t, expectedErr, cmd)
+	dbB.ExpectErr(t, expectedErr, cmd)
 
 	// Kill replication job and verify that schema changes work now.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
-	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10")
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	dbA.Exec(t, cmd)
+	dbB.Exec(t, cmd)
 }
 
 // TestUserDefinedTypes verifies that user-defined types are correctly
