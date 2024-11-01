@@ -1,4 +1,4 @@
-// Copyright 2023 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -8,6 +8,7 @@ package apiutil
 import (
 	"context"
 	"math"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,33 +18,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type IndexNames struct {
-	Database string
-	Table    string
-	Index    string
-	Span     roachpb.Span
-}
-
-// Equal only compares the names, not the spans
-func (idx IndexNames) Equal(other IndexNames) bool {
-	return idx.Database == other.Database &&
-		idx.Table == other.Table &&
-		idx.Index == other.Index
+// rangeLess encapsulate a slice of ranges and returns a comparator function
+// so that it can be sorted by go's builtin sort package.
+func rangeLess(ranges []roachpb.RangeDescriptor) func(i, j int) bool {
+	return func(i, j int) bool {
+		return ranges[i].StartKey.Less(ranges[j].StartKey)
+	}
 }
 
 // GetRangeIndexMappings translates a set of ordered ranges into a
-// RangeID -> []IndexNames mapping. It does this by executing the fololowing steps:
-//  1. Convert the set of ranges to a set of spans.
-//  2. Get the table descriptors that fall within the given spans.
-//  3. Get the database, table and index name for all indexes found in the descriptors.
-//  4. Return a mapping of the indexes which appear in each range.
+// RangeID -> IndexNamesList mapping. It does this by executing the fololowing steps:
+//  1. Sort the incoming ranges by start key
+//  2. Convert the set of ranges to a set of spans.
+//  3. Get the table descriptors that fall within the given spans.
+//  4. Get the database, table and index name for all indexes found in the descriptors.
+//  5. Return a mapping of the indexes which appear in each range.
 func GetRangeIndexMapping(
 	ctx context.Context,
 	txn descs.Txn,
 	codec keys.SQLCodec,
 	databases map[descpb.ID]catalog.DatabaseDescriptor,
 	ranges []roachpb.RangeDescriptor,
-) (map[roachpb.RangeID][]IndexNames, error) {
+) (map[roachpb.RangeID]IndexNamesList, error) {
+	sort.Slice(ranges, rangeLess(ranges))
 	spans := RangesToTableSpans(codec, ranges)
 
 	tables, err := SpansToOrderedTableDescriptors(ctx, txn, codec, spans)
@@ -63,13 +60,13 @@ func GetRangeIndexMapping(
 // one consisting of ordered ranges, and the other consisting of ordered index names
 // and outputs a mapping from range to index.
 func MapRangesToIndexes(
-	ranges []roachpb.RangeDescriptor, indexes []IndexNames,
-) map[roachpb.RangeID][]IndexNames {
-	results := map[roachpb.RangeID][]IndexNames{}
-	contents := []IndexNames{}
+	ranges []roachpb.RangeDescriptor, indexes IndexNamesList,
+) map[roachpb.RangeID]IndexNamesList {
+	results := map[roachpb.RangeID]IndexNamesList{}
+	contents := IndexNamesList{}
 	flushToResults := func(rangeID roachpb.RangeID) {
 		results[rangeID] = contents
-		contents = []IndexNames{}
+		contents = IndexNamesList{}
 	}
 
 	// move through the ranges + descriptors
@@ -147,9 +144,9 @@ func TableDescriptorsToIndexNames(
 	codec keys.SQLCodec,
 	databases map[descpb.ID]catalog.DatabaseDescriptor,
 	tables []catalog.TableDescriptor,
-) ([]IndexNames, error) {
+) (IndexNamesList, error) {
 	seen := map[string]bool{}
-	indexes := []IndexNames{}
+	indexes := IndexNamesList{}
 
 	for _, table := range tables {
 		database, ok := databases[table.GetParentID()]

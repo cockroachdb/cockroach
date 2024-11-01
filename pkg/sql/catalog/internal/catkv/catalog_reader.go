@@ -209,13 +209,16 @@ func (cr catalogReader) ScanDescriptorsInSpans(
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 
-	descSpans := make([]roachpb.Span, len(spans))
-	for i, span := range spans {
+	descSpans := []roachpb.Span{}
+	for _, span := range spans {
 		descSpan, err := getDescriptorSpanFromSpan(cr.Codec(), span)
 		if err != nil {
 			return mc.Catalog, err
 		}
-		descSpans[i] = descSpan
+		if descSpan.ZeroLength() {
+			continue
+		}
+		descSpans = append(descSpans, descSpan)
 	}
 
 	cq := catalogQuery{codec: cr.codec}

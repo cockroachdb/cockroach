@@ -4,6 +4,7 @@ go_library(
     name = "apiutil",
     srcs = [
         "apiutil.go",
+        "index_names.go",
         "rangeutil.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/apiutil",
@@ -21,7 +22,10 @@ go_library(
 
 go_test(
     name = "apiutil_test",
-    srcs = ["rangeutil_test.go"],
+    srcs = [
+        "index_names_test.go",
+        "rangeutil_test.go",
+    ],
     deps = [
         ":apiutil",
         "//pkg/keys",
