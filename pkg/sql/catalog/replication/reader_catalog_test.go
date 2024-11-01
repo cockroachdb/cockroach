@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/replication"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -236,9 +237,30 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		TenantName: "src",
 	})
 	require.NoError(t, err)
+
+	waitForRefresh := make(chan struct{})
+	descriptorRefreshHookEnabled := atomic.Bool{}
+	closeWaitForRefresh := func() {
+		if descriptorRefreshHookEnabled.Load() {
+			descriptorRefreshHookEnabled.Store(false)
+			close(waitForRefresh)
+		}
+	}
+	defer closeWaitForRefresh()
+	destTestingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+				if !descriptorRefreshHookEnabled.Load() {
+					return
+				}
+				<-waitForRefresh
+			},
+		},
+	}
 	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantID:   serverutils.TestTenantID2(),
 		TenantName: "dest",
+		Knobs:      destTestingKnobs,
 	})
 	require.NoError(t, err)
 	srcConn := srcTenant.SQLConn(t)
@@ -307,8 +329,14 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	compareEqual("SELECT * FROM t1")
 
 	var newTS hlc.Timestamp
-
+	descriptorRefreshHookEnabled.Store(true)
 	for _, useAOST := range []bool{false, true} {
+		if useAOST {
+			closeWaitForRefresh()
+		}
+		// When AOST is enabled then a fixed number of iterations sufficient. When
+		// the AOST is disabled, then we will iterate until a reader timestamp error
+		// is generated.
 		errorDetected := false
 		checkAOSTError := func(err error) {
 			if useAOST || err == nil {
@@ -323,12 +351,14 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		// are not line up on the reader catalog.
 		grp := ctxgroup.WithContext(ctx)
 		require.NoError(t, err)
-		var iterationsDone atomic.Bool
+		iterationsDoneCh := make(chan struct{})
 		grp.GoCtx(func(ctx context.Context) error {
 			defer func() {
-				iterationsDone.Swap(true)
+				close(iterationsDoneCh)
 			}()
-			const NumIterations = 64
+			const NumIterations = 16
+			// Ensure the minimum iterations are met, and any expected errors
+			// are observed before stopping TS advances.
 			for iter := 0; iter < NumIterations; iter++ {
 				if _, err := srcRunner.DB.ExecContext(ctx,
 					"INSERT INTO t1(val, j) VALUES('open', $1);",
@@ -351,22 +381,35 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		} else {
 			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='on'")
 		}
-		for !iterationsDone.Load() {
-			tx := destRunner.Begin(t)
-			_, err := tx.Exec("SELECT * FROM t1")
-			checkAOSTError(err)
-			_, err = tx.Exec("SELECT * FROM v1")
-			checkAOSTError(err)
-			_, err = tx.Exec("SELECT * FROM t2")
-			checkAOSTError(err)
-			checkAOSTError(tx.Commit())
+		iterationsDone := false
+		for !iterationsDone {
+			if !useAOST {
+				select {
+				case waitForRefresh <- struct{}{}:
+				case <-iterationsDoneCh:
+					iterationsDone = true
+				}
+			}
+			select {
+			case <-iterationsDoneCh:
+				iterationsDone = true
+			default:
+				tx := destRunner.Begin(t)
+				_, err := tx.Exec("SELECT * FROM t1")
+				checkAOSTError(err)
+				_, err = tx.Exec("SELECT * FROM v1")
+				checkAOSTError(err)
+				_, err = tx.Exec("SELECT * FROM t2")
+				checkAOSTError(err)
+				checkAOSTError(tx.Commit())
 
-			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
-			checkAOSTError(err)
-			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM v1 ORDER BY 1")
-			checkAOSTError(err)
-			_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t2 ORDER BY 1")
-			checkAOSTError(err)
+				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
+				checkAOSTError(err)
+				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM v1 ORDER BY 1")
+				checkAOSTError(err)
+				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t2 ORDER BY 1")
+				checkAOSTError(err)
+			}
 		}
 
 		// Finally ensure the queries actually match.
