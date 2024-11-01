@@ -131,7 +131,7 @@ func rangeFeed(
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) (err error) {
-		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, opts...)
+		return ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: sp, StartAfter: startFrom}}, events, opts...)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		for {

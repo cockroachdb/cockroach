@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -139,6 +138,18 @@ func WithMetadata() RangeFeedOption {
 	})
 }
 
+// SpanTimePair is a pair of span along with its starting time. The starting
+// time is exclusive, i.e. the first possible emitted event (including catchup
+// scans) will be at startAfter.Next().
+type SpanTimePair struct {
+	Span       roachpb.Span
+	StartAfter hlc.Timestamp // exclusive
+}
+
+func (p SpanTimePair) String() string {
+	return fmt.Sprintf("%s@%s", p.Span, p.StartAfter)
+}
+
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
@@ -153,59 +164,6 @@ func WithMetadata() RangeFeedOption {
 // NB: the given startAfter timestamp is exclusive, i.e. the first possible
 // emitted event (including catchup scans) will be at startAfter.Next().
 func (ds *DistSender) RangeFeed(
-	ctx context.Context,
-	spans []roachpb.Span,
-	startAfter hlc.Timestamp, // exclusive
-	eventCh chan<- RangeFeedMessage,
-	opts ...RangeFeedOption,
-) error {
-	timedSpans := make([]SpanTimePair, 0, len(spans))
-	for _, sp := range spans {
-		timedSpans = append(timedSpans, SpanTimePair{
-			Span:       sp,
-			StartAfter: startAfter,
-		})
-	}
-	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
-}
-
-// RangeFeedFromFrontier is similar to RangeFeed but can initialize each
-// rangefeed at the timestamp passed by the span frontier.
-func (ds *DistSender) RangeFeedFromFrontier(
-	ctx context.Context,
-	frontier span.Frontier,
-	eventCh chan<- RangeFeedMessage,
-	opts ...RangeFeedOption,
-) error {
-	timedSpans := make([]SpanTimePair, 0, frontier.Len())
-	frontier.Entries(
-		func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-			timedSpans = append(timedSpans, SpanTimePair{
-				// Clone the span as the rangefeed progress tracker will manipulate the
-				// original frontier.
-				Span:       sp.Clone(),
-				StartAfter: ts,
-			})
-			return false
-		})
-	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
-}
-
-// SpanTimePair is a pair of span along with its starting time. The starting
-// time is exclusive, i.e. the first possible emitted event (including catchup
-// scans) will be at startAfter.Next().
-type SpanTimePair struct {
-	Span       roachpb.Span
-	StartAfter hlc.Timestamp // exclusive
-}
-
-func (p SpanTimePair) String() string {
-	return fmt.Sprintf("%s@%s", p.Span, p.StartAfter)
-}
-
-// RangeFeedSpans is similar to RangeFeed but allows specification of different
-// starting time for each span.
-func (ds *DistSender) RangeFeedSpans(
 	ctx context.Context,
 	spans []SpanTimePair,
 	eventCh chan<- RangeFeedMessage,
