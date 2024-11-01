@@ -170,9 +170,22 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
 		},
 		{
-			desc:         "alter column type",
+			desc:         "alter column type trivial",
 			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col SMALLINT NOT NULL DEFAULT 100"},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE BIGINT",
+		},
+		{
+			desc:         "alter column type validate",
+			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100"},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE SMALLINT",
+		},
+		{
+			desc: "alter column type general",
+			setup: []string{
+				"SET enable_experimental_alter_column_type_general=TRUE",
+				"ALTER TABLE tbl ADD COLUMN new_col BIGINT",
+			},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE TEXT",
 		},
 		{
 			desc:         "add column default udf",

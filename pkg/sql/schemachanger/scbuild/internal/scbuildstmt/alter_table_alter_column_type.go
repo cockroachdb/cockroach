@@ -304,6 +304,11 @@ func handleGeneralColumnConversion(
 	b.Drop(oldColType)
 	handleDropColumnPrimaryIndexes(b, tbl, col)
 
+	// The new column is replacing an existing one, so we want to insert it into the
+	// column family at the same position as the old column. Normally, when adding a new
+	// column, it is appended to the end of the column family.
+	newColType.ColumnFamilyOrderFollowsColumnID = oldColType.ColumnID
+
 	// Add the spec for the new column. It will be identical to the column it is replacing,
 	// except the type will differ, and it will have a transient computed expression.
 	// This expression will reference the original column to facilitate the backfill.
@@ -331,11 +336,8 @@ func handleGeneralColumnConversion(
 		},
 		transientCompute: true,
 		notNull:          retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
-		// TODO(#133040): The new column will be placed in the same column family as the
-		// one it's replacing, so there's no need to specify a family. However, the new
-		// column will be added to the end of the family's column ID list, which changes
-		// its internal ordering. This needs to be revisited as CDC may have a dependency
-		// on the same ordering (see TestEventColumnOrderingWithSchemaChanges).
+		// The new column will be placed in the same column family as the one
+		// it's replacing, so there's no need to specify a family.
 		fam: nil,
 	}
 	addColumn(b, spec, t)
