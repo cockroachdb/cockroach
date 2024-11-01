@@ -16,6 +16,7 @@ func TestVectorSet(t *testing.T) {
 	vs := MakeSet(2)
 	require.Equal(t, 2, vs.Dims)
 	require.Equal(t, 0, vs.Count)
+	require.Equal(t, T{0, 0}, vs.Centroid(T{-1, -1}))
 
 	// Add methods.
 	v1 := T{1, 2}
@@ -31,21 +32,24 @@ func TestVectorSet(t *testing.T) {
 	require.Equal(t, 6, vs.Count)
 	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6}, vs.Data)
 
-	vs.AddZero(2)
-	vs.AddZero(0)
+	vs.AddUndefined(2)
+	copy(vs.At(6), []float32{3, 1})
+	copy(vs.At(7), []float32{4, 4})
+	vs.AddUndefined(0)
 	require.Equal(t, 8, vs.Count)
-	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 0, 0, 0, 0}, vs.Data)
+	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs.Data)
+
+	// Centroid method.
+	vs2 := T{-10.5}.AsSet()
+	require.Equal(t, T{3.875, 3.375}, vs.Centroid(T{-1, -1}))
+	require.Equal(t, T{-10.5}, vs2.Centroid(T{-1}))
 
 	// ReplaceWithLast.
 	vs.ReplaceWithLast(1)
 	vs.ReplaceWithLast(4)
 	vs.ReplaceWithLast(5)
 	require.Equal(t, 5, vs.Count)
-	require.Equal(t, []float32{1, 2, 0, 0, 6, 6, 1, 2, 0, 0}, vs.Data)
-
-	// Add zero again, to ensure that reusing memory still zeroes it.
-	vs.AddZero(1)
-	require.Equal(t, []float32{1, 2, 0, 0, 6, 6, 1, 2, 0, 0, 0, 0}, vs.Data)
+	require.Equal(t, []float32{1, 2, 4, 4, 6, 6, 1, 2, 3, 1}, vs.Data)
 
 	vs3 := MakeSetFromRawData(vs.Data, 2)
 	require.Equal(t, vs, vs3)
@@ -55,7 +59,9 @@ func TestVectorSet(t *testing.T) {
 	vs4.EnsureCapacity(5)
 	require.Equal(t, 0, len(vs4.Data))
 	require.GreaterOrEqual(t, cap(vs4.Data), 15)
-	vs4.AddZero(2)
+	vs4.AddUndefined(2)
+	copy(vs4.At(0), []float32{3, 1, 2})
+	copy(vs4.At(1), []float32{4, 4, 4})
 	require.Equal(t, 2, vs4.Count)
 	require.Equal(t, 6, len(vs4.Data))
 
@@ -64,7 +70,7 @@ func TestVectorSet(t *testing.T) {
 	require.Equal(t, 3, cap(vs5.Data))
 	vs4.AddSet(&vs5)
 	require.Equal(t, 3, vs4.Count)
-	require.Equal(t, []float32{0, 0, 0, 0, 0, 0, 1, 2, 3}, vs4.Data)
+	require.Equal(t, []float32{3, 1, 2, 4, 4, 4, 1, 2, 3}, vs4.Data)
 
 	// SplitAt.
 	vs6 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
@@ -99,9 +105,10 @@ func TestVectorSet(t *testing.T) {
 	vs11 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
 	require.Panics(t, func() { vs11.At(-1) })
 	require.Panics(t, func() { vs11.SplitAt(-1) })
-	require.Panics(t, func() { vs11.AddZero(-1) })
+	require.Panics(t, func() { vs11.AddUndefined(-1) })
 	require.Panics(t, func() { vs11.AddSet(nil) })
 	require.Panics(t, func() { vs11.ReplaceWithLast(-1) })
+	require.Panics(t, func() { vs11.Centroid([]float32{0, 0, 0}) })
 
 	vs12 := MakeSet(2)
 	require.Panics(t, func() { vs12.At(0) })
@@ -110,5 +117,5 @@ func TestVectorSet(t *testing.T) {
 
 	vs13 := MakeSet(-1)
 	require.Panics(t, func() { vs13.Add(v1) })
-	require.Panics(t, func() { vs13.AddZero(1) })
+	require.Panics(t, func() { vs13.AddUndefined(1) })
 }
