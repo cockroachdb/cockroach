@@ -507,6 +507,7 @@ var (
 		// default type that raw strings get parsed into, without any casts or type
 		// assertions.
 		types.String,
+		types.AnyCollatedString,
 		types.Bytes,
 		types.Bool,
 		types.Int,

@@ -1,8 +1,10 @@
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 
-statement error pq: unsupported comparison operator: <collatedstring{en}> = <string>
+query B 
 SELECT 'A' COLLATE en = 'a'
+----
+false
 
 statement error pq: unsupported comparison operator: <collatedstring{en}> = <collatedstring{de}>
 SELECT 'A' COLLATE en = 'a' COLLATE de
@@ -560,3 +562,51 @@ SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, '' COLLATE de);
 statement ok
 SELECT * FROM t45142 WHERE c < SOME (CASE WHEN true THEN NULL END, '' COLLATE en);
 SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, CASE WHEN true THEN NULL END);
+
+subtest issue_132867
+
+statement ok
+CREATE TABLE test_collate (
+  id INT8 PRIMARY KEY,
+  "string_field" STRING COLLATE en_US_u_ks_level2 NULL
+)
+
+statement ok
+INSERT INTO test_collate VALUES (1, 'Str_Collate_1')
+
+query IT
+SELECT * FROM test_collate WHERE (("id", "string_field")) = ANY(Array[(1, 'str_collate_1')])
+----
+1  Str_Collate_1
+
+query I
+SELECT id FROM test_collate WHERE "string_field" = 'sTR_cOLLATE_1'
+----
+1
+
+statement ok
+INSERT INTO test_collate VALUES (2, 'Foo'), (3, 'Bar'), (4, 'Baz')
+
+query T
+SELECT string_field FROM test_collate WHERE string_field < 'baz' ORDER BY id
+----
+Bar
+
+query T
+SELECT string_field FROM test_collate WHERE string_field <= 'baz' ORDER BY id
+----
+Bar
+Baz
+
+query T
+SELECT string_field FROM test_collate WHERE string_field > 'baz' ORDER BY id
+----
+Str_Collate_1
+Foo
+
+query T
+SELECT string_field FROM test_collate WHERE string_field >= 'baz' ORDER BY id
+----
+Str_Collate_1
+Foo
+Baz
