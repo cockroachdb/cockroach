@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -296,15 +297,7 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
-		// Add the LDR job ID to the destination table descriptors.
-		b := p.InternalSQLTxn().KV().NewBatch()
-		for _, td := range dstTableDescs {
-			td.LDRJobIDs = append(td.LDRJobIDs, jr.JobID)
-			if err := p.InternalSQLTxn().Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
-				return err
-			}
-		}
-		if err := p.InternalSQLTxn().KV().Run(ctx, b); err != nil {
+		if err := replicationutils.LockLDRTables(ctx, p.InternalSQLTxn(), dstTableDescs, jr.JobID); err != nil {
 			return err
 		}
 

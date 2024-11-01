@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -20,7 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -377,4 +381,44 @@ func GetProducerJobIDFromLDRJob(
 ) jobspb.JobID {
 	payload := jobutils.GetJobPayload(t, sqlRunner, ldrJobID)
 	return jobspb.JobID(payload.GetLogicalReplicationDetails().StreamID)
+}
+
+func LockLDRTables(
+	ctx context.Context, txn descs.Txn, dstTableDescs []*tabledesc.Mutable, jobID jobspb.JobID,
+) error {
+	b := txn.KV().NewBatch()
+	for _, td := range dstTableDescs {
+		td.LDRJobIDs = append(td.LDRJobIDs, jobID)
+		if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+			return err
+		}
+	}
+	if err := txn.KV().Run(ctx, b); err != nil {
+		return err
+	}
+	return nil
+}
+
+func UnlockLDRTables(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tableIDs []uint32, jobID jobspb.JobID,
+) error {
+	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		b := txn.KV().NewBatch()
+		for _, id := range tableIDs {
+			td, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descpb.ID(id))
+			if err != nil {
+				return err
+			}
+			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID catpb.JobID) bool {
+				return thisID == jobID
+			})
+			if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+				return err
+			}
+		}
+		if err := txn.KV().Run(ctx, b); err != nil {
+			return err
+		}
+		return nil
+	})
 }
