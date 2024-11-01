@@ -231,8 +231,8 @@ const HotRangesTable = ({
             Database
           </Tooltip>
         ),
-        cell: val => <>{val.database_name}</>,
-        sort: val => val.database_name,
+        cell: val => <>{val.databases.join(", ")}</>,
+        sort: val => val.databases.join(", "),
       },
       {
         name: "table",
@@ -244,22 +244,7 @@ const HotRangesTable = ({
             Table
           </Tooltip>
         ),
-        cell: val =>
-          // A hot range may not necessarily back a SQL table. If we see a
-          // "table name" that starts with a slash, it is not a table name but
-          // instead the start key of the range, and we should not link it.
-          val.table_name.startsWith("/") ? (
-            val.table_name
-          ) : (
-            <Link
-              to={util.EncodeDatabaseTableUri(
-                val.database_name,
-                val.table_name,
-              )}
-            >
-              {val.table_name}
-            </Link>
-          ),
+        cell: val => val.tables.join(", "),
         sort: val => val.table_name,
       },
       {
@@ -272,8 +257,8 @@ const HotRangesTable = ({
             Index
           </Tooltip>
         ),
-        cell: val => <>{val.index_name}</>,
-        sort: val => val.index_name,
+        cell: val => <>{val.indexes.join(", ")}</>,
+        sort: val => val.indexes.join(", "),
       },
       {
         name: "locality",

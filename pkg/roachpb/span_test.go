@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestSpanZeroLength(t *testing.T) {
@@ -38,6 +39,7 @@ func TestSpanClamp(t *testing.T) {
 		span   roachpb.Span
 		bounds roachpb.Span
 		want   roachpb.Span
+		error  string
 	}{
 		{
 			name:   "within bounds",
@@ -63,12 +65,23 @@ func TestSpanClamp(t *testing.T) {
 			bounds: roachpb.Span{tp(5), tp(15)},
 			want:   roachpb.Span{tp(5), tp(15)},
 		},
+		{
+			name:   "clamp start error",
+			span:   roachpb.Span{},
+			bounds: roachpb.Span{tp(2), tp(1)},
+			want:   roachpb.Span{},
+			error:  "cannot clamp when min '/Table/2' is larger than max '/Table/1'",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.span.Clamp(tt.bounds); !got.Equal(tt.want) {
-				t.Errorf("Clamp() = %v, want %v", got, tt.want)
+			span, err := tt.span.Clamp(tt.bounds)
+			if !testutils.IsError(err, tt.error) {
+				t.Fatalf("expected error to be '%s', got '%s'", tt.error, err)
+			}
+			if !span.Equal(tt.want) {
+				t.Errorf("Clamp() = %v, want %v", span, tt.want)
 			}
 		})
 	}
