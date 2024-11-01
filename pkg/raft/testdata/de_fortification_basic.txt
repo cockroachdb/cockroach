@@ -316,6 +316,7 @@ stabilize
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 > 3 receiving messages
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
@@ -351,7 +352,7 @@ ok
 # De-fortifying ourselves should also work as expected.
 send-de-fortify 1 1
 ----
-ok
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 
 stabilize
 ----
@@ -649,6 +650,7 @@ stabilize
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
 > 3 receiving messages
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0
@@ -715,6 +717,7 @@ stabilize
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0
@@ -805,6 +808,7 @@ stabilize
 > 2 receiving messages
   3->2 MsgFortifyLeader Term:4 Log:0/0
   INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 4]
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 2 became follower at term 4
   3->2 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
 > 3 processing append thread
@@ -1021,6 +1025,7 @@ stabilize
   ]
 > 1 receiving messages
   2->1 MsgVote Term:5 Log:4/5
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 [term: 4] received a MsgVote message with higher term from 2 [term: 5]
   INFO 1 became follower at term 5
   INFO 1 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
@@ -1273,6 +1278,7 @@ stabilize
   2->1 MsgDeFortifyLeader Term:5 Log:0/0
 > 1 receiving messages
   2->1 MsgDeFortifyLeader Term:5 Log:0/0
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:5 Vote:2 Commit:6 Lead:2 LeadEpoch:0
@@ -1310,6 +1316,7 @@ stabilize
   ]
 > 2 receiving messages
   1->2 MsgVote Term:6 Log:5/6
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 2 [term: 5] received a MsgVote message with higher term from 1 [term: 6]
   INFO 2 became follower at term 6
   INFO 2 [logterm: 5, index: 6, vote: 0] cast MsgVote for 1 [logterm: 5, index: 6] at term 6
@@ -1363,6 +1370,7 @@ stabilize
 > 3 receiving messages
   1->3 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
   INFO 3 [term: 5] received a MsgApp message with higher term from 1 [term: 6]
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 became follower at term 6
 > 1 processing append thread
   Processing:
