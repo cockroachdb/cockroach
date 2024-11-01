@@ -556,11 +556,34 @@ func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, fromCols, toCols opt.ColList) 
 	if !colSet.SubsetOf(fromSet) {
 		f.ProjectCols(colSet.Intersection(fromSet))
 	}
-	for i := range f.deps {
-		f.deps[i].from = opt.TranslateColSetStrict(f.deps[i].from, fromCols, toCols)
-		f.deps[i].to = opt.TranslateColSetStrict(f.deps[i].to, fromCols, toCols)
+	n := 0
+	var newEquivCols []opt.ColSet
+	for i := 0; i < len(f.deps); i++ {
+		remappedFrom := opt.TranslateColSetStrict(f.deps[i].from, fromCols, toCols)
+		remappedTo := opt.TranslateColSetStrict(f.deps[i].to, fromCols, toCols)
+		if f.deps[i].equiv && remappedFrom.Len() != 1 {
+			// The original "from" column maps to more than one "to" column. Remove
+			// this FD, and keep track of the set of equivalent columns to be handled
+			// after the loop.
+			remappedFrom.UnionWith(remappedTo)
+			newEquivCols = append(newEquivCols, remappedFrom)
+			continue
+		}
+		f.deps[i].from = remappedFrom
+		f.deps[i].to = remappedTo
+		if n != i {
+			f.deps[n] = f.deps[i]
+		}
+		n++
 	}
+	f.deps = f.deps[:n]
 	f.key = opt.TranslateColSetStrict(f.key, fromCols, toCols)
+	if len(newEquivCols) > 0 {
+		for i := range newEquivCols {
+			f.addEquivalency(newEquivCols[i])
+		}
+		f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+	}
 }
 
 // ColsAreStrictKey returns true if the given columns contain a strict key for the
