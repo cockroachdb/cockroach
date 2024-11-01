@@ -84,6 +84,8 @@ type logicalReplicationWriterProcessor struct {
 
 	bh []BatchHandler
 
+	configByTable map[descpb.ID]sqlProcessorTableConfig
+
 	getBatchSize func() int
 
 	streamPartitionClient streamclient.Client
@@ -167,42 +169,6 @@ func newLogicalReplicationWriterProcessor(
 			tableID:  descpb.ID(dstTableID),
 		}
 	}
-	bhPool := make([]BatchHandler, writerWorkers.Get(&flowCtx.Cfg.Settings.SV))
-	for i := range bhPool {
-		var rp RowProcessor
-		var err error
-		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, procConfigByDestTableID)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			rp, err = makeSQLProcessor(
-				ctx, flowCtx.Cfg.Settings, procConfigByDestTableID,
-				jobspb.JobID(spec.JobID),
-				// Initialize the executor with a fresh session data - this will
-				// avoid creating a new copy on each executor usage.
-				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-			if streamingKnobs != nil && streamingKnobs.FailureRate != 0 {
-				rp.SetSyntheticFailurePercent(streamingKnobs.FailureRate)
-			}
-		}
-
-		bhPool[i] = &txnBatch{
-			db:       flowCtx.Cfg.DB,
-			rp:       rp,
-			settings: flowCtx.Cfg.Settings,
-			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
-			spec:     spec,
-		}
-	}
 
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
@@ -214,7 +180,8 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	lrw := &logicalReplicationWriterProcessor{
-		spec: spec,
+		configByTable: procConfigByDestTableID,
+		spec:          spec,
 		getBatchSize: func() int {
 			// TODO(ssd): We set this to 1 since putting more than 1
 			// row in a KV batch using the new ConditionalPut-based
@@ -246,7 +213,6 @@ func newLogicalReplicationWriterProcessor(
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 		},
-		bh:             bhPool,
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
 		checkpointCh:   make(chan []jobspb.ResolvedSpan),
@@ -628,6 +594,61 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 	return remaining[:j]
 }
 
+func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Context) error {
+	if lrw.FlowCtx == nil {
+		return nil
+	}
+
+	poolSize := writerWorkers.Get(&lrw.FlowCtx.Cfg.Settings.SV)
+
+	if len(lrw.bh) >= int(poolSize) {
+		return nil
+	}
+
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
+	}
+
+	flowCtx := lrw.FlowCtx
+	lrw.bh = make([]BatchHandler, poolSize)
+	for i := range lrw.bh {
+		var rp RowProcessor
+		var err error
+		if lrw.spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, lrw.configByTable)
+			if err != nil {
+				return err
+			}
+		} else {
+			rp, err = makeSQLProcessor(
+				ctx, flowCtx.Cfg.Settings, lrw.configByTable,
+				jobspb.JobID(lrw.spec.JobID),
+				// Initialize the executor with a fresh session data - this will
+				// avoid creating a new copy on each executor usage.
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.FailureRate != 0 {
+				rp.SetSyntheticFailurePercent(streamingKnobs.FailureRate)
+			}
+		}
+
+		lrw.bh[i] = &txnBatch{
+			db:       flowCtx.Cfg.DB,
+			rp:       rp,
+			settings: flowCtx.Cfg.Settings,
+			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
+			spec:     lrw.spec,
+		}
+	}
+	return nil
+}
+
 // flushBuffer processes some or all of the events in the passed buffer, and
 // zeros out each event in the passed buffer for which it successfully completed
 // processing either by applying it or by sending it to a DLQ. If mustProcess is
@@ -644,6 +665,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	if len(kvs) == 0 {
 		return nil, 0, nil
+	}
+
+	if err := lrw.setupBatchHandlers(ctx); err != nil {
+		return kvs, int64(len(kvs)), err
 	}
 
 	preFlushTime := timeutil.Now()
