@@ -1264,6 +1264,9 @@ func setupServerWithNumDBs(
 	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
 	require.NoError(t, err)
 
+	_, err = server.Conns[0].Exec("SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1s'")
+	require.NoError(t, err)
+
 	runners := []*sqlutils.SQLRunner{}
 	dbNames := []string{}
 
@@ -1988,6 +1991,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"cannot create logical replication stream: table tab has more than one column family",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// UniqueWithoutIndex constraints are not allowed.
 	for _, db := range []*sqlutils.SQLRunner{dbA, dbB} {
@@ -1998,6 +2002,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"cannot create logical replication stream: table tab_with_uwi has UNIQUE WITHOUT INDEX constraints: unique_v",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_uwi ON $1 INTO TABLE tab_with_uwi", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for mismatched numbers of columns.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
@@ -2005,6 +2010,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"cannot create logical replication stream: destination table tab has 2 columns, but the source table tab has 3 columns",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for mismatched column types.
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col TEXT NOT NULL")
@@ -2012,6 +2018,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"cannot create logical replication stream: destination table tab column new_col has type STRING, but the source table tab has type INT8",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for composite type in primary key.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
@@ -2023,6 +2030,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab has a primary key column \(composite_col\) with composite encoding`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for partial indexes.
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
@@ -2031,6 +2039,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab has a partial index partial_idx`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for virtual computed columns that are a key of a secondary index.
 	dbA.Exec(t, "DROP INDEX partial_idx")
@@ -2041,6 +2050,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that is a key of index virtual_col_idx`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check for virtual columns that are in the primary index.
 	dbA.Exec(t, "DROP INDEX virtual_col_idx")
@@ -2049,6 +2059,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that appears in the primary key`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Change the primary key back, and remove the indexes that are left over from
 	// changing the PK.
@@ -2064,6 +2075,8 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: destination table tab CHECK constraints do not match source table tab`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
 	// Allow user to create LDR stream with mismatched CHECK via SKIP SCHEMA CHECK.
 	var jobIDSkipSchemaCheck jobspb.JobID
 	dbA.QueryRow(t,
@@ -2072,6 +2085,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	).Scan(&jobIDSkipSchemaCheck)
 	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
 	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Add missing CHECK constraints, and verify that the stream can be created.
 	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (length(payload) > 1)")
@@ -2085,6 +2099,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Kill replication job.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check if the table references a UDF.
 	dbA.Exec(t, "CREATE OR REPLACE FUNCTION my_udf() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL")
@@ -2095,6 +2110,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab references functions with IDs \[[0-9]+\]`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check if the table references a sequence.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN udf_col")
@@ -2106,6 +2122,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab references sequences with IDs \[[0-9]+\]`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check if table has a trigger.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN seq_col")
@@ -2116,6 +2133,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: table tab references triggers \[my_trigger\]`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Verify that the stream cannot be created with mismatched enum types.
 	dbA.Exec(t, "DROP TRIGGER my_trigger ON tab")
@@ -2127,6 +2145,8 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: .* destination type USER DEFINED ENUM: public.mytype has logical representations \[a b c\], but the source type USER DEFINED ENUM: mytype has \[a b\]`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
 	// Allows user to create LDR stream with UDT via SKIP SCHEMA CHECK.
 	dbA.QueryRow(t,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
@@ -2134,6 +2154,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	).Scan(&jobIDSkipSchemaCheck)
 	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
 	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Verify that the stream cannot be created with mismatched composite types.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN enum_col")
@@ -2146,6 +2167,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: .* destination type USER DEFINED RECORD: public.composite_typ tuple element 0 does not match source type USER DEFINED RECORD: composite_typ tuple element 0: destination type INT8 does not match source type STRING`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Check that UNIQUE indexes match.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN composite_udt_col")
@@ -2156,6 +2178,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		`cannot create logical replication stream: destination table tab UNIQUE indexes do not match source table tab`,
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
 	)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
 	// Create the missing indexes on each side and verify the stream can be
 	// created. Note that the indexes don't need to be created in the same order
@@ -2214,4 +2237,5 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Kill replication job.
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 }
