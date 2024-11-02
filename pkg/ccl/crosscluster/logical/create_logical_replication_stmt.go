@@ -63,9 +63,9 @@ func createLogicalReplicationStreamPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (err error) {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (retErr error) {
 		defer func() {
-			if err == nil {
+			if retErr == nil {
 				telemetry.Count("logical_replication_stream.started")
 			}
 		}()
@@ -207,6 +207,11 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+		defer func() {
+			if retErr != nil {
+				retErr = errors.CombineErrors(retErr, client.Complete(ctx, spec.StreamID, false))
+			}
+		}()
 
 		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
 		for i, desc := range spec.TypeDescriptors {

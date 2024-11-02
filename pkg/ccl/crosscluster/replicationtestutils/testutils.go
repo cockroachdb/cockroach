@@ -722,3 +722,7 @@ func SSTMaker(t *testing.T, keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable 
 		WriteTS: batchTS,
 	}
 }
+
+func WaitForAllProducerJobsToFail(t *testing.T, sql *sqlutils.SQLRunner) {
+	sql.CheckQueryResultsRetry(t, "SELECT distinct(status) FROM [SHOW JOBS] where job_type = 'REPLICATION STREAM PRODUCER'", [][]string{{"failed"}})
+}
