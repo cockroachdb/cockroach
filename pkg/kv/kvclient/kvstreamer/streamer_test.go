@@ -594,11 +594,11 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 	// all rows via the streamer, both in the OutOfOrder and InOrder modes. Each
 	// time assert that the number of BatchRequests issued is in double digits
 	// (if not, then the streamer was extremely suboptimal).
-	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: (\d+,)`)
+	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: ([\d,]+)`)
 	for inOrder := range []bool{false, true} {
 		runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
 		for i := 0; i < 2; i++ {
-			var gRPCCalls int
+			gRPCCalls := -1
 			var err error
 			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
 			for _, row := range rows {
@@ -608,6 +608,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 					break
 				}
 			}
+			require.Greater(t, gRPCCalls, 0, rows)
 			require.Greater(t, 100, gRPCCalls, rows)
 		}
 	}
