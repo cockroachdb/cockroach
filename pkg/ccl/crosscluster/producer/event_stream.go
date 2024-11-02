@@ -417,6 +417,8 @@ func (s *eventStream) flushBatch(ctx context.Context) error {
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }
 func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent) error {
+	event.StreamSeq = s.debug.SeqNo.Add(1)
+	event.EmitUnixNanos = timeutil.Now().UnixNano()
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err
