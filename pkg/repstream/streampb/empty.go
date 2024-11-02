@@ -16,6 +16,8 @@ import (
 type DebugProducerStatus struct {
 	// Identification info.
 	StreamID StreamID
+	SeqNo    atomic.Uint64
+
 	// Properties.
 	Spec  StreamPartitionSpec
 	State atomic.Int64
