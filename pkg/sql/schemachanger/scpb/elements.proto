@@ -247,6 +247,17 @@ message ColumnComputeExpression {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Usage indicates that this expression is being added for. We need to identify
+  // usages, such as the the USING clause of an ALTER COLUMN .. TYPE operation,
+  // to properly order dependency rules.
+  enum Usage {
+    // REGULAR means its added by the user as an explicit compute expression.
+    REGULAR = 0;
+    // USING_EXPRESSION means it is part of the USING clause in an
+    // ALTER COLUMN .. TYPE operation.
+    USING_EXPRESSION = 1;
+  }
+  Usage usage = 5;
 }
 
 message ColumnFamily {

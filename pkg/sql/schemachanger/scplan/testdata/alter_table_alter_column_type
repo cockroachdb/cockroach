@@ -185,7 +185,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: c1, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: STRING}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, Usage: USING_EXPRESSION}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -222,6 +222,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
           ReferencedColumnIDs:
           - 2
         TableID: 104
+        Usage: 1
     *scop.SetColumnName
       ColumnID: 2
       Name: c1_shadow
@@ -303,7 +304,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: c1, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: STRING}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, Usage: USING_EXPRESSION}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], PUBLIC] -> ABSENT
@@ -326,7 +327,7 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: c1, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: STRING}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, Usage: USING_EXPRESSION}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -363,6 +364,7 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
           ReferencedColumnIDs:
           - 2
         TableID: 104
+        Usage: 1
     *scop.SetColumnName
       ColumnID: 2
       Name: c1_shadow
@@ -660,7 +662,7 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, Usage: USING_EXPRESSION}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[ColumnName:{DescID: 104, Name: c1_shadow, ColumnID: 2}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT

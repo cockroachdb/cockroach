@@ -105,6 +105,9 @@ const (
 	TypeName
 	// PartitionName corresponds to the name of a partition.
 	PartitionName
+	// Usage is an attribute for column compute expression to identify why it's
+	// being added.
+	Usage
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -297,6 +300,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(Usage, "Usage"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnNotNull)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
