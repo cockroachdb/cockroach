@@ -207,6 +207,11 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+		defer func() {
+			if err != nil {
+				err = errors.CombineErrors(err, client.Complete(ctx, spec.StreamID, false))
+			}
+		}()
 
 		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
 		for i, desc := range spec.TypeDescriptors {
