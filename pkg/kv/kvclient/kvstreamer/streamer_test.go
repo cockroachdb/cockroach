@@ -690,3 +690,61 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 		}
 	}
 }
+
+// TestStreamerRandomAccess verifies that the Streamer handles the requests that
+// have random access pattern within ranges reasonably well. It is a regression
+// test for #133043.
+func TestStreamerRandomAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	rng, _ := randutil.NewTestRand()
+	runner := sqlutils.MakeSQLRunner(db)
+	// Create a table with 3 ranges, with 2k rows in each. Each row is about
+	// 2.7KiB in size and has a random value in column 'v'.
+	runner.Exec(t, `
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT,
+  blob STRING,
+  INDEX v_idx (v)
+);
+
+INSERT INTO t (k, v, blob) SELECT i, (random()*6000)::INT, repeat('a', 2700) FROM generate_series(1, 6000) AS g(i);
+
+ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
+`)
+
+	// The meat of the test - run the query that performs an index join to fetch
+	// all rows via the streamer, both in the OutOfOrder and InOrder modes, and
+	// with different workmem limits. Each time assert that the number of
+	// BatchRequests issued is relatively small (if not, then the streamer was
+	// extremely suboptimal).
+	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: ([\d,]+)`)
+	for i := 0; i < 10; i++ {
+		// Pick random workmem limit in [2MiB; 16MiB] range.
+		workmem := 2<<20 + rng.Intn(14<<20)
+		runner.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
+		for inOrder := range []bool{false, true} {
+			runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
+			gRPCCalls := -1
+			var err error
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT * FROM t@v_idx WHERE v > 0`)
+			for _, row := range rows {
+				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
+					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
+					require.NoError(t, err)
+					break
+				}
+			}
+			require.Greater(t, gRPCCalls, 0, rows)
+			require.Greater(t, 150, gRPCCalls, rows)
+		}
+	}
+}
