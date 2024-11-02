@@ -9256,6 +9256,9 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	batches INT,
 	checkpoints INT,
 	megabytes FLOAT,
+	last_kb INT,
+	flush_fl_rd_ck STRING,
+
 	last_checkpoint INTERVAL,
 
 	produce_wait INTERVAL,
@@ -9325,6 +9328,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				}
 				return 0
 			}
+			flushFull, flushReady, flushCheckpoint := s.Flushes.Full.Load(), s.Flushes.Ready.Load(), s.Flushes.Checkpoints.Load()
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(s.StreamID)),
@@ -9337,6 +9341,8 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
 				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
+				tree.NewDInt(tree.DInt(s.Flushes.LastSize.Load()/1024)),
+				tree.NewDString(fmt.Sprintf("%d/%d/%d", flushFull, flushReady, flushCheckpoint)),
 				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
 
 				dur(s.Flushes.ProduceWaitNanos.Load()+currentWaitWithState(streampb.Producing)),
