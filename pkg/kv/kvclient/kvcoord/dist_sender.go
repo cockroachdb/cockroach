@@ -125,6 +125,12 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderAsyncThrottledDuration = metric.Metadata{
+		Name:        "distsender.batches.async.throttled_cumulative_duration_nanos",
+		Help:        "Cumulative duration of partial batches being throttled (in nanoseconds)",
+		Measurement: "Throttled Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaTransportSentCount = metric.Metadata{
 		Name:        "distsender.rpc.sent",
 		Help:        "Number of replica-addressed RPCs sent",
@@ -417,6 +423,7 @@ type DistSenderMetrics struct {
 	AsyncSentCount                     *metric.Counter
 	AsyncInProgress                    *metric.Gauge
 	AsyncThrottledCount                *metric.Counter
+	AsyncThrottledDuration             *metric.Counter
 	SentCount                          *metric.Counter
 	LocalSentCount                     *metric.Counter
 	NextReplicaErrCount                *metric.Counter
@@ -464,6 +471,7 @@ func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 		AsyncSentCount:                     metric.NewCounter(metaDistSenderAsyncSentCount),
 		AsyncInProgress:                    metric.NewGauge(metaDistSenderAsyncInProgress),
 		AsyncThrottledCount:                metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		AsyncThrottledDuration:             metric.NewCounter(metaDistSenderAsyncThrottledDuration),
 		SentCount:                          metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:                     metric.NewCounter(metaTransportLocalSentCount),
 		ReplicaAddressedBatchRequestBytes:  metric.NewCounter(metaDistSenderReplicaAddressedBatchRequestBytes),
@@ -1926,16 +1934,29 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		lastRange := !ri.NeedAnother(rs)
+		var asyncSent, asyncThrottled bool
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
-		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
-			// Sent the batch asynchronously.
-		} else {
-			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
-			)
+		if canParallelize && !lastRange && !ds.disableParallelBatches {
+			if ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
+				asyncSent = true
+			} else {
+				asyncThrottled = true
+			}
+		}
+		if !asyncSent {
+			resp := func() response {
+				if asyncThrottled {
+					tStart := crtime.NowMono()
+					defer func() {
+						ds.metrics.AsyncThrottledDuration.Inc(int64(tStart.Elapsed()))
+					}()
+				}
+				return ds.sendPartialBatch(
+					ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
+				)
+			}()
 			resp.positions = positions
 			responseCh <- resp
 			if resp.pErr != nil {
