@@ -9252,7 +9252,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	initial_ts DECIMAL,
 	prev_ts DECIMAL,
 	state STRING,
-
+	seq INT,
 	batches INT,
 	checkpoints INT,
 	megabytes FLOAT,
@@ -9333,7 +9333,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),
 				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),
 				tree.NewDString(curState.String()),
-
+				tree.NewDInt(tree.DInt(s.SeqNo.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
 				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
