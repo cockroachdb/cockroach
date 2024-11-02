@@ -541,7 +541,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
 			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
-			_, fractionCompleted, status := rh.rangeStats.RollupStats()
+			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
 
 			if rh.replicatedTimeAtStart.Less(replicatedTime) {
 				prog.ReplicatedTime = replicatedTime
@@ -567,6 +567,15 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			}
 			if l := rh.job.Details().(jobspb.LogicalReplicationDetails).MetricsLabel; l != "" {
 				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
+
+				if aggRangeStats.RangeCount != 0 {
+					rh.metrics.LabeledScanningRanges.Update(map[string]string{"label": l}, aggRangeStats.ScanningRangeCount)
+					rh.metrics.LabeledCatchupRanges.Update(map[string]string{"label": l}, aggRangeStats.LaggingRangeCount)
+				}
+			}
+			if aggRangeStats.RangeCount != 0 {
+				rh.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
+				rh.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
 			}
 			return nil
 		}); err != nil {
