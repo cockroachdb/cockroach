@@ -51,11 +51,11 @@ const (
 func (p ProducerState) String() string {
 	switch p {
 	case Producing:
-		return "produce"
+		return "read"
 	case Emitting:
 		return "emit"
 	default:
-		return "unknown"
+		return "othr"
 	}
 }
 
