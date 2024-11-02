@@ -1056,6 +1056,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"batches",
 			"checkpoints",
 			"megabytes",
+			"last_kb",
+			"flush_fl_rd_ck",
 			"produce_wait",
 			"emit_wait",
 			"last_produce_wait",

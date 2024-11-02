@@ -28,8 +28,11 @@ type DebugProducerStatus struct {
 		ResolvedMicros        atomic.Int64
 	}
 	Flushes struct {
-		Batches, Checkpoints, Bytes, EmitWaitNanos, ProduceWaitNanos atomic.Int64
-		LastProduceWaitNanos, LastEmitWaitNanos                      atomic.Int64
+		Batches, Checkpoints, Bytes             atomic.Int64
+		EmitWaitNanos, ProduceWaitNanos         atomic.Int64
+		LastProduceWaitNanos, LastEmitWaitNanos atomic.Int64
+		LastSize                                atomic.Int64
+		Full, Ready, Forced                     atomic.Int64
 	}
 	LastCheckpoint struct {
 		Micros atomic.Int64
