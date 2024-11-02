@@ -177,7 +177,7 @@ var useStreaksInLDR = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"logical_replication.producer.group_adjacent_spans.enabled",
 	"controls whether to attempt adjacent spans in the same stream",
-	true,
+	false,
 )
 
 var ldrProcCount = settings.RegisterIntSetting(
