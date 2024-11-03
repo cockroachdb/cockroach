@@ -68,7 +68,8 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
-	debug streampb.DebugProducerStatus
+	seqNum uint64
+	debug  streampb.DebugProducerStatusHolder
 
 	consumerReady atomic.Bool
 }
@@ -112,8 +113,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return errors.AssertionFailedf("expected to be started once")
 	}
 
-	s.debug.State.Store(int64(streampb.Emitting))
-	s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
+	s.debug.Emitting()
 
 	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
 	if err != nil {
@@ -209,8 +209,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return err
 	}
 
-	s.debug.StreamID = s.streamID
-	s.debug.Spec = s.spec
+	s.debug.Setup(s.streamID, s.spec)
 	streampb.RegisterProducerStatus(&s.debug)
 	return nil
 }
@@ -230,11 +229,7 @@ func (s *eventStream) setErr(err error) bool {
 
 // Next implements eval.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
-	s.debug.State.Store(int64(streampb.Producing))
-	emitWait := (timeutil.Now().UnixMicro() - s.debug.LastPolledMicros.Load()) * 1000
-	s.debug.Flushes.LastEmitWaitNanos.Store(emitWait)
-	s.debug.Flushes.EmitWaitNanos.Add(emitWait)
-	s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
+	s.debug.Producing()
 
 	s.consumerReady.Store(true)
 	defer s.consumerReady.Store(false)
@@ -250,11 +245,7 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 		case err := <-s.errCh:
 			return false, err
 		default:
-			s.debug.State.Store(int64(streampb.Emitting))
-			produceWait := (timeutil.Now().UnixMicro() - s.debug.LastPolledMicros.Load()) * 1000
-			s.debug.Flushes.ProduceWaitNanos.Add(produceWait)
-			s.debug.Flushes.LastProduceWaitNanos.Store(produceWait)
-			s.debug.LastPolledMicros.Store(timeutil.Now().UnixMicro())
+			s.debug.Emitting()
 			return true, nil
 		}
 	}
@@ -315,13 +306,11 @@ func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 }
 
 func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-	s.debug.RF.Checkpoints.Add(1)
+	s.debug.Checkpoint()
 }
 
 func (s *eventStream) onFrontier(ctx context.Context, timestamp hlc.Timestamp) {
-	s.debug.RF.Advances.Add(1)
-	s.debug.RF.LastAdvanceMicros.Store(timeutil.Now().UnixMicro())
-	s.debug.RF.ResolvedMicros.Store(timestamp.GoTime().UnixMicro())
+	s.debug.Advance(timestamp.GoTime())
 }
 
 func (s *eventStream) onSSTable(
@@ -366,7 +355,7 @@ func (s *eventStream) maybeCheckpoint(
 }
 
 func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.VisitableFrontier) {
-	if err := s.flushBatch(ctx, checkpoint); err != nil {
+	if err := s.flushBatch(ctx, streampb.FlushCheckpoint); err != nil {
 		return
 	}
 
@@ -377,7 +366,8 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 	})
 	s.lastCheckpointLen = len(spans)
 
-	err := s.sendFlush(ctx, &streampb.StreamEvent{Checkpoint: &streampb.StreamEvent_StreamCheckpoint{
+	s.seqNum++
+	err := s.sendFlush(ctx, &streampb.StreamEvent{StreamSeq: s.seqNum, Checkpoint: &streampb.StreamEvent_StreamCheckpoint{
 		ResolvedSpans: spans,
 		RangeStats:    s.stats.MaybeStats(),
 	}})
@@ -388,9 +378,7 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 	// set the local time for pacing.
 	s.lastCheckpointTime = timeutil.Now()
 
-	s.debug.Flushes.Checkpoints.Add(1)
-	s.debug.LastCheckpoint.Micros.Store(s.lastCheckpointTime.UnixMicro())
-	s.debug.LastCheckpoint.Spans.Store(spans)
+	s.debug.CheckpointEmitted(s.lastCheckpointTime, spans, s.seqNum)
 }
 
 func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
@@ -401,43 +389,26 @@ func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
 	// preventing the slow consumer from blocking rangefeed progress, avoiding
 	// catchup scans.
 	if s.seb.size > int(s.spec.Config.BatchByteSize) {
-		return s.flushBatch(ctx, full)
+		return s.flushBatch(ctx, streampb.FlushFull)
 	}
 	if s.consumerReady.Load() && s.seb.size > minBatchByteSize {
-		return s.flushBatch(ctx, ready)
+		return s.flushBatch(ctx, streampb.FlushReady)
 	}
 	return nil
 }
 
-type flushReason int
-
-const (
-	full flushReason = iota
-	ready
-	checkpoint
-)
-
-func (s *eventStream) flushBatch(ctx context.Context, reason flushReason) error {
+func (s *eventStream) flushBatch(ctx context.Context, reason streampb.FlushReason) error {
 	if s.seb.size == 0 {
 		return nil
 	}
-	s.debug.Flushes.Batches.Add(1)
-	s.debug.Flushes.Bytes.Add(int64(s.seb.size))
-	s.debug.Flushes.LastSize.Store(int64(s.seb.size))
-	switch reason {
-	case full:
-		s.debug.Flushes.Full.Add(1)
-	case ready:
-		s.debug.Flushes.Ready.Add(1)
-	case checkpoint:
-		s.debug.Flushes.Forced.Add(1)
-	}
+	s.seqNum++
+	s.debug.Flushed(int64(s.seb.size), reason, s.seqNum)
 
 	defer s.seb.reset()
-	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
+
+	return s.sendFlush(ctx, &streampb.StreamEvent{StreamSeq: s.seqNum, Batch: &s.seb.batch})
 }
 func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent) error {
-	event.StreamSeq = s.debug.SeqNo.Add(1)
 	event.EmitUnixNanos = timeutil.Now().UnixNano()
 	data, err := protoutil.Marshal(event)
 	if err != nil {
