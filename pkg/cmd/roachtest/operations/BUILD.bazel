@@ -10,6 +10,7 @@ go_library(
         "backup_restore.go",
         "cluster_settings.go",
         "disk_stall.go",
+        "grant_revoke_all.go",
         "license_throttle.go",
         "manual_compaction.go",
         "network_partition.go",
