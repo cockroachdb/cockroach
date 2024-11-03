@@ -9316,14 +9316,14 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 		}
 
 		for _, s := range sm.DebugGetProducerStatuses(ctx) {
-			resolved := time.UnixMicro(s.RF.ResolvedMicros.Load())
+			resolved := time.UnixMicro(s.RF.ResolvedMicros)
 			resolvedDatum := tree.DNull
 			if resolved.Unix() != 0 {
 				resolvedDatum = shortenLogical(eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()}))
 			}
 
-			curState := streampb.ProducerState(s.State.Load())
-			currentWait := duration.Age(now, time.UnixMicro(s.LastPolledMicros.Load())).Nanos()
+			curState := s.State
+			currentWait := duration.Age(now, time.UnixMicro(s.LastPolledMicros)).Nanos()
 
 			curOrLast := func(currentNanos int64, lastNanos int64, statePredicate streampb.ProducerState) tree.Datum {
 				if curState == statePredicate {
@@ -9337,31 +9337,31 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				}
 				return 0
 			}
-			flushFull, flushReady, flushCheckpoint := s.Flushes.Full.Load(), s.Flushes.Ready.Load(), s.Flushes.Checkpoints.Load()
+			flushFull, flushReady, flushCheckpoint := s.Flushes.Full, s.Flushes.Ready, s.Flushes.Checkpoints
 
 			if err := addRow(
-				tree.NewDInt(tree.DInt(s.StreamID)),                                               // stream_id
-				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),  // consumer
-				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),                                        // spans
-				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),         // initial_ts
-				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),  //prev_ts
-				tree.NewDString(curState.String()),                                                // state
-				dur(s.Flushes.ProduceWaitNanos.Load()+currentWaitWithState(streampb.Producing)),   // read
-				dur(s.Flushes.EmitWaitNanos.Load()+currentWaitWithState(streampb.Emitting)),       // emit
-				curOrLast(currentWait, s.Flushes.LastProduceWaitNanos.Load(), streampb.Producing), // last_read_ms
-				curOrLast(currentWait, s.Flushes.LastEmitWaitNanos.Load(), streampb.Emitting),     // last_emit_ms
-				tree.NewDInt(tree.DInt(s.SeqNo.Load())),                                           // seq
-				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),                             // checkpoints
-				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),                               // last_chkpt
-				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),                                 // batches
-				tree.NewDInt(tree.DInt(flushFull)),                                                // batches_full
-				tree.NewDInt(tree.DInt(flushReady)),                                               // batches_ready
-				tree.NewDInt(tree.DInt(flushCheckpoint)),                                          // batches_checkpoint
-				tree.NewDInt(tree.DInt(s.Flushes.Bytes.Load())/(1<<20)),                           // megabytes
-				tree.NewDInt(tree.DInt(s.Flushes.LastSize.Load()/1024)),                           // last_kb
-				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),                                  // rf_chk
-				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),                                     // rf_adv
-				age(time.UnixMicro(s.RF.LastAdvanceMicros.Load())),                                // rf_last_adv
+				tree.NewDInt(tree.DInt(s.StreamID)),                                              // stream_id
+				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)), // consumer
+				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),                                       // spans
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),        // initial_ts
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)), //prev_ts
+				tree.NewDString(curState.String()),                                               // state
+				dur(s.Flushes.ProduceWaitNanos+currentWaitWithState(streampb.Producing)),         // read
+				dur(s.Flushes.EmitWaitNanos+currentWaitWithState(streampb.Emitting)),             // emit
+				curOrLast(currentWait, s.Flushes.LastProduceWaitNanos, streampb.Producing),       // last_read_ms
+				curOrLast(currentWait, s.Flushes.LastEmitWaitNanos, streampb.Emitting),           // last_emit_ms
+				tree.NewDInt(tree.DInt(s.SeqNum)),                                                // seq
+				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints)),                                   // checkpoints
+				age(time.UnixMicro(s.LastCheckpoint.Micros)),                                     // last_chkpt
+				tree.NewDInt(tree.DInt(s.Flushes.Batches)),                                       // batches
+				tree.NewDInt(tree.DInt(flushFull)),                                               // batches_full
+				tree.NewDInt(tree.DInt(flushReady)),                                              // batches_ready
+				tree.NewDInt(tree.DInt(flushCheckpoint)),                                         // batches_checkpoint
+				tree.NewDInt(tree.DInt(s.Flushes.Bytes)/(1<<20)),                                 // megabytes
+				tree.NewDInt(tree.DInt(s.Flushes.LastSize/1024)),                                 // last_kb
+				tree.NewDInt(tree.DInt(s.RF.Checkpoints)),                                        // rf_chk
+				tree.NewDInt(tree.DInt(s.RF.Advances)),                                           // rf_adv
+				age(time.UnixMicro(s.RF.LastAdvanceMicros)),                                      // rf_last_adv
 				resolvedDatum, // resolved not visible.
 				age(resolved), // resolved_age.
 			); err != nil {
@@ -9427,11 +9427,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 			return err
 		}
 		for _, status := range sm.DebugGetProducerStatuses(ctx) {
-			sp := status.LastCheckpoint.Spans.Load()
-			if sp == nil {
-				continue
-			}
-			for _, s := range sp.([]jobspb.ResolvedSpan) {
+			for _, s := range status.LastCheckpoint.Spans {
 				if err := addRow(
 					tree.NewDInt(tree.DInt(status.StreamID)),
 					tree.NewDString(fmt.Sprintf("%d[%d]", status.Spec.ConsumerNode, status.Spec.ConsumerProc)),

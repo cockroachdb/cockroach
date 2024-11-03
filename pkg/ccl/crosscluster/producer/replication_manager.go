@@ -296,7 +296,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 
 func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	ctx context.Context,
-) []*streampb.DebugProducerStatus {
+) []streampb.DebugProducerStatus {
 	// NB: we don't check license here since if a stream started but the license
 	// expired or was removed, we still want visibility into it during debugging.
 
