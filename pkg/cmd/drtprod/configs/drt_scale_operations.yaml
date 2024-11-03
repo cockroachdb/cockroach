@@ -13,5 +13,6 @@ targets:
     steps:
       - script: "pkg/cmd/drtprod/scripts/create_run_operation.sh"
         args:
+          - "grant_revoke,grant-revoke"
           - "schema_change,add-column|add-index"
           - "kill_stall,disk-stall|network-partition|node-kill,0 * * * *" # runs every 1 hour
