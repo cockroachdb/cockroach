@@ -47,6 +47,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/repstream/streampb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],
