@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"net"
 	"net/url"
 	"sort"
@@ -9260,26 +9259,27 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	stream_id INT,
 	consumer STRING,
 	spans INT,
-	initial_ts DECIMAL,
-	prev_ts DECIMAL,
+	initial_ts DECIMAL NOT VISIBLE,
+	prev_ts DECIMAL NOT VISIBLE,
 	state STRING,
-
+	read INTERVAL,
+	emit INTERVAL,
+	last_read_ms INT,
+	last_emit_ms INT,
+	seq INT,
+	chkpts INT,
+	last_chkpt INTERVAL,
 	batches INT,
-	checkpoints INT,
-	megabytes FLOAT,
-	last_checkpoint INTERVAL,
-
-	produce_wait INTERVAL,
-	emit_wait INTERVAL,
-	last_produce_wait INTERVAL,
-	last_emit_wait INTERVAL,
-
-	rf_checkpoints INT,
-	rf_advances INT,
-	rf_last_advance INTERVAL,
-
-	rf_resolved DECIMAL,
-	rf_resolved_age INTERVAL
+	batches_full INT NOT VISIBLE,
+	batches_ready INT NOT VISIBLE,
+	batches_checkpoint INT NOT VISIBLE,
+	megabytes INT,
+	last_kb INT,
+	rf_chk INT,
+	rf_adv INT,
+	rf_last_adv INTERVAL,
+	resolved DECIMAL NOT VISIBLE,
+	resolved_age INTERVAL
 	);`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
@@ -9291,12 +9291,6 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 			return err
 		}
 		now := p.EvalContext().GetStmtTimestamp()
-		age := func(t time.Time) tree.Datum {
-			if t.Unix() == 0 {
-				return tree.DNull
-			}
-			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
-		}
 
 		// Transform `.0000000000` to `.0` to shorted/de-noise HLCs.
 		shortenLogical := func(d *tree.DDecimal) *tree.DDecimal {
@@ -9311,7 +9305,14 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 		}
 
 		dur := func(nanos int64) tree.Datum {
-			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+			// Round to seconds to save some width.
+			return tree.NewDInterval(duration.MakeDuration((nanos/1e9)*1e9, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return dur(now.Sub(t).Nanoseconds())
 		}
 
 		for _, s := range sm.DebugGetProducerStatuses(ctx) {
@@ -9326,9 +9327,9 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 
 			curOrLast := func(currentNanos int64, lastNanos int64, statePredicate streampb.ProducerState) tree.Datum {
 				if curState == statePredicate {
-					return dur(currentNanos)
+					return tree.NewDInt(tree.DInt(time.Duration(currentNanos).Milliseconds()))
 				}
-				return dur(lastNanos)
+				return tree.NewDInt(tree.DInt(time.Duration(lastNanos).Milliseconds()))
 			}
 			currentWaitWithState := func(statePredicate streampb.ProducerState) int64 {
 				if curState == statePredicate {
@@ -9336,31 +9337,33 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				}
 				return 0
 			}
+			flushFull, flushReady, flushCheckpoint := s.Flushes.Full.Load(), s.Flushes.Ready.Load(), s.Flushes.Checkpoints.Load()
 
 			if err := addRow(
-				tree.NewDInt(tree.DInt(s.StreamID)),
-				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),
-				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
-				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),
-				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),
-				tree.NewDString(curState.String()),
-
-				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
-				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
-				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
-				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
-
-				dur(s.Flushes.ProduceWaitNanos.Load()+currentWaitWithState(streampb.Producing)),
-				dur(s.Flushes.EmitWaitNanos.Load()+currentWaitWithState(streampb.Emitting)),
-				curOrLast(currentWait, s.Flushes.LastProduceWaitNanos.Load(), streampb.Producing),
-				curOrLast(currentWait, s.Flushes.LastEmitWaitNanos.Load(), streampb.Emitting),
-
-				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),
-				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),
-				age(time.UnixMicro(s.RF.LastAdvanceMicros.Load())),
-
-				resolvedDatum,
-				age(resolved),
+				tree.NewDInt(tree.DInt(s.StreamID)),                                               // stream_id
+				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),  // consumer
+				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),                                        // spans
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),         // initial_ts
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),  //prev_ts
+				tree.NewDString(curState.String()),                                                // state
+				dur(s.Flushes.ProduceWaitNanos.Load()+currentWaitWithState(streampb.Producing)),   // read
+				dur(s.Flushes.EmitWaitNanos.Load()+currentWaitWithState(streampb.Emitting)),       // emit
+				curOrLast(currentWait, s.Flushes.LastProduceWaitNanos.Load(), streampb.Producing), // last_read_ms
+				curOrLast(currentWait, s.Flushes.LastEmitWaitNanos.Load(), streampb.Emitting),     // last_emit_ms
+				tree.NewDInt(tree.DInt(s.SeqNo.Load())),                                           // seq
+				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),                             // checkpoints
+				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),                               // last_chkpt
+				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),                                 // batches
+				tree.NewDInt(tree.DInt(flushFull)),                                                // batches_full
+				tree.NewDInt(tree.DInt(flushReady)),                                               // batches_ready
+				tree.NewDInt(tree.DInt(flushCheckpoint)),                                          // batches_checkpoint
+				tree.NewDInt(tree.DInt(s.Flushes.Bytes.Load())/(1<<20)),                           // megabytes
+				tree.NewDInt(tree.DInt(s.Flushes.LastSize.Load()/1024)),                           // last_kb
+				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),                                  // rf_chk
+				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),                                     // rf_adv
+				age(time.UnixMicro(s.RF.LastAdvanceMicros.Load())),                                // rf_last_adv
+				resolvedDatum, // resolved not visible.
+				age(resolved), // resolved_age.
 			); err != nil {
 				return err
 			}

@@ -259,6 +259,9 @@ message StreamEvent {
   // Only 1 field ought to be set.
   Batch batch = 1;
   StreamCheckpoint checkpoint = 2;
+
+  uint64 stream_seq = 3;
+  int64 emit_unix_nanos = 4;
 }
 
 message StreamReplicationStatus {

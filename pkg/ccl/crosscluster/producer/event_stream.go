@@ -366,7 +366,7 @@ func (s *eventStream) maybeCheckpoint(
 }
 
 func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.VisitableFrontier) {
-	if err := s.flushBatch(ctx); err != nil {
+	if err := s.flushBatch(ctx, checkpoint); err != nil {
 		return
 	}
 
@@ -400,23 +400,45 @@ func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
 	// If the consumer is not ready, the larger batch delays the flush call and
 	// preventing the slow consumer from blocking rangefeed progress, avoiding
 	// catchup scans.
-	if (s.seb.size > int(s.spec.Config.BatchByteSize)) || s.consumerReady.Load() && s.seb.size > minBatchByteSize {
-		return s.flushBatch(ctx)
+	if s.seb.size > int(s.spec.Config.BatchByteSize) {
+		return s.flushBatch(ctx, full)
+	}
+	if s.consumerReady.Load() && s.seb.size > minBatchByteSize {
+		return s.flushBatch(ctx, ready)
 	}
 	return nil
 }
 
-func (s *eventStream) flushBatch(ctx context.Context) error {
+type flushReason int
+
+const (
+	full flushReason = iota
+	ready
+	checkpoint
+)
+
+func (s *eventStream) flushBatch(ctx context.Context, reason flushReason) error {
 	if s.seb.size == 0 {
 		return nil
 	}
 	s.debug.Flushes.Batches.Add(1)
 	s.debug.Flushes.Bytes.Add(int64(s.seb.size))
+	s.debug.Flushes.LastSize.Store(int64(s.seb.size))
+	switch reason {
+	case full:
+		s.debug.Flushes.Full.Add(1)
+	case ready:
+		s.debug.Flushes.Ready.Add(1)
+	case checkpoint:
+		s.debug.Flushes.Forced.Add(1)
+	}
 
 	defer s.seb.reset()
 	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
 }
 func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent) error {
+	event.StreamSeq = s.debug.SeqNo.Add(1)
+	event.EmitUnixNanos = timeutil.Now().UnixNano()
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err
