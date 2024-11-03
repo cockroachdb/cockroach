@@ -151,12 +151,6 @@ targets:
           duration: 12h
           ramp: 10m
           wait: 0
-      - script: "pkg/cmd/drtprod/scripts/tpch_init.sh"
-        args:
-          - scale_factor_1000 # suffix added to script name tpch_init_scale_factor_1000.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          scale-factor: 1000
       - script: "pkg/cmd/drtprod/scripts/generate_tpch_run.sh"
         args:
           - scale_factor_1000
