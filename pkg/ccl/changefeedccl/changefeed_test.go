@@ -6472,6 +6472,11 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test requires many range splits, which can be slow under certain test
+	// conditions. Skip potentially slow tests.
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+
 	opts := makeOptions()
 	defer addCloudStorageOptions(t, &opts)()
 	opts.forceRootUserConnection = true
@@ -6549,6 +6554,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	// Perform the rolling restart.
 	require.NoError(t, tc.Restart())
 
+	// For validation, the test requires an enterprise feed.
+	feedTestEnterpriseSinks(&opts)
 	sinkType := randomSinkTypeWithOptions(opts)
 	f, closeSink := makeFeedFactoryWithOptions(t, sinkType, tc, tc.ServerConn(0), opts)
 	defer closeSink()
@@ -6561,7 +6568,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 
 	defer DiscardMessages(testFeed)()
 
-	// Ensure the changeefeed is able to complete in a reasonable amount of time.
+	// Ensure the changefeed is able to complete in a reasonable amount of time.
 	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitForStatus(func(s jobs.Status) bool {
 		return s == jobs.StatusSucceeded
 	}))
