@@ -9,36 +9,128 @@ import (
 	"sync/atomic"
 	time "time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+type DebugProducerStatusHolder struct {
+	mu syncutil.Mutex
+	s  DebugProducerStatus
+}
+
+func (h *DebugProducerStatusHolder) Setup(streamID StreamID, spec StreamPartitionSpec) {
+	h.s.StreamID = streamID
+	h.s.Spec = spec
+}
+
+func (h *DebugProducerStatusHolder) Get() DebugProducerStatus {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.s
+}
+
+func (h *DebugProducerStatusHolder) Checkpoint() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.RF.Checkpoints++
+}
+
+func (h *DebugProducerStatusHolder) Advance(resolved time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.RF.Advances++
+	h.s.RF.ResolvedMicros = resolved.UnixMicro()
+	h.s.RF.LastAdvanceMicros = timeutil.Now().UnixMicro()
+}
+
+type FlushReason int
+
+const (
+	FlushFull FlushReason = iota
+	FlushReady
+	FlushCheckpoint
+)
+
+func (h *DebugProducerStatusHolder) Flushed(size int64, reason FlushReason, seqNum uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.Flushes.Batches++
+	h.s.Flushes.Bytes += size
+	h.s.SeqNum = seqNum
+
+	switch reason {
+	case FlushFull:
+		h.s.Flushes.Full++
+	case FlushReady:
+		h.s.Flushes.Ready++
+	case FlushCheckpoint:
+		h.s.Flushes.Checkpoints++
+	}
+}
+
+func (h *DebugProducerStatusHolder) Emitting() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.State = Emitting
+	nowMicros := timeutil.Now().UnixMicro()
+	if h.s.LastPolledMicros != 0 {
+		produceWait := (nowMicros - h.s.LastPolledMicros) * 1000
+		h.s.Flushes.ProduceWaitNanos += produceWait
+		h.s.Flushes.LastProduceWaitNanos = produceWait
+	}
+	h.s.LastPolledMicros = nowMicros
+}
+
+func (h *DebugProducerStatusHolder) Producing() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	nowMicro := timeutil.Now().UnixMicro()
+
+	h.s.State = Producing
+	emitWait := (nowMicro - h.s.LastPolledMicros) * 1000
+	h.s.LastPolledMicros = nowMicro
+	h.s.Flushes.LastEmitWaitNanos = emitWait
+	h.s.Flushes.EmitWaitNanos += emitWait
+}
+
+func (h *DebugProducerStatusHolder) CheckpointEmitted(
+	t time.Time, spans []jobspb.ResolvedSpan, seqNum uint64,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.Flushes.Checkpoints++
+	h.s.LastCheckpoint.Micros = t.UnixMicro()
+	h.s.LastCheckpoint.Spans = spans
+	h.s.SeqNum = seqNum
+}
+
 type DebugProducerStatus struct {
 	// Identification info.
 	StreamID StreamID
-	SeqNo    atomic.Uint64
+	SeqNum   uint64
 
 	// Properties.
 	Spec  StreamPartitionSpec
-	State atomic.Int64
+	State ProducerState
 
 	RF struct {
-		Checkpoints, Advances atomic.Int64
-		LastAdvanceMicros     atomic.Int64
-		ResolvedMicros        atomic.Int64
+		Checkpoints, Advances int64
+		LastAdvanceMicros     int64
+		ResolvedMicros        int64
 	}
 	Flushes struct {
-		Batches, Checkpoints, Bytes             atomic.Int64
-		EmitWaitNanos, ProduceWaitNanos         atomic.Int64
-		LastProduceWaitNanos, LastEmitWaitNanos atomic.Int64
-		LastSize                                atomic.Int64
-		Full, Ready, Forced                     atomic.Int64
+		Batches, Checkpoints, Bytes             int64
+		EmitWaitNanos, ProduceWaitNanos         int64
+		LastProduceWaitNanos, LastEmitWaitNanos int64
+		LastSize                                int64
+		Full, Ready, Forced                     int64
 	}
 	LastCheckpoint struct {
-		Micros atomic.Int64
-		Spans  atomic.Value
+		Micros int64
+		Spans  []jobspb.ResolvedSpan
 	}
-	LastPolledMicros atomic.Int64
+	LastPolledMicros int64
 }
 
 type ProducerState int64
@@ -64,13 +156,13 @@ func (p ProducerState) String() string {
 // every components of a job could register itself while it is running.
 var activeProducerStatuses = struct {
 	syncutil.Mutex
-	m map[*DebugProducerStatus]struct{}
-}{m: make(map[*DebugProducerStatus]struct{})}
+	m map[*DebugProducerStatusHolder]struct{}
+}{m: make(map[*DebugProducerStatusHolder]struct{})}
 
 // RegisterProducerStatus registers a DebugProducerStatus so that it is returned
 // by GetActiveProducerStatuses. It *must* be unregistered with
 // UnregisterProducerStatus when its processor closes to prevent leaks.
-func RegisterProducerStatus(s *DebugProducerStatus) {
+func RegisterProducerStatus(s *DebugProducerStatusHolder) {
 	activeProducerStatuses.Lock()
 	defer activeProducerStatuses.Unlock()
 	activeProducerStatuses.m[s] = struct{}{}
@@ -78,7 +170,7 @@ func RegisterProducerStatus(s *DebugProducerStatus) {
 
 // UnregisterProducerStatus unregisters a previously registered
 // DebugProducerStatus. It is idempotent.
-func UnregisterProducerStatus(s *DebugProducerStatus) {
+func UnregisterProducerStatus(s *DebugProducerStatusHolder) {
 	activeProducerStatuses.Lock()
 	defer activeProducerStatuses.Unlock()
 	delete(activeProducerStatuses.m, s)
@@ -86,12 +178,12 @@ func UnregisterProducerStatus(s *DebugProducerStatus) {
 
 // GetActiveProducerStatuses gets the DebugProducerStatus for all registered
 // stream producers in the process.
-func GetActiveProducerStatuses() []*DebugProducerStatus {
+func GetActiveProducerStatuses() []DebugProducerStatus {
 	activeProducerStatuses.Lock()
 	defer activeProducerStatuses.Unlock()
-	res := make([]*DebugProducerStatus, 0, len(activeProducerStatuses.m))
+	res := make([]DebugProducerStatus, 0, len(activeProducerStatuses.m))
 	for e := range activeProducerStatuses.m {
-		res = append(res, e)
+		res = append(res, e.Get())
 	}
 	return res
 }
