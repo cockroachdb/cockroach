@@ -306,7 +306,12 @@ func (s *sysbenchKV) Commit() {
 
 func (s *sysbenchKV) PointSelect(t tableNum, id rowID) {
 	key := s.pkKey(t, id)
-	val := try(s.txn.Get(s.ctx, key))
+	var val kv.KeyValue
+	if s.txn != nil {
+		val = try(s.txn.Get(s.ctx, key))
+	} else {
+		val = try(s.db.Get(s.ctx, key))
+	}
 	if !val.Exists() {
 		panic(errors.New("row not found"))
 	}
@@ -593,6 +598,13 @@ func sysbenchOltpReadWrite(s sysbenchDriver, rng *rand.Rand) {
 	s.Commit()
 }
 
+// https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_point_select.lua#L32
+func sysbenchOltpPointSelect(s sysbenchDriver, rng *rand.Rand) {
+	// Run one point select per transaction, regardless of sysbenchPointSelects,
+	// just like https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_point_select.lua#L25-L26
+	s.PointSelect(randTableNum(rng), randRowID(rng))
+}
+
 func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
 	s.Begin()
 	s.Commit()
@@ -614,6 +626,7 @@ func BenchmarkSysbench(b *testing.B) {
 		{"oltp_read_only", sysbenchOltpReadOnly},
 		{"oltp_write_only", sysbenchOltpWriteOnly},
 		{"oltp_read_write", sysbenchOltpReadWrite},
+		{"oltp_point_select", sysbenchOltpPointSelect},
 		{"oltp_begin_commit", sysbenchOltpBeginCommit},
 	}
 	for _, driver := range drivers {
