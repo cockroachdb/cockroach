@@ -8,6 +8,7 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-scale-pcr
   CLUSTER_NODES: 150
+  COCKROACH_VERSION: v24.3.0-beta.2
 
 targets:
   # crdb cluster specs
@@ -34,10 +35,26 @@ targets:
       - command: sync
         flags:
           clouds: gce
-      - command: stage
+      - command: run
         args:
           - $CLUSTER
-          - cockroach
+          - --
+          - wget https://binaries.cockroachdb.com/cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - tar -xvzf cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - mv cockroach-${COCKROACH_VERSION}.linux-amd64/* .
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - rm -rf cockroach-${COCKROACH_VERSION}.linux-amd64*
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
