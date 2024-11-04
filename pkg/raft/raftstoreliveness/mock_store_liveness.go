@@ -328,3 +328,16 @@ func (l *LivenessFabric) BumpAllSupportEpochs() {
 		}
 	}
 }
+
+// Isolate isolates the target peer from all other peers in the liveness fabric.
+func (l *LivenessFabric) Isolate(targetID pb.PeerID) {
+	for id := range l.state {
+		if id == targetID {
+			// We don't want to withdraw the support from our self.
+			continue
+		}
+
+		l.WithdrawSupport(id, targetID)
+		l.WithdrawSupport(targetID, id)
+	}
+}
