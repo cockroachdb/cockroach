@@ -360,12 +360,13 @@ func (c Catalog) FilterByNames(nameInfos []descpb.NameInfo) Catalog {
 		return Catalog{}
 	}
 	var ret MutableCatalog
-	for _, ni := range nameInfos {
+	for i := range nameInfos {
+		ni := &nameInfos[i]
 		found := c.byName.getByName(ni.ParentID, ni.ParentSchemaID, ni.Name)
 		if found == nil {
 			continue
 		}
-		e := ret.ensureForName(&ni)
+		e := ret.ensureForName(ni)
 		*e = *found.(*byNameEntry)
 		if foundByID := c.byID.get(e.id); foundByID != nil {
 			e := ret.ensureForID(e.id)

@@ -326,9 +326,10 @@ func (cr catalogReader) GetByNames(
 	var mc nstree.MutableCatalog
 	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		for _, nameInfo := range nameInfos {
-			if nameInfo.Name != "" {
-				get(ctx, b, catalogkeys.EncodeNameKey(codec, nameInfo))
+		for i := range nameInfos {
+			ni := &nameInfos[i]
+			if ni.Name != "" {
+				get(ctx, b, catalogkeys.EncodeNameKey(codec, ni))
 			}
 		}
 	})

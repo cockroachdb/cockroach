@@ -553,12 +553,12 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
-		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		ni := &descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return continueLookups, descpb.InvalidID, nil
 		}
-		if tc.cr.IsNameInCache(&ni) {
-			if e := tc.cr.Cache().LookupNamespaceEntry(&ni); e != nil {
+		if tc.cr.IsNameInCache(ni) {
+			if e := tc.cr.Cache().LookupNamespaceEntry(ni); e != nil {
 				return haltLookups, e.GetID(), nil
 			}
 			return haltLookups, descpb.InvalidID, nil
@@ -587,15 +587,15 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if flags.layerFilters.withoutStorage {
 			return haltLookups, descpb.InvalidID, nil
 		}
-		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		ni := &descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return haltLookups, descpb.InvalidID, nil
 		}
-		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})
+		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{*ni})
 		if err != nil {
 			return haltLookups, descpb.InvalidID, err
 		}
-		if e := read.LookupNamespaceEntry(&ni); e != nil {
+		if e := read.LookupNamespaceEntry(ni); e != nil {
 			return haltLookups, e.GetID(), nil
 		}
 		return haltLookups, descpb.InvalidID, nil
