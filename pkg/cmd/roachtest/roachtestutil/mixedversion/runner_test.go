@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -160,7 +161,7 @@ func testTestRunner() *testRunner {
 		cancel:         cancel,
 		logger:         nilLogger,
 		systemService:  newServiceRuntime(systemDescriptor),
-		background:     newBackgroundRunner(runnerCtx, nilLogger),
+		background:     task.NewManager(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
 		plan:           &TestPlan{seed: seed},
 		_addAnnotation: testAddAnnotation,
