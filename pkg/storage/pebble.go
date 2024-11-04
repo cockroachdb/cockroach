@@ -1765,8 +1765,8 @@ func (p *Pebble) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.db.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -2940,7 +2940,7 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 // PinEngineStateForIterators implements the Engine interface.
 func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
+		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
 		if p.durability == GuaranteedDurability {
 			o.OnlyReadGuaranteedDurable = true
 		}
@@ -3158,8 +3158,8 @@ func (p *pebbleSnapshot) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.snapshot.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -3282,8 +3282,8 @@ func (p *pebbleEFOS) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.efos.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
