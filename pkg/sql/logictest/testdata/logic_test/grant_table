@@ -92,6 +92,7 @@ test           crdb_internal       kv_store_status                              
 test           crdb_internal       kv_system_privileges                         table        public   SELECT          false
 test           crdb_internal       leases                                       table        public   SELECT          false
 test           crdb_internal       logical_replication_node_processors          table        public   SELECT          false
+test           crdb_internal       logical_replication_spans                    table        public   SELECT          false
 test           crdb_internal       lost_descriptors_with_data                   table        public   SELECT          false
 test           crdb_internal       node_build_info                              table        public   SELECT          false
 test           crdb_internal       node_contention_events                       table        public   SELECT          false

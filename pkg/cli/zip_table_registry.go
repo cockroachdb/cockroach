@@ -331,6 +331,13 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
+	`"".crdb_internal.logical_replication_spans`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"job_id",
+			"resolved",
+			"resolved_age",
+		},
+	},
 	"crdb_internal.default_privileges": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_name",

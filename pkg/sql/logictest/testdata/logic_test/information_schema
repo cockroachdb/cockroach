@@ -457,6 +457,7 @@ crdb_internal       kv_store_status
 crdb_internal       kv_system_privileges
 crdb_internal       leases
 crdb_internal       logical_replication_node_processors
+crdb_internal       logical_replication_spans
 crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
@@ -821,6 +822,7 @@ kv_store_status
 kv_system_privileges
 leases
 logical_replication_node_processors
+logical_replication_spans
 lost_descriptors_with_data
 node_build_info
 node_contention_events
@@ -1279,6 +1281,7 @@ system         public              lease                                        
 system         crdb_internal       leases                                       SYSTEM VIEW  NO
 system         public              locations                                    BASE TABLE   YES
 system         crdb_internal       logical_replication_node_processors          SYSTEM VIEW  NO
+system         crdb_internal       logical_replication_spans                    SYSTEM VIEW  NO
 system         crdb_internal       lost_descriptors_with_data                   SYSTEM VIEW  NO
 system         public              migrations                                   BASE TABLE   YES
 system         public              mvcc_statistics                              BASE TABLE   YES
@@ -4003,6 +4006,7 @@ NULL     public   system         crdb_internal       kv_store_status            
 NULL     public   system         crdb_internal       kv_system_privileges                         SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                       SELECT          NO            YES
 NULL     public   system         crdb_internal       logical_replication_node_processors          SELECT          NO            YES
+NULL     public   system         crdb_internal       logical_replication_spans                    SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data                   SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                       SELECT          NO            YES
@@ -4727,6 +4731,7 @@ NULL     public   system         crdb_internal       kv_store_status            
 NULL     public   system         crdb_internal       kv_system_privileges                         SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                       SELECT          NO            YES
 NULL     public   system         crdb_internal       logical_replication_node_processors          SELECT          NO            YES
+NULL     public   system         crdb_internal       logical_replication_spans                    SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data                   SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_contention_events                       SELECT          NO            YES
