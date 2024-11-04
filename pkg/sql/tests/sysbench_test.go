@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -639,21 +640,42 @@ func BenchmarkSysbench(b *testing.B) {
 						}
 					}()
 
+					// Set up the cluster and dataset.
+					disableProfiling()
 					ctx := context.Background()
 					sys, cleanup := driver.constructorFn(ctx, b)
 					defer cleanup()
-
 					rng := rand.New(rand.NewSource(0))
 					sys.prep(rng)
 
+					// Start profiling and timer, then run the workload.
+					enableProfiling()
 					b.ResetTimer()
+					b.ReportAllocs()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
 					}
+
+					// Stop timer and profiling to exclude (deferred) cluster teardown.
+					b.StopTimer()
+					disableProfiling()
 				})
 			}
 		})
 	}
+}
+
+func disableProfiling() {
+	runtime.MemProfileRate = 0
+	runtime.SetMutexProfileFraction(0)
+	runtime.SetBlockProfileRate(0)
+}
+
+func enableProfiling() {
+	runtime.GC()
+	runtime.MemProfileRate = 1
+	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(1)
 }
 
 func try0(err error) {
