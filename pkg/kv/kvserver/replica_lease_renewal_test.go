@@ -37,10 +37,20 @@ func TestLeaseRenewer(t *testing.T) {
 	// We test with kv.expiration_leases_only.enabled both enabled and disabled,
 	// to ensure meta/liveness ranges are still eagerly extended, while regular
 	// ranges are upgraded to epoch leases.
-	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
+	testutils.RunValues(t, "lease type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
+		if leaseType == roachpb.LeaseExpiration {
+			ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+		} else {
+			ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+		}
+		if leaseType == roachpb.LeaseLeader {
+			RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+			LeaderLeasesEnabled.Override(ctx, &st.SV, true)
+		} else {
+			LeaderLeasesEnabled.Override(ctx, &st.SV, false)
+		}
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
@@ -103,11 +113,11 @@ func TestLeaseRenewer(t *testing.T) {
 
 		// assertLeaseUpgrade asserts that the range is eventually upgraded
 		// to an epoch lease.
-		assertLeaseUpgrade := func(rangeID roachpb.RangeID) {
+		assertLeaseUpgrade := func(rangeID roachpb.RangeID, leaseType roachpb.LeaseType) {
 			repl := getNodeReplica(1, rangeID)
 			require.Eventually(t, func() bool {
 				lease, _ := repl.GetLease()
-				return lease.Type() == roachpb.LeaseEpoch
+				return lease.Type() == leaseType
 			}, 20*time.Second, 100*time.Millisecond)
 		}
 
@@ -132,10 +142,10 @@ func TestLeaseRenewer(t *testing.T) {
 		// Split off a regular non-system range. This should only be eagerly
 		// extended if kv.expiration_leases_only.enabled is true.
 		desc = tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
-		if expOnly {
+		if leaseType == roachpb.LeaseExpiration {
 			assertLeaseExtension(desc.RangeID)
 		} else {
-			assertLeaseUpgrade(desc.RangeID)
+			assertLeaseUpgrade(desc.RangeID, leaseType)
 		}
 	})
 }
