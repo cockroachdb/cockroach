@@ -160,6 +160,8 @@ func init() {
 	redact.RegisterSafeType(reflect.TypeOf(encodingtype.T(0)))
 	// Channel names are safe to report.
 	redact.RegisterSafeType(reflect.TypeOf(Channel(0)))
+	// Arbitrary strings are safe to report.
+	redact.RegisterSafeType(reflect.TypeOf(""))
 }
 
 type redactablePackage struct {
