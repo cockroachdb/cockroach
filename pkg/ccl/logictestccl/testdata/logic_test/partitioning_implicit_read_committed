@@ -189,6 +189,18 @@ SELECT * FROM overwrite ORDER BY pk
 ----
 1  three  5
 
+query T
+EXPLAIN INSERT INTO t VALUES (1, 'two', 3, 4, 5)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: t(pk, a, b, c, d, j)
+  auto commit
+  uniqueness checks (tombstones): t_pkey, t_c_key
+  size: 7 columns, 1 row
+
 statement ok
 INSERT INTO t VALUES (1, 'two', 3, 4, 5)
 
@@ -204,14 +216,113 @@ INSERT INTO t VALUES (2, 'four', 3, 6, 5)
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_pkey"
 UPDATE t SET pk = 1 WHERE c = 6;
 
+query T
+EXPLAIN UPDATE t SET c = 4 WHERE pk = 2
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t
+│ uniqueness checks (tombstones): t_c_key
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t@t_pkey
+          spans: [/'one'/2 - /'one'/2] [/'two'/2 - /'two'/2] [/'three'/2 - /'three'/2] [/'four'/2 - /'four'/2] … (1 more)
+          locking strength: for update
+
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
 UPDATE t SET c = 4 WHERE pk = 2
+
+query T
+EXPLAIN UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t(pk, a, b, c, d, j)
+│ auto commit
+│ arbiter constraints: t_pkey
+│ uniqueness checks (tombstones): t_pkey, t_c_key
+│
+└── • render
+    │
+    └── • lookup join (left outer)
+        │ table: t@t_pkey
+        │ equality cols are key
+        │ lookup condition: (a IN ('one', 'two', __more1_10__, 'five')) AND (column1 = pk)
+        │ locking strength: for update
+        │ locking durability: guaranteed
+        │
+        └── • values
+              size: 6 columns, 1 row
 
 statement ok
 UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
 
+query T
+EXPLAIN INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: t(pk, a, b, c, d, j)
+│ auto commit
+│ arbiter constraints: t_pkey, t_c_key
+│ uniqueness checks (tombstones): t_pkey, t_c_key
+│
+└── • render
+    │
+    └── • lookup join (anti)
+        │ table: t@t_c_key
+        │ equality cols are key
+        │ lookup condition: (a IN ('one', 'two', __more1_10__, 'five')) AND (column4 = c)
+        │ locking strength: for share
+        │ locking durability: guaranteed
+        │
+        └── • lookup join (anti)
+            │ table: t@t_pkey
+            │ equality cols are key
+            │ lookup condition: (a IN ('one', 'two', __more1_10__, 'five')) AND (column1 = pk)
+            │ locking strength: for share
+            │ locking durability: guaranteed
+            │
+            └── • values
+                  size: 6 columns, 1 row
+
 statement ok
 INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
+
+query T
+EXPLAIN INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t(pk, a, b, c, d, j)
+│ auto commit
+│ arbiter constraints: t_pkey
+│ uniqueness checks (tombstones): t_pkey, t_c_key
+│
+└── • render
+    │
+    └── • lookup join (left outer)
+        │ table: t@t_pkey
+        │ equality cols are key
+        │ lookup condition: (a IN ('one', 'two', __more1_10__, 'five')) AND (column1 = pk)
+        │ locking strength: for update
+        │ locking durability: guaranteed
+        │
+        └── • values
+              size: 6 columns, 1 row
 
 statement ok
 INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
