@@ -3944,17 +3944,26 @@ func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
-func (sm *StoreMetrics) updateDiskStats(rollingStats disk.StatsWindow) {
-	cumulativeStats := rollingStats.Latest()
-	sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
-	sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
-	sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
-	sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
-	sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
-	sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
-	sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
-	sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
-	sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
+func (sm *StoreMetrics) updateDiskStats(
+	ctx context.Context,
+	rollingStats disk.StatsWindow,
+	cumulativeStats disk.Stats,
+	cumulativeStatsErr error,
+) {
+	if cumulativeStatsErr == nil {
+		sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
+		sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
+		sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
+		sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
+		sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
+		sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
+		sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
+		sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
+		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
+	} else {
+		// Don't update cumulative stats to the useless zero value.
+		log.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
+	}
 	maxRollingStats := rollingStats.Max()
 	// maxRollingStats is computed as the change in stats every 100ms, so we
 	// scale them to represent the change in stats every 1s.
