@@ -328,3 +328,31 @@ func (l *LivenessFabric) BumpAllSupportEpochs() {
 		}
 	}
 }
+
+// Isolate isolates the target peer from all other peers in the liveness fabric.
+func (l *LivenessFabric) Isolate(targetID pb.PeerID) {
+	for id := range l.state {
+		if id == targetID {
+			// We don't want to withdraw the support from our self.
+			continue
+		}
+
+		l.WithdrawSupport(id, targetID)
+		l.WithdrawSupport(targetID, id)
+	}
+}
+
+// UnIsolate is the opposite of Isolate(). It unisolates the target peer from
+// all other peers in the liveness fabric.
+func (l *LivenessFabric) UnIsolate(targetID pb.PeerID) {
+	for id := range l.state {
+		if id == targetID {
+			// We don't have to grant support to our self since Isolate() doesn't
+			// withdraw it.
+			continue
+		}
+
+		l.GrantSupport(id, targetID)
+		l.GrantSupport(targetID, id)
+	}
+}
