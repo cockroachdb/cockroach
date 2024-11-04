@@ -51,15 +51,14 @@ const COLUMNS: (TableColumnProps<TableIndexRow> & { hideIfCloud?: boolean })[] =
       title: "Total Reads",
       sorter: true,
       render: (idx: TableIndexRow) => idx.totalReads,
+      align: "right",
     },
     {
       title: (
         <Tooltip
-          text={`
-    Index recommendations will appear if the system detects improper index usage, 
+          title={`Index recommendations will appear if the system detects improper index usage, 
     such as the occurrence of unused indexes. Following index recommendations may 
-    help improve query performance.
-    `}
+    help improve query performance.`}
         >
           Recommendations
         </Tooltip>
