@@ -6719,6 +6719,9 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+	// Quiescence is disabled for leader leases
+	// (see shouldReplicaQuiesceRaftMuLockedReplicaMuLocked).
+	kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, false)
 
 	// Block writes to the range, to prevent spurious proposals (typically due to
 	// txn record GC).
