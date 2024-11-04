@@ -210,6 +210,7 @@ const (
 	CrdbInternalKVProtectedTS
 	CrdbInternalKVSessionBasedLeases
 	CrdbInternalClusterReplicationResolvedViewID
+	CrdbInternalLogicalReplicationResolvedViewID
 	CrdbInternalPCRStreamsTableID
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
