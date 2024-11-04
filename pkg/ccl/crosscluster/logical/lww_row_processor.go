@@ -236,7 +236,7 @@ func makeSQLProcessorFromQuerier(
 // ReportMutations implements the RowProcessor interface, but is a no-op for
 // sqlRowProcessor because its mutations are already reported by the queries it
 // runs when they are run.
-func (sqlRowProcessor) ReportMutations(_ *stats.Refresher) {}
+func (sqlRowProcessor) ReportMutations(_ context.Context, _ *stats.Refresher) {}
 
 func (*sqlRowProcessor) Close(ctx context.Context) {}
 

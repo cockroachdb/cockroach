@@ -195,7 +195,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 	v.retBatch.ColVec(0).Int64()[0] = int64(b.Length())
 	v.retBatch.SetLength(1)
 
-	v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, b.Length())
+	v.flowCtx.Cfg.StatsRefresher.NotifyMutation(ctx, v.desc, b.Length())
 
 	return v.retBatch
 }

@@ -504,7 +504,9 @@ type noopStatsReferesher struct{}
 
 var _ scexec.StatsRefresher = noopStatsReferesher{}
 
-func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+func (noopStatsReferesher) NotifyMutation(
+	ctx context.Context, table catalog.TableDescriptor, rowsAffected int,
+) {
 }
 
 type noopMetadataUpdater struct{}

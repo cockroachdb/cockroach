@@ -2025,7 +2025,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
 	if !details.ExperimentalOnline {
-		r.notifyStatsRefresherOfNewTables()
+		r.notifyStatsRefresherOfNewTables(ctx)
 	}
 
 	r.restoreStats = resTotal
@@ -2161,11 +2161,11 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of
 // rows affected per table, so we use a large number because we want to make
 // sure that stats always get created/refreshed here.
-func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
+func (r *restoreResumer) notifyStatsRefresherOfNewTables(ctx context.Context) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	for i := range details.TableDescs {
 		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
-		r.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+		r.execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
 	}
 }
 

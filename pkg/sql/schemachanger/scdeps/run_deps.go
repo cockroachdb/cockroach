@@ -165,7 +165,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				if err != nil {
 					return err
 				}
-				d.statsRefresher.NotifyMutation(tbl, math.MaxInt32)
+				d.statsRefresher.NotifyMutation(ctx, tbl, math.MaxInt32)
 			}
 			return nil
 		})
