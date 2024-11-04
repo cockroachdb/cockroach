@@ -82,6 +82,18 @@ GRANT INSERT, UPDATE, SELECT ON TABLE university TO testuser
 
 # Test non-conflicting INSERT.
 
+query T
+EXPLAIN INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: university(name, mascot, postal_code, region)
+  auto commit
+  uniqueness checks (tombstones): university_pkey, university_mascot_key
+  size: 5 columns, 1 row
+
 statement ok
 INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
 
@@ -157,6 +169,31 @@ us-east-1       Fraser     Strait of Georgia
 
 # Test conflicting UPSERT.
 
+query T
+EXPLAIN UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: university(name, mascot, postal_code, region)
+│ auto commit
+│ arbiter constraints: university_pkey
+│ uniqueness checks (tombstones): university_pkey, university_mascot_key
+│
+└── • render
+    │
+    └── • lookup join (left outer)
+        │ table: university@university_pkey
+        │ equality cols are key
+        │ lookup condition: (region = 'ap-southeast-2') AND (column1 = name)
+        │ remote lookup condition: (region IN ('ca-central-1', 'us-east-1')) AND (column1 = name)
+        │ locking strength: for update
+        │ locking durability: guaranteed
+        │
+        └── • values
+              size: 4 columns, 1 row
+
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
 
@@ -172,6 +209,33 @@ UPSERT INTO river VALUES ('us-east-1', 'Fraser', 'Salish Sea')
 
 # Test conflicting UPDATE.
 
+query T
+EXPLAIN UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: university
+│ uniqueness checks (tombstones): university_mascot_key
+│ set: mascot
+│ auto commit
+│
+└── • render
+    │
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: university@university_pkey
+        │     spans: [/'ap-southeast-2'/'Evergreen State' - /'ap-southeast-2'/'Evergreen State']
+        │
+        └── • scan
+              missing stats
+              table: university@university_pkey
+              spans: [/'ca-central-1'/'Evergreen State' - /'ca-central-1'/'Evergreen State'] [/'us-east-1'/'Evergreen State' - /'us-east-1'/'Evergreen State']
+
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
 
@@ -185,6 +249,42 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 UPDATE river SET region = 'us-east-1', outlet = 'Salish Sea' WHERE name = 'Skykomish'
 
 # Test conflicting INSERT ON CONFLICT DO UPDATE.
+
+query T
+EXPLAIN INSERT INTO university (name, mascot, postal_code)
+VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Oregon Tech', 'owls', '97601')
+ON CONFLICT (mascot) DO UPDATE SET name = 'Evergreen State', mascot = 'banana slugs'
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: university(name, mascot, postal_code, region)
+│ auto commit
+│ arbiter constraints: university_mascot_key
+│ uniqueness checks (tombstones): university_pkey, university_mascot_key
+│
+└── • render
+    │
+    └── • lookup join (left outer)
+        │ table: university@university_pkey
+        │ equality: (region, name) = (region, name)
+        │ equality cols are key
+        │ locking strength: for update
+        │ locking durability: guaranteed
+        │
+        └── • lookup join (left outer)
+            │ table: university@university_mascot_key
+            │ equality cols are key
+            │ lookup condition: (region = 'ap-southeast-2') AND (column2 = mascot)
+            │ remote lookup condition: (region IN ('ca-central-1', 'us-east-1')) AND (column2 = mascot)
+            │ locking strength: for update
+            │ locking durability: guaranteed
+            │
+            └── • render
+                │
+                └── • values
+                      size: 3 columns, 2 rows
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
 INSERT INTO university (name, mascot, postal_code)
