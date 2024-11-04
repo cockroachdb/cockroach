@@ -617,6 +617,7 @@ kv_store_status                              NULL
 kv_system_privileges                         NULL
 leases                                       NULL
 logical_replication_node_processors          NULL
+logical_replication_spans                    NULL
 lost_descriptors_with_data                   NULL
 node_build_info                              NULL
 node_contention_events                       NULL

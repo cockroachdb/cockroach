@@ -79,6 +79,7 @@ crdb_internal  kv_store_status                              table  node  NULL  N
 crdb_internal  kv_system_privileges                         view   node  NULL  NULL
 crdb_internal  leases                                       table  node  NULL  NULL
 crdb_internal  logical_replication_node_processors          table  node  NULL  NULL
+crdb_internal  logical_replication_spans                    view   node  NULL  NULL
 crdb_internal  lost_descriptors_with_data                   table  node  NULL  NULL
 crdb_internal  node_build_info                              table  node  NULL  NULL
 crdb_internal  node_contention_events                       table  node  NULL  NULL
