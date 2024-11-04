@@ -38,10 +38,6 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
 By default, the 'movr' dataset is pre-loaded. You can also use --no-example-database
 to avoid pre-loading a dataset.
-
-cockroach demo attempts to connect to a Cockroach Labs server to send
-telemetry back to Cockroach Labs. In order to disable this behavior, set the
-environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
