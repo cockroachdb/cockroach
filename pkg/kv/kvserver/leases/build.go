@@ -773,3 +773,16 @@ func validateNonZero[T comparable](field T, name string) error {
 	}
 	return nil
 }
+
+// RunEachLeaseType calls f in a subtest for each lease type.
+func RunEachLeaseType[T testingTB[T]](t T, f func(T, roachpb.LeaseType)) {
+	for _, l := range roachpb.LeaseTypes() {
+		t.Run(l.String(), func(t T) { f(t, l) })
+	}
+}
+
+// testingTB is an interface that matches *testing.T and *testing.B, without
+// incurring the package dependency.
+type testingTB[T any] interface {
+	Run(name string, f func(t T)) bool
+}
