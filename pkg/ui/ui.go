@@ -50,6 +50,15 @@ var _ = settings.RegisterEnumSetting(
 	},
 	settings.WithPublic)
 
+// TODO(davidh): This setting can be removed after 24.3 since it only
+// affects legacy DB page.
+var DatabaseLocalityMetadataEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"ui.database_locality_metadata.enabled",
+	"if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute",
+	true,
+	settings.WithPublic)
+
 // Assets is used for embedded JS assets required for UI.
 // In case the binary is built without UI, it provides single index.html file with
 // the same content as indexHTML as a fallback.
