@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Col, Row, Skeleton } from "antd";
+import { Col, Row } from "antd";
 import React, { useContext } from "react";
 
 import { useNodeStatuses } from "src/api";
@@ -17,6 +17,8 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Timestamp } from "src/timestamp";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
+
+import { RegionNodesLabel } from "../components/regionNodesLabel";
 
 type TableOverviewProps = {
   tableDetails: TableDetails;
@@ -34,24 +36,11 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
     isLoading: nodesLoading,
   } = useNodeStatuses();
 
-  // getNodesByRegionDisplayStr returns a string that displays
-  // the regions and nodes that the table is replicated across.
-  const getNodesByRegionDisplayStr = (): string => {
-    if (nodesLoading) {
-      return "";
-    }
-    const regionsToNodes = mapStoreIDsToNodeRegions(
-      tableDetails.metadata.storeIds,
-      nodeStatusByID,
-      storeIDToNodeID,
-    );
-    return Object.entries(regionsToNodes)
-      .map(
-        ([region, nodes]) =>
-          `${region} (${nodes.map(nid => "n" + nid).join(",")})`,
-      )
-      .join(", ");
-  };
+  const regionsToNodes = mapStoreIDsToNodeRegions(
+    tableDetails.metadata.storeIds,
+    nodeStatusByID,
+    storeIDToNodeID,
+  );
 
   return (
     <>
@@ -89,9 +78,10 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
                 <SummaryCardItem
                   label="Regions / Nodes"
                   value={
-                    <Skeleton paragraph={false} loading={nodesLoading}>
-                      {getNodesByRegionDisplayStr()}
-                    </Skeleton>
+                    <RegionNodesLabel
+                      nodesByRegion={regionsToNodes}
+                      loading={nodesLoading}
+                    />
                   }
                 />
               )}

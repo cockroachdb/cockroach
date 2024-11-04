@@ -13,6 +13,8 @@ import {
   TableChangeFn,
 } from "src/sharedFromCloud/table";
 
+import { PageSection } from "../../layouts";
+
 // This type is used by data source for the table.
 export type GrantsByUser = {
   key: string;
@@ -59,12 +61,14 @@ export const GrantsTable: React.FC<GrantsTableProps> = ({
 
   return (
     <>
-      <PageCount
-        page={currentPage}
-        pageSize={PAGE_SIZE}
-        total={data.length}
-        entity="grants"
-      />
+      <PageSection>
+        <PageCount
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          total={data.length}
+          entity="grants"
+        />
+      </PageSection>
       <Table
         error={error}
         loading={loading}
