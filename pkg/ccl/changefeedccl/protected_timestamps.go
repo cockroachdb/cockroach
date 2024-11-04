@@ -48,7 +48,8 @@ var systemTablesToProtect = []descpb.ID{
 	keys.ZonesTableID,
 	// Required for CDC Queries.
 	keys.RoleMembersTableID,
-	// TODO(#128806): identify and add any more required tables (such as, possibly, `keys.UsersTableID`)
+	keys.UsersTableID,
+	// TODO(#128806, #133566): identify and add any more required tables
 }
 
 func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {

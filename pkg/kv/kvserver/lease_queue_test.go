@@ -27,13 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	proto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,21 +84,34 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 		ServerArgsPerNode: serverArgs,
 	})
 	defer tc.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	db := tc.Conns[0]
 	setLeasePreferences := func(node int) {
-		_, err := db.Exec(fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
+		tdb.Exec(t, fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
       num_replicas=3, num_voters=3, voter_constraints='[]', lease_preferences='[[+rack=%d]]'`,
 			node))
-		require.NoError(t, err)
+	}
+
+	checkSplits := func() error {
+		var count int
+		var startSplit bool
+		tdb.QueryRow(t,
+			"SELECT count(*), bool_or(start_key ~ 'TableMin') FROM [SHOW RANGES FROM TABLE t WITH DETAILS];",
+		).Scan(&count, &startSplit)
+		if count != numRanges {
+			return errors.Errorf("expected %d ranges in table, found %d", numRanges, count)
+		}
+		if !startSplit {
+			return errors.New("expected table to be split at /TableMin")
+		}
+		return nil
 	}
 
 	leaseCount := func(node int) int {
 		var count int
-		err := db.QueryRow(fmt.Sprintf(
+		tdb.QueryRow(t, fmt.Sprintf(
 			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
 		).Scan(&count)
-		require.NoError(t, err)
 		return count
 	}
 
@@ -109,25 +123,33 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 		return nil
 	}
 
+	// Shorten the closed timestamp target duration and span config reconciliation
+	// interval so that span configs propagate more rapidly.
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '100ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+
 	// Create a test table with numRanges-1 splits, to end up with numRanges
 	// ranges. We will use the test table ranges to assert on the purgatory lease
 	// preference behavior.
-	_, err := db.Exec("CREATE TABLE t (i int);")
-	require.NoError(t, err)
-	_, err = db.Exec(
-		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
-	require.NoError(t, err)
-	_, err = db.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t;")
-	require.NoError(t, err)
+	tdb.Exec(t, "CREATE TABLE t (i int);")
+	tdb.Exec(t, fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	tdb.Exec(t, "ALTER TABLE t SPLIT AT SELECT i FROM t;")
 	require.NoError(t, tc.WaitForFullReplication())
 
-	// Set a preference on the initial node, then wait until all the leases for
-	// the test table are on that node.
+	// Set a preference on the initial node, then wait until:
+	// (1) the first span in the test table (i.e. [/Table/<id>, /Table/<id>/1/1))
+	//     has been split off into its own range.
+	// (2) all the leases for the test table are on the initial node.
 	setLeasePreferences(initialPreferredNode)
 	testutils.SucceedsSoon(t, func() error {
 		for serverIdx := 0; serverIdx < numNodes; serverIdx++ {
-			require.NoError(t, tc.GetFirstStoreFromServer(t, serverIdx).
-				ForceLeaseQueueProcess())
+			store := tc.GetFirstStoreFromServer(t, serverIdx)
+			require.NoError(t, store.ForceSplitScanAndProcess())
+			require.NoError(t, store.ForceLeaseQueueProcess())
+		}
+		if err := checkSplits(); err != nil {
+			return err
 		}
 		return checkLeaseCount(initialPreferredNode, numRanges)
 	})
