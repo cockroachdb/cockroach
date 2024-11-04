@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -80,11 +81,13 @@ FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`
 	}
 }
 
-// TestRangeLocalityBasedOnNodeIDs tests that the leaseholder_locality shown in
+// TestShowRangesMultipleStores tests that the leaseholder_locality shown in
 // SHOW RANGES works correctly.
 func TestShowRangesMultipleStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "the test is too heavy")
 
 	ctx := context.Background()
 
@@ -116,7 +119,7 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	)
 	assert.NoError(t, tc.WaitForFullReplication())
 
-	// Scatter a system table so that the lease is unlike to be on node 1.
+	// Scatter a system table so that the lease is unlikely to be on node 1.
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, "ALTER TABLE system.jobs SCATTER")
 	// Ensure that the localities line up.
@@ -128,7 +131,7 @@ func TestShowRangesMultipleStores(t *testing.T) {
 		"SHOW RANGE FROM INDEX system.jobs@jobs_status_created_idx FOR ROW ('running', now(), 0)",
 	} {
 		t.Run(q, func(t *testing.T) {
-			// Retry because if there's not a leaseholder, you can NULL.
+			// Retry because if there's not a leaseholder, you can get a NULL.
 			sqlDB.CheckQueryResultsRetry(t,
 				fmt.Sprintf(`
 SELECT DISTINCT
