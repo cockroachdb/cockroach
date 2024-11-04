@@ -972,7 +972,7 @@ func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args .
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 func (loggerDev) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.DEV, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.DEV, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -1504,7 +1504,7 @@ func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args .
 //   - [Cluster setting](cluster-settings.html) changes
 //   - [Zone configuration](configure-replication-zones.html) changes
 func (loggerOps) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.OPS, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.OPS, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -1939,7 +1939,7 @@ func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, arg
 //   - Range and table leasing events
 //   - Up- and down-replication, range unavailability
 func (loggerHealth) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.HEALTH, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.HEALTH, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -2248,7 +2248,7 @@ func (loggerStorage) Shoutf(ctx context.Context, sev Severity, format string, ar
 // The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 func (loggerStorage) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.STORAGE, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.STORAGE, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -2705,7 +2705,7 @@ func (loggerSessions) Shoutf(ctx context.Context, sev Severity, format string, a
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 func (loggerSessions) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SESSIONS, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SESSIONS, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -3238,7 +3238,7 @@ func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, 
 // `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 func (loggerSqlSchema) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_SCHEMA, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SQL_SCHEMA, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -3717,7 +3717,7 @@ func (loggerUserAdmin) Shoutf(ctx context.Context, sev Severity, format string, 
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 func (loggerUserAdmin) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.USER_ADMIN, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.USER_ADMIN, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -4150,7 +4150,7 @@ func (loggerPrivileges) Shoutf(ctx context.Context, sev Severity, format string,
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 func (loggerPrivileges) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.PRIVILEGES, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.PRIVILEGES, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -4659,7 +4659,7 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SENSITIVE_ACCESS, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SENSITIVE_ACCESS, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -5056,7 +5056,7 @@ func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, ar
 //     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -5501,7 +5501,7 @@ func (loggerSqlPerf) Shoutf(ctx context.Context, sev Severity, format string, ar
 // with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 func (loggerSqlPerf) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_PERF, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SQL_PERF, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -5852,7 +5852,7 @@ func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format st
 // channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 func (loggerSqlInternalPerf) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_INTERNAL_PERF, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.SQL_INTERNAL_PERF, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -6173,7 +6173,7 @@ func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, 
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 func (loggerTelemetry) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.TELEMETRY, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.TELEMETRY, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the
@@ -6492,7 +6492,7 @@ func (loggerKvDistribution) Shoutf(ctx context.Context, sev Severity, format str
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
 func (loggerKvDistribution) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.KV_DISTRIBUTION, "%s", msg)
+	vEvent(ctx, false /* isErr */, 1, level, channel.KV_DISTRIBUTION, msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the

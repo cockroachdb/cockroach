@@ -38,3 +38,21 @@ func TestTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// BenchmarkVEventNoop measures the cost of a VEvent call when neither verbose
+// logging nor tracing is enabled.
+func BenchmarkVEventNoop(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		VEvent(context.Background(), 1, "should be free")
+	}
+}
+
+// BenchmarkVEventfNoop measures the cost of a VEventf call when neither verbose
+// logging nor tracing is enabled.
+func BenchmarkVEventfNoop(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		VEventf(context.Background(), 1, "%s", "should be free")
+	}
+}
