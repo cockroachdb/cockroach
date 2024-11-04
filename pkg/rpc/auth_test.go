@@ -274,6 +274,72 @@ func TestAuthenticateTenant(t *testing.T) {
 	}
 }
 
+func BenchmarkAuthenticate(b *testing.B) {
+	correctOU := []string{security.TenantsOU}
+	stid := roachpb.SystemTenantID
+	for _, tc := range []struct {
+		name         string
+		systemID     roachpb.TenantID
+		ous          []string
+		commonName   string
+		rootDNString string
+		nodeDNString string
+	}{
+		{name: "tenTen", systemID: stid, ous: correctOU, commonName: "10"},
+		{name: "rootDN", systemID: stid, ous: nil, commonName: "foo", rootDNString: "CN=foo"},
+		{name: "nodeDN", systemID: stid, ous: nil, commonName: "foo", nodeDNString: "CN=foo"},
+		{name: "commonRoot", systemID: stid, ous: nil, commonName: "root"},
+		{name: "commonNode", systemID: stid, ous: nil, commonName: "node"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			var err error
+			if tc.rootDNString != "" {
+				err = security.SetRootSubject(tc.rootDNString)
+				if err != nil {
+					b.Fatalf("could not set root subject DN, err: %v", err)
+				}
+			}
+			if tc.nodeDNString != "" {
+				err = security.SetNodeSubject(tc.nodeDNString)
+				if err != nil {
+					b.Fatalf("could not set node subject DN, err: %v", err)
+				}
+			}
+			defer func() {
+				security.UnsetRootSubject()
+				security.UnsetNodeSubject()
+			}()
+
+			cert := &x509.Certificate{
+				Subject: pkix.Name{
+					CommonName:         tc.commonName,
+					OrganizationalUnit: tc.ous,
+				},
+			}
+			cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+			if err != nil {
+				b.Fatalf("unable to marshal rdn sequence to raw subject, err: %v", err)
+			}
+			tlsInfo := credentials.TLSInfo{
+				State: tls.ConnectionState{
+					PeerCertificates: []*x509.Certificate{cert},
+				},
+			}
+			p := peer.Peer{AuthInfo: tlsInfo}
+			ctx := peer.NewContext(context.Background(), &p)
+
+			b.ResetTimer()
+			var clusterSettings map[settings.InternalKey]settings.EncodedValue
+			for i := 0; i < b.N; i++ {
+				_, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, clusterSettings)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func prefix(tenID uint64, key string) string {
 	tenPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
 	return string(append(tenPrefix, []byte(key)...))
