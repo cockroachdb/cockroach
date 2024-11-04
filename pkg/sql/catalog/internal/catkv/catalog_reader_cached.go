@@ -374,18 +374,19 @@ func (c *cachedCatalogReader) GetByNames(
 ) (nstree.Catalog, error) {
 	numUncached := 0
 	// Move any uncached name keys to the front of the slice.
-	for i, ni := range nameInfos {
-		if c.byNameState[ni].hasGetNamespaceEntries || c.hasScanAll {
+	for i := range nameInfos {
+		ni := &nameInfos[i]
+		if c.byNameState[*ni].hasGetNamespaceEntries || c.hasScanAll {
 			continue
 		}
-		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, &ni); id != descpb.InvalidID {
-			c.cache.UpsertNamespaceEntry(&ni, id, ts)
-			s := c.byNameState[ni]
+		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, ni); id != descpb.InvalidID {
+			c.cache.UpsertNamespaceEntry(ni, id, ts)
+			s := c.byNameState[*ni]
 			s.hasGetNamespaceEntries = true
-			c.setByNameState(ni, s)
+			c.setByNameState(*ni, s)
 			continue
 		}
-		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], ni
+		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], *ni
 		numUncached++
 	}
 	if numUncached > 0 && !c.hasScanAll {
