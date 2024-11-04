@@ -727,25 +727,6 @@ func NewColOperator(
 	result := opResult{NewColOperatorResult: colexecargs.GetNewColOperatorResult()}
 	r := result.NewColOperatorResult
 	spec := args.Spec
-	// Throughout this method we often use the type slice from the input spec to
-	// create the type schema of an operator. However, it is possible that the
-	// same type slice is shared by multiple stages of processors. If it just so
-	// happens that there is free capacity in the slice, and we append to it
-	// when planning operators for both stages, we might corrupt the type schema
-	// captured by the operators for the earlier stage. In order to prevent such
-	// type schema corruption we cap the slice to force creation of a fresh copy
-	// on the first append.
-	if flowCtx.Gateway {
-		// Sharing of the same type slice is only possible on the gateway node
-		// because we don't serialize the specs created during the physical
-		// planning. On the remote nodes each stage of processors gets their own
-		// allocation, so there is no aliasing that can lead to the type schema
-		// corruption.
-		for i := range spec.Input {
-			inputSpec := &spec.Input[i]
-			inputSpec.ColumnTypes = inputSpec.ColumnTypes[:len(inputSpec.ColumnTypes):len(inputSpec.ColumnTypes)]
-		}
-	}
 	inputs := args.Inputs
 	if args.Factory == nil {
 		// This code path is only used in tests.
