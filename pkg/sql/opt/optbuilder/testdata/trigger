@@ -559,3 +559,80 @@ root
                 │              └── f(new:10, old:9, 'tr', 'AFTER', 'ROW', 'INSERT', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:24]
                 └── projections
                      └── f(new:10, old:9, 'tr2', 'AFTER', 'ROW', 'INSERT', 53, 'xy', 'xy', 'public', 0, ARRAY[]) [as=f:38]
+
+# ------------------------------------------------------------------------------
+# Regression tests.
+# ------------------------------------------------------------------------------
+
+# Regression test for #133329 - do not inline insert values into uniqueness
+# checks when the table has row-level BEFORE triggers that could modify the
+# rows.
+exec-ddl
+CREATE TABLE t133329 (k INT PRIMARY KEY, a INT UNIQUE WITHOUT INDEX);
+----
+
+build format=(hide-all,show-fastpathchecks)
+INSERT INTO t133329 VALUES (1, 1);
+----
+insert t133329
+ ├── values
+ │    └── (1, 1)
+ ├── unique-checks
+ │    └── unique-checks-item: t133329(a)
+ │         └── project
+ │              └── semi-join (hash)
+ │                   ├── values
+ │                   │    └── (1, 1)
+ │                   ├── scan t133329
+ │                   └── filters
+ │                        ├── a = t133329.a
+ │                        └── k != t133329.k
+ └── fast-path-unique-checks
+      └── fast-path-unique-checks-item: t133329(a)
+           └── select
+                ├── scan t133329
+                └── filters
+                     └── t133329.a = 1
+
+exec-ddl
+CREATE FUNCTION f133329() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-ddl
+CREATE TRIGGER tr BEFORE INSERT ON t133329 FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+build format=(hide-all,show-fastpathchecks)
+INSERT INTO t133329 VALUES (1, 1);
+----
+insert t133329
+ ├── project
+ │    ├── barrier
+ │    │    └── select
+ │    │         ├── project
+ │    │         │    ├── barrier
+ │    │         │    │    └── project
+ │    │         │    │         ├── values
+ │    │         │    │         │    └── (1, 1)
+ │    │         │    │         └── projections
+ │    │         │    │              └── ((column1, column2) AS k, a)
+ │    │         │    └── projections
+ │    │         │         └── f(new, NULL, 'tr', 'BEFORE', 'ROW', 'INSERT', 55, 't133329', 't133329', 'public', 0, ARRAY[])
+ │    │         └── filters
+ │    │              └── f IS DISTINCT FROM NULL
+ │    └── projections
+ │         ├── (f).k
+ │         └── (f).a
+ └── unique-checks
+      └── unique-checks-item: t133329(a)
+           └── project
+                └── semi-join (hash)
+                     ├── with-scan &1
+                     ├── scan t133329
+                     └── filters
+                          ├── a = t133329.a
+                          └── k != t133329.k
