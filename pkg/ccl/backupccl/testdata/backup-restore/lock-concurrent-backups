@@ -83,29 +83,6 @@ job tag=b wait-for-state=succeeded
 
 subtest end
 
-# Note, `BACKUP TO` is going away, and `BACKUP INTO` picks a timestamped
-# directory making it *impossible* for two backups to write to the same
-# directory in the future.
-#
-# Backup should fail if it sees a BACKUP_LOCK in the bucket.
-subtest backup-lock-file-prevents-concurrent-backups
-
-exec-sql
-SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow';
-----
-
-backup expect-pausepoint
-BACKUP TO 'userfile://defaultdb.public.baz/baz';
-----
-job paused at pausepoint
-
-exec-sql expect-error-regex=(userfile://defaultdb.public.baz/baz already contains a `BACKUP-LOCK`)
-BACKUP TO 'userfile://defaultdb.public.baz/baz';
-----
-regex matches error
-
-subtest end
-
 # For mixed version compatability the backup job also checks for a
 # `BACKUP-CHECKPOINT` file when ensuring that there are no concurrent backups
 # writing to the same bucket.
@@ -119,7 +96,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoin
 ----
 
 backup expect-pausepoint tag=d
-BACKUP TO 'userfile://defaultdb.public.bat/bat';
+BACKUP INTO 'userfile://defaultdb.public.bat/bat';
 ----
 job paused at pausepoint
 

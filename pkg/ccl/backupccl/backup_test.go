@@ -2098,7 +2098,7 @@ table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc
 		{
 			// We have to qualify the table correctly to back it up. d.tb1 resolves
 			// to d.public.tb1.
-			sqlDB.ExpectErr(t, `pq: failed to resolve targets specified in the BACKUP stmt: table "d.tb1" does not exist`, `BACKUP TABLE d.tb1 TO 'nodelocal://1/test/'`)
+			sqlDB.ExpectErr(t, `pq: failed to resolve targets specified in the BACKUP stmt: table "d.tb1" does not exist`, `BACKUP TABLE d.tb1 INTO 'nodelocal://1/test/'`)
 			// Backup tb1.
 			sqlDB.Exec(t, `BACKUP TABLE d.sc.tb1 INTO 'nodelocal://1/test/'`)
 			// Create a new database to restore into. This restore should restore the
@@ -4868,7 +4868,7 @@ func TestBackupAzureAccountName(t *testing.T) {
 	}
 
 	// Verify newlines in the account name cause an error.
-	sqlDB.ExpectErr(t, "azure: account name is not valid", `backup database data to $1`, url.String())
+	sqlDB.ExpectErr(t, "azure: account name is not valid", `BACKUP DATABASE data INTO $1`, url.String())
 }
 
 // If an operator issues a bad query or if a deploy contains a bug that corrupts
@@ -6707,7 +6707,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				tenant11C2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 			t.Run("into-system-tenant-id", func(t *testing.T) {
-				systemDB2.Exec(t, `RESTORE FROM $1`, httpAddr)
+				systemDB2.Exec(t, `RESTORE FROM LATEST IN $1`, httpAddr)
 				systemDB2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 		})
@@ -9150,10 +9150,10 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 	t.Run("new_db_name syntax checks", func(t *testing.T) {
 		expectedErr := "new_db_name can only be used for RESTORE DATABASE with a single target database"
 
-		sqlDB.ExpectErr(t, expectedErr, "RESTORE FROM $1 with new_db_name = 'new_fkdb'", localFoo)
+		sqlDB.ExpectErr(t, expectedErr, "RESTORE FROM LATEST IN $1 WITH new_db_name = 'new_fkdb'", localFoo)
 
 		sqlDB.ExpectErr(t, expectedErr, "RESTORE DATABASE fkdb, "+
-			"data FROM $1 with new_db_name = 'new_fkdb'", localFoo)
+			"data FROM LATEST IN $1 with new_db_name = 'new_fkdb'", localFoo)
 
 		sqlDB.ExpectErr(t, expectedErr, "RESTORE TABLE fkdb.fk FROM LATEST IN $1 with new_db_name = 'new_fkdb'",
 			localFoo)
