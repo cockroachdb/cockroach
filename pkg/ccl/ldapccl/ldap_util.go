@@ -45,8 +45,10 @@ func (lu *ldapUtil) MaybeInitLDAPsConn(ctx context.Context, conf ldapConfig) (er
 	// connections crdb nodes can take up(either in total or on a per node basis)
 	//
 	// ldapAddress := "ldap://ldap.example.com:636"
-	//
-	if lu.conn != nil {
+	// If the connection is idle for sometime, we get a ERRCONNRESET error from
+	// server, the ldap client sets the connection to closing. We need to dial for
+	// a new connection to continue using the client.
+	if lu.conn != nil && !lu.conn.IsClosing() {
 		return nil
 	}
 	ldapAddress := conf.ldapServer + ":" + conf.ldapPort
