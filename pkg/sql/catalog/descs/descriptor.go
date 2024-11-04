@@ -554,7 +554,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-		if tc.isShadowedName(ni) {
+		if tc.isShadowedNameInfo(ni) {
 			return continueLookups, descpb.InvalidID, nil
 		}
 		if tc.cr.IsNameInCache(&ni) {
@@ -588,7 +588,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 			return haltLookups, descpb.InvalidID, nil
 		}
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-		if tc.isShadowedName(ni) {
+		if tc.isShadowedNameInfo(ni) {
 			return haltLookups, descpb.InvalidID, nil
 		}
 		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})

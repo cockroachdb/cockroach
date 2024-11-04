@@ -440,6 +440,13 @@ func (tc *Collection) isShadowedName(nameKey catalog.NameKey) bool {
 	return ok
 }
 
+// isShadowedNameInfo is similar to isShadowedName, but has a concrete parameter
+// type instead of an interface to avoid heap allocations.
+func (tc *Collection) isShadowedNameInfo(nameInfo descpb.NameInfo) bool {
+	_, ok := tc.shadowedNames[nameInfo]
+	return ok
+}
+
 // WriteCommentToBatch adds the comment changes to uncommitted layer and writes
 // to the kv batch.
 func (tc *Collection) WriteCommentToBatch(
@@ -652,7 +659,7 @@ func (tc *Collection) lookupDescriptorID(
 		return objInMemory.GetID(), nil
 	}
 	// Look up ID in storage if nothing was found in memory.
-	if tc.isShadowedName(key) {
+	if tc.isShadowedNameInfo(key) {
 		return descpb.InvalidID, nil
 	}
 	read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{key})
