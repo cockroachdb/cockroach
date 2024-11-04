@@ -5,8 +5,10 @@
 package clusterstats
 
 import (
+	context "context"
 	reflect "reflect"
 
+	task "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	version "github.com/cockroachdb/cockroach/pkg/util/version"
 	gomock "github.com/golang/mock/gomock"
@@ -197,6 +199,23 @@ func (mr *MockTestMockRecorder) Fatalf(arg0 interface{}, arg1 ...interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fatalf", reflect.TypeOf((*MockTest)(nil).Fatalf), varargs...)
 }
 
+// Go mocks base method.
+func (m *MockTest) Go(arg0 task.Func, arg1 ...task.Option) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "Go", varargs...)
+}
+
+// Go indicates an expected call of Go.
+func (mr *MockTestMockRecorder) Go(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Go", reflect.TypeOf((*MockTest)(nil).Go), varargs...)
+}
+
 // GoCoverArtifactsDir mocks base method.
 func (m *MockTest) GoCoverArtifactsDir() string {
 	m.ctrl.T.Helper()
@@ -209,6 +228,25 @@ func (m *MockTest) GoCoverArtifactsDir() string {
 func (mr *MockTestMockRecorder) GoCoverArtifactsDir() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GoCoverArtifactsDir", reflect.TypeOf((*MockTest)(nil).GoCoverArtifactsDir))
+}
+
+// GoWithCancel mocks base method.
+func (m *MockTest) GoWithCancel(arg0 task.Func, arg1 ...task.Option) context.CancelFunc {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GoWithCancel", varargs...)
+	ret0, _ := ret[0].(context.CancelFunc)
+	return ret0
+}
+
+// GoWithCancel indicates an expected call of GoWithCancel.
+func (mr *MockTestMockRecorder) GoWithCancel(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GoWithCancel", reflect.TypeOf((*MockTest)(nil).GoWithCancel), varargs...)
 }
 
 // Helper mocks base method.
