@@ -15,6 +15,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.logical_replication_spans... writing output: debug/crdb_internal.logical_replication_spans.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
@@ -149,6 +150,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/cluster/test-tenant/crdb_internal.create_schema_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/cluster/test-tenant/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/cluster/test-tenant/crdb_internal.create_type_statements.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.logical_replication_spans... writing output: debug/cluster/test-tenant/crdb_internal.logical_replication_spans.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/cluster/test-tenant/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/cluster/test-tenant/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/cluster/test-tenant/crdb_internal.cluster_distsql_flows.txt... done
