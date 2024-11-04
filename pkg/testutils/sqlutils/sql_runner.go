@@ -26,7 +26,7 @@ import (
 // convenience functions to run SQL statements and fail the test on any errors.
 type SQLRunner struct {
 	DB                   DBHandle
-	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration
+	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration or testutils.RaceSucceedsSoonDuration
 	MaxTxnRetries        int           // defaults to 0 for unlimited retries
 }
 
@@ -124,7 +124,7 @@ func (sr *SQLRunner) succeedsWithin(t Fataler, f func() error) {
 	helperOrNoop(t)()
 	d := sr.SucceedsSoonDuration
 	if d == 0 {
-		d = testutils.DefaultSucceedsSoonDuration
+		d = testutils.SucceedsSoonDuration()
 	}
 	require.NoError(requireT{t}, testutils.SucceedsWithinError(f, d))
 }
@@ -230,7 +230,7 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	helperOrNoop(t)()
 	d := sr.SucceedsSoonDuration
 	if d == 0 {
-		d = testutils.DefaultSucceedsSoonDuration
+		d = testutils.SucceedsSoonDuration()
 	}
 	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
 		_, err := sr.DB.ExecContext(ctx, query, args...)
