@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"math/rand"
 	"strings"
@@ -2053,23 +2054,29 @@ func (ns *prepStmtNamespace) resetToEmpty(
 func (ns *prepStmtNamespace) resetTo(
 	ctx context.Context, to *prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) error {
-	for name, p := range ns.prepStmts {
-		p.decRef(ctx)
-		delete(ns.prepStmts, name)
+	// Reset prepStmts.
+	if !maps.Equal(ns.prepStmts, to.prepStmts) {
+		for name, ps := range ns.prepStmts {
+			ps.decRef(ctx)
+			delete(ns.prepStmts, name)
+		}
+		for name, ps := range to.prepStmts {
+			ps.incRef(ctx)
+			ns.prepStmts[name] = ps
+		}
 	}
-	for name := range ns.prepStmtsLRU {
-		delete(ns.prepStmtsLRU, name)
-	}
-	ns.closeAllPortals(ctx, prepStmtsNamespaceMemAcc)
 
-	for name, ps := range to.prepStmts {
-		ps.incRef(ctx)
-		ns.prepStmts[name] = ps
+	// Reset prepStmtsLRU.
+	if !maps.Equal(ns.prepStmtsLRU, to.prepStmtsLRU) {
+		clear(ns.prepStmtsLRU)
+		maps.Copy(ns.prepStmtsLRU, to.prepStmtsLRU)
 	}
-	for name, entry := range to.prepStmtsLRU {
-		ns.prepStmtsLRU[name] = entry
-	}
+
+	// Reset prepStmtsLRUAlloc.
 	ns.prepStmtsLRUAlloc = to.prepStmtsLRUAlloc
+
+	// Reset portals.
+	ns.closeAllPortals(ctx, prepStmtsNamespaceMemAcc)
 	for name, p := range to.portals {
 		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
 			return err
