@@ -13,7 +13,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1028,8 +1027,12 @@ func (ir *IntentResolver) resolveIntents(
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 	h := opts.AdmissionHeader
 	// We skip the warning for release builds to avoid printing out verbose stack traces.
+	// NB: this was disabled in general since there's a large backlog of reported warnings
+	// that yet have to be resolved, and in the meantime it's not worth  more engineering
+	// time making additional reports.
 	// TODO(aaditya): reconsider this once #112680 is resolved.
-	if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+	// if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+	if false {
 		log.Warningf(ctx,
 			"test-only warning: if you see this, please report to https://github.com/cockroachdb/cockroach/issues/112680. empty admission header provided by %s", string(debug.Stack()))
 	}
