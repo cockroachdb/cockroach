@@ -189,15 +189,6 @@ func transformPrincipal(commonName string) string {
 	return mappedName
 }
 
-func getCertificatePrincipals(cert *x509.Certificate) []string {
-	results := make([]string, 0, 1+len(cert.DNSNames))
-	results = append(results, transformPrincipal(cert.Subject.CommonName))
-	for _, name := range cert.DNSNames {
-		results = append(results, transformPrincipal(name))
-	}
-	return results
-}
-
 // GetCertificateUserScope extracts the certificate scopes from a client
 // certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
 // user information. If there is no such URI, then it gets principal transformed
@@ -264,13 +255,18 @@ func forEachCertificateUserScope(
 		}
 	}
 	if !hasCRDBSANURI {
-		users := getCertificatePrincipals(peerCert)
-		for _, user := range users {
-			scope := CertificateUserScope{
+		globalScope := func(user string) CertificateUserScope {
+			return CertificateUserScope{
 				Username: user,
 				Global:   true,
 			}
-			if halt, err := fn(scope); halt || err != nil {
+		}
+		halt, err := fn(globalScope(transformPrincipal(peerCert.Subject.CommonName)))
+		if halt || err != nil {
+			return err
+		}
+		for _, name := range peerCert.DNSNames {
+			if halt, err := fn(globalScope(transformPrincipal(name))); halt || err != nil {
 				return err
 			}
 		}
