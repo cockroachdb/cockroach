@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -566,14 +567,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - max-stack: sets the maximum stack size for the goroutine that optimizes
 //     the query. See debug.SetMaxStack.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
-	// Allow testcases to override the flags.
-	for _, a := range d.CmdArgs {
-		if err := ot.Flags.Set(a); err != nil {
-			d.Fatalf(tb, "%+v", err)
-		}
-	}
-	ot.Flags.Verbose = datadriven.Verbose()
-
 	// Skip the test if the skip-race flag was provided and the race detector is
 	// enabled.
 	if ot.Flags.SkipRace && util.RaceEnabled {
@@ -588,11 +581,34 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.Placeholders = nil
 	ot.evalCtx.TxnIsoLevel = ot.Flags.TxnIsoLevel
 
+	// Allow testcases to override the flags.
+	for _, a := range d.CmdArgs {
+		if err := ot.Flags.Set(a); err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+	}
+	ot.Flags.Verbose = datadriven.Verbose()
+
 	if ot.Flags.MaxStackBytes > 0 {
 		originalMaxStack := debug.SetMaxStack(ot.Flags.MaxStackBytes)
 		defer debug.SetMaxStack(originalMaxStack)
+		// Spawn a separate goroutine. A fresh stack makes tests using this
+		// setting more reliable.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		var res string
+		go func() {
+			defer wg.Done()
+			res = ot.runCommandInternal(tb, d)
+		}()
+		wg.Wait()
+		return res
+	} else {
+		return ot.runCommandInternal(tb, d)
 	}
+}
 
+func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) string {
 	switch d.Cmd {
 	case "exec-ddl":
 		testCatalog, ok := ot.catalog.(*testcat.Catalog)
