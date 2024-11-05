@@ -6,6 +6,7 @@
 package pgwire
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"math"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
@@ -516,9 +518,7 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 }
 
 // spaces is used for padding CHAR(N) datums.
-var spaces = [16]byte{
-	' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-}
+var spaces = bytes.Repeat([]byte{' '}, system.CacheLineSize)
 
 func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 	if t.Oid() == oid.T_char && len(v) == 0 {
