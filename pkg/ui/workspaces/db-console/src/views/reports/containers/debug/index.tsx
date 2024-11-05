@@ -427,7 +427,7 @@ export default function Debug() {
           />
           <DebugTableLink
             name="Heap (recent allocs)"
-            url="debug/pprof/ui/heap/"
+            url="debug/pprof/ui/allocs/"
             params={{ node: nodeID, seconds: "5", si: "alloc_objects" }}
           />
           <DebugTableLink
