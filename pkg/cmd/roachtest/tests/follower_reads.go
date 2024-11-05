@@ -978,6 +978,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
 		// Test currently fails in shared-process deployments, see: #129167.
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 }
 
