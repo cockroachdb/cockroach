@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -63,9 +64,9 @@ func createLogicalReplicationStreamPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (err error) {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (retErr error) {
 		defer func() {
-			if err == nil {
+			if retErr == nil {
 				telemetry.Count("logical_replication_stream.started")
 			}
 		}()
@@ -207,6 +208,11 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+		defer func() {
+			if retErr != nil {
+				retErr = errors.CombineErrors(retErr, client.Complete(ctx, spec.StreamID, false))
+			}
+		}()
 
 		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
 		for i, desc := range spec.TypeDescriptors {
@@ -291,15 +297,7 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
-		// Add the LDR job ID to the destination table descriptors.
-		b := p.InternalSQLTxn().KV().NewBatch()
-		for _, td := range dstTableDescs {
-			td.LDRJobIDs = append(td.LDRJobIDs, jr.JobID)
-			if err := p.InternalSQLTxn().Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
-				return err
-			}
-		}
-		if err := p.InternalSQLTxn().KV().Run(ctx, b); err != nil {
+		if err := replicationutils.LockLDRTables(ctx, p.InternalSQLTxn(), dstTableDescs, jr.JobID); err != nil {
 			return err
 		}
 

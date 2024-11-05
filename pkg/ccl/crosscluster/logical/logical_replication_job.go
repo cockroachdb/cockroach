@@ -8,12 +8,12 @@ package logical
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/physical"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -611,25 +610,11 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 
 	// Remove the LDR job ID from the destination table descriptors.
 	details := r.job.Details().(jobspb.LogicalReplicationDetails)
-	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		b := txn.KV().NewBatch()
-		for _, repPair := range details.ReplicationPairs {
-			td, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descpb.ID(repPair.DstDescriptorID))
-			if err != nil {
-				return err
-			}
-			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID catpb.JobID) bool {
-				return thisID == r.job.ID()
-			})
-			if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
-				return err
-			}
-		}
-		if err := txn.KV().Run(ctx, b); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+	destTableIDs := make([]uint32, 0, len(details.ReplicationPairs))
+	for _, pair := range details.ReplicationPairs {
+		destTableIDs = append(destTableIDs, uint32(pair.DstDescriptorID))
+	}
+	if err := replicationutils.UnlockLDRTables(ctx, execCfg, destTableIDs, r.job.ID()); err != nil {
 		return err
 	}
 

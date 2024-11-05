@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -81,6 +82,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
+	mutableTableDescs := make([]*tabledesc.Mutable, 0, len(req.TableNames))
+	tableIDs := make([]uint32, 0, len(req.TableNames))
 	typeDescriptors := make([]descpb.TypeDescriptor, 0)
 	foundTypeDescriptors := make(map[descpb.ID]struct{})
 	for _, name := range req.TableNames {
@@ -94,6 +97,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 			return streampb.ReplicationProducerSpec{}, err
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		tableIDs = append(tableIDs, uint32(td.GetID()))
+		mutableTableDescs = append(mutableTableDescs, td)
 		tableDescs[name] = td.TableDescriptor
 		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
 		if err != nil {
@@ -109,7 +114,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		r.evalCtx.SessionData().User(),
 		ptsID,
 		spans,
+		tableIDs,
 		strings.Join(req.TableNames, ","))
+
+	if err := replicationutils.LockLDRTables(ctx, r.txn, mutableTableDescs, jr.JobID); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
 
 	// TODO(ssd): Update this to protect the right set of
 	// tables. Perhaps we can just protect the tables and depend
