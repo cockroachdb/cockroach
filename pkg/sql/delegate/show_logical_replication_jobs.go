@@ -33,7 +33,7 @@ WITH table_names AS (
 SELECT
 	job_info.id AS job_id, 
 	job_info.status, 
-	table_names.targets AS targets,
+	table_names.targets AS tables,
 	hlc_to_timestamp((crdb_internal.pb_to_json(
 	  	'cockroach.sql.jobs.jobspb.Progress',
 	  	job_info.progress)->'LogicalReplication'->'replicatedTime'->>'wallTime')::DECIMAL) AS replicated_time%s
