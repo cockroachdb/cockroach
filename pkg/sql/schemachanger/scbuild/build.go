@@ -278,10 +278,11 @@ type cachedDesc struct {
 func newBuilderState(
 	ctx context.Context, d Dependencies, incumbent scpb.CurrentState, localMemAcc *mon.BoundAccount,
 ) *builderState {
+
 	bs := builderState{
 		ctx:                      ctx,
 		clusterSettings:          d.ClusterSettings(),
-		evalCtx:                  newEvalCtx(d),
+		evalCtx:                  d.EvalCtx(),
 		semaCtx:                  d.SemaCtx(),
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),
