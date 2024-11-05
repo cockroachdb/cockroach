@@ -21,6 +21,8 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		buildVersion *version.Version
 		expected     int
 	}{
+		{spec.Local, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), 15},
+
 		{"gce", spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), 1300},
 		{"gce", spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0-rc.1`), 1250},
 		{"gce", spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0`), 1250},
