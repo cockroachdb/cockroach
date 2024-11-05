@@ -316,6 +316,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		debugMode: NoDebug,
 	}
 	numTasks := 3
+	startedTasks := make(chan struct{})
 	var tasksDone atomic.Uint32
 	test := registry.TestSpec{
 		Name:             `timeout`,
@@ -335,6 +336,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 					return nil
 				})
 			}
+			close(startedTasks)
 			<-ctx.Done()
 		},
 	}
@@ -351,6 +353,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 
 	// Ensure tasks are also canceled.
+	<-startedTasks
 	require.Equal(t, uint32(numTasks), tasksDone.Load())
 }
 
