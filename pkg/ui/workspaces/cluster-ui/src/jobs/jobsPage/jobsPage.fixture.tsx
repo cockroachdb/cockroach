@@ -78,7 +78,7 @@ const pausedJobFixture = {
   id: new Long(6091954177, 70312826),
   type: "BACKUP",
   description:
-    "BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history\n",
+    "BACKUP DATABASE bank INTO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history\n",
   status: "paused",
 };
 
@@ -105,7 +105,7 @@ const runningWithRemainingJobFixture = {
   ...defaultJobProperties,
   id: new Long(6093756417, 70312826),
   type: "RESTORE",
-  description: "RESTORE data.* FROM $1 WITH OPTIONS (into_db='data2')",
+  description: "RESTORE data.* FROM LATEST IN $1 WITH OPTIONS (into_db='data2')",
   status: "running",
   fraction_completed: 0.38,
 };
@@ -154,7 +154,7 @@ const retryRunningWithRemainingJobFixture = {
   id: new Long(3390625793, 70312826),
   type: "REPLICATION STREAM INGESTION",
   description:
-    "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
+    "RESTORE DATABASE backup_database_name FROM LATEST IN 'your_backup_location';",
   status: "retry-running",
   fraction_completed: 0.11,
   next_run: new protos.google.protobuf.Timestamp({
