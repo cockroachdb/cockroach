@@ -32,7 +32,6 @@ go_library(
         "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
-        "//pkg/sql/faketreeeval",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

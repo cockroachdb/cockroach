@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -64,6 +65,7 @@ func WithBuilderDependenciesFromTestServer(
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
 		SemaCtx() *tree.SemaContext
+		EvalContext() *eval.Context
 		resolver.SchemaResolver
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
@@ -104,6 +106,7 @@ func WithBuilderDependenciesFromTestServer(
 		planner, /* nodesStatusInfo */
 		planner, /* regionProvider */
 		planner.SemaCtx(),
+		planner.EvalContext(),
 		execCfg.DefaultZoneConfig,
 	))
 }
