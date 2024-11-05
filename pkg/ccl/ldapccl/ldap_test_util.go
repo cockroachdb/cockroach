@@ -26,16 +26,17 @@ type mockLDAPUtil struct {
 	conn         *ldap.Conn
 	tlsConfig    *tls.Config
 	userGroupDNs map[string][]string
+	connClosing  bool
 }
 
 var _ ILDAPUtil = &mockLDAPUtil{}
 
-var LDAPMocks = func() (mockLDAPUtil, func(context.Context, ldapConfig) (ILDAPUtil, error)) {
+var LDAPMocks = func() (*mockLDAPUtil, func(context.Context, ldapConfig) (ILDAPUtil, error)) {
 	var mLU = mockLDAPUtil{tlsConfig: &tls.Config{}, userGroupDNs: make(map[string][]string)}
 	var newMockLDAPUtil = func(ctx context.Context, conf ldapConfig) (ILDAPUtil, error) {
 		return &mLU, nil
 	}
-	return mLU, newMockLDAPUtil
+	return &mLU, newMockLDAPUtil
 }
 
 // MaybeInitLDAPsConn implements the ILDAPUtil interface.
@@ -45,8 +46,23 @@ func (lu *mockLDAPUtil) MaybeInitLDAPsConn(ctx context.Context, conf ldapConfig)
 	} else if strings.Contains(conf.ldapPort, invalidParam) {
 		return errors.Newf(ldapsFailureMessage + ": invalid ldap port provided")
 	}
-	lu.conn = &ldap.Conn{}
+	if lu.conn != nil && !lu.connClosing {
+		return nil
+	}
+	lu.conn = ldap.NewConn(nil, true)
 	return nil
+}
+
+// resetLDAPsConn mocks server behavior for sending ECONNRESET in case of
+// prolonged connection idleness.
+// ref: https://github.com/cockroachdb/cockroach/issues/133777
+func (lu *mockLDAPUtil) resetLDAPsConn() {
+	lu.connClosing = true
+}
+
+// getLDAPsConn returns the current ldap conn set for the ldap util.
+func (lu *mockLDAPUtil) getLDAPsConn() *ldap.Conn {
+	return lu.conn
 }
 
 // Bind implements the ILDAPUtil interface.

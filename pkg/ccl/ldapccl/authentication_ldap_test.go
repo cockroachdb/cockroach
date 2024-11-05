@@ -192,3 +192,48 @@ func TestLDAPAuthentication(t *testing.T) {
 		})
 	}
 }
+
+func TestLDAPConnectionReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
+	defer testutils.TestingHook(
+		&NewLDAPUtil,
+		newMockLDAPUtil)()
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	manager := ConfigureLDAPAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	hbaEntryBase := "host all all all ldap "
+	hbaConfLDAPDefaultOpts := map[string]string{
+		"ldapserver":          "localhost",
+		"ldapport":            "636",
+		"ldapbasedn":          "dc=localhost",
+		"ldapbinddn":          "cn=readonly,dc=localhost",
+		"ldapbindpasswd":      "readonly_pwd",
+		"ldapsearchattribute": "uid",
+		"ldapsearchfilter":    "(memberOf=cn=users,ou=groups,dc=localhost)",
+		"ldapgrouplistfilter": "(cn=ldap_parent_1)",
+	}
+	hbaEntry := constructHBAEntry(t, hbaEntryBase, hbaConfLDAPDefaultOpts, nil)
+
+	if _, _, err := manager.FetchLDAPUserDN(
+		ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString("foo"), &hbaEntry, nil); err != nil {
+		t.Fatalf("expected success, got err=%v", err)
+	}
+	ldapConnection1 := mockLDAP.getLDAPsConn()
+
+	mockLDAP.resetLDAPsConn()
+
+	if _, _, err := manager.FetchLDAPUserDN(
+		ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString("foo"), &hbaEntry, nil); err != nil {
+		t.Fatalf("expected success, got err=%v", err)
+	}
+	ldapConnection2 := mockLDAP.getLDAPsConn()
+
+	require.Falsef(t, ldapConnection1 == ldapConnection2,
+		"expected a different ldap connection as previous connection was reset by server, conn1: %v, conn2: %v",
+		ldapConnection1, ldapConnection2)
+}
