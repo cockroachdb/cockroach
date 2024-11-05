@@ -97,6 +97,7 @@ type cockroachKeyWriter struct {
 	logicalTimes    colblk.UintBuilder
 	untypedVersions colblk.RawBytesBuilder
 	suffixTypes     suffixTypes
+	prevRoachKeyLen int32
 	prevSuffix      []byte
 }
 
@@ -118,6 +119,7 @@ func (kw *cockroachKeyWriter) Reset() {
 	kw.logicalTimes.Reset()
 	kw.untypedVersions.Reset()
 	kw.suffixTypes = 0
+	kw.prevRoachKeyLen = 0
 }
 
 func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
@@ -130,7 +132,11 @@ func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
 	lp := kw.roachKeys.UnsafeGet(kw.roachKeys.Rows() - 1)
 	cmpv.CommonPrefixLen = int32(crbytes.CommonPrefix(lp, key[:cmpv.PrefixLen-1]))
 	if cmpv.CommonPrefixLen == cmpv.PrefixLen-1 {
-		// Adjust CommonPrefixLen to include the sentinel byte.
+		// The common prefix is the entirety of key's prefix. This key's prefix
+		// is necessarily equal to the previous key's prefix.
+		//
+		// Adjust the CommonPrefixLen to include the sentinel byte (which is
+		// elided when a prefix is stored in kw.roachKeys).
 		cmpv.CommonPrefixLen = cmpv.PrefixLen
 		cmpv.UserKeyComparison = int32(EnginePointSuffixCompare(key[cmpv.PrefixLen:], kw.prevSuffix))
 		return cmpv
@@ -139,6 +145,14 @@ func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
 	// greater, but we know the index at which they diverge. The base.Comparer
 	// contract dictates that prefixes must be lexicographically ordered.
 	if len(lp) == int(cmpv.CommonPrefixLen) {
+		// All the bytes of the previous prefix form a byte-wise prefix of
+		// [key]'s prefix. It's possible that [key] also has a 0x00 byte in the
+		// same position (but not serving as a sentinel byte, otherwise we
+		// would've fallen into the above equality case). In this case, we need
+		// to increment CommonPrefixLen.
+		if key[cmpv.CommonPrefixLen] == 0x00 {
+			cmpv.CommonPrefixLen++
+		}
 		// cmpv.PrefixLen > cmpv.PrefixLenShared; key is greater.
 		cmpv.UserKeyComparison = +1
 	} else {
@@ -165,9 +179,10 @@ func (kw *cockroachKeyWriter) WriteKey(
 	// TODO(jackson): Avoid copying the previous suffix.
 	kw.prevSuffix = append(kw.prevSuffix[:0], key[keyPrefixLen:]...)
 
-	// When the roach key is the same, keyPrefixLenSharedWithPrev includes the
-	// separator byte.
-	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(keyPrefixLen)-1))
+	// When the roach key is the same or contain the previous key as a prefix,
+	// keyPrefixLenSharedWithPrev includes the previous key's separator byte.
+	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(kw.prevRoachKeyLen)))
+	kw.prevRoachKeyLen = keyPrefixLen - 1
 
 	// NB: The w.logicalTimes builder was initialized with InitWithDefault, so
 	// if we don't set a value, the column value is implicitly zero. We only
