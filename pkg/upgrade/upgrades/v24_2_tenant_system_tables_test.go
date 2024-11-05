@@ -29,6 +29,8 @@ func TestCreateTenantSystemTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 24, 2)
+
 	// Set up the storage cluster at v1.
 	v1 := clusterversion.MinSupported.Version()
 	v2 := clusterversion.V24_2_TenantSystemTables.Version()

@@ -37,6 +37,8 @@ func TestSQLInstancesAddIsDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 24, 3)
+
 	ctx := context.Background()
 	ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{

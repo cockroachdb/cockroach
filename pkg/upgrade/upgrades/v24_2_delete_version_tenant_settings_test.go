@@ -24,6 +24,8 @@ func TestDeleteVersionTenantSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 24, 2)
+
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
