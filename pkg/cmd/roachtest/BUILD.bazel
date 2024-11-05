@@ -23,6 +23,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build",
+        "//pkg/cli/exit",
         "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",

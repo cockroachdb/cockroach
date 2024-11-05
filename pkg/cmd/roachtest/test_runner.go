@@ -26,6 +26,7 @@ import (
 
 	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -1707,7 +1708,7 @@ func (r *testRunner) addWorker(ctx context.Context, l *logger.Logger, name strin
 	defer r.workersMu.Unlock()
 	w := &workerStatus{name: name}
 	if _, ok := r.workersMu.workers[name]; ok {
-		l.FatalfCtx(ctx, "worker %q already exists", name)
+		logFatalfCtx(ctx, l, "worker %q already exists", name)
 	}
 	r.workersMu.workers[name] = w
 	return w
@@ -2009,4 +2010,13 @@ func grafanaAnnotateTestStart(ctx context.Context, t test.Test, c cluster.Cluste
 	if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: text, Tags: tags}); err != nil {
 		t.L().Printf(errors.Wrap(err, "error adding annotation for test start").Error())
 	}
+}
+
+// logFatalfCtx logs the message using the provided logger and then closes the
+// logger and exits the process with status 1. It should only be used in
+// circumstances where the process cannot continue, and not by tests.
+func logFatalfCtx(ctx context.Context, l *logger.Logger, f string, args ...interface{}) {
+	l.ErrorfCtx(ctx, f, args...)
+	l.Close()
+	exit.WithCode(exit.UnspecifiedError())
 }
