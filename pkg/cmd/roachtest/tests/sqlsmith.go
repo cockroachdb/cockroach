@@ -366,6 +366,26 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 // setupMultiRegionDatabase is used to set up a multi-region database.
 func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logStmt func(string)) {
 	t.Helper()
+
+	execStmt := func(stmt string) {
+		logStmt(stmt)
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// If we have a stmt timeout set on the session, then increase it 3x given
+	// that schema changes below can take non-trivial amount of time.
+	row := conn.QueryRow("SHOW statement_timeout")
+	var stmtTimeout int
+	if err := row.Scan(&stmtTimeout); err != nil {
+		t.Fatal(err)
+	} else if stmtTimeout != 0 {
+		t.L().Printf("temporarily increasing the statement timeout")
+		execStmt(fmt.Sprintf("SET statement_timeout = %d", 3*stmtTimeout))
+		defer execStmt(fmt.Sprintf("SET statement_timeout = %d", stmtTimeout))
+	}
+
 	regionsSet := make(map[string]struct{})
 	var region, zone string
 	rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
@@ -388,13 +408,6 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 
 	if len(regionList) == 0 {
 		t.Fatal(errors.New("no regions, cannot run multi-region config"))
-	}
-
-	execStmt := func(stmt string) {
-		logStmt(stmt)
-		if _, err := conn.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	for i, region := range regionList {
