@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -591,8 +592,23 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	if ot.Flags.MaxStackBytes > 0 {
 		originalMaxStack := debug.SetMaxStack(ot.Flags.MaxStackBytes)
 		defer debug.SetMaxStack(originalMaxStack)
+		// Spawn a separate goroutine. A fresh stack makes tests using this
+		// setting more reliable.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		var res string
+		go func() {
+			defer wg.Done()
+			res = ot.runCommandInternal(tb, d)
+		}()
+		wg.Wait()
+		return res
+	} else {
+		return ot.runCommandInternal(tb, d)
 	}
+}
 
+func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) string {
 	switch d.Cmd {
 	case "exec-ddl":
 		testCatalog, ok := ot.catalog.(*testcat.Catalog)
