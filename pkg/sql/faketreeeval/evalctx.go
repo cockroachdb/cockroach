@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -466,8 +467,8 @@ func (ep *DummyEvalPlanner) ResolveType(
 // QueryRowEx is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) QueryRowEx(
 	ctx context.Context,
-	opName string,
-	session sessiondata.InternalExecutorOverride,
+	opName redact.RedactableString,
+	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
@@ -477,7 +478,7 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 // QueryIteratorEx is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) QueryIteratorEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},

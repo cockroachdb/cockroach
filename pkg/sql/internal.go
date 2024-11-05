@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // NewInternalSessionData returns a session data for use in internal queries
@@ -209,7 +210,7 @@ var ieRowsAffectedRetryLimit = settings.RegisterIntSetting(
 
 func (ie *InternalExecutor) runWithEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	w ieResultWriter,
 	mode ieExecutionMode,
@@ -237,7 +238,7 @@ func (ie *InternalExecutor) runWithEx(
 	if err = ie.s.cfg.Stopper.RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName: opName,
+			TaskName: opName.StripMarkers(),
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
@@ -660,7 +661,11 @@ func (r *rowsIterator) HasResults() bool {
 // QueryBuffered is deprecated because it may transparently execute a query as
 // root. Use QueryBufferedEx instead.
 func (ie *InternalExecutor) QueryBuffered(
-	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	txn *kv.Txn,
+	stmt string,
+	qargs ...interface{},
 ) ([]tree.Datums, error) {
 	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
@@ -674,7 +679,7 @@ func (ie *InternalExecutor) QueryBuffered(
 // have previously been set through SetSessionData().
 func (ie *InternalExecutor) QueryBufferedEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -688,7 +693,7 @@ func (ie *InternalExecutor) QueryBufferedEx(
 // ResultColumns of the input query.
 func (ie *InternalExecutor) QueryBufferedExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -700,7 +705,7 @@ func (ie *InternalExecutor) QueryBufferedExWithCols(
 
 func (ie *InternalExecutor) queryInternalBuffered(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
 	stmt ieStmt,
@@ -737,7 +742,11 @@ func (ie *InternalExecutor) queryInternalBuffered(
 //
 // QueryRow is deprecated (like Query). Use QueryRowEx() instead.
 func (ie *InternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	txn *kv.Txn,
+	stmt string,
+	qargs ...interface{},
 ) (tree.Datums, error) {
 	return ie.QueryRowEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
@@ -749,7 +758,7 @@ func (ie *InternalExecutor) QueryRow(
 // have previously been set through SetSessionData().
 func (ie *InternalExecutor) QueryRowEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -762,7 +771,7 @@ func (ie *InternalExecutor) QueryRowEx(
 // QueryRowExParsed is like QueryRowEx, but takes a parsed statement.
 func (ie *InternalExecutor) QueryRowExParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
@@ -776,7 +785,7 @@ func (ie *InternalExecutor) QueryRowExParsed(
 // ResultColumns of the input query.
 func (ie *InternalExecutor) QueryRowExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -789,7 +798,7 @@ func (ie *InternalExecutor) QueryRowExWithCols(
 // ResultColumns of the input query.
 func (ie *InternalExecutor) queryRowExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt ieStmt,
@@ -818,7 +827,11 @@ func (ie *InternalExecutor) queryRowExWithCols(
 // Exec is deprecated because it may transparently execute a query as root. Use
 // ExecEx instead.
 func (ie *InternalExecutor) Exec(
-	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	txn *kv.Txn,
+	stmt string,
+	qargs ...interface{},
 ) (int, error) {
 	return ie.ExecEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
@@ -830,7 +843,7 @@ func (ie *InternalExecutor) Exec(
 // have previously been set through SetSessionData().
 func (ie *InternalExecutor) ExecEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -843,7 +856,7 @@ func (ie *InternalExecutor) ExecEx(
 // statement.
 func (ie *InternalExecutor) ExecParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	o sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
@@ -868,7 +881,7 @@ func (s *ieStmt) SQL() string {
 // execIEStmt extracts the shared logic between ExecEx and ExecParsed.
 func (ie *InternalExecutor) execIEStmt(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt ieStmt,
@@ -903,7 +916,11 @@ func (ie *InternalExecutor) execIEStmt(
 // QueryIterator is deprecated because it may transparently execute a query
 // as root. Use QueryIteratorEx instead.
 func (ie *InternalExecutor) QueryIterator(
-	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	txn *kv.Txn,
+	stmt string,
+	qargs ...interface{},
 ) (isql.Rows, error) {
 	return ie.QueryIteratorEx(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), stmt, qargs...)
 }
@@ -913,7 +930,7 @@ func (ie *InternalExecutor) QueryIterator(
 // *must* be closed.
 func (ie *InternalExecutor) QueryIteratorEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -1009,12 +1026,12 @@ var ieMultiOverride = settings.RegisterStringSetting(
 )
 
 func (ie *InternalExecutor) maybeNodeSessionDataOverride(
-	opName string,
+	opName redact.RedactableString,
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
 			User:            username.NodeUserName(),
-			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
+			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName.StripMarkers(),
 		}
 	}
 	o := sessiondata.NoSessionDataOverride
@@ -1023,7 +1040,7 @@ func (ie *InternalExecutor) maybeNodeSessionDataOverride(
 		o.User = username.NodeUserName()
 	}
 	if sd.ApplicationName == "" {
-		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
+		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName.StripMarkers()
 	}
 	return o
 }
@@ -1154,7 +1171,7 @@ var attributeToUserEnabled = settings.RegisterBoolSetting(
 // SetSessionData(), if anything.
 func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	rw *ieResultChannel,
 	mode ieExecutionMode,
 	txn *kv.Txn,
@@ -1213,7 +1230,7 @@ func (ie *InternalExecutor) execInternal(
 	// their respective "pressure" on internal queries. Hence the choice here to
 	// add the delegate prefix to the current app name.
 	if sd.ApplicationName == "" || sd.ApplicationName == catconstants.InternalAppNamePrefix {
-		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
+		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName.StripMarkers()
 	} else if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
 		// If this is already an "internal app", don't put more prefix.
 		sd.ApplicationName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
@@ -1223,7 +1240,7 @@ func (ie *InternalExecutor) execInternal(
 		// previous app name heuristics and use a separate prefix. This is
 		// needed since we hard-code filters that exclude queries with '$
 		// internal' in their app names on the UI.
-		sd.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName
+		sd.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName.StripMarkers()
 	}
 	// If the caller has injected a mapping to temp schemas, install it, and
 	// leave it installed for the rest of the transaction.

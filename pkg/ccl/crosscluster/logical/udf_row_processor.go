@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type applierDecision string
@@ -286,7 +287,7 @@ func (aq *applierQuerier) applyDecision(
 
 func (aq *applierQuerier) execParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	ie isql.Executor,
 	o sessiondata.InternalExecutorOverride,
@@ -302,7 +303,7 @@ func (aq *applierQuerier) execParsed(
 
 func (aq *applierQuerier) queryRowExParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	ie isql.Executor,
 	o sessiondata.InternalExecutorOverride,

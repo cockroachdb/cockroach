@@ -55,6 +55,7 @@ go_test(
         "//pkg/util/optional",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )
