@@ -97,6 +97,7 @@ type cockroachKeyWriter struct {
 	logicalTimes    colblk.UintBuilder
 	untypedVersions colblk.RawBytesBuilder
 	suffixTypes     suffixTypes
+	prevRoachKeyLen int32
 	prevSuffix      []byte
 }
 
@@ -118,35 +119,57 @@ func (kw *cockroachKeyWriter) Reset() {
 	kw.logicalTimes.Reset()
 	kw.untypedVersions.Reset()
 	kw.suffixTypes = 0
+	kw.prevRoachKeyLen = 0
 }
 
 func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
-	var cmpv colblk.KeyComparison
-	cmpv.PrefixLen = int32(EngineKeySplit(key)) // TODO(jackson): Inline
+	prefixLen := EngineKeySplit(key)
 	if kw.roachKeys.Rows() == 0 {
-		cmpv.UserKeyComparison = 1
-		return cmpv
+		return colblk.KeyComparison{
+			PrefixLen:         int32(prefixLen),
+			CommonPrefixLen:   0,
+			UserKeyComparison: +1,
+		}
 	}
-	lp := kw.roachKeys.UnsafeGet(kw.roachKeys.Rows() - 1)
-	cmpv.CommonPrefixLen = int32(crbytes.CommonPrefix(lp, key[:cmpv.PrefixLen-1]))
-	if cmpv.CommonPrefixLen == cmpv.PrefixLen-1 {
-		// Adjust CommonPrefixLen to include the sentinel byte.
-		cmpv.CommonPrefixLen = cmpv.PrefixLen
-		cmpv.UserKeyComparison = int32(EnginePointSuffixCompare(key[cmpv.PrefixLen:], kw.prevSuffix))
-		return cmpv
+	lastRoachKey := kw.roachKeys.UnsafeGet(kw.roachKeys.Rows() - 1)
+	commonPrefixLen := crbytes.CommonPrefix(lastRoachKey, key[:prefixLen-1])
+	if len(lastRoachKey) == commonPrefixLen {
+		if buildutil.CrdbTestBuild && len(lastRoachKey) > prefixLen-1 {
+			panic(errors.AssertionFailedf("out-of-order keys: previous roach key %q > roach key of key %q",
+				lastRoachKey, key))
+		}
+		// All the bytes of the previous roach key form a byte-wise prefix of
+		// [key]'s prefix. The last byte of the previous prefix is the 0x00
+		// sentinel byte, which is not stored within roachKeys. It's possible
+		// that [key] also has a 0x00 byte in the same position (either also
+		// serving as a sentinel byte, in which case the prefixes are equal, or
+		// not in which case [key] is greater). In both cases, we need to
+		// increment CommonPrefixLen.
+		if key[commonPrefixLen] == 0x00 {
+			commonPrefixLen++
+			if commonPrefixLen == prefixLen {
+				// The prefixes are equal; compare the suffixes.
+				return colblk.KeyComparison{
+					PrefixLen:         int32(prefixLen),
+					CommonPrefixLen:   int32(commonPrefixLen),
+					UserKeyComparison: int32(EnginePointSuffixCompare(key[prefixLen:], kw.prevSuffix)),
+				}
+			}
+		}
+		// prefixLen > commonPrefixLen; key is greater.
+		return colblk.KeyComparison{
+			PrefixLen:         int32(prefixLen),
+			CommonPrefixLen:   int32(commonPrefixLen),
+			UserKeyComparison: +1,
+		}
 	}
-	// The keys have different MVCC prefixes. We haven't determined which is
-	// greater, but we know the index at which they diverge. The base.Comparer
-	// contract dictates that prefixes must be lexicographically ordered.
-	if len(lp) == int(cmpv.CommonPrefixLen) {
-		// cmpv.PrefixLen > cmpv.PrefixLenShared; key is greater.
-		cmpv.UserKeyComparison = +1
-	} else {
-		// Both keys have at least 1 additional byte at which they diverge.
-		// Compare the diverging byte.
-		cmpv.UserKeyComparison = int32(cmp.Compare(key[cmpv.CommonPrefixLen], lp[cmpv.CommonPrefixLen]))
+	// Both keys have at least 1 additional byte at which they diverge.
+	// Compare the diverging byte.
+	return colblk.KeyComparison{
+		PrefixLen:         int32(prefixLen),
+		CommonPrefixLen:   int32(commonPrefixLen),
+		UserKeyComparison: int32(cmp.Compare(key[commonPrefixLen], lastRoachKey[commonPrefixLen])),
 	}
-	return cmpv
 }
 
 func (kw *cockroachKeyWriter) WriteKey(
@@ -165,9 +188,10 @@ func (kw *cockroachKeyWriter) WriteKey(
 	// TODO(jackson): Avoid copying the previous suffix.
 	kw.prevSuffix = append(kw.prevSuffix[:0], key[keyPrefixLen:]...)
 
-	// When the roach key is the same, keyPrefixLenSharedWithPrev includes the
-	// separator byte.
-	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(keyPrefixLen)-1))
+	// When the roach key is the same or contain the previous key as a prefix,
+	// keyPrefixLenSharedWithPrev includes the previous key's separator byte.
+	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(kw.prevRoachKeyLen)))
+	kw.prevRoachKeyLen = keyPrefixLen - 1
 
 	// NB: The w.logicalTimes builder was initialized with InitWithDefault, so
 	// if we don't set a value, the column value is implicitly zero. We only
