@@ -101,9 +101,7 @@ var maxBlockBytes = []int{1, 1024, 4096}
 var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
-
-// TODO(baptist): Re-enable spec.Low testing. Currently it causes OOMs in backfill tests.
-var memOptions = []spec.MemPerCPU{spec.Standard, spec.High}
+var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
 var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
 
 var leases = []registry.LeaseType{
@@ -371,7 +369,13 @@ type backfill struct{}
 var _ perturbation = backfill{}
 
 func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
-	return newMetamorphic(b, rng)
+	v := newMetamorphic(b, rng)
+	// TODO(#133114): The backfill test can cause OOM with low memory
+	// configurations.
+	if v.mem == spec.Low {
+		v.mem = spec.Standard
+	}
+	return v
 }
 
 // startTargetNode starts the target node and creates the backfill table.
