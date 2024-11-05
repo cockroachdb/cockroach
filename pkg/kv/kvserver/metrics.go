@@ -3427,9 +3427,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
 		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
 		SSTableCompressionNone:            metric.NewGauge(metaSSTableCompressionNone),
-		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
-			registry: storeRegistry,
-		},
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -3750,20 +3747,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
 	}
+	sm.categoryIterMetrics.init(storeRegistry)
 
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
-
-	// Pre-initialize some category stats, so that metrics generation is
-	// deterministic.
-	// TODO(radu): #133507 tracks fixing this properly.
-	for _, category := range []sstable.Category{
-		"batch-eval", "crdb-unknown", "mvcc-gc", "rangefeed",
-		"replication", "scan-regular"} {
-		cm := makePebbleCategorizedIterMetrics(category)
-		sm.categoryIterMetrics.metricsMap.Store(category, cm)
-		storeRegistry.AddMetricStruct(cm)
+	for i := range sm.categoryIterMetrics.metrics {
+		storeRegistry.AddMetricStruct(&sm.categoryIterMetrics.metrics[i])
 	}
+
 	return sm
 }
 
@@ -4104,7 +4095,7 @@ type pebbleCategoryIterMetrics struct {
 	IterBlockReadLatencySum *metric.Counter
 }
 
-func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
+func makePebbleCategorizedIterMetrics(category sstable.Category) pebbleCategoryIterMetrics {
 	metaBlockBytes := metric.Metadata{
 		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.bytes", category),
 		Help:        "Bytes loaded by storage sstable iterators (possibly cached).",
@@ -4123,7 +4114,7 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategory
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	return &pebbleCategoryIterMetrics{
+	return pebbleCategoryIterMetrics{
 		IterBlockBytes:          metric.NewCounter(metaBlockBytes),
 		IterBlockBytesInCache:   metric.NewCounter(metaBlockBytesInCache),
 		IterBlockReadLatencySum: metric.NewCounter(metaBlockReadLatencySum),
@@ -4140,22 +4131,28 @@ func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 }
 
 type pebbleCategoryIterMetricsContainer struct {
-	registry   *metric.Registry
-	metricsMap syncutil.Map[sstable.Category, pebbleCategoryIterMetrics]
+	registry *metric.Registry
+	// metrics slice for all categories; can be directly indexed by sstable.Category.
+	metrics []pebbleCategoryIterMetrics
+}
+
+func (m *pebbleCategoryIterMetricsContainer) init(registry *metric.Registry) {
+	m.registry = registry
+	categories := sstable.Categories()
+	m.metrics = make([]pebbleCategoryIterMetrics, len(categories))
+	for _, c := range categories {
+		m.metrics[c] = makePebbleCategorizedIterMetrics(c)
+	}
 }
 
 func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStatsAggregate) {
 	for _, s := range stats {
-		cm, ok := m.metricsMap.Load(s.Category)
-		if !ok {
-			cm, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
-			if !ok {
-				m.registry.AddMetricStruct(cm)
-			}
-		}
-		cm.update(s.CategoryStats)
+		m.metrics[s.Category].update(s.CategoryStats)
 	}
 }
+
+// MetricStruct implements metrics.Struct.
+func (m *pebbleCategoryIterMetricsContainer) MetricStruct() {}
 
 type pebbleCategoryDiskWriteMetrics struct {
 	BytesWritten *metric.Counter
