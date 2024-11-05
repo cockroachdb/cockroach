@@ -1069,7 +1069,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		// Leadership changes, if any, are communicated through MsgStorageAppends.
 		// Check if that's the case here.
-		if app.Lead != raft.None && leaderID != roachpb.ReplicaID(app.Lead) {
+		if hs := app.HardState(); !raft.IsEmptyHardState(hs) && leaderID != roachpb.ReplicaID(hs.Lead) {
 			// Refresh pending commands if the Raft leader has changed. This is
 			// usually the first indication we have of a new leader on a restarted
 			// node.
@@ -1079,12 +1079,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// indicating a newly elected leader or a conf change. Replay protection
 			// prevents any corruption, so the waste is only a performance issue.
 			if log.V(3) {
-				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, app.Lead)
+				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, hs.Lead)
 			}
 			if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
 				refreshReason = reasonNewLeader
 			}
-			leaderID = roachpb.ReplicaID(app.Lead)
+			leaderID = roachpb.ReplicaID(hs.Lead)
 		}
 
 		if app.Snapshot != nil {
