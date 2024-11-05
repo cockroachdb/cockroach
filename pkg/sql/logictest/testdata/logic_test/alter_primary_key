@@ -2046,3 +2046,22 @@ CREATE TABLE public.table_w0_66 (
 )
 
 subtest end
+
+subtest multiple_operations
+
+statement ok
+CREATE TABLE public.table_w1_14 (i int not null);
+
+# statement error ALTER PRIMARY KEY cannot be combined with other ALTER TABLE commands
+# ALTER TABLE public.table_w1_14 ADD COLUMN col_w1_14_w1_122 BOX2D NULL UNIQUE, ALTER PRIMARY KEY USING COLUMNS (i) USING HASH;
+
+statement ok
+BEGIN
+
+statement error ALTER PRIMARY KEY cannot be used inside a multi-statement transaction
+ALTER TABLE public.table_w1_14 ALTER PRIMARY KEY USING COLUMNS (i) USING HASH;
+
+statement ok
+ROLLBACK
+
+subtest end

@@ -94,6 +94,11 @@ func (s *TestState) Statements() []string {
 	return s.statements
 }
 
+// EvalCtx implements the scbuild.Dependencies interface.
+func (s *TestState) EvalCtx() *eval.Context {
+	return s.evalCtx
+}
+
 // SemaCtx implements the scbuild.Dependencies interface.
 func (s *TestState) SemaCtx() *tree.SemaContext {
 	return s.semaCtx

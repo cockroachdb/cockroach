@@ -53,6 +53,11 @@ func (p *planner) AlterPrimaryKey(
 	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
+	if !p.EvalContext().TxnIsSingleStmt {
+		return pgerror.Newf(pgcode.InvalidTransactionState,
+			"ALTER PRIMARY KEY cannot be used inside a multi-statement transaction")
+	}
+
 	if err := paramparse.ValidateUniqueConstraintParams(
 		alterPKNode.StorageParams,
 		paramparse.UniqueConstraintParamContext{

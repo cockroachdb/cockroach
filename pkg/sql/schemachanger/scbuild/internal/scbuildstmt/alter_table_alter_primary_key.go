@@ -57,6 +57,14 @@ type alterPrimaryKeySpec struct {
 func alterPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t alterPrimaryKeySpec,
 ) {
+	if !b.EvalCtx().TxnIsSingleStmt {
+		panic(pgerror.Newf(pgcode.InvalidTransactionState,
+			"ALTER PRIMARY KEY cannot be used inside a multi-statement transaction"))
+	}
+	if alterTable, ok := stmt.(*tree.AlterTable); ok && len(alterTable.Cmds) > 1 {
+		panic(pgerror.Newf(pgcode.InvalidTransactionState,
+			"ALTER PRIMARY KEY cannot be combined with other ALTER TABLE commands"))
+	}
 	// Panic on certain forbidden `ALTER PRIMARY KEY` cases (e.g. one of
 	// the new primary key column is a virtual column). See the comments
 	// for a full list of preconditions we check.

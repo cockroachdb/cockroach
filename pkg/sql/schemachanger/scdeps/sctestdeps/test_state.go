@@ -57,6 +57,7 @@ type TestState struct {
 	sessionData             sessiondata.SessionData
 	statements              []string
 	semaCtx                 *tree.SemaContext
+	evalCtx                 *eval.Context
 	testingKnobs            *scexec.TestingKnobs
 	jobs                    []jobs.Record
 	createdJobsInCurrentTxn []jobspb.JobID
