@@ -107,6 +107,7 @@ var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry
 
 var leases = []registry.LeaseType{
 	registry.EpochLeases,
+	registry.LeaderLeases,
 	registry.ExpirationLeases,
 }
 
