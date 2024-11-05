@@ -1774,6 +1774,14 @@ func retrieveColumnNotNull(
 		MustGetZeroOrOneElement()
 }
 
+func retrieveColumnComment(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnComment {
+	return b.QueryByID(tableID).FilterColumnComment().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComment) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
 // mustRetrievePartitioningFromIndexPartitioning retrieves the partitioning
 // from the index partitioning element associated with the given tableID
 // and indexID.

@@ -25,7 +25,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+), Usage: ALTER_TYPE_USING}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
@@ -33,7 +33,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnFamilyOrderFollowsColumnID":2,"ColumnID":3,"IsNullable":true,"TableID":104}}
- │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104,"Usage":1}}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
@@ -64,7 +64,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
- │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+), Usage: ALTER_TYPE_USING}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
  │    │    │    └── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
@@ -87,7 +87,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+), Usage: ALTER_TYPE_USING}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 2 (t_pkey~)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}
@@ -95,7 +95,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"PgAttributeNum":2,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":104}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnFamilyOrderFollowsColumnID":2,"ColumnID":3,"IsNullable":true,"TableID":104}}
- │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":104,"Usage":1}}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j_shadow","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
@@ -239,7 +239,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-j_shadow~), IndexID: 3}
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 2 (t_pkey~)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j+), Usage: ALTER_TYPE_USING}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 3}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j+), IndexID: 5}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT ColumnName:{DescID: 104 (t), Name: "j_shadow", ColumnID: 2 (j-j_shadow~)}

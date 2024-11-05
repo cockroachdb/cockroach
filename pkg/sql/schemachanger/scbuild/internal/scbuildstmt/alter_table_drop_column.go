@@ -6,6 +6,9 @@
 package scbuildstmt
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -500,10 +503,10 @@ func dropIndexColumnFromInternal(
 
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
 	if stillPublic := colElts.Filter(publicTargetFilter); !stillPublic.IsEmpty() {
-		var elements []scpb.Element
+		var sb strings.Builder
 		stillPublic.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			elements = append(elements, e)
+			sb.WriteString(fmt.Sprintf("%T[%v]", e, e))
 		})
-		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %v", elements))
+		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %s", sb.String()))
 	}
 }

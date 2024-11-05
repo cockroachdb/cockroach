@@ -646,7 +646,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 - from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: unique_rowid()}, ABSENT]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence

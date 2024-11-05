@@ -3521,7 +3521,7 @@ DROP DATABASE db1 CASCADE
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108], Expr: nextval(108:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108], Expr: nextval(108:::REGCLASS)}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -3533,7 +3533,7 @@ DROP DATABASE db1 CASCADE
 - from: [ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT]
   to:   [Table:{DescID: 110}, ABSENT]
   kind: Precedence

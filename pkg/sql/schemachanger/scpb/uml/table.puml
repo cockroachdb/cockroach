@@ -43,6 +43,7 @@ object ColumnComputeExpression
 ColumnComputeExpression :  TableID
 ColumnComputeExpression :  ColumnID
 ColumnComputeExpression :  Expression
+ColumnComputeExpression :  Usage
 
 object ColumnDefaultExpression
 

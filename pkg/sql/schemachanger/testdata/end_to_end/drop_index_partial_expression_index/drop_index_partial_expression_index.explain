@@ -55,7 +55,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 5 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
-           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
+           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), Usage: REGULAR}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_idx_expr-), TypeName: "STRING"}
            │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
