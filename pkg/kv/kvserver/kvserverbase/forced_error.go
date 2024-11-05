@@ -256,6 +256,9 @@ func CheckForcedErr(
 			ForcedError: kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
 				Timestamp: wts,
 				Threshold: *replicaState.GCThreshold,
+				RangeID:   replicaState.Desc.RangeID,
+				StartKey:  replicaState.Desc.StartKey.AsRawKey(),
+				EndKey:    replicaState.Desc.EndKey.AsRawKey(),
 			}),
 		}
 	}

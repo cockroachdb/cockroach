@@ -282,7 +282,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &BatchTimestampBeforeGCError{},
-			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0",
+			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: ‹/Min›)",
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},
