@@ -163,6 +163,7 @@ go_library(
         "//pkg/util/pretty",
         "//pkg/util/stringencoding",
         "//pkg/util/syncutil",
+        "//pkg/util/system",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
