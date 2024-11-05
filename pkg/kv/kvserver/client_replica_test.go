@@ -4925,31 +4925,35 @@ func TestRangeMigration(t *testing.T) {
 	assertVersion(endV)
 }
 
-func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
+// setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB sets up a DB that
+// contains writes at keys a and b.
+//
+// The tests that use this helper are highly sensitive to latches that are
+// still active on the keys written here. We disable CanAckBeforeReplication
+// and write them via 1PC to ensure that latches are fully released and there
+// no errant intent resolutions or anything of the kind is inflight by the time
+// this method returns.
+//
+// See: https://github.com/cockroachdb/cockroach/pull/131071#issuecomment-2449439120.
+func setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(
+	t *testing.T,
+) (serverutils.TestServerInterface, *kv.DB) {
 	ctx := context.Background()
 	args := base.TestServerArgs{}
+	args.Knobs.Store = &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true}
 	s, _, db := serverutils.StartServer(t, args)
-
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		defer func() {
 			if err != nil {
 				t.Log(err)
 			}
 		}()
-		if err := txn.Put(ctx, "a", "a"); err != nil {
-			return err
-		}
-		if err := txn.Put(ctx, "b", "b"); err != nil {
-			return err
-		}
-		return txn.Commit(ctx)
+		b := txn.NewBatch()
+		b.Put("a", "a")
+		b.Put("b", "b")
+		return txn.CommitInBatch(ctx, b)
 	}))
-	tup, err := db.Get(ctx, "a")
-	require.NoError(t, err)
-	require.NotNil(t, tup.Value)
-	tup, err = db.Get(ctx, "b")
-	require.NoError(t, err)
-	require.NotNil(t, tup.Value)
+
 	return s, db
 }
 
@@ -4963,7 +4967,7 @@ func TestNonTransactionalLockingRequestsConflictWithReplicatedLocks(t *testing.T
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db := setupDBAndWriteAAndB(t)
+	s, db := setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
@@ -5181,7 +5185,7 @@ func TestSharedLocksBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db := setupDBAndWriteAAndB(t)
+	s, db := setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
 	testutils.RunTrueAndFalse(t, "guaranteed-durability", func(t *testing.T, guaranteedDurability bool) {
@@ -5243,7 +5247,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db := setupDBAndWriteAAndB(t)
+	s, db := setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
@@ -5299,7 +5303,7 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	s, db := setupDBAndWriteAAndB(t)
+	s, db := setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
@@ -5340,7 +5344,7 @@ func TestOptimisticEvalWithConcurrentWriters(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db := setupDBAndWriteAAndB(t)
+	s, db := setupDBWithDisableCanAckBeforeApplicationAndWriteAAndB(t)
 	defer s.Stopper().Stop(ctx)
 
 	finish := make(chan struct{})
