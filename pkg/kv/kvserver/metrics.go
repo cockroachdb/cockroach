@@ -798,6 +798,18 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaStorageCompactionsCancelledCount = metric.Metadata{
+		Name:        "storage.compactions.cancelled.count",
+		Help:        `Cumulative count of compactions that were cancelled before they completed due to a conflicting operation.`,
+		Measurement: "Compactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaStorageCompactionsCancelledBytes = metric.Metadata{
+		Name:        "storage.compactions.cancelled.bytes",
+		Help:        `Cumulative volume of data written to sstables during compactions that were ultimately cancelled due to a conflicting operation.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	metaStorageSingleDelInvariantViolationCount = metric.Metadata{
 		Name:        "storage.single-delete.invariant-violation",
@@ -2686,6 +2698,8 @@ type StoreMetrics struct {
 	SecondaryCacheWriteBackFails      *metric.Counter
 	StorageCompactionsPinnedKeys      *metric.Counter
 	StorageCompactionsPinnedBytes     *metric.Counter
+	StorageCompactionsCancelledCount  *metric.Counter
+	StorageCompactionsCancelledBytes  *metric.Counter
 	StorageCompactionsDuration        *metric.Counter
 	StorageWriteAmplification         *metric.GaugeFloat64
 	IterBlockBytes                    *metric.Counter
@@ -3409,6 +3423,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SecondaryCacheWriteBackFails:      metric.NewCounter(metaSecondaryCacheWriteBackFailures),
 		StorageCompactionsPinnedKeys:      metric.NewCounter(metaStorageCompactionsKeysPinnedCount),
 		StorageCompactionsPinnedBytes:     metric.NewCounter(metaStorageCompactionsKeysPinnedBytes),
+		StorageCompactionsCancelledCount:  metric.NewCounter(metaStorageCompactionsCancelledCount),
+		StorageCompactionsCancelledBytes:  metric.NewCounter(metaStorageCompactionsCancelledBytes),
 		StorageCompactionsDuration:        metric.NewCounter(metaStorageCompactionsDuration),
 		StorageWriteAmplification:         metric.NewGaugeFloat64(metaStorageWriteAmplification),
 		FlushableIngestCount:              metric.NewCounter(metaFlushableIngestCount),
@@ -3837,6 +3853,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.IterInternalSteps.Update(int64(m.Iterator.InternalSteps))
 	sm.StorageCompactionsPinnedKeys.Update(int64(m.Snapshots.PinnedKeys))
 	sm.StorageCompactionsPinnedBytes.Update(int64(m.Snapshots.PinnedSize))
+	sm.StorageCompactionsCancelledCount.Update(m.Compact.CancelledCount)
+	sm.StorageCompactionsCancelledBytes.Update(m.Compact.CancelledBytes)
 	sm.StorageCompactionsDuration.Update(int64(m.Compact.Duration))
 	sm.SingleDelInvariantViolations.Update(m.SingleDelInvariantViolationCount)
 	sm.SingleDelIneffectualCount.Update(m.SingleDelIneffectualCount)
