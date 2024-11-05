@@ -46,4 +46,6 @@ var activeRecordBlocklist = blocklist{
 	`TimestampTest#test_saving_an_unchanged_record_with_a_non_mutating_before_update_callback_does_not_update_its_timestamp`: "unknown",
 }
 
-var activeRecordIgnoreList = blocklist{}
+var activeRecordIgnoreList = blocklist{
+	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`: "pg_terminate_backend not implemented",
+}
