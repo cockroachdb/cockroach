@@ -9361,7 +9361,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				}
 				return 0
 			}
-			flushFull, flushReady, flushCheckpoint := s.Flushes.Full, s.Flushes.Ready, s.Flushes.Checkpoints
+			flushFull, flushReady, flushCheckpoint := s.Flushes.Full, s.Flushes.Ready, s.Flushes.Forced
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(s.StreamID)),                                              // stream_id
