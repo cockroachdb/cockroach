@@ -30,6 +30,9 @@ import (
 // kvcoord and kvserver. These add significant overheads and can be explored
 // using `pkg/sql/tests.BenchmarkKV`.
 func BenchmarkReplicaProposal(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
 	const kb = 1 << 10
 	const mb = kb * kb
 	for _, bytes := range []int64{
@@ -50,8 +53,6 @@ func BenchmarkReplicaProposal(b *testing.B) {
 }
 
 func runBenchmarkReplicaProposal(b *testing.B, bytes int64, withFollower bool) {
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	nodes := 1
