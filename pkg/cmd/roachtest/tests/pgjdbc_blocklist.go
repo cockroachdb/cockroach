@@ -808,7 +808,7 @@ var pgjdbcIgnoreList = blocklist{
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testTruncatedUTF8Decode":                                                                        "54477",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testUTF8Decode":                                                                                 "54477",
 	"org.postgresql.test.jdbc2.DatabaseMetaDataCacheTest.testGetTypeInfoUsesCache":                                                                  "https://github.com/cockroachdb/cockroach/issues/119332#issuecomment-1950242848",
-	"org.postgresql.test.jdbc2.StatementTest.testShortQueryTimeout":                                                                                 "flaky",
+	"org.postgresql.test.jdbc2.StatementTest.shortQueryTimeout":                                                                                     "flaky",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyNotVisibilityTableInsideFunction":                                         "https://github.com/pgjdbc/pgjdbc/pull/2806",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyVisibilityFunction":                                                       "https://github.com/pgjdbc/pgjdbc/pull/2806",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testCurrentSchemaPropertyVisibilityTableDuringFunctionCreation":                                    "https://github.com/pgjdbc/pgjdbc/pull/2806",
