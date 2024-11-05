@@ -562,6 +562,13 @@ func maybeLookupRoutine(
 		return nil, nil
 	}
 
+	db := sr.CurrentDatabase()
+	// The database is empty for queries run in the internal executor. None of
+	// the lookups below will succeed, so we can return early.
+	if db == "" {
+		return nil, nil
+	}
+
 	if fn.ExplicitSchema && fn.Schema() != catconstants.CRDBInternalSchemaName {
 		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fn.Schema())
 		if err != nil {
