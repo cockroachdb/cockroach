@@ -1727,30 +1727,32 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		// TODO(msbutler): disconnect nodes during a random phase
 		require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
 		sleepBeforeResiliencyEvent(rd, phaseSteadyState)
-
-		srcNode := rd.setup.src.nodes.RandNode()[0]
-		srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
-
-		var dstNode int
-		srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
-
-		disconnectDuration := sp.additionalDuration
-		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
-			dstNode, disconnectDuration.Minutes())
-
-		// Normally, the blackholeFailer is accessed through the failer interface,
-		// at least in the failover tests. Because this test shouldn't use all the
-		// failer interface calls (e.g. Setup(), and Ready()), we use the
-		// blakholeFailer struct directly. In other words, in this test, we
-		// shouldn't treat the blackholeFailer as an abstracted api.
-		blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
-		blackholeFailer.FailPartial(ctx, srcNode, []int{dstNode})
-
-		time.Sleep(disconnectDuration)
-		// Calling this will log the latest topology.
-		blackholeFailer.Cleanup(ctx)
-		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
+		partitionPair(ctx, c, t, rd.setup.src.nodes, sp.additionalDuration)
 	})
+}
+
+func partitionPair(ctx context.Context, c cluster.Cluster, t test.Test, srcNodes option.NodeListOption, disconnectDuration time.Duration) {
+	srcNode := srcNodes.RandNode()[0]
+	srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
+
+	var dstNode int
+	srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
+
+	t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
+		dstNode, disconnectDuration.Minutes())
+
+	// Normally, the blackholeFailer is accessed through the failer interface,
+	// at least in the failover tests. Because this test shouldn't use all the
+	// failer interface calls (e.g. Setup(), and Ready()), we use the
+	// blakholeFailer struct directly. In other words, in this test, we
+	// shouldn't treat the blackholeFailer as an abstracted api.
+	blackholeFailer := &blackholeFailer{t: t, c: c, input: true, output: true}
+	blackholeFailer.FailPartial(ctx, srcNode, []int{dstNode})
+
+	time.Sleep(disconnectDuration)
+	// Calling this will log the latest topology.
+	blackholeFailer.Cleanup(ctx)
+	t.L().Printf("Nodes reconnected. Replication Job should eventually complete")
 }
 
 func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName string) int {
