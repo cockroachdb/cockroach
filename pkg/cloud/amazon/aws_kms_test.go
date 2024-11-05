@@ -98,8 +98,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
 		ctx := context.Background()
-		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		cfg, err := config.LoadDefaultConfig(ctx)
 		require.NoError(t, err)
 		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
@@ -430,4 +429,49 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: sts:AssumeRole|InvalidCiphertext)")
 	})
 
+}
+
+func TestAWSKMSImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Tests if the AWS KMS client can be created when the shared config files
+	// are not present, but are present through the rest of the credential/config
+	// chain as specified in https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-authentication.html#cli-chap-authentication-precedence
+
+	// If either KMS region or key ARN is not set, we can assume we are not
+	// running in the nightly test environment and can skip.
+	kmsRegion := os.Getenv("AWS_KMS_REGION")
+	if kmsRegion == "" {
+		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
+	}
+	keyID := os.Getenv("AWS_KMS_KEY_ARN")
+	if keyID == "" {
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+	}
+
+	// Setup a bogus credentials/configs file so that we can simulate a non-existent
+	// shared config file. The test environment is already setup with the
+	// default config/credential files at ~/.aws/config and ~/.aws/credentials,
+	// so in order to circumvent this and test the case where the shared config
+	// files are not present, we need to set the AWS_CONFIG_FILE and
+	// AWS_SHARED_CREDENTIALS_FILE.
+	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
+	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
+		"/tmp/credentials"))
+	defer func() {
+		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+	}()
+
+	testEnv := &cloud.TestKMSEnv{
+		Settings:         awsKMSTestSettings,
+		ExternalIOConfig: &base.ExternalIODirConfig{},
+	}
+
+	params := make(url.Values)
+	params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	params.Add(KMSRegionParam, kmsRegion)
+
+	uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
+	_, err := MakeAWSKMS(context.Background(), uri, testEnv)
+	require.NoError(t, err)
 }
