@@ -915,7 +915,7 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
 	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PlanLogicalReplication(

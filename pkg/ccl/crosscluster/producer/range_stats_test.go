@@ -77,6 +77,7 @@ func TestNewPoller(t *testing.T) {
 		ranges        []string
 		tracked       []string
 		completed     []string
+		lagging       []string
 		expectedStats streampb.StreamEvent_RangeStats
 	}
 	tests := []testCase{
@@ -119,6 +120,19 @@ func TestNewPoller(t *testing.T) {
 				ScanningRangeCount: 2,
 			},
 		},
+		{
+			name:      "lagging",
+			ranges:    []string{"a,b", "c,d", "e,f"},
+			tracked:   []string{"a,b", "c,d", "e,f"},
+			completed: []string{"a,b"},
+			lagging:   []string{"c,d"},
+
+			expectedStats: streampb.StreamEvent_RangeStats{
+				RangeCount:         3,
+				ScanningRangeCount: 1,
+				LaggingRangeCount:  1,
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,6 +148,12 @@ func TestNewPoller(t *testing.T) {
 			for _, span := range tc.completed {
 				_, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
 					WallTime: time.Now().UnixNano(),
+				})
+				require.NoError(t, err)
+			}
+			for _, span := range tc.lagging {
+				_, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
+					WallTime: time.Now().Add(-laggingSpanThreshold * 2).UnixNano(),
 				})
 				require.NoError(t, err)
 			}

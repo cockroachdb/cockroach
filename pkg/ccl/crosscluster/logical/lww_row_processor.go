@@ -588,9 +588,9 @@ VALUES (%s)
 ON CONFLICT (%s)
 DO UPDATE SET
 %s
-WHERE (t.crdb_internal_mvcc_timestamp <= $%[6]d
+WHERE (t.crdb_internal_mvcc_timestamp < $%[6]d
     AND t.crdb_internal_origin_timestamp IS NULL)
- OR (t.crdb_internal_origin_timestamp <= $%[6]d
+ OR (t.crdb_internal_origin_timestamp < $%[6]d
  	AND t.crdb_internal_origin_timestamp IS NOT NULL)`
 )
 

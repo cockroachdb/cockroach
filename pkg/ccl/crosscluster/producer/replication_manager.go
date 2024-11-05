@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -172,6 +173,20 @@ func getUDTs(
 	return typeDescriptors, nil, nil
 }
 
+var useStreaksInLDR = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.group_adjacent_spans.enabled",
+	"controls whether to attempt adjacent spans in the same stream",
+	false,
+)
+
+var ldrProcCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.ingest_processor_parallelism",
+	"target number of stream partitions per source node",
+	1,
+)
+
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (*streampb.ReplicationStreamSpec, error) {
@@ -199,7 +214,9 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 			return nil, err
 		}
 	}
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
+
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans,
+		int(ldrProcCount.Get(&r.evalCtx.Settings.SV)), useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +296,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 
 func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	ctx context.Context,
-) []*streampb.DebugProducerStatus {
+) []streampb.DebugProducerStatus {
 	// NB: we don't check license here since if a stream started but the license
 	// expired or was removed, we still want visibility into it during debugging.
 

@@ -8,6 +8,8 @@ package logical
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"runtime/pprof"
 	"slices"
 	"time"
 
@@ -57,6 +59,29 @@ var flushBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var writerWorkers = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_worker_per_proc",
+	"the maximum number of workers per processor to use to flush each batch",
+	128,
+	settings.NonNegativeInt,
+)
+
+var minChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_min_size",
+	"minimum number of row updates to pass to a flush worker at once",
+	64,
+	settings.NonNegativeInt,
+)
+var maxChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.flush_chunk_max_size",
+	"maximum number of row updates to pass to a flush worker at once (repeated revisions of a row notwithstanding)",
+	1000,
+	settings.NonNegativeInt,
+)
+
 // logicalReplicationWriterProcessor consumes a cross-cluster replication stream
 // by decoding kvs in it to logical changes and applying them by executing DMLs.
 type logicalReplicationWriterProcessor struct {
@@ -64,7 +89,10 @@ type logicalReplicationWriterProcessor struct {
 
 	spec execinfrapb.LogicalReplicationWriterSpec
 
-	bh []BatchHandler
+	bh      []BatchHandler
+	bhStats []flushStats
+
+	configByTable map[descpb.ID]sqlProcessorTableConfig
 
 	getBatchSize func() int
 
@@ -98,6 +126,10 @@ type logicalReplicationWriterProcessor struct {
 	dlqClient DeadLetterQueueClient
 
 	purgatory purgatory
+
+	seenKeys  map[uint64]int64
+	dupeCount int64
+	seenEvery log.EveryN
 }
 
 var (
@@ -106,6 +138,13 @@ var (
 )
 
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
+
+var batchSizeSetting = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"logical_replication.stream_batch_size",
+	"target batch size for logical replication stream",
+	16<<20,
+)
 
 func newLogicalReplicationWriterProcessor(
 	ctx context.Context,
@@ -138,42 +177,6 @@ func newLogicalReplicationWriterProcessor(
 			tableID:  descpb.ID(dstTableID),
 		}
 	}
-	bhPool := make([]BatchHandler, maxWriterWorkers)
-	for i := range bhPool {
-		var rp RowProcessor
-		var err error
-		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, procConfigByDestTableID)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			rp, err = makeSQLProcessor(
-				ctx, flowCtx.Cfg.Settings, procConfigByDestTableID,
-				jobspb.JobID(spec.JobID),
-				// Initialize the executor with a fresh session data - this will
-				// avoid creating a new copy on each executor usage.
-				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-			if streamingKnobs != nil && streamingKnobs.FailureRate != 0 {
-				rp.SetSyntheticFailurePercent(streamingKnobs.FailureRate)
-			}
-		}
-
-		bhPool[i] = &txnBatch{
-			db:       flowCtx.Cfg.DB,
-			rp:       rp,
-			settings: flowCtx.Cfg.Settings,
-			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
-			spec:     spec,
-		}
-	}
 
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
@@ -185,7 +188,8 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	lrw := &logicalReplicationWriterProcessor{
-		spec: spec,
+		configByTable: procConfigByDestTableID,
+		spec:          spec,
 		getBatchSize: func() int {
 			// TODO(ssd): We set this to 1 since putting more than 1
 			// row in a KV batch using the new ConditionalPut-based
@@ -217,7 +221,6 @@ func newLogicalReplicationWriterProcessor(
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 		},
-		bh:             bhPool,
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
 		checkpointCh:   make(chan []jobspb.ResolvedSpan),
@@ -229,6 +232,7 @@ func newLogicalReplicationWriterProcessor(
 		},
 		dlqClient: InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
+		seenEvery: log.Every(1 * time.Minute),
 	}
 	lrw.purgatory = purgatory{
 		deadline:    func() time.Duration { return retryQueueAgeLimit.Get(&flowCtx.Cfg.Settings.SV) },
@@ -315,6 +319,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 			lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes ||
 				lrw.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes),
 		streamclient.WithDiff(true),
+		streamclient.WithBatchSize(batchSizeSetting.Get(&lrw.FlowCtx.Cfg.Settings.SV)),
 	)
 	if err != nil {
 		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))
@@ -336,10 +341,12 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
-		if err := lrw.consumeEvents(ctx); err != nil {
-			log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
-			lrw.sendError(errors.Wrap(err, "consume events"))
-		}
+		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", lrw.ProcessorID)), func(ctx context.Context) {
+			if err := lrw.consumeEvents(ctx); err != nil {
+				log.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
+				lrw.sendError(errors.Wrap(err, "consume events"))
+			}
+		})
 		return nil
 	})
 }
@@ -595,7 +602,60 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 	return remaining[:j]
 }
 
-const maxWriterWorkers = 32
+func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Context) error {
+	if lrw.FlowCtx == nil {
+		return nil
+	}
+
+	poolSize := writerWorkers.Get(&lrw.FlowCtx.Cfg.Settings.SV)
+
+	if len(lrw.bh) >= int(poolSize) {
+		return nil
+	}
+
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
+	}
+
+	flowCtx := lrw.FlowCtx
+	lrw.bh = make([]BatchHandler, poolSize)
+	for i := range lrw.bh {
+		var rp RowProcessor
+		var err error
+		if lrw.spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, lrw.configByTable)
+			if err != nil {
+				return err
+			}
+		} else {
+			rp, err = makeSQLProcessor(
+				ctx, flowCtx.Cfg.Settings, lrw.configByTable,
+				jobspb.JobID(lrw.spec.JobID),
+				// Initialize the executor with a fresh session data - this will
+				// avoid creating a new copy on each executor usage.
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.FailureRate != 0 {
+				rp.SetSyntheticFailurePercent(streamingKnobs.FailureRate)
+			}
+		}
+
+		lrw.bh[i] = &txnBatch{
+			db:       flowCtx.Cfg.DB,
+			rp:       rp,
+			settings: flowCtx.Cfg.Settings,
+			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
+			spec:     lrw.spec,
+		}
+	}
+	return nil
+}
 
 // flushBuffer processes some or all of the events in the passed buffer, and
 // zeros out each event in the passed buffer for which it successfully completed
@@ -613,6 +673,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	if len(kvs) == 0 {
 		return nil, 0, nil
+	}
+
+	if err := lrw.setupBatchHandlers(ctx); err != nil {
+		return kvs, int64(len(kvs)), err
 	}
 
 	preFlushTime := timeutil.Now()
@@ -649,43 +713,84 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	const minChunkSize = 64
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+	// If the seen map is nil or has hit 2M items, reset it.
+	if lrw.seenKeys == nil || len(lrw.seenKeys) > 2<<20 {
+		lrw.seenKeys = make(map[uint64]int64, 2<<20)
+	}
 
-	perChunkStats := make([]flushStats, len(lrw.bh))
+	h := fnv.New64a()
+	logged := false
+	for i := range kvs {
+		h.Reset()
+		_, _ = h.Write(kvs[i].KeyValue.Key)
+		hashed := h.Sum64() + uint64(kvs[i].KeyValue.Value.Timestamp.WallTime)
+		c := lrw.seenKeys[hashed]
+		lrw.seenKeys[hashed] = c + 1
 
-	todo := kvs
-	g := ctxgroup.WithContext(ctx)
-	for worker := range lrw.bh {
-		if len(todo) == 0 {
-			break
-		}
-		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkSize, len(todo))
-		for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
-			chunkEnd++
-		}
-		chunk := todo[0:chunkEnd]
-		todo = todo[len(chunk):]
-		bh := lrw.bh[worker]
-
-		if err := ctx.Err(); err != nil {
-			// Bail early if ctx is canceled. NB: we break rather than return the err
-			// now since we still need to Wait() to avoid leaking a goroutine. We will
-			// re-check for any ctx errors after the Wait() in case all workers had
-			// completed without error as of this break.
-			break
-		}
-
-		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
-			if err != nil {
-				return err
+		if c > 0 {
+			lrw.dupeCount++
+			if !logged && lrw.seenEvery.ShouldLog() {
+				logged = true // don't check ShouldLog again for rest of loop.
+				log.Infof(ctx, "duplicate delivery of key %s@%d (%d prior times); %d total recent dupes.",
+					kvs[i].KeyValue.Key, kvs[i].KeyValue.Value.Timestamp.WallTime, c, lrw.dupeCount)
 			}
-			perChunkStats[worker] = s
+		}
+	}
+
+	// Aim for a chunk size that gives each worker at least 4 chunks to do so that
+	// if it takes longer to process some keys in a chunk, the other 3/4 can be
+	// stolen by other workers. That said, we don't want tiny chunks that are more
+	// channel overhead than work, nor giant chunks, so bound it by the settings.
+	minChunk, maxChunk := minChunkSize.Default(), maxChunkSize.Default()
+	if lrw.FlowCtx != nil {
+		minChunk, maxChunk = minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV), maxChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
+	}
+	chunkSize := min(max(len(kvs)/(len(lrw.bh)*4), int(minChunk)), int(maxChunk))
+
+	// Figure out how many workers we can utilize from the pool for the number of
+	// chunks we expect (we could use fewer if chunks overshoot size target due to
+	// key revisions).
+	requiredWorkers := max(1, min(len(kvs)/chunkSize, len(lrw.bh)))
+	if len(lrw.bhStats) < requiredWorkers {
+		lrw.bhStats = make([]flushStats, requiredWorkers)
+	}
+
+	// TODO(dt): consider keeping these goroutines running for lifetime of proc
+	// rather than starting new ones for each flush.
+	chunks := make(chan []streampb.StreamEvent_KV)
+	g := ctxgroup.WithContext(ctx)
+	for worker := range lrw.bh[:requiredWorkers] {
+		w := worker
+		lrw.bhStats[w] = flushStats{}
+		g.GoCtx(func(ctx context.Context) error {
+			for chunk := range chunks {
+				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
+				if err != nil {
+					return err
+				}
+				lrw.bhStats[w].Add(s)
+			}
 			return nil
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(chunks)
+		for todo := kvs; len(todo) > 0; {
+			// The chunk should end after the first new key after chunk size.
+			chunkEnd := min(chunkSize, len(todo))
+			for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
+				chunkEnd++
+			}
+			chunk := todo[0:chunkEnd]
+			select {
+			case chunks <- chunk:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			todo = todo[len(chunk):]
+		}
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return nil, 0, err
@@ -695,9 +800,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, 0, err
 	}
 
+	// Collect the stats from every (possibly run) worker.
 	var stats flushStats
-	for _, i := range perChunkStats {
-		stats.Add(i)
+	for i := range lrw.bhStats[:requiredWorkers] {
+		stats.Add(lrw.bhStats[i])
 	}
 
 	if stats.notProcessed.count > 0 {
@@ -778,6 +884,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
 ) (flushStats, error) {
 	batchSize := lrw.getBatchSize()
+
+	lrw.debug.RecordChunkStart()
+	defer lrw.debug.RecordChunkComplete()
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
@@ -1009,7 +1118,7 @@ func (t *txnBatch) HandleBatch(
 		if err != nil {
 			return stats, err
 		}
-		stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+		stats.Add(s)
 	} else {
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, kv := range batch {
@@ -1020,7 +1129,7 @@ func (t *txnBatch) HandleBatch(
 				if err != nil {
 					return err
 				}
-				stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+				stats.Add(s)
 			}
 			return nil
 		}, isql.WithSessionData(t.sd))
