@@ -308,6 +308,8 @@ message StreamReplicationDetails {
   // ExpirationWindow specifies the length of time a producer job will stay
   // alive without a heartbeat from the consumer job.
   int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
+
+  repeated uint32 table_ids = 5 [(gogoproto.customname) = "TableIDs"];
 }
 
 message StreamReplicationProgress {
