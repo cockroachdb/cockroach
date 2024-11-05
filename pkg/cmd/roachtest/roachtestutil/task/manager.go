@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type (
@@ -33,12 +34,15 @@ type (
 	}
 
 	manager struct {
-		group     ctxgroup.Group
-		ctx       context.Context
-		logger    *logger.Logger
-		events    chan Event
-		id        atomic.Uint32
-		cancelFns []context.CancelFunc
+		group  ctxgroup.Group
+		ctx    context.Context
+		logger *logger.Logger
+		events chan Event
+		id     atomic.Uint32
+		mu     struct {
+			syncutil.Mutex
+			cancelFns []context.CancelFunc
+		}
 	}
 )
 
@@ -70,6 +74,10 @@ func (m *manager) defaultOptions() []Option {
 }
 
 func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
+	if IsContextCanceled(m.ctx) {
+		return func() {}
+	}
+
 	opt := CombineOptions(OptionList(m.defaultOptions()...), OptionList(opts...))
 	groupCtx, cancel := context.WithCancel(m.ctx)
 	var expectedContextCancellation bool
@@ -114,7 +122,9 @@ func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	}
 	// Collect all taskCancelFn(s) so that we can explicitly stop all tasks when
 	// the tasker is terminated.
-	m.cancelFns = append(m.cancelFns, taskCancelFn)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.cancelFns = append(m.mu.cancelFns, taskCancelFn)
 	return taskCancelFn
 }
 
@@ -125,9 +135,13 @@ func (m *manager) Go(fn Func, opts ...Option) {
 // Terminate will call the stop functions for every task started during the
 // test. Returns when all task functions have returned.
 func (m *manager) Terminate(l *logger.Logger) {
-	for _, cancel := range m.cancelFns {
-		cancel()
-	}
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for _, cancel := range m.mu.cancelFns {
+			cancel()
+		}
+	}()
 
 	doneCh := make(chan error)
 	go func() {

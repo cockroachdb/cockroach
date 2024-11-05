@@ -315,19 +315,21 @@ func TestRunnerTestTimeout(t *testing.T) {
 		cpuQuota:  1000,
 		debugMode: NoDebug,
 	}
-	numTasks := 3
+
+	var tasksStarted atomic.Uint32
 	var tasksDone atomic.Uint32
 	test := registry.TestSpec{
 		Name:             `timeout`,
 		Owner:            OwnerUnitTest,
-		Timeout:          10 * time.Millisecond,
+		Timeout:          100 * time.Millisecond,
 		Cluster:          spec.MakeClusterSpec(0),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			for i := 0; i < numTasks; i++ {
+			for i := 0; i < 3; i++ {
 				t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+					tasksStarted.Add(1)
 					defer func() {
 						tasksDone.Add(1)
 					}()
@@ -351,7 +353,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 
 	// Ensure tasks are also canceled.
-	require.Equal(t, uint32(numTasks), tasksDone.Load())
+	require.Equal(t, tasksStarted.Load(), tasksDone.Load())
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {

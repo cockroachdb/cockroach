@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/roachprod/logger",
         "//pkg/util/ctxgroup",
+        "//pkg/util/syncutil",
     ],
 )
 
