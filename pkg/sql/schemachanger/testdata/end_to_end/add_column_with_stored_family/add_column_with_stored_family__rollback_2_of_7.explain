@@ -42,7 +42,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnFamily:{DescID: 106 (tbl), Name: "bob", ColumnFamilyID: 1 (bob-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 1 (bob-), ColumnID: 3 (j-), TypeName: "INT8"}
-           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-)}
+           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-), Usage: REGULAR}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 3}

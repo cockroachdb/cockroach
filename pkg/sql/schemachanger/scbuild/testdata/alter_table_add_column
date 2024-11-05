@@ -132,7 +132,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {columnId: 2, name: a, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnComputeExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+- [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], ABSENT]
   {columnId: 2, expr: 'i + 1:::INT8', referencedColumnIds: [1], tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}

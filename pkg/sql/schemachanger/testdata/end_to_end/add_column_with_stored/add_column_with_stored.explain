@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 2 (tbl_pkey+)}
@@ -44,7 +44,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 2 (tbl_pkey+)}
@@ -62,7 +62,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 2 (tbl_pkey+)}

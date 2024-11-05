@@ -66,7 +66,7 @@ func init() {
 	)
 
 	registerDepRule(
-		"DEFAULT or ON UPDATE existence precedes writes to column",
+		"DEFAULT or ON UPDATE existence precedes writes to column, except if they are added as part of a alter column type",
 		scgraph.Precedence,
 		"expr", "column",
 		func(from, to NodeVars) rel.Clauses {
@@ -77,6 +77,7 @@ func init() {
 				),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
+				IsNotAlterColumnTypeOp("table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		},
@@ -105,6 +106,28 @@ func init() {
 		},
 	)
 
+	// A computed expression cannot have a DEFAULT or ON UPDATE expression.
+	// However, if the computed expression is temporary (e.g., for an ALTER COLUMN
+	// TYPE requiring a backfill), these expressions can be added once the
+	// computed expression is dropped.
+	registerDepRule(
+		"DEFAULT or ON UPDATE expressions is public after transient compute expression transitions to absent",
+		scgraph.SameStagePrecedence,
+		"transient-compute-expression", "column-expr",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnComputeExpression)(nil)),
+				to.Type(
+					(*scpb.ColumnDefaultExpression)(nil),
+					(*scpb.ColumnOnUpdateExpression)(nil),
+				),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				ToPublicOrTransient(from, to),
+				from.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
 }
 
 // This rule ensures that columns depend on each other in increasing order.

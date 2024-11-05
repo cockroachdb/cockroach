@@ -184,6 +184,7 @@ ElementState:
     expr: x'80':::@100104
     referencedColumnIds: []
     tableId: 108
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -195,6 +196,7 @@ ElementState:
     expr: x'80':::@100106
     referencedColumnIds: []
     tableId: 108
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -980,6 +982,7 @@ ElementState:
     expr: (3:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -989,6 +992,7 @@ ElementState:
     expr: (4:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -999,6 +1003,7 @@ ElementState:
     referencedColumnIds:
     - 2
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []

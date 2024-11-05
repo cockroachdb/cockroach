@@ -2465,7 +2465,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 - from: [ColumnDefaultExpression:{DescID: 107, ColumnID: 3, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -3476,7 +3476,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
 - from: [ColumnDefaultExpression:{DescID: 107, ColumnID: 4, Expr: [FUNCTION 100109](), ReferencedFunctionIDs: [109]}, ABSENT]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnName:{DescID: 107, Name: udfcol, ColumnID: 4}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4}, ABSENT]
   kind: Precedence

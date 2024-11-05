@@ -65,7 +65,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"column type dependents removed right before column type",
+		"column type dependents removed right before column type, except if part of a column type alteration ",
 		scgraph.SameStagePrecedence,
 		"dependent", "column-type",
 		func(from, to NodeVars) rel.Clauses {
@@ -73,6 +73,25 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
 				to.Type((*scpb.ColumnType)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
+				IsNotAlterColumnTypeOp("table-id", "col-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+			}
+		},
+	)
+
+	// This rule is similar to the previous one but relaxes SameStagePrecedence,
+	// allowing for planning in case the ALTER COLUMN .. TYPE needs to roll back
+	// (particularly when altering columns with DEFAULT or ON UPDATE expressions).
+	registerDepRule(
+		"during a column type alterations, column type dependents removed before column type",
+		scgraph.Precedence,
+		"dependent", "column-type",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
+				to.Type((*scpb.ColumnType)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				rel.And(IsAlterColumnTypeOp("table-id", "col-id")...),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
@@ -91,7 +110,7 @@ func init() {
 	// able to express the _absence_ of a target element as a query clause.
 	//
 	// Note that DEFAULT and ON UPDATE expressions are column-dependent elements
-	// which also hold references to other descriptors. The rule prior to this one
+	// which also hold references to other descriptors. The rules prior to this one
 	// ensures that they transition to ABSENT before scpb.ColumnType does.
 	registerDepRule(
 		"column type removed right before column when not dropping relation",
