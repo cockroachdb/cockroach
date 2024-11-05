@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // adoptedJobs represents the epoch and cancellation of a job id being run by
@@ -1617,8 +1618,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: resuming with non-nil error", job.ID())
 		}
-		resumeCtx := logtags.AddTag(ctx, "job",
-			fmt.Sprintf("%s id=%d", jobType, job.ID()))
+		resumeCtx := logtags.AddTag(ctx, "job", redact.Sprintf("%s id=%d", jobType, job.ID()))
 		// Adding all tags as pprof labels (including the one we just added for job
 		// type and id).
 		resumeCtx, undo := pprofutil.SetProfilerLabelsFromCtxTags(resumeCtx)
