@@ -145,7 +145,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			run: TestLDROnNodeShutdown,
 		},
 		{
-			name: "ldr/kv0/workload=both/network_partition",
+			name: "ldr/network_partition",
 			clusterSpec: multiClusterSpec{
 				leftNodes:  3,
 				rightNodes: 3,
@@ -534,29 +534,11 @@ func TestLDROnNetworkPartition(
 	// Let workload run for a bit before we kill a node
 	time.Sleep(ldrWorkload.workload.(replicateKV).debugRunDuration / 10)
 
-	failNodesLength := len(setup.CRDBNodes()) / 2
-	nodesToFail, err := setup.CRDBNodes().SeededRandList(setup.rng, failNodesLength)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We're not using the entire blackholeFailer setup, so break the interface contract and use this directly
-	blackholeFailer := &blackholeFailer{t: t, c: c, input: true, output: true}
-	disconnectDuration := ldrWorkload.workload.(replicateKV).debugRunDuration / 5
-	t.L().Printf("Disconnecting nodes %v", nodesToFail)
-	for _, nodeID := range nodesToFail {
-		blackholeFailer.FailPartial(ctx, nodeID, setup.CRDBNodes())
-	}
-
-	// Sleep while workload continues
-	t.L().Printf("Sleeping for %.2f minutes", disconnectDuration.Minutes())
-	time.Sleep(disconnectDuration)
-
-	// Re-enable
-	blackholeFailer.Cleanup(ctx)
-	t.L().Printf("Nodes reconnected. Waiting for workload to complete")
+	disconnectDuration := ldrWorkload.workload.(replicateKV).debugRunDuration / 3
+	partitionPair(ctx, c, t, setup.left.nodes, disconnectDuration)
 
 	monitor.Wait()
+	// VerifyCorrectness ensures the stream can catch up.
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
 }
 
