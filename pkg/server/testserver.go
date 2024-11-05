@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 )
@@ -1294,7 +1295,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 	// Helper function to execute SQL statements.
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
-	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+	execSQL := func(opName redact.RedactableString, stmt string, qargs ...interface{}) error {
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -332,7 +333,7 @@ func getSourceStatsInfo(
 		queryToGetClusterTotalRunTime := createQuery(table)
 		it, err := ie.QueryIteratorEx(
 			ctx,
-			fmt.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
+			redact.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
 			queryToGetClusterTotalRunTime, args...)
@@ -366,7 +367,7 @@ func getSourceStatsInfo(
 	getOldestDate := func(table string) (*time.Time, error) {
 		it, err := ie.QueryIteratorEx(
 			ctx,
-			fmt.Sprintf(`console-combined-stmts-%s-oldest_date`, table),
+			redact.Sprintf(`console-combined-stmts-%s-oldest_date`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(`
@@ -841,7 +842,7 @@ func getIterator(
 		whereClause,
 		aostClause,
 		orderAndLimit)
-	opName := fmt.Sprintf(`console-combined-stmts-%s`, queryInfo)
+	opName := redact.Sprintf(`console-combined-stmts-%s`, queryInfo)
 
 	it, err := ie.QueryIteratorEx(ctx, opName, nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)

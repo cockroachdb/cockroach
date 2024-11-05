@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // DropRoleNode deletes entries from the system.users table.
@@ -79,7 +80,7 @@ type objectAndType struct {
 }
 
 func (n *DropRoleNode) startExec(params runParams) error {
-	var opName string
+	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMDropCounter(sqltelemetry.Role)
 		opName = "drop-role"

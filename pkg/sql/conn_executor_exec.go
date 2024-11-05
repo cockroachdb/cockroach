@@ -2913,7 +2913,7 @@ func (ex *connExecutor) runShowCompletions(
 	} else {
 		ie = ex.server.cfg.InternalDB.Executor()
 	}
-	queryIterFn := func(ctx context.Context, opName string, stmt string, args ...interface{}) (eval.InternalRows, error) {
+	queryIterFn := func(ctx context.Context, opName redact.RedactableString, stmt string, args ...interface{}) (eval.InternalRows, error) {
 		return ie.QueryIteratorEx(ctx, opName, txn,
 			override,
 			stmt, args...)

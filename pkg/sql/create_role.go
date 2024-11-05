@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CreateRoleNode creates entries in the system.users table.
@@ -117,7 +118,7 @@ func (p *planner) CreateRoleNode(
 }
 
 func (n *CreateRoleNode) startExec(params runParams) error {
-	var opName string
+	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMCreateCounter(sqltelemetry.Role)
 		opName = "create-role"
@@ -197,7 +198,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 
 func updateRoleOptions(
 	params runParams,
-	opName string,
+	opName redact.RedactableString,
 	roleOptions roleoption.List,
 	roleName username.SQLUsername,
 	telemetryOp string,

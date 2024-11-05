@@ -7,7 +7,6 @@ package ttljob
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // QueryBounds stores the start and end bounds for the SELECT query that the
@@ -61,7 +61,7 @@ type SelectQueryParams struct {
 // portion of the TTL job.
 type SelectQueryBuilder struct {
 	SelectQueryParams
-	selectOpName string
+	selectOpName redact.RedactableString
 	// isFirst is true if we have not invoked a query using the builder yet.
 	isFirst bool
 	// cachedQuery is the cached query, which stays the same from the second
@@ -93,7 +93,7 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 
 	return SelectQueryBuilder{
 		SelectQueryParams: params,
-		selectOpName:      fmt.Sprintf("ttl select %s", params.RelationName),
+		selectOpName:      redact.Sprintf("ttl select %s", params.RelationName),
 		cachedArgs:        cachedArgs,
 		isFirst:           true,
 	}
@@ -190,7 +190,7 @@ type DeleteQueryParams struct {
 // portion of the TTL job.
 type DeleteQueryBuilder struct {
 	DeleteQueryParams
-	deleteOpName string
+	deleteOpName redact.RedactableString
 	// cachedQuery is the cached query, which stays the same as long as we are
 	// deleting up to DeleteBatchSize elements.
 	cachedQuery string
@@ -208,7 +208,7 @@ func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQu
 
 	return DeleteQueryBuilder{
 		DeleteQueryParams: params,
-		deleteOpName:      fmt.Sprintf("ttl delete %s", params.RelationName),
+		deleteOpName:      redact.Sprintf("ttl delete %s", params.RelationName),
 		cachedArgs:        cachedArgs,
 	}
 }

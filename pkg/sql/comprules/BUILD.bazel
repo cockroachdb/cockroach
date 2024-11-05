@@ -24,5 +24,6 @@ go_test(
         "//pkg/sql/compengine",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
