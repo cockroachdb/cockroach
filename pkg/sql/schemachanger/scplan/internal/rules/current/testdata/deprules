@@ -763,6 +763,21 @@ deprules
     - $column-expr-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
     - joinTargetNode($column-expr, $column-expr-Target, $column-expr-Node)
+- name: Final compute expression is always added after transient compute expression
+  from: transient-compute-expression-Node
+  kind: SameStagePrecedence
+  to: final-compute-expression-Node
+  query:
+    - $transient-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $final-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($transient-compute-expression, $final-compute-expression, $table-id, $col-id)
+    - $transient-compute-expression[Usage] = ALTER_TYPE_USING
+    - $final-compute-expression[Usage] = REGULAR
+    - ToPublicOrTransient($transient-compute-expression-Target, $final-compute-expression-Target)
+    - $transient-compute-expression-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $final-compute-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
+    - joinTargetNode($final-compute-expression, $final-compute-expression-Target, $final-compute-expression-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -5337,6 +5352,21 @@ deprules
     - $column-expr-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
     - joinTargetNode($column-expr, $column-expr-Target, $column-expr-Node)
+- name: Final compute expression is always added after transient compute expression
+  from: transient-compute-expression-Node
+  kind: SameStagePrecedence
+  to: final-compute-expression-Node
+  query:
+    - $transient-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $final-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($transient-compute-expression, $final-compute-expression, $table-id, $col-id)
+    - $transient-compute-expression[Usage] = ALTER_TYPE_USING
+    - $final-compute-expression[Usage] = REGULAR
+    - ToPublicOrTransient($transient-compute-expression-Target, $final-compute-expression-Target)
+    - $transient-compute-expression-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $final-compute-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
+    - joinTargetNode($final-compute-expression, $final-compute-expression-Target, $final-compute-expression-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence

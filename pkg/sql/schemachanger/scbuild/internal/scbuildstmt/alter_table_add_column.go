@@ -319,10 +319,10 @@ type addColumnSpec struct {
 	def              *scpb.ColumnDefaultExpression
 	onUpdate         *scpb.ColumnOnUpdateExpression
 	compute          *scpb.ColumnComputeExpression
+	transientCompute *scpb.ColumnComputeExpression
 	comment          *scpb.ColumnComment
 	unique           bool
 	notNull          bool
-	transientCompute bool
 }
 
 // addColumn adds a column as specified in the `spec`. It delegates most of the work
@@ -349,11 +349,10 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 			b.Add(spec.onUpdate)
 		}
 		if spec.compute != nil {
-			if spec.transientCompute {
-				b.AddTransient(spec.compute)
-			} else {
-				b.Add(spec.compute)
-			}
+			b.Add(spec.compute)
+		}
+		if spec.transientCompute != nil {
+			b.AddTransient(spec.transientCompute)
 		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
@@ -364,7 +363,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 
 		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)
-		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil {
+		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil && spec.transientCompute == nil {
 			// Optimization opportunity: if we were to add a new column without default
 			// value nor computed expression, then we can just add the column to existing
 			// non-nil primary indexes without actually backfilling any data. This is
