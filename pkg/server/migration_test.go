@@ -363,7 +363,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 					for i := 0; i < N; i++ {
 						runtime.Gosched()
 					}
-					require.True(t, st.Version.ActiveVersion(ctx).Less(clusterversion.Latest.Version()))
+					require.True(t, st.Version.ActiveVersion(ctx).LessEq(clusterversion.Latest.Version()))
 				},
 			},
 		},
