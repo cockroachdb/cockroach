@@ -510,7 +510,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence

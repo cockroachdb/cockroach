@@ -1446,6 +1446,7 @@ ElementState:
     expr: x'80':::@100107::STRING
     referencedColumnIds: []
     tableId: 109
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:

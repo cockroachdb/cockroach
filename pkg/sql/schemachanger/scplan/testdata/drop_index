@@ -249,7 +249,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4, TypeName: STRING}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
@@ -293,7 +293,7 @@ DROP INDEX idx2 CASCADE
   kind: PreviousTransactionPrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 104, ColumnID: 4}, WRITE_ONLY]
-  to:   [ColumnComputeExpression:{DescID: 104, ColumnID: 4}, ABSENT]
+  to:   [ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 4}, WRITE_ONLY]
@@ -308,14 +308,14 @@ DROP INDEX idx2 CASCADE
   to:   [IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 4}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 4}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, ABSENT]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4, TypeName: STRING}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
   kind: Precedence
@@ -525,7 +525,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 5, Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveColumnComputeExpression
@@ -571,7 +571,7 @@ DROP INDEX idx3 CASCADE
   kind: PreviousTransactionPrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 104, ColumnID: 5}, WRITE_ONLY]
-  to:   [ColumnComputeExpression:{DescID: 104, ColumnID: 5}, ABSENT]
+  to:   [ColumnComputeExpression:{DescID: 104, ColumnID: 5, Usage: REGULAR}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 5}, WRITE_ONLY]
@@ -586,14 +586,14 @@ DROP INDEX idx3 CASCADE
   to:   [IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 5}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 5, Usage: REGULAR}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 5}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 104, ColumnID: 5, Usage: REGULAR}, ABSENT]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type
+  rule: column type dependents removed right before column type, except if part of a column type alteration 
 - from: [ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: Precedence
