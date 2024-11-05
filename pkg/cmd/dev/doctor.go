@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -93,6 +94,30 @@ func (cfg *doctorConfig) maybePromptForAutofixPermission(question string) {
 			cfg.haveAutofixPermission = true
 		}
 	}
+}
+
+type buildConfig struct {
+	name        string
+	description string
+}
+
+// buildConfigs returns the available build configs (typically "dev" and
+// "crosslinux"). The first config will always be "dev".
+func buildConfigs() []buildConfig {
+	configs := []buildConfig{
+		{name: "dev", description: "uses the host toolchain"},
+	}
+	if runtime.GOOS == "linux" {
+		crossCfg := "crosslinux"
+		if runtime.GOARCH == "arm64" {
+			crossCfg = "crosslinuxarm"
+		}
+		configs = append(configs, buildConfig{
+			name:        crossCfg,
+			description: "uses the cross-compiler that we use in CI",
+		})
+	}
+	return configs
 }
 
 // The list of all checks performed by `dev doctor`.
@@ -179,35 +204,39 @@ Please perform the following steps:
 	{
 		name: "devconfig_local",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			var alreadyHaveSuggestion bool
-			for _, str := range []string{"dev", "crosslinux"} {
-				alreadyHaveSuggestion = alreadyHaveSuggestion || d.checkUsingConfig(cfg.workspace, str)
-			}
-			if alreadyHaveSuggestion {
-				return ""
+			buildConfigs := buildConfigs()
+			for _, bldCfg := range buildConfigs {
+				if d.checkUsingConfig(cfg.workspace, bldCfg.name) {
+					// Already configured.
+					return ""
+				}
 			}
 			ret := fmt.Sprintf(`
 Make sure one of the following lines is in the file %s/.bazelrc.user:
 `, cfg.workspace)
-			if runtime.GOOS == "linux" {
-				ret = ret + "    build --config=dev\n"
-				ret = ret + "             OR       \n"
-				ret = ret + "    build --config=crosslinux\n"
-				ret = ret + "The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI."
-			} else {
-				ret = ret + "    build --config=dev"
+			for i, bldCfg := range buildConfigs {
+				if i > 0 {
+					ret = ret + "\n             OR       \n"
+				}
+				ret = fmt.Sprintf("%s    build --config=%s  # %s", ret, bldCfg.name, bldCfg.description)
 			}
 			return ret
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if runtime.GOOS == "linux" {
+			buildConfigs := buildConfigs()
+			if len(buildConfigs) > 1 {
 				if !cfg.interactive {
 					return fmt.Errorf("must be running in --interactive mode to autofix")
 				}
-				log.Println("DOCTOR >> I can configure your .bazelrc.user to build either in the `dev` configuration or the `crosslinux` configuration.")
-				log.Println("DOCTOR >> The former uses your host toolchain, while the latter downloads and uses our production cross-toolchains.")
-				response := promptInteractiveInput("Which config you want to use (dev,crosslinux)?", "dev")
-				if response != "dev" && response != "crosslinux" {
+				log.Println("DOCTOR >> I can configure your .bazelrc.user to build in one of the following configurations:")
+				var names []string
+				for _, c := range buildConfigs {
+					names = append(names, c.name)
+					log.Printf("           - %s: %s\n", c.name, c.description)
+				}
+				question := fmt.Sprintf("Which config you want to use (%s)?", strings.Join(names, ","))
+				response := promptInteractiveInput(question, names[0])
+				if !slices.Contains(names, response) {
 					return fmt.Errorf("unrecognized configuration option %s", response)
 				}
 				return d.addLineToBazelRcUser(cfg.workspace, fmt.Sprintf("build --config=%s", response))
