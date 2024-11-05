@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -252,6 +253,10 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			immByIDAfter, err := descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
+
+			// The name must be non-empty.
+			_, err = descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "")
+			require.Equal(t, sqlerrors.ErrEmptyDatabaseName, err)
 
 			return nil
 		}))
