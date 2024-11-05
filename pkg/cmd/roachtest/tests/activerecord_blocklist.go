@@ -43,4 +43,6 @@ var activeRecordBlocklist = blocklist{
 	`PostGISTest#test_point_to_json`:                                                                                                    "unknown",
 }
 
-var activeRecordIgnoreList = blocklist{}
+var activeRecordIgnoreList = blocklist{
+	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`: "pg_terminate_backend not implemented",
+}
