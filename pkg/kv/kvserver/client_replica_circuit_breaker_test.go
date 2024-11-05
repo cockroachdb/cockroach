@@ -883,9 +883,16 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	var leader raftpb.PeerID
 	require.Eventually(t, func() bool {
 		for _, repl := range repls {
-			if l := repl.RaftStatus().Lead; l == 3 {
+			l := repl.RaftStatus().Lead
+			if l == 3 {
 				return false
-			} else if l > 0 {
+			}
+			if repl.ReplicaID() != 3 && l == 0 {
+				// The old leader (3) steps down because of check quorum. A new leader
+				// should be elected amongst 1 and 2, and both of them should know who
+				// that is before we proceed with the test.
+				return false
+			} else if repl.ReplicaID() != 3 {
 				leader = l
 			}
 		}

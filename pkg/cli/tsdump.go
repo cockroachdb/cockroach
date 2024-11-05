@@ -77,13 +77,6 @@ will then convert it to the --format requested in the current invocation.
 			convertFile = args[0]
 		}
 
-		// validate the datadog site name & generate target url for datadog upload
-		host, ok := ddSiteToHostMap[debugTimeSeriesDumpOpts.ddSite]
-		if !ok {
-			return fmt.Errorf("unsupported datadog site '%s'", debugTimeSeriesDumpOpts.ddSite)
-		}
-		targetURL := fmt.Sprintf(targetURLFormat, host)
-
 		var w tsWriter
 		switch debugTimeSeriesDumpOpts.format {
 		case tsDumpRaw:
@@ -108,6 +101,11 @@ will then convert it to the --format requested in the current invocation.
 				doRequest,
 			)
 		case tsDumpDatadog:
+			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
+			if err != nil {
+				return err
+			}
+
 			var datadogWriter = makeDatadogWriter(
 				targetURL,
 				false,
@@ -118,6 +116,11 @@ will then convert it to the --format requested in the current invocation.
 			return datadogWriter.upload(args[0])
 
 		case tsDumpDatadogInit:
+			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
+			if err != nil {
+				return err
+			}
+
 			var datadogWriter = makeDatadogWriter(
 				targetURL,
 				true,
@@ -257,6 +260,15 @@ will then convert it to the --format requested in the current invocation.
 			}
 		}
 	}),
+}
+
+func getDatadogTargetURL(site string) (string, error) {
+	host, ok := ddSiteToHostMap[site]
+	if !ok {
+		return "", fmt.Errorf("unsupported datadog site '%s'", site)
+	}
+	targetURL := fmt.Sprintf(targetURLFormat, host)
+	return targetURL, nil
 }
 
 func doRequest(req *http.Request) error {

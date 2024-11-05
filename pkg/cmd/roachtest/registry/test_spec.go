@@ -366,11 +366,13 @@ const (
 	PebbleNightlyYCSBRace = "pebble_nightly_ycsb_race"
 	Roachtest             = "roachtest"
 	Acceptance            = "acceptance"
+	Perturbation          = "perturbation"
 )
 
 var allSuites = []string{
 	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Smoketest, Quick, Fixtures,
 	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest, Acceptance,
+	Perturbation,
 }
 
 // SuiteSet represents a set of suites.

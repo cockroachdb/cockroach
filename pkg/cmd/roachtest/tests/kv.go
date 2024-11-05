@@ -603,7 +603,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Set up statement bundles for the (now known) top queries, with reasonable
 			// criteria. This gives us something to look into should the test fail to
 			// meet its qps targets.
-			require.NoError(t, profileTopStatements(ctx, c, t.L(), "kv"))
+			require.NoError(t, profileTopStatements(ctx, c, t.L(), profDbName("kv")))
 			defer func() {
 				if err := downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
 					t.L().PrintfCtx(ctx, "failed to download stmt bundles: %v", err)
