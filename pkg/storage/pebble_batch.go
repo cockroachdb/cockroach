@@ -136,6 +136,15 @@ func (wb *writeBatch) SingleClearEngineKey(key EngineKey) error {
 	return wb.batch.SingleDelete(wb.buf, nil)
 }
 
+// SingleClearUnversioned implements the Writer interface.
+func (wb *writeBatch) SingleClearUnversioned(key roachpb.Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], MVCCKey{Key: key})
+	return wb.batch.SingleDelete(wb.buf, nil)
+}
+
 // ClearRawRange implements the Writer interface.
 func (wb *writeBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	wb.buf = EngineKey{Key: start}.EncodeToBuf(wb.buf[:0])

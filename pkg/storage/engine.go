@@ -832,6 +832,7 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
+	SingleClearUnversioned(key roachpb.Key) error
 
 	// ShouldWriteLocalTimestamps is only for internal use in the storage package.
 	// This method is temporary, to handle the transition from clusters where not
