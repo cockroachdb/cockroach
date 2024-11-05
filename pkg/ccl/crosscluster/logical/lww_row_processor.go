@@ -251,7 +251,7 @@ func makeSQLProcessorFromQuerier(
 		querier:  querier,
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		settings: settings,
-		db: db,
+		db:       db,
 		ie:       ie,
 		sd:       sd,
 		spec:     spec,

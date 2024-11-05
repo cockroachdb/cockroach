@@ -56,6 +56,14 @@ var flushBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var immediateFlushBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.immediate_batch_size",
+	"the number of row updates to attempt in a single KV transaction",
+	32,
+	settings.NonNegativeInt,
+)
+
 var writerWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.flush_worker_per_proc",
@@ -127,6 +135,8 @@ type logicalReplicationWriterProcessor struct {
 	seenKeys  map[uint64]int64
 	dupeCount int64
 	seenEvery log.EveryN
+
+	skipBatching, skipBatchingStep int
 }
 
 var (
@@ -194,7 +204,7 @@ func newLogicalReplicationWriterProcessor(
 			// handling and tracking that we haven't implemented
 			// yet.
 			if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-				return 1
+				return int(immediateFlushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 			}
 			// We want to decide whether to use implicit txns or not based on
 			// the schema of the dest table. Benchmarking has shown that
@@ -753,18 +763,32 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// TODO(dt): consider keeping these goroutines running for lifetime of proc
 	// rather than starting new ones for each flush.
 	chunks := make(chan []streampb.StreamEvent_KV)
+	batchSize := lrw.getBatchSize()
+
+	if lrw.skipBatching > 0 {
+		batchSize = 1
+		lrw.skipBatching--
+	}
 
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh[:requiredWorkers] {
 		w := worker
 		lrw.bhStats[w] = flushStats{}
+		bs := batchSize
 		g.GoCtx(func(ctx context.Context) error {
 			for chunk := range chunks {
-				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
+				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry, bs)
 				if err != nil {
 					return err
 				}
 				lrw.bhStats[w].Add(s)
+				// If we saw any de-batching resolved errors, stop batching for the rest
+				// of the chunks in this flush worker; we will update the whole
+				// processor to stop batching in all workers after the flush is over and
+				// we're back on the main goroutine.
+				if s.debatchResolvedErrs > 0 {
+					bs = 1
+				}
 			}
 			return nil
 		})
@@ -801,6 +825,17 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	for i := range lrw.bhStats[:requiredWorkers] {
 		stats.Add(lrw.bhStats[i])
 	}
+
+	if stats.debatchResolvedErrs > 0 {
+		// de-batching helped -- up the backoff.
+		lrw.skipBatchingStep = max(1, min(lrw.skipBatchingStep*2, 100))
+		lrw.skipBatching += lrw.skipBatchingStep
+	} else if lrw.skipBatchingStep > 0 {
+		// decay skipBatching.
+		lrw.skipBatchingStep--
+	}
+
+	lrw.skipBatching += lrw.skipBatchingStep
 
 	if stats.notProcessed.count > 0 {
 		notProcessed = filterRemaining(kvs)
@@ -877,10 +912,8 @@ func (t replicationMutationType) String() string {
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
-	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
+	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility, batchSize int,
 ) (flushStats, error) {
-	batchSize := lrw.getBatchSize()
-
 	lrw.debug.RecordChunkStart()
 	defer lrw.debug.RecordChunkComplete()
 
@@ -952,6 +985,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 						stats.processed.bytes += int64(batch[i].Size())
 					}
 				}
+				stats.debatchResolvedErrs++
 			}
 		} else {
 			stats.batchStats.Add(s)
@@ -1047,6 +1081,8 @@ type flushStats struct {
 		count, bytes int64
 	}
 
+	debatchResolvedErrs int
+
 	batchStats
 }
 
@@ -1057,6 +1093,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
 	b.batchStats.Add(o.batchStats)
+	b.debatchResolvedErrs += o.debatchResolvedErrs
 }
 
 type BatchHandler interface {
