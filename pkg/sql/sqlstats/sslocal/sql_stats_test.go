@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -49,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -1420,7 +1420,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 
 			// Set a unique application name for our session, so we can find our
 			// stats easily.
-			appName := t.Name()
+			appName := redact.RedactableString(t.Name())
 			_, err := opsDB.Exec("SET application_name = $1", appName)
 			require.NoError(t, err)
 
@@ -1482,7 +1482,7 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
-	appName := "indexes-usage"
+	var appName redact.RedactableString = "indexes-usage"
 	testConn.Exec(t, "SET application_name = $1", appName)
 
 	testCases := []struct {
@@ -1586,7 +1586,7 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
-	appName := "latency-info"
+	var appName redact.RedactableString = "latency-info"
 	testConn.Exec(t, "SET application_name = $1", appName)
 	testConn.Exec(t, "CREATE TABLE t1 (k INT)")
 
@@ -1814,7 +1814,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 	// statement if it's the first time we've seen it.
 	t.Run("internal statement without a transaction", func(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
-			appName := "without-txn"
+			var appName redact.RedactableString = "without-txn"
 			for i := 0; i < 10; i++ {
 				_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
 					ctx,
@@ -1827,7 +1827,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 			}
 
 			// Verify that the internal statement is captured.
-			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			query, cnt, sampledCnt := getStmtRow(appName.StripMarkers(), attributedToUser)
 			require.Equal(t, "SELECT _", query)
 			require.Equal(t, 10, cnt)
 			require.Equal(t, 1, sampledCnt)
@@ -1836,7 +1836,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 
 	t.Run("internal statement with a transaction", func(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
-			appName := "with-txn"
+			var appName redact.RedactableString = "with-txn"
 			for i := 0; i < 10; i++ {
 				err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					_, err := txn.ExecEx(
@@ -1852,7 +1852,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 			}
 
 			// Verify that the internal statement is captured.
-			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			query, cnt, sampledCnt := getStmtRow(appName.StripMarkers(), attributedToUser)
 			require.Equal(t, "SELECT _", query)
 			require.Equal(t, 10, cnt)
 			require.Equal(t, 1, sampledCnt)
@@ -1860,7 +1860,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 	})
 
 	t.Run("internal multi-statement transaction", func(t *testing.T) {
-		appName := "with-txn-multiple"
+		var appName redact.RedactableString = "with-txn-multiple"
 		err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for i := 0; i < 10; i++ {
 				if _, err := txn.Exec(ctx, appName, txn.KV(), "SELECT 1"); err != nil {
@@ -1872,7 +1872,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 		require.NoError(t, err)
 
 		// Verify that the internal statement is captured.
-		query, cnt, sampledCnt := getStmtRow(appName, false /* attributedToUser */)
+		query, cnt, sampledCnt := getStmtRow(appName.StripMarkers(), false /* attributedToUser */)
 		require.Equal(t, "SELECT _", query)
 		require.Equal(t, 10, cnt)
 		require.Equal(t, 1, sampledCnt)
@@ -1881,7 +1881,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 	// This test case differs from "internal statement with a transaction" since
 	// we use the internal executor without any extra txn state set up.
 	t.Run("internal statement with a transaction through executor", func(t *testing.T) {
-		appName := "with-txn-through-executor"
+		var appName redact.RedactableString = "with-txn-through-executor"
 		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
 			for i := 0; i < 10; i++ {
 				err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -1898,7 +1898,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 			}
 
 			// Verify that the internal statement is captured.
-			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			query, cnt, sampledCnt := getStmtRow(appName.StripMarkers(), attributedToUser)
 			require.Equal(t, "SELECT _", query)
 			require.Equal(t, 10, cnt)
 			require.Equal(t, 1, sampledCnt)
@@ -1952,7 +1952,7 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 	// the total fingerprint count across all applications exceeds the limit.
 	conns := make([]*sqlutils.SQLRunner, 3)
 	for i := 0; i < 3; i++ {
-		appName := fmt.Sprintf("app%d", i)
+		appName := redact.Sprintf("app%d", i)
 		conns[i] = sqlutils.MakeSQLRunner(ts.SQLConn(t))
 		conns[i].Exec(t, "SET application_name = $1", appName)
 	}
