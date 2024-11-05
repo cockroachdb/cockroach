@@ -736,7 +736,7 @@ deprules
     - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
     - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
-- name: DEFAULT or ON UPDATE existence precedes writes to column
+- name: DEFAULT or ON UPDATE existence precedes writes to column, except if they are added as part of a alter column type
   from: expr-Node
   kind: Precedence
   to: column-Node
@@ -744,11 +744,25 @@ deprules
     - $expr[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($expr, $column, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - ToPublicOrTransient($expr-Target, $column-Target)
     - $expr-Node[CurrentStatus] = PUBLIC
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-Target, $expr-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: DEFAULT or ON UPDATE expressions is public after transient compute expression transitions to absent
+  from: transient-compute-expression-Node
+  kind: SameStagePrecedence
+  to: column-expr-Node
+  query:
+    - $transient-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $column-expr[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - joinOnColumnID($transient-compute-expression, $column-expr, $table-id, $col-id)
+    - ToPublicOrTransient($transient-compute-expression-Target, $column-expr-Target)
+    - $transient-compute-expression-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-expr-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
+    - joinTargetNode($column-expr, $column-expr-Target, $column-expr-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -2616,7 +2630,7 @@ deprules
     - $constraint-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-- name: column type dependents removed right before column type
+- name: 'column type dependents removed right before column type, except if part of a column type alteration '
   from: dependent-Node
   kind: SameStagePrecedence
   to: column-type-Node
@@ -2624,6 +2638,7 @@ deprules
     - $dependent[Type] IN ['*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner']
     - $column-type[Type] = '*scpb.ColumnType'
     - joinOnColumnID($dependent, $column-type, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - toAbsent($dependent-Target, $column-type-Target)
     - $dependent-Node[CurrentStatus] = ABSENT
     - $column-type-Node[CurrentStatus] = ABSENT
@@ -3264,6 +3279,25 @@ deprules
     - $data-Node[CurrentStatus] = DROPPED
     - joinTargetNode($database, $database-Target, $database-Node)
     - joinTargetNode($data, $data-Target, $data-Node)
+- name: during a column type alterations, column type dependents removed before column type
+  from: dependent-Node
+  kind: Precedence
+  to: column-type-Node
+  query:
+    - $dependent[Type] IN ['*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner']
+    - $column-type[Type] = '*scpb.ColumnType'
+    - joinOnColumnID($dependent, $column-type, $table-id, $col-id)
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - toAbsent($dependent-Target, $column-type-Target)
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - $column-type-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: ensure columns are in increasing order
   from: later-column-Node
   kind: Precedence
@@ -5193,7 +5227,7 @@ deprules
     - $constraint-name-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
     - joinTargetNode($constraint-name, $constraint-name-Target, $constraint-name-Node)
-- name: DEFAULT or ON UPDATE existence precedes writes to column
+- name: DEFAULT or ON UPDATE existence precedes writes to column, except if they are added as part of a alter column type
   from: expr-Node
   kind: Precedence
   to: column-Node
@@ -5201,11 +5235,25 @@ deprules
     - $expr[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($expr, $column, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - ToPublicOrTransient($expr-Target, $column-Target)
     - $expr-Node[CurrentStatus] = PUBLIC
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-Target, $expr-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: DEFAULT or ON UPDATE expressions is public after transient compute expression transitions to absent
+  from: transient-compute-expression-Node
+  kind: SameStagePrecedence
+  to: column-expr-Node
+  query:
+    - $transient-compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $column-expr[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - joinOnColumnID($transient-compute-expression, $column-expr, $table-id, $col-id)
+    - ToPublicOrTransient($transient-compute-expression-Target, $column-expr-Target)
+    - $transient-compute-expression-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-expr-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-compute-expression, $transient-compute-expression-Target, $transient-compute-expression-Node)
+    - joinTargetNode($column-expr, $column-expr-Target, $column-expr-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -7073,7 +7121,7 @@ deprules
     - $constraint-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-- name: column type dependents removed right before column type
+- name: 'column type dependents removed right before column type, except if part of a column type alteration '
   from: dependent-Node
   kind: SameStagePrecedence
   to: column-type-Node
@@ -7081,6 +7129,7 @@ deprules
     - $dependent[Type] IN ['*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner']
     - $column-type[Type] = '*scpb.ColumnType'
     - joinOnColumnID($dependent, $column-type, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - toAbsent($dependent-Target, $column-type-Target)
     - $dependent-Node[CurrentStatus] = ABSENT
     - $column-type-Node[CurrentStatus] = ABSENT
@@ -7721,6 +7770,25 @@ deprules
     - $data-Node[CurrentStatus] = DROPPED
     - joinTargetNode($database, $database-Target, $database-Node)
     - joinTargetNode($data, $data-Target, $data-Node)
+- name: during a column type alterations, column type dependents removed before column type
+  from: dependent-Node
+  kind: Precedence
+  to: column-type-Node
+  query:
+    - $dependent[Type] IN ['*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner']
+    - $column-type[Type] = '*scpb.ColumnType'
+    - joinOnColumnID($dependent, $column-type, $table-id, $col-id)
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - toAbsent($dependent-Target, $column-type-Target)
+    - $dependent-Node[CurrentStatus] = ABSENT
+    - $column-type-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: ensure columns are in increasing order
   from: later-column-Node
   kind: Precedence

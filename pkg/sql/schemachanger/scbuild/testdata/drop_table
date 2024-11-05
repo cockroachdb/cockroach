@@ -89,7 +89,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnId: 6, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: val, ColumnID: 6}, ABSENT], PUBLIC]
   {columnId: 6, name: val, tableId: 109}
-- [[ColumnComputeExpression:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnID: 6}, ABSENT], PUBLIC]
+- [[ColumnComputeExpression:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnID: 6, Usage: REGULAR}, ABSENT], PUBLIC]
   {columnId: 6, expr: 'x''80'':::@100107', tableId: 109, usesTypeIds: [107, 108]}
 - [[ColumnType:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 6, TypeName: public.typ}, ABSENT], PUBLIC]
   {closedTypeIds: [107, 108], columnId: 6, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.typ}

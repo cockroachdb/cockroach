@@ -146,6 +146,20 @@ func ColumnInSourcePrimaryIndex(
 	return columnInSourcePrimaryIndex(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
+// IsAlterColumnTypeOp checks if the specified column is undergoing a type alteration
+func IsAlterColumnTypeOp(tableIDVar, columnIDVar rel.Var) rel.Clauses {
+	column := MkNodeVars("column")
+	computeExpression := MkNodeVars("compute-expression")
+	return rel.Clauses{
+		column.Type((*scpb.Column)(nil)),
+		computeExpression.Type((*scpb.ColumnComputeExpression)(nil)),
+		JoinOnColumnID(column, computeExpression, tableIDVar, columnIDVar),
+		computeExpression.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
+		column.JoinTargetNode(),
+		computeExpression.JoinTargetNode(),
+	}
+}
+
 // IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
 // occurring because of a primary key alter.
 func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
@@ -328,6 +342,12 @@ var (
 	IsNotPotentialSecondaryIndexSwap = screl.Schema.DefNotJoin2("no secondary index swap is on going",
 		"table-id", "index-id", func(a, b rel.Var) rel.Clauses {
 			return IsPotentialSecondaryIndexSwap(b, a)
+		})
+
+	// IsNotAlterColumnTypeOp determines if no column alteration in progress
+	IsNotAlterColumnTypeOp = screl.Schema.DefNotJoin2("no column type alteration in progress",
+		"table-id", "column-id", func(t, c rel.Var) rel.Clauses {
+			return IsAlterColumnTypeOp(t, c)
 		})
 )
 
