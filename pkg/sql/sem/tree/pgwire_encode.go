@@ -7,7 +7,6 @@ package tree
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -15,11 +14,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 )
+
+// blanks is a static slice of spaces used for efficient padding.
+var blanks = bytes.Repeat([]byte{' '}, 1<<10 /* 1KiB */)
 
 // ResolveBlankPaddedChar pads the given string with spaces if blank padding is
 // required or returns the string unmodified otherwise.
@@ -27,7 +30,15 @@ func ResolveBlankPaddedChar(s string, t *types.T) string {
 	if t.Oid() == oid.T_bpchar && len(s) < int(t.Width()) {
 		// Pad spaces on the right of the string to make it of length specified
 		// in the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
+		res := make([]byte, t.Width())
+		copy(res, s)
+		pad := res[len(s):]
+		for len(pad) > len(blanks) {
+			copy(pad, blanks)
+			pad = pad[len(blanks):]
+		}
+		copy(pad, blanks)
+		return encoding.UnsafeConvertBytesToString(res)
 	}
 	return s
 }
