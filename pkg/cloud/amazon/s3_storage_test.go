@@ -64,13 +64,9 @@ func skipIfNoDefaultConfig(t *testing.T, ctx context.Context) {
 	t.Helper()
 	const helpMsg = "we only run this test if a default role exists, " +
 		"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html"
-	config, err := config.LoadDefaultConfig(ctx,
-		config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
-	if err != nil && err.Error() == "failed to get shared config profile, default" {
-		skip.IgnoreLintf(t, "%s: %s", helpMsg, err)
-	}
+	cfg, err := config.LoadDefaultConfig(ctx)
 	require.NoError(t, err)
-	_, err = config.Credentials.Retrieve(ctx)
+	_, err = cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		skip.IgnoreLintf(t, "%s: %s", helpMsg, err)
 	}
@@ -688,4 +684,44 @@ func TestCanceledError(t *testing.T) {
 	require.False(t, errors.Is(aerr, ctx.Err()))
 	aerr = errors.Mark(aerr, ctx.Err())
 	require.True(t, errors.Is(aerr, ctx.Err()))
+}
+
+func TestAWSS3ImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Tests if the AWS KMS client can be created when the shared config files
+	// are not present, but are present through the rest of the credential/config
+	// chain as specified in https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-authentication.html#cli-chap-authentication-precedence
+
+	// If AWS S3 bucket variable is not set, we can assume we are not running in
+	// the nightly test environment and can skip.
+	baseBucket := os.Getenv("AWS_S3_BUCKET")
+	if baseBucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+
+	// Setup a bogus credentials/configs file so that we can simulate a non-existent
+	// shared config file. The test environment is already setup with the
+	// default config/credential files at ~/.aws/config and ~/.aws/credentials,
+	// so in order to circumvent this and test the case where the shared config
+	// files are not present, we need to set the AWS_CONFIG_FILE and
+	// AWS_SHARED_CREDENTIALS_FILE.
+	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
+	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
+		"/tmp/credentials"))
+	defer func() {
+		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+	}()
+
+	s3 := s3Storage{
+		opts: s3ClientConfig{
+			bucket: baseBucket,
+			auth:   cloud.AuthParamImplicit,
+			region: "us-east-1",
+		},
+		metrics:  cloud.NilMetrics,
+		settings: cluster.MakeTestingClusterSettings(),
+	}
+	_, _, err := s3.newClient(context.Background())
+	require.NoError(t, err)
 }
