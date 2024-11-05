@@ -105,3 +105,35 @@ finish
 | hex:017a6b12706f690001 |          0 |       0 | 02073a83c45688420eaf97824255790f1e |
 | /MVCC/poi              | 1000000000 |       3 |                                    |
 +------------------------+------------+---------+------------------------------------+
+
+# Regression test for #134053.
+#
+# Write consecutive keys where the engine key prefix of the 1st key (including
+# the sentinel byte) is a byte prefix of the 2nd key, but the two keys have
+# different MVCC prefixes. Previously, ComparePrev would return the wrong value
+# for CommonPrefixLen, omitting the sentinel byte of the previous prefix.
+
+init
+----
+
+write
+hex:fa00180512db93969eee09
+hex:fa0000180512db93c71f7409
+----
+Parse("hex:fa00180512db93969eee09") = hex:fa00180512db93969eee09
+00: ComparePrev("hex:fa00180512db93969eee09"): PrefixLen=2; CommonPrefixLen=0; UserKeyComparison=1
+00: WriteKey(0, "hex:fa00180512db93969eee09", PrefixLen=2, CommonPrefixLen=0)
+00: MaterializeKey(_, 0) = hex:fa00180512db93969eee09
+Parse("hex:fa0000180512db93c71f7409") = hex:fa0000180512db93c71f7409
+01: ComparePrev("hex:fa0000180512db93c71f7409"): PrefixLen=3; CommonPrefixLen=2; UserKeyComparison=1
+01: WriteKey(1, "hex:fa0000180512db93c71f7409", PrefixLen=3, CommonPrefixLen=2)
+01: MaterializeKey(_, 1) = hex:fa0000180512db93c71f7409
+
+finish
+----
++----------+---------------------+---------+---------+
+|   KEY    |        WALL         | LOGICAL | UNTYPED |
++----------+---------------------+---------+---------+
+| hex:fa   | 1730810366077083374 |       0 |         |
+| hex:fa00 | 1730810366080262004 |       0 |         |
++----------+---------------------+---------+---------+
