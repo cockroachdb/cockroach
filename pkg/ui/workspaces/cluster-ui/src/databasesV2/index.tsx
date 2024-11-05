@@ -5,6 +5,7 @@
 
 import { Row } from "antd";
 import React, { useContext, useMemo } from "react";
+import { Redirect } from "react-router";
 import { Link } from "react-router-dom";
 
 import { useNodeStatuses } from "src/api";
@@ -19,7 +20,7 @@ import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
 import { AUTO_STATS_COLLECTION_HELP } from "src/components/tooltipMessages";
-import { ClusterDetailsContext } from "src/contexts";
+import { ClusterDetailsContext, CockroachCloudContext } from "src/contexts";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { BooleanSetting } from "src/settings";
@@ -140,6 +141,7 @@ const createDatabaseMetadataRequestFromParams = (
 export const DatabasesPageV2 = () => {
   const clusterDetails = useContext(ClusterDetailsContext);
   const isTenant = clusterDetails.isTenant;
+  const isCloud = useContext(CockroachCloudContext);
   const { params, setFilters, setSort, setSearch, setPagination } = useTable({
     initial: initialParams,
   });
@@ -201,6 +203,14 @@ export const DatabasesPageV2 = () => {
     sid => parseInt(sid, 10) as StoreID,
   );
 
+  // 409 conflict - this error code arises when the CRDB version
+  // is not compatible with the APIs used by this page.
+  // v2 Databases page is only supported for finalized CRDB versions >= 24.3.
+  // We can remove this check when the cluster-ui version moves past the 24.3 release.
+  if (!isCloud && error?.status === 409) {
+    return <Redirect to="/legacy/databases" />;
+  }
+
   return (
     <PageLayout>
       <PageHeader
@@ -209,7 +219,7 @@ export const DatabasesPageV2 = () => {
           !settingsLoading && (
             <BooleanSetting
               text={"Auto stats collection"}
-              enabled={settingValues[AUTO_STATS_ENABLED_CS].value === "true"}
+              enabled={settingValues[AUTO_STATS_ENABLED_CS]?.value === "true"}
               tooltipText={AUTO_STATS_COLLECTION_HELP}
             />
           )
