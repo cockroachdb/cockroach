@@ -55,6 +55,7 @@ func NewBuilderDependencies(
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
 	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -78,6 +79,7 @@ func NewBuilderDependencies(
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
 		semaCtx:                  semaCtx,
+		evalCtx:                  evalCtx,
 	}
 }
 
@@ -101,6 +103,7 @@ type buildDeps struct {
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
 	semaCtx                  *tree.SemaContext
+	evalCtx                  *eval.Context
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -368,6 +371,11 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
+}
+
+// EvalCtx implements the scbuild.Dependencies interface.
+func (d *buildDeps) EvalCtx() *eval.Context {
+	return d.evalCtx
 }
 
 // SemaCtx implements the scbuild.Dependencies interface.

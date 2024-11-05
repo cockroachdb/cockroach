@@ -8,6 +8,7 @@ package sctestdeps
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -187,5 +189,11 @@ var defaultOptions = []Option{
 		semaCtx := tree.MakeSemaContext(state)
 		semaCtx.SearchPath = &state.SessionData().SearchPath
 		state.semaCtx = &semaCtx
+
+		evalCtx := &eval.Context{
+			SessionDataStack: sessiondata.NewStack(state.SessionData()),
+			Settings:         cluster.MakeTestingClusterSettings(),
+		}
+		state.evalCtx = evalCtx
 	}),
 }
