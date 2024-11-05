@@ -5302,6 +5302,8 @@ func setupClusterWithSubsumedRange(
 }
 
 func BenchmarkStoreRangeMerge(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(b, 1,
 		base.TestClusterArgs{
