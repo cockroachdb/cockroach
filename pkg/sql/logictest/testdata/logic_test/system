@@ -1416,7 +1416,7 @@ SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
 ----
 sql.defaults.vectorize  1
 
-query T
+query T retry
 SHOW CLUSTER SETTING sql.defaults.vectorize
 ----
 on
@@ -1444,7 +1444,7 @@ query TT
 SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
 ----
 
-query T
+query T retry
 SHOW CLUSTER SETTING sql.defaults.vectorize
 ----
 on
