@@ -91,6 +91,10 @@ func (zc *debugZipContext) collectCPUProfiles(
 		if livenessByNodeID[nodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			continue
 		}
+		if !zipCtx.nodes.isIncluded(nodeID) {
+			zc.clusterPrinter.info(fmt.Sprintf("skipping excluded node %d", nodeID))
+			continue
+		}
 		wg.Add(1)
 		go func(ctx context.Context, i int) {
 			defer wg.Done()
@@ -261,10 +265,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, id)
 
 	if !zipCtx.nodes.isIncluded(nodeID) {
-		if err := zc.z.createRaw(nodePrinter.start("skipping node"), prefix+".skipped",
-			[]byte(fmt.Sprintf("skipping excluded node %d\n", nodeID))); err != nil {
-			return err
-		}
+		nodePrinter.info("skipping excluded node")
 		return nil
 	}
 	if nodeStatus != nil {
