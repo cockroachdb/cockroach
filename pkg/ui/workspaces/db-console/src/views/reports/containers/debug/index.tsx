@@ -596,12 +596,6 @@ export default function Debug() {
             note="_status/hotranges?node_id=[node_id]"
           />
         </DebugTableRow>
-        <DebugTableRow title="Databases">
-          <DebugTableLink
-            name="Databases Page (Legacy)"
-            url="#/legacy/databases"
-          />
-        </DebugTableRow>
         <DebugTableRow
           title="Single Node Specific"
           disabled={disable_kv_level_advanced_debug}

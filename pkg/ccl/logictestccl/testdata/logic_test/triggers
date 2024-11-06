@@ -2230,24 +2230,28 @@ statement ok
 INSERT INTO parent VALUES (1), (2), (3);
 INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 UPDATE parent SET k = k * 10 WHERE k = 2 OR k = 3;
 ----
 NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
 NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
 NOTICE: AFTER UPDATE ON parent: (2) -> (20)
 NOTICE: AFTER UPDATE ON parent: (3) -> (30)
 NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
 NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
 NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 DELETE FROM parent WHERE k = 20 OR k = 30;
 ----
 NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
 NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
 NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
@@ -2286,31 +2290,35 @@ $$;
 statement ok
 CREATE TRIGGER foo BEFORE INSERT ON ab FOR EACH ROW EXECUTE FUNCTION h();
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 INSERT INTO ab VALUES (2, 20), (3, 30);
 ----
 NOTICE: update parent.k to 20 in trigger where k = 2
 NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
 NOTICE: AFTER UPDATE ON parent: (2) -> (20)
 NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
 NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
 NOTICE: update parent.k to 30 in trigger where k = 3
 NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
 NOTICE: AFTER UPDATE ON parent: (3) -> (30)
 NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 INSERT INTO ab VALUES (20, NULL), (30, NULL);
 ----
 NOTICE: delete from parent in trigger where k = 20
 NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
 NOTICE: delete from parent in trigger where k = 30
 NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
 NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 
@@ -2330,31 +2338,35 @@ subtest after_trigger_fires_cascades
 statement ok
 CREATE TRIGGER foo AFTER INSERT OR DELETE ON ab FOR EACH ROW EXECUTE FUNCTION h();
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 INSERT INTO ab VALUES (2, 20), (3, 30);
 ----
 NOTICE: update parent.k to 20 in trigger where k = 2
 NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
 NOTICE: AFTER UPDATE ON parent: (2) -> (20)
 NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
 NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
 NOTICE: update parent.k to 30 in trigger where k = 3
 NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
 NOTICE: AFTER UPDATE ON parent: (3) -> (30)
 NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
 
-# TODO(#132971): We should fire the BEFORE trigger on child.
 query T noticetrace
 INSERT INTO ab VALUES (20, NULL), (30, NULL);
 ----
 NOTICE: delete from parent in trigger where k = 20
 NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
 NOTICE: delete from parent in trigger where k = 30
 NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
 NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
 NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 
@@ -2415,6 +2427,8 @@ query T noticetrace
 CALL wrap_parent_update(2, NULL);
 ----
 NOTICE: BEFORE DELETE ON parent: (2) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,2) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,2) -> <NULL>
 NOTICE: FK violation updating parent from 2 to <NULL>
 
 # Try updating a referenced row in the parent table.
@@ -2422,6 +2436,8 @@ query T noticetrace
 CALL wrap_parent_update(2, 10);
 ----
 NOTICE: BEFORE UPDATE ON parent: (2) -> (10)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,10)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,10)
 NOTICE: FK violation updating parent from 2 to 10
 
 # Try inserting a row with no reference into the child2 table.
@@ -2434,10 +2450,248 @@ NOTICE: FK violation inserting (10, 10) into child2
 statement ok
 DROP PROCEDURE wrap_parent_update;
 DROP PROCEDURE wrap_child2_insert;
+DROP TABLE child2;
+
+# Unless "unsafe_allow_triggers_modifying_cascades" is set, triggers are not
+# allowed to modify or filter rows the mutation for a cascade.
+subtest triggers_modify_fk_cascades
+
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW.k := (NEW).k + 100;
+    OLD.k := (OLD).k + 100;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION filter() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+statement ok
+CREATE TRIGGER mod BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION h();
+
+statement error pgcode 27000 pq: trigger mod attempted to modify or filter a row in a cascade operation: \(1,11\)
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement error pgcode 27000 pq: trigger mod attempted to modify or filter a row in a cascade operation: \(1,1\)
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+SET unsafe_allow_triggers_modifying_cascades = true;
+
+statement ok
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement ok
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+RESET unsafe_allow_triggers_modifying_cascades;
+
+statement ok
+DROP TRIGGER mod ON child;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+statement ok
+CREATE TRIGGER filter BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION filter();
+
+statement error pgcode 27000 pq: trigger filter attempted to modify or filter a row in a cascade operation: \(1,11\)
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement error pgcode 27000 pq: trigger filter attempted to modify or filter a row in a cascade operation: \(1,1\)
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+SET unsafe_allow_triggers_modifying_cascades = true;
+
+statement ok
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement ok
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+RESET unsafe_allow_triggers_modifying_cascades;
+
+statement ok
+DROP TRIGGER filter ON child;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+# Modifications to mutated rows made by BEFORE triggers are visible to cascades.
+subtest before_trigger_modifies_fk_cascades
+
+statement ok
+CREATE TRIGGER mod BEFORE INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+UPDATE parent SET k = k + 10 WHERE k < 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (1) -> (11)
+NOTICE: BEFORE UPDATE ON parent: (2) -> (12)
+NOTICE: BEFORE UPDATE ON child: (1,1) -> (1,111)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,112)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,112)
+NOTICE: AFTER UPDATE ON parent: (1) -> (111)
+NOTICE: AFTER UPDATE ON parent: (2) -> (112)
+NOTICE: AFTER UPDATE ON child: (1,1) -> (1,111)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,112)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,112)
+
+query II rowsort
+SELECT * FROM child;
+----
+1  111
+2  112
+3  112
+4  3
+
+query T noticetrace
+DELETE FROM parent WHERE k > 3;
+----
+NOTICE: BEFORE DELETE ON parent: (111) -> <NULL>
+NOTICE: BEFORE DELETE ON parent: (112) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (1,111) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,112) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,112) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (111) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (112) -> <NULL>
+NOTICE: AFTER DELETE ON child: (1,111) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,112) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,112) -> <NULL>
+
+query II rowsort
+SELECT * FROM child;
+----
+4  3
+
+statement ok
+DROP TRIGGER mod ON parent;
+
+subtest cascade_diamond
+
+# Create a diamond cascade structure.
+statement ok
+DROP TABLE child;
+DELETE FROM parent WHERE True;
+
+statement ok
+CREATE TABLE child (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+CREATE TABLE child2 (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TABLE grandchild (
+  k INT PRIMARY KEY,
+  v INT REFERENCES child(v) ON UPDATE CASCADE ON DELETE CASCADE,
+  v2 INT REFERENCES child2(v) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO grandchild VALUES (1, 1, 1), (2, 2, 2), (3, 2, 2), (4, 3, 3);
+
+# Update the parent table, which should cascade to the children and grandchild.
+# Note that both child tables cascade to the grandchild.
+#
+# Regression test for #133784 and #133792.
+query T noticetrace
+UPDATE parent SET k = k + 10 WHERE k < 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (1) -> (11)
+NOTICE: BEFORE UPDATE ON parent: (2) -> (12)
+NOTICE: BEFORE UPDATE ON child: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON parent: (1) -> (11)
+NOTICE: AFTER UPDATE ON parent: (2) -> (12)
+NOTICE: AFTER UPDATE ON child: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: BEFORE UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: BEFORE UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: BEFORE UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: AFTER UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: AFTER UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+
+query II rowsort
+SELECT * FROM child;
+----
+1  11
+2  12
+3  3
+
+query II rowsort
+SELECT * FROM child2;
+----
+1  11
+2  12
+3  3
+
+query III rowsort
+SELECT * FROM grandchild;
+----
+1  11  11
+2  12  12
+3  12  12
+4  3   3
+
+statement ok
+DROP TABLE grandchild;
 DROP TABLE child;
 DROP TABLE child2;
 DROP TABLE parent;
 DROP FUNCTION g;
+DROP FUNCTION h;
+DROP FUNCTION filter;
 
 # ==============================================================================
 # Test order of execution.
