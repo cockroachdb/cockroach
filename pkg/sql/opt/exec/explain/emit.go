@@ -958,6 +958,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			}
 			ob.Attr("arbiter constraints", sb.String())
 		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 
 	case updateOp:
 		a := n.args.(*updateArgs)
