@@ -76,6 +76,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -481,10 +482,32 @@ func WithTag(tag string) CustomOption {
 	}
 }
 
-// minSupportedSkipVersionUpgrade is the minimum version after which
-// "skip version" upgrades are supported (i.e., upgrading two major
-// releases in a single upgrade).
-var minSupportedSkipVersionUpgrade = clusterupgrade.MustParseVersion("v24.1.0")
+// supportsSkipUpgradeTo returns true if the given version supports skipping the
+// previous major version during upgrade. For example, 24.3 supports upgrade
+// directly from 24.1, but 25.1 only supports upgrade from 24.3.
+func supportsSkipUpgradeTo(v *clusterupgrade.Version) bool {
+	major, minor := v.Version.Major(), v.Version.Minor()
+
+	// Special case for the current release series. This is useful to keep the
+	// test correct when we bump the minimum supported version separately from
+	// the current version.
+	if r := clusterversion.Latest.ReleaseSeries(); int(r.Major) == major && int(r.Minor) == minor {
+		return len(clusterversion.SupportedPreviousReleases()) > 1
+	}
+
+	switch {
+	case major < 24:
+		return false
+	case major == 24:
+		// v24.2 supported skip upgrades experimentally.
+		// v24.3 is the first version which officially supports the skip upgrade.
+		return minor == 2 || minor == 3
+	default:
+		// The current plan for 2025+ is for .1 and .3 to be skippable innovation
+		// releases.
+		return minor == 2 || minor == 4
+	}
+}
 
 func defaultTestOptions() testOptions {
 	return testOptions{
@@ -835,11 +858,9 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 			return nil, nil
 		}
 
-		// If skip-version upgrades are not enabled, the only possible
-		// predecessor is the immediate predecessor release. If the
-		// predecessor doesn't support skip versions, then its predecessor
-		// won't either. Don't attempt to find it.
-		if !skipVersions || !pred.AtLeast(minSupportedSkipVersionUpgrade) {
+		// If skip-version upgrades are not enabled or v does not support them, the
+		// only possible predecessor is the immediate predecessor release.
+		if !skipVersions || !supportsSkipUpgradeTo(v) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
@@ -848,26 +869,18 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 			return nil, err
 		}
 
-		if predPred.AtLeast(minSupportedSkipVersionUpgrade) {
-			// If the predecessor's predecessor supports skip-version
-			// upgrades and we haven't performed a skip-version upgrade yet,
-			// do it. This logic makes sure that, when skip-version upgrades
-			// are enabled, it happens when upgrading to the current
-			// release, which is the most important upgrade to be tested on
-			// any release branch.
-			if numSkips == 0 {
-				numSkips++
-				return []*clusterupgrade.Version{predPred}, nil
-			}
-
-			// If we already performed a skip-version upgrade on this test
-			// plan, we can choose to do another one or not.
-			return []*clusterupgrade.Version{pred, predPred}, nil
+		// If we haven't performed a skip-version upgrade yet, do it. This logic
+		// makes sure that, when skip-version upgrades are enabled, it happens
+		// when upgrading to the current release, which is the most important
+		// upgrade to be tested on any release branch.
+		if numSkips == 0 {
+			numSkips++
+			return []*clusterupgrade.Version{predPred}, nil
 		}
 
-		// If the predecessor is too old and does not support skip-version
-		// upgrades, it's the only possible predecessor.
-		return []*clusterupgrade.Version{pred}, nil
+		// If we already performed a skip-version upgrade on this test
+		// plan, we can choose to do another one or not.
+		return []*clusterupgrade.Version{pred, predPred}, nil
 	}
 
 	currentVersion := clusterupgrade.CurrentVersion()
