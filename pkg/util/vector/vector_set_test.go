@@ -51,6 +51,11 @@ func TestVectorSet(t *testing.T) {
 	require.Equal(t, 5, vs.Count)
 	require.Equal(t, []float32{1, 2, 4, 4, 6, 6, 1, 2, 3, 1}, vs.Data)
 
+	// Clear.
+	vs.Clear()
+	require.Equal(t, 2, vs.Dims)
+	require.Equal(t, 0, vs.Count)
+
 	vs3 := MakeSetFromRawData(vs.Data, 2)
 	require.Equal(t, vs, vs3)
 

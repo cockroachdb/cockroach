@@ -12,6 +12,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
+// SearchResults is a list of search results from the search set.
+type SearchResults []SearchResult
+
+// Sort re-orders the results in-place, by their distance.
+func (s *SearchResults) Sort() {
+	results := searchResultHeap(*s)
+	if len(results) > 1 {
+		// Sort the results in-place.
+		sort.Slice(results, func(i int, j int) bool {
+			return !results.Less(i, j)
+		})
+	}
+}
+
 // SearchResult contains a set of results from searching partitions for data
 // vectors that are nearest to a query vector.
 type SearchResult struct {
@@ -57,7 +71,7 @@ func (h searchResultHeap) Less(i, j int) bool {
 		return true
 	}
 	if distance1 == distance2 && h[i].ErrorBound < h[j].ErrorBound {
-		// If distance is equal, higher error bound sorts first.
+		// If distance is equal, lower error bound sorts first.
 		return true
 	}
 	return false
@@ -181,34 +195,25 @@ func (ss *SearchSet) Add(candidate *SearchResult) {
 }
 
 // AddAll includes a set of candidates in the search set.
-func (ss *SearchSet) AddAll(candidates []SearchResult) {
+func (ss *SearchSet) AddAll(candidates SearchResults) {
 	for i := range candidates {
 		ss.Add(&candidates[i])
 	}
 }
 
-// PopResults removes the nearest candidates by distance from the set and
-// returns them as a sorted list.
-func (ss *SearchSet) PopResults() []SearchResult {
-	return ss.popAndSort(&ss.results)
+// PopResults removes all results from the set and returns them in order of
+// their distance.
+func (ss *SearchSet) PopResults() SearchResults {
+	results := ss.PopUnsortedResults()
+	results.Sort()
+	return results
 }
 
-// PopExtraResults removes extra potential candidates from the set and returns
-// them as a sorted list.
-func (ss *SearchSet) PopExtraResults() []SearchResult {
-	return ss.popAndSort(&ss.extraResults)
-}
-
-func (ss *SearchSet) popAndSort(results *searchResultHeap) []SearchResult {
-	if len(*results) > 1 {
-		// Sort the results. This invalidates the heap invariant, so do not
-		// attempt to reuse the slice.
-		sort.Slice(*results, func(i int, j int) bool {
-			return !results.Less(i, j)
-		})
-	}
-
-	popped := *results
-	*results = nil
-	return popped
+// PopUnsortedResults removes the nearest candidates by distance from the set
+// and returns them in unsorted order.
+func (ss *SearchSet) PopUnsortedResults() SearchResults {
+	popped := append(ss.results, ss.extraResults...)
+	ss.results = nil
+	ss.extraResults = nil
+	return SearchResults(popped)
 }
