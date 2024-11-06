@@ -43,6 +43,7 @@ type MetadataSchema struct {
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
 	ids           catalog.DescriptorIDSet
+	descsMap      map[string]catalog.Descriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -52,7 +53,7 @@ func MakeMetadataSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) MetadataSchema {
-	ms := MetadataSchema{codec: codec}
+	ms := MetadataSchema{codec: codec, descsMap: make(map[string]catalog.Descriptor)}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
 	return ms
 }
@@ -76,9 +77,10 @@ const firstNonSystemDescriptorID = 100
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
+	_, isTable := desc.(catalog.TableDescriptor)
 	switch id := desc.GetID(); id {
 	case descpb.InvalidID:
-		if _, isTable := desc.(catalog.TableDescriptor); !isTable {
+		if !isTable {
 			log.Fatalf(context.TODO(), "only system tables may have dynamic IDs, got %T for %s",
 				desc, desc.GetName())
 		}
@@ -89,6 +91,10 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 		if ms.ids.Contains(id) {
 			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
+	}
+
+	if isTable {
+		ms.descsMap[desc.GetName()] = desc
 	}
 	ms.descs = append(ms.descs, desc)
 }
@@ -561,10 +567,7 @@ func addZoneConfigKVsToSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	var kvs []roachpb.KeyValue
-	if target.codec.TenantID != roachpb.TenantTwo {
-		kvs = InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
-	}
+	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
 	target.otherKV = append(target.otherKV, kvs...)
 }
 
@@ -577,8 +580,10 @@ func addSystemDatabaseToSchema(
 ) {
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
-	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
-	addSystemTenantEntry(target)
+	if target.codec.TenantID != roachpb.TenantTwo {
+		addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+		addSystemTenantEntry(target)
+	}
 }
 
 // addSystemTenantEntry adds a kv pair to system.tenants to define the initial

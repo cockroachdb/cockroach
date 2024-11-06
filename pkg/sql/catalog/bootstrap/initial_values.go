@@ -7,6 +7,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -16,7 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,6 +33,8 @@ type InitialValuesOpts struct {
 	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	OverrideKey             clusterversion.Key
 	Codec                   keys.SQLCodec
+	Txn                     *kv.Txn
+	IsqlTxn                 isql.Txn
 }
 
 // GenerateInitialValues generates the initial values with which to bootstrap a
@@ -37,6 +45,7 @@ func (opts InitialValuesOpts) GenerateInitialValues() ([]roachpb.KeyValue, []roa
 	if opts.OverrideKey != 0 {
 		versionKey = opts.OverrideKey
 	}
+	// TODO(shubham): deal with other `versionKey` later
 	f, ok := initialValuesFactoryByKey[versionKey]
 	if !ok {
 		return nil, nil, errors.Newf("unsupported version %q", versionKey)
@@ -90,7 +99,85 @@ func buildLatestInitialValues(
 ) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
 	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
 	kvs, splits = schema.GetInitialValues()
+
+	ctx := context.Background()
+
+	if opts.Codec.TenantID == roachpb.TenantTwo {
+		copiedKVs, err := copySystemTableKVs(ctx, opts.Txn, opts.IsqlTxn, opts.Codec, schema.descsMap)
+		if err != nil {
+			return nil, nil, err
+		}
+		kvs = append(kvs, copiedKVs...)
+	}
+
 	return kvs, splits, nil
+}
+
+func copySystemTableKVs(
+	ctx context.Context,
+	kvTxn *kv.Txn,
+	isqlTxn isql.Txn,
+	targetCodec keys.SQLCodec,
+	descMap map[string]catalog.Descriptor,
+) ([]roachpb.KeyValue, error) {
+	ret := make([]roachpb.KeyValue, 0)
+	sourceCodec := keys.SystemSQLCodec
+
+	tables := []catconstants.SystemTableName{
+		catconstants.ZonesTableName, // we need to filter out data for tables we don't need
+		catconstants.TenantSettingsTableName,
+	}
+
+	batch := kvTxn.NewBatch()
+	for _, table := range tables {
+		desc, ok := descMap[string(table)]
+		if !ok {
+			log.Ops.Errorf(ctx, "descID not found for : %s", table)
+			return nil, errors.Errorf("descID not found for : %s", table)
+		}
+		span := sourceCodec.TableSpan(uint32(desc.GetID()))
+		batch.Scan(span.Key, span.EndKey)
+	}
+
+	if err := kvTxn.Run(ctx, batch); err != nil {
+		return nil, err
+	}
+
+	if len(batch.Results) != len(tables) {
+		return nil, errors.AssertionFailedf(
+			"unexpected batch result count, expected: %d, found: %d",
+			len(tables),
+			len(batch.Results))
+	}
+
+	for i, result := range batch.Results {
+		if err := result.Err; err != nil {
+			return nil, err
+		}
+		rows := result.Rows
+		// Rewrite the keys
+		tablePrefix := targetCodec.TablePrefix(uint32(descMap[string(tables[i])].GetID()))
+		kvs := make([]roachpb.KeyValue, 0, len(rows))
+		for _, row := range rows {
+			strippedKey, err := keys.StripTablePrefix(row.Key)
+			if err != nil {
+				return nil, err
+			}
+			key := make([]byte, 0, len(tablePrefix)+len(strippedKey))
+			key = append(key, tablePrefix...)
+			key = append(key, strippedKey...)
+			kv := roachpb.KeyValue{
+				Key:   key,
+				Value: *row.Value,
+			}
+
+			kv.Value.ClearChecksum()
+			kvs = append(kvs, kv)
+		}
+		ret = append(ret, kvs...)
+	}
+
+	return ret, nil
 }
 
 // hardCodedInitialValues defines an initialValuesFactoryFn using
