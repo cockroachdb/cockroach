@@ -80,6 +80,7 @@ go_library(
         "//pkg/util/ring",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/system",
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
