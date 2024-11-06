@@ -890,6 +890,33 @@ deprules
     - descriptorIsDataNotBeingAdded-25.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: New primary index for alter column type should go public in the same stage as dropped column
+  from: column-Node
+  kind: SameStagePrecedence
+  to: new-primary-index-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $new-primary-index[Type] = '*scpb.PrimaryIndex'
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $old-column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $old-column-id)
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - $new-primary-index-Target[TargetStatus] = PUBLIC
+    - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - joinOnColumnName($old-column-name, $new-column-name, $table-id, $column-name)
+    - $old-column-name[ColumnID] = $old-column-id
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($new-column-name, $compute-expression, $table-id, $new-column-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: New primary index should go public only after columns being dropped move to WRITE_ONLY
   from: column-Node
   kind: Precedence
@@ -897,12 +924,13 @@ deprules
   query:
     - $column[Type] = '*scpb.Column'
     - $new-primary-index[Type] = '*scpb.PrimaryIndex'
-    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $column-id, $index-id)
-    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $old-column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $old-column-id)
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - $new-primary-index-Target[TargetStatus] = PUBLIC
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - dropped column is not part of column type operation($table-id, $old-column-id)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -2504,6 +2532,26 @@ deprules
     - ToPublicOrTransient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = DELETE_ONLY
     - $dependent-Node[CurrentStatus] = PUBLIC
+    - no column type alteration in progress($table-id, $col-id)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: column existence precedes column dependents during an alter column type
+  from: column-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - joinOnColumnID($column, $dependent, $table-id, $col-id)
+    - ToPublicOrTransient($column-Target, $dependent-Target)
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: column existence precedes index existence
@@ -2548,17 +2596,18 @@ deprules
     - $index-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
-- name: column name and type set right after column existence
+- name: column name set right after column existence, except for alter column type
   from: column-Node
   kind: SameStagePrecedence
   to: column-name-or-type-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $column-name-or-type[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType']
+    - $column-name-or-type[Type] = '*scpb.ColumnName'
     - ToPublicOrTransient($column-Target, $column-name-or-type-Target)
     - $column-Node[CurrentStatus] = DELETE_ONLY
     - $column-name-or-type-Node[CurrentStatus] = PUBLIC
     - joinOnColumnID($column, $column-name-or-type, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($column-name-or-type, $column-name-or-type-Target, $column-name-or-type-Node)
 - name: column no longer public before dependents
@@ -2687,6 +2736,19 @@ deprules
     - $column-Node[CurrentStatus] = ABSENT
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: column type set right after column existence
+  from: column-Node
+  kind: SameStagePrecedence
+  to: column-type-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $column-type[Type] = '*scpb.ColumnType'
+    - ToPublicOrTransient($column-Target, $column-type-Target)
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-type-Node[CurrentStatus] = PUBLIC
+    - joinOnColumnID($column, $column-type, $table-id, $col-id)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: column type update is decomposed as a drop then add
   from: old-column-type-Node
   kind: Precedence
@@ -3298,6 +3360,27 @@ deprules
     - $column-type-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
+- name: during alter column type, column names for old and new columns are swapped in the same stage
+  from: old-column-name-Node
+  kind: SameStagePrecedence
+  to: new-column-name-Node
+  query:
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $old-column-name-Node[CurrentStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $new-column-name-Node[CurrentStatus] = PUBLIC
+    - joinOnDescID($old-column-name, $new-column-name, $table-id)
+    - $new-column-name[ColumnID] = $new-col-id
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $new-col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
 - name: ensure columns are in increasing order
   from: later-column-Node
   kind: Precedence
@@ -5381,6 +5464,33 @@ deprules
     - descriptorIsDataNotBeingAdded-25.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: New primary index for alter column type should go public in the same stage as dropped column
+  from: column-Node
+  kind: SameStagePrecedence
+  to: new-primary-index-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $new-primary-index[Type] = '*scpb.PrimaryIndex'
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $old-column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $old-column-id)
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - $new-primary-index-Target[TargetStatus] = PUBLIC
+    - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - joinOnColumnName($old-column-name, $new-column-name, $table-id, $column-name)
+    - $old-column-name[ColumnID] = $old-column-id
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($new-column-name, $compute-expression, $table-id, $new-column-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: New primary index should go public only after columns being dropped move to WRITE_ONLY
   from: column-Node
   kind: Precedence
@@ -5388,12 +5498,13 @@ deprules
   query:
     - $column[Type] = '*scpb.Column'
     - $new-primary-index[Type] = '*scpb.PrimaryIndex'
-    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $column-id, $index-id)
-    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - ColumnInSourcePrimaryIndex($index-column, $new-primary-index, $table-id, $old-column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $old-column-id)
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - $new-primary-index-Target[TargetStatus] = PUBLIC
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
+    - dropped column is not part of column type operation($table-id, $old-column-id)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -6995,6 +7106,26 @@ deprules
     - ToPublicOrTransient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = DELETE_ONLY
     - $dependent-Node[CurrentStatus] = PUBLIC
+    - no column type alteration in progress($table-id, $col-id)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: column existence precedes column dependents during an alter column type
+  from: column-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $dependent[Type] IN ['*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.IndexColumn', '*scpb.SequenceOwner']
+    - joinOnColumnID($column, $dependent, $table-id, $col-id)
+    - ToPublicOrTransient($column-Target, $dependent-Target)
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: column existence precedes index existence
@@ -7039,17 +7170,18 @@ deprules
     - $index-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
-- name: column name and type set right after column existence
+- name: column name set right after column existence, except for alter column type
   from: column-Node
   kind: SameStagePrecedence
   to: column-name-or-type-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $column-name-or-type[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType']
+    - $column-name-or-type[Type] = '*scpb.ColumnName'
     - ToPublicOrTransient($column-Target, $column-name-or-type-Target)
     - $column-Node[CurrentStatus] = DELETE_ONLY
     - $column-name-or-type-Node[CurrentStatus] = PUBLIC
     - joinOnColumnID($column, $column-name-or-type, $table-id, $col-id)
+    - no column type alteration in progress($table-id, $col-id)
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($column-name-or-type, $column-name-or-type-Target, $column-name-or-type-Node)
 - name: column no longer public before dependents
@@ -7178,6 +7310,19 @@ deprules
     - $column-Node[CurrentStatus] = ABSENT
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: column type set right after column existence
+  from: column-Node
+  kind: SameStagePrecedence
+  to: column-type-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $column-type[Type] = '*scpb.ColumnType'
+    - ToPublicOrTransient($column-Target, $column-type-Target)
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - $column-type-Node[CurrentStatus] = PUBLIC
+    - joinOnColumnID($column, $column-type, $table-id, $col-id)
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: column type update is decomposed as a drop then add
   from: old-column-type-Node
   kind: Precedence
@@ -7789,6 +7934,27 @@ deprules
     - $column-type-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
+- name: during alter column type, column names for old and new columns are swapped in the same stage
+  from: old-column-name-Node
+  kind: SameStagePrecedence
+  to: new-column-name-Node
+  query:
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $old-column-name-Node[CurrentStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $new-column-name-Node[CurrentStatus] = PUBLIC
+    - joinOnDescID($old-column-name, $new-column-name, $table-id)
+    - $new-column-name[ColumnID] = $new-col-id
+    - $column[Type] = '*scpb.Column'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - joinOnColumnID($column, $compute-expression, $table-id, $new-col-id)
+    - $compute-expression[Usage] = ALTER_TYPE_USING
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
 - name: ensure columns are in increasing order
   from: later-column-Node
   kind: Precedence
