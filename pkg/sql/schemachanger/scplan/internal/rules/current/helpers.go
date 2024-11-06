@@ -213,6 +213,14 @@ func isColumnDependent(e scpb.Element) bool {
 	return isColumnTypeDependent(e)
 }
 
+func isColumnDependentExceptColumnName(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnName:
+		return false
+	}
+	return isColumnDependent(e)
+}
+
 func isColumnNotNull(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnNotNull:

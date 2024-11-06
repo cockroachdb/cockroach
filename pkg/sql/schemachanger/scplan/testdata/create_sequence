@@ -259,7 +259,7 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
 - from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
   to:   [ColumnName:{DescID: 105, Name: value, ColumnID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [column existence precedes column dependents; column name and type set right after column existence]
+  rules: [column existence precedes column dependents; column name set right after column existence, except for alter column type]
 - from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
   to:   [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, PUBLIC]
   kind: Precedence
@@ -267,7 +267,7 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
 - from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [column existence precedes column dependents; column name and type set right after column existence]
+  rules: [column existence precedes column dependents; column type set right after column existence]
 - from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
   kind: Precedence

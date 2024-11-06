@@ -105,6 +105,10 @@ func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Claus
 	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
 }
 
+func JoinOnColumnName(a, b NodeVars, relationIDVar, columnNameVar rel.Var) rel.Clause {
+	return joinOnColumnNameUntyped(a.El, b.El, relationIDVar, columnNameVar)
+}
+
 // JoinOnColumnFamilyID joins elements on column ID.
 func JoinOnColumnFamilyID(a, b NodeVars, relationIDVar, columnFamilyIDVar rel.Var) rel.Clause {
 	return joinOnColumnFamilyIDUntyped(a.El, b.El, relationIDVar, columnFamilyIDVar)
@@ -146,7 +150,10 @@ func ColumnInSourcePrimaryIndex(
 	return columnInSourcePrimaryIndex(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
-// IsAlterColumnTypeOp checks if the specified column is undergoing a type alteration
+// IsAlterColumnTypeOp checks if the specified column is undergoing a type alteration.
+// columnIDVar represents the column ID of the new column in the operation.
+// If only the dropped column ID is available, use the alternative function:
+// IsDroppedColumnPartOfAlterColumnTypeOp.
 func IsAlterColumnTypeOp(tableIDVar, columnIDVar rel.Var) rel.Clauses {
 	column := MkNodeVars("column")
 	computeExpression := MkNodeVars("compute-expression")
@@ -156,6 +163,30 @@ func IsAlterColumnTypeOp(tableIDVar, columnIDVar rel.Var) rel.Clauses {
 		JoinOnColumnID(column, computeExpression, tableIDVar, columnIDVar),
 		computeExpression.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
 		column.JoinTargetNode(),
+		computeExpression.JoinTargetNode(),
+	}
+}
+
+// IsDroppedColumnPartOfAlterColumnTypeOp functions similarly to IsAlterColumnTypeOp
+// but operates using the dropped column ID. It checks for a specific compute expression
+// applied to the new column. This requires joining the old column with the new column
+// by matching on the column name.
+func IsDroppedColumnPartOfAlterColumnTypeOp(tableIDVar, oldColumnIDVar rel.Var) rel.Clauses {
+	oldColumnName := MkNodeVars("old-column-name")
+	newColumnName := MkNodeVars("new-column-name")
+	computeExpression := MkNodeVars("compute-expression")
+	return rel.Clauses{
+		oldColumnName.Type((*scpb.ColumnName)(nil)),
+		newColumnName.Type((*scpb.ColumnName)(nil)),
+		JoinOnColumnName(oldColumnName, newColumnName, tableIDVar, "column-name"),
+		oldColumnName.El.AttrEqVar(screl.ColumnID, oldColumnIDVar),
+		oldColumnName.TargetStatus(scpb.ToAbsent),
+		newColumnName.TargetStatus(scpb.ToPublic),
+		computeExpression.Type((*scpb.ColumnComputeExpression)(nil)),
+		JoinOnColumnID(newColumnName, computeExpression, tableIDVar, "new-column-id"),
+		computeExpression.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
+		oldColumnName.JoinTargetNode(),
+		newColumnName.JoinTargetNode(),
 		computeExpression.JoinTargetNode(),
 	}
 }
@@ -256,6 +287,18 @@ var (
 			}
 		},
 	)
+
+	joinOnColumnNameUntyped = screl.Schema.Def4(
+		"joinOnColumnName", "a", "b", "desc-id", "column-name", func(
+			a, b, descID, columnName rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				JoinOnDescIDUntyped(a, b, descID),
+				columnName.Entities(screl.Name, a, b),
+			}
+		},
+	)
+
 	joinOnColumnFamilyIDUntyped = screl.Schema.Def4(
 		"joinOnColumnFamilyID", "a", "b", "desc-id", "family-id", func(
 			a, b, descID, familyID rel.Var,
@@ -344,11 +387,15 @@ var (
 			return IsPotentialSecondaryIndexSwap(b, a)
 		})
 
-	// IsNotAlterColumnTypeOp determines if no column alteration in progress
+	// IsNotAlterColumnTypeOp determines if no column alteration in progress. The column
+	// passed in must for a new column.
 	IsNotAlterColumnTypeOp = screl.Schema.DefNotJoin2("no column type alteration in progress",
 		"table-id", "column-id", func(t, c rel.Var) rel.Clauses {
 			return IsAlterColumnTypeOp(t, c)
 		})
+
+	IsNotDroppedColumnPartOfAlterColumnTypeOp = screl.Schema.DefNotJoin2("dropped column is not part of column type operation",
+		"table-id", "old-column-id", func(t, c rel.Var) rel.Clauses { return IsDroppedColumnPartOfAlterColumnTypeOp(t, c) })
 )
 
 // ForEachElementInActiveVersion executes a function for each element supported within

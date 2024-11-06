@@ -2936,11 +2936,11 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
 - from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [column existence precedes column dependents; column name and type set right after column existence]
+  rules: [column existence precedes column dependents; column name set right after column existence, except for alter column type]
 - from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [column existence precedes column dependents; column name and type set right after column existence]
+  rules: [column existence precedes column dependents; column type set right after column existence]
 - from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 2}, PUBLIC]
   kind: Precedence

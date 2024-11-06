@@ -9,7 +9,7 @@ EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET DATA TYPE BIGINT USING j::
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE INT8 USING ‹j›::INT8;
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
- │    └── into t_pkey~ (i; j-j_shadow~, j+)
+ │    └── into t_pkey~ (i; j-, j+)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
  │    └── from t@[3] into t_pkey~
