@@ -14,3 +14,12 @@ import "context"
 type ITableMetadataUpdater interface {
 	RunUpdater(ctx context.Context) error
 }
+
+// NoopUpdater is an implementation of ITableMetadataUpdater that performs a noop when RunUpdater is called.
+type NoopUpdater struct{}
+
+func (nu *NoopUpdater) RunUpdater(_ctx context.Context) error {
+	return nil
+}
+
+var _ ITableMetadataUpdater = &NoopUpdater{}
