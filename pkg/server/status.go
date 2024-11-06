@@ -117,6 +117,10 @@ var (
 	redactedMarker = string(redact.RedactedMarker())
 )
 
+const (
+	updateTableMetadataCachePermissionErrMsg = "only admin users can trigger table metadata cache updates"
+)
+
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer, expfmt.Format) error
@@ -4258,6 +4262,10 @@ func (s *statusServer) localUpdateTableMetadataCache() (
 func (s *statusServer) UpdateTableMetadataCache(
 	ctx context.Context, req *serverpb.UpdateTableMetadataCacheRequest,
 ) (*serverpb.UpdateTableMetadataCacheResponse, error) {
+	_, isAdmin, _ := s.privilegeChecker.GetUserAndRole(ctx)
+	if !isAdmin {
+		return nil, status.Error(codes.PermissionDenied, updateTableMetadataCachePermissionErrMsg)
+	}
 	if req.Local {
 		return s.localUpdateTableMetadataCache()
 	}

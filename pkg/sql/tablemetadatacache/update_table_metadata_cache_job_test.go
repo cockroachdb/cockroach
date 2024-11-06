@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,70 +23,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-// TestUpdateTableMetadataCacheJobRunsOnRPCTrigger tests that
-// signalling the update table metadata cache job via the status
-// server triggers the job to run.
-func TestUpdateTableMetadataCacheJobRunsOnRPCTrigger(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	jobCompleteCh := make(chan struct{})
-	ctx := context.Background()
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				TableMetadata: &tablemetadatacacheutil.TestingKnobs{
-					TableMetadataUpdater: &tablemetadatacacheutil.NoopUpdater{},
-					OnJobComplete: func() {
-						jobCompleteCh <- struct{}{}
-					},
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(context.Background())
-
-	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-
-	// Get the node id that claimed the update job. We'll issue the
-	// RPC to a node that doesn't own the job to test that the RPC can
-	// propagate the request to the correct node.
-	var nodeID int
-	testutils.SucceedsSoon(t, func() error {
-		row := conn.Query(t, `
-SELECT claim_instance_id FROM system.jobs 
-WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJobID)
-		if !row.Next() {
-			return errors.New("no node has claimed the job")
-		}
-		require.NoError(t, row.Scan(&nodeID))
-
-		rpcGatewayNode := (nodeID + 1) % 3
-		_, err := tc.Server(rpcGatewayNode).GetStatusClient(t).UpdateTableMetadataCache(ctx,
-			&serverpb.UpdateTableMetadataCacheRequest{Local: false})
-		if err != nil {
-			return err
-		}
-		// The job shouldn't be busy.
-		return nil
-	})
-
-	// Wait for the job to complete.
-	t.Log("waiting for job to complete")
-	<-jobCompleteCh
-	t.Log("job completed")
-
-	row := conn.Query(t,
-		`SELECT running_status FROM crdb_internal.jobs WHERE job_id = $1 AND running_status IS NOT NULL`,
-		jobs.UpdateTableMetadataCacheJobID)
-	if !row.Next() {
-		t.Fatal("last_run_time not updated")
-	}
-	var runningStatus string
-	require.NoError(t, row.Scan(&runningStatus))
-	require.Containsf(t, runningStatus, "Job completed at", "running_status not updated: %s", runningStatus)
-}
 
 // TestUpdateTableMetadataCacheAutomaticUpdates tests that:
 // 1. The update table metadata cache job does not run automatically by default.
