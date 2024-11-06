@@ -59,8 +59,12 @@ func Build(
 	n tree.Statement,
 	memAcc *mon.BoundAccount,
 ) (_ scpb.CurrentState, eventLogCallBack LogSchemaChangerEventsFn, err error) {
+	// This message is logged at level=1 since this is called during the planning
+	// phase to check if the statement is supported by the declarative schema
+	// changer, which makes this quite verbose.
 	defer scerrors.StartEventf(
 		ctx,
+		1, /* level */
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)

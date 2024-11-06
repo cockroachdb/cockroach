@@ -60,6 +60,7 @@ func makeEventLogCallback(
 	var swallowedError error
 	defer scerrors.StartEventf(
 		b.Context,
+		0, /* level */
 		"event logging for declarative schema change targets built for %s",
 		redact.Safe(ts.Statements[loggedTargets[0].target.Metadata.StatementID].StatementTag),
 	).HandlePanicAndLogError(b.Context, &swallowedError)
