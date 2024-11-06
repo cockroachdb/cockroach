@@ -90,10 +90,7 @@ const COLUMNS: (TableColumnProps<TableIndexRow> & { hideIfCloud?: boolean })[] =
 
         const stat = {
           indexName: idx.indexName,
-          indexRecommendations: idx.indexRecs.map(rec => ({
-            type: "DROP_UNUSED" as const,
-            reason: rec.reason,
-          })),
+          indexRecommendations: idx.indexRecs,
         };
         // The action button expects an escaped schema qualified table name.
         return (
