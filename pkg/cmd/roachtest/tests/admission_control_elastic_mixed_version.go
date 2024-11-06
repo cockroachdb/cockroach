@@ -128,6 +128,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 				})
 
 			mvt.Run()
+			validateTokensReturned(ctx, t, c, c.CRDBNodes())
 		},
 	})
 }
