@@ -136,7 +136,7 @@ func (p *planner) createTenantInternal(
 		return tid, nil
 	}
 
-	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig)
+	return BootstrapTenant(ctx, p.execCfg, p.Txn(), p.InternalSQLTxn(), info, initialTenantZoneConfig)
 }
 
 // BootstrapTenant bootstraps the span of the newly created tenant identified in
@@ -145,6 +145,7 @@ func BootstrapTenant(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
+	isqlTxn isql.Txn,
 	info mtinfopb.TenantInfoWithUsage,
 	zfcg *zonepb.ZoneConfig,
 ) (roachpb.TenantID, error) {
@@ -186,19 +187,17 @@ func BootstrapTenant(
 		DefaultSystemZoneConfig: zfcg,
 		OverrideKey:             bootstrapVersionOverride,
 		Codec:                   codec,
+		IsqlTxn:                 isqlTxn,
+		Txn:                     txn,
 	}
 	kvs, splits, err := initialValuesOpts.GenerateInitialValues()
 	if err != nil {
 		return tid, err
 	}
 
-	{
-		copiedKVs, err := CopyZoneConfigKVs(ctx, txn, codec)
-		if err != nil {
-			return tid, err
-		}
-		kvs = append(kvs, copiedKVs...)
-	}
+	// if tid == roachpb.TenantTwo {
+	// 	kvs = append(kvs, C)
+	// }
 
 	{
 		// Populate the version setting for the tenant. This will allow the tenant
@@ -248,43 +247,6 @@ func BootstrapTenant(
 	}
 
 	return tid, nil
-}
-
-func CopyZoneConfigKVs(
-	ctx context.Context, txn *kv.Txn, targetCodec keys.SQLCodec,
-) ([]roachpb.KeyValue, error) {
-	sourceCodec := keys.SystemSQLCodec
-	// get all keys for the table
-
-	zoneSpan := sourceCodec.TableSpan(keys.ZonesTableID)
-	batch := txn.NewBatch()
-	batch.Scan(zoneSpan.Key, zoneSpan.EndKey)
-
-	if err := txn.Run(ctx, batch); err != nil {
-		return nil, err
-	}
-
-	if len(batch.Results) != 1 {
-		return nil, errors.AssertionFailedf("expected exactly on batch result found %d: %+v", len(batch.Results), batch.Results[1])
-	}
-
-	if err := batch.Results[0].Err; err != nil {
-		return nil, err
-	}
-	rows := batch.Results[0].Rows
-
-	// rewrite keys
-	targetTenantPrefix := targetCodec.TenantPrefix()
-	ret := make([]roachpb.KeyValue, 0, len(rows))
-	for _, row := range rows {
-		v := roachpb.KeyValue{
-			Key:   append(targetTenantPrefix, row.Key...),
-			Value: *row.Value,
-		}
-		v.Value.ClearChecksum()
-		ret = append(ret, v)
-	}
-	return ret, nil
 }
 
 // CreateTenantRecord creates a tenant in system.tenants and installs an initial
