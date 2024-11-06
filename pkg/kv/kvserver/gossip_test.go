@@ -9,20 +9,27 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -205,4 +212,125 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 			t.Errorf("failed Put to node %d: %+v", i, err)
 		}
 	}
+}
+
+func TestGossipRecoversBeforeUnavailableRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// As of Nov 2024 it takes TODOs.
+	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+	ctx := context.Background()
+
+	const numNodes = 5
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
+	stickyVFSRegistry := fs.NewStickyRegistry()
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := range numNodes {
+		serverArgs[i] = base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgsPerNode:   serverArgs,
+		ReusableListenerReg: lisReg,
+	})
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// Launch a goroutine that watches for unavailable ranges.
+	watcherCancel := make(chan struct{})
+	watcherRes := make(chan error, 1)
+	var watcherMu syncutil.Mutex
+	go func() {
+		watcherRes <- func() error {
+			for {
+				select {
+				case <-watcherCancel:
+					return nil
+				case <-time.After(10 * time.Millisecond):
+					// Every 10 milliseconds...
+				}
+
+				// Check that there are no unavailable ranges on any live node.
+				if err := func() error {
+					watcherMu.Lock()
+					defer watcherMu.Unlock()
+					for i := range numNodes {
+						if tc.ServerStopped(i) {
+							continue // ignore dead nodes
+						}
+						s := tc.GetFirstStoreFromServer(t, i)
+						if err := s.ComputeMetrics(ctx); err != nil {
+							if errors.Is(err, kvserver.ErrSpanConfigsUnavailable) {
+								// This can sometimes fail since ComputeMetrics calls
+								// updateReplicationGauges which needs the system config
+								// gossiped.
+								t.Logf("failed to compute metrics for server %d: %s", i, err)
+								continue
+							}
+							return errors.Wrapf(err, "failed to compute metrics for server %d", i)
+						}
+						if v := s.Metrics().UnavailableRangeCount.Value(); v > 0 {
+							return errors.Errorf("server %d has %d unavailable ranges", i, v)
+						}
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+		}()
+	}()
+
+	for i := range numNodes {
+		time.Sleep(5 * time.Second)
+
+		t.Logf("draining server %d", i)
+		require.NoError(t, tc.Server(i).DrainNode(ctx))
+
+		// Stop the server and hold it down for a few seconds while waiting to see
+		// whether the watcher detects an unavailable ranges.
+		t.Logf("stopping server %d", i)
+		func() {
+			// NOTE: we stop the server under watcherMu so that we properly
+			// synchronize with the watcher goroutine's calls to ServerStopped.
+			watcherMu.Lock()
+			defer watcherMu.Unlock()
+			tc.StopServer(i)
+		}()
+		select {
+		case err := <-watcherRes:
+			t.Fatalf("watcher failed: %s", err)
+		case <-time.After(15 * time.Second):
+		}
+
+		// Restart the server and wait for under-replicated ranges to drop to zero.
+		t.Logf("restarting server %d", i)
+		func() {
+			// NOTE: we restart the server under watcherMu so that we properly
+			// synchronize with the watcher goroutine's calls to ServerStopped.
+			watcherMu.Lock()
+			defer watcherMu.Unlock()
+			require.NoError(t, tc.RestartServer(i))
+		}()
+		require.NoError(t, tc.WaitForFullReplication())
+	}
+
+	// Stop the watcher.
+	close(watcherCancel)
+	require.NoError(t, <-watcherRes)
 }

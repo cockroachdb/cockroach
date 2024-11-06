@@ -178,7 +178,9 @@ func (s *Store) startGossip() {
 	}
 }
 
-var errSpanConfigsUnavailable = errors.New("span configs not available")
+// ErrSpanConfigsUnavailable indicates that an operation failed because the span
+// configs are not available.
+var ErrSpanConfigsUnavailable = errors.New("span configs not available")
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.

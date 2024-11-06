@@ -620,7 +620,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	{
 		confReader, err := tc.store.GetConfReader(ctx)
 		require.Nil(t, confReader)
-		require.True(t, errors.Is(err, errSpanConfigsUnavailable))
+		require.True(t, errors.Is(err, ErrSpanConfigsUnavailable))
 	}
 
 	r, err := tc.store.GetReplica(1)

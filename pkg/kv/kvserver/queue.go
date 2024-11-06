@@ -1026,7 +1026,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 		var err error
 		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
-			if log.V(1) || !errors.Is(err, errSpanConfigsUnavailable) {
+			if log.V(1) || !errors.Is(err, ErrSpanConfigsUnavailable) {
 				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
 			}
 			return nil, err

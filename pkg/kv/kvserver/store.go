@@ -2410,7 +2410,7 @@ func (s *Store) WaitForInit() {
 // GetConfReader exposes access to a configuration reader.
 func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
-		return nil, errSpanConfigsUnavailable
+		return nil, ErrSpanConfigsUnavailable
 	}
 	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
@@ -2419,7 +2419,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 	if s.cfg.SpanConfigsDisabled || s.TestingKnobs().UseSystemConfigSpanForQueues {
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
-			return nil, errSpanConfigsUnavailable
+			return nil, ErrSpanConfigsUnavailable
 		}
 		return sysCfg, nil
 	}
@@ -2442,7 +2442,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		//   failing to find expected data.
 		// - enabling the replicate queue would mean replicating towards the
 		//   statically defined 3x replication in the fallback span config.
-		return nil, errSpanConfigsUnavailable
+		return nil, ErrSpanConfigsUnavailable
 	}
 	return s.cfg.SpanConfigSubscriber, nil
 }

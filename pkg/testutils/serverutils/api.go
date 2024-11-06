@@ -366,6 +366,9 @@ type ApplicationLayerInterface interface {
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
 
+	// DrainNode drains leases from the node.
+	DrainNode(ctx context.Context) error
+
 	// SystemConfigProvider provides access to the system config.
 	SystemConfigProvider() config.SystemConfigProvider
 

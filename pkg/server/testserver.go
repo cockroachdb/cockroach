@@ -1185,6 +1185,11 @@ func (t *testTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
+// DrainNode exports the drainNode() method for use by tests.
+func (t *testTenant) DrainNode(ctx context.Context) error {
+	return t.drain.drainNode(ctx, nil /* reporter */, false /* verbose */)
+}
+
 // Readiness is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) Readiness(ctx context.Context) error {
 	return t.t.admin.checkReadinessForHealthCheck(ctx)
@@ -1851,6 +1856,11 @@ func (ts *testServer) SQLAddr() string {
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *testServer) DrainClients(ctx context.Context) error {
 	return ts.drain.drainClients(ctx, nil /* reporter */)
+}
+
+// DrainNode exports the drainNode() method for use by tests.
+func (ts *testServer) DrainNode(ctx context.Context) error {
+	return ts.drain.drainNode(ctx, nil /* reporter */, false /* verbose */)
 }
 
 // Readiness is part of the serverutils.ApplicationLayerInterface.
