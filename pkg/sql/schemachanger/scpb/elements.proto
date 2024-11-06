@@ -60,6 +60,11 @@ message ElementProto {
     CompositeType composite_type = 8;
     Function function = 9;
 
+    // Zero-level elements.
+    // These elements do not own a corresponding descriptor in the catalog,
+    // but do not have a parent.
+    NamedRangeZoneConfig named_range_zone_config = 220;
+
     // Relation elements.
     ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
     Column column = 21 [(gogoproto.moretags) = "parent:\"Table, View\""];
@@ -161,7 +166,7 @@ message ElementProto {
     TriggerFunctionCall trigger_function_call = 206 [(gogoproto.moretags) = "parent:\"Trigger\""];
     TriggerDeps trigger_deps = 207 [(gogoproto.moretags) = "parent:\"Trigger\""];
 
-    // Next element group start id: 220
+    // Next element group start id: 240
   }
 }
 
@@ -590,6 +595,17 @@ message UserPrivileges {
   uint64 with_grant_option = 4;
 }
 
+message NamedRangeZoneConfig {
+  uint32 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2;
+
+  // `seq_num` is used to differentiate different zone config elements tied to
+  // the same range. E.g. If we attempt to update a range's zone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 3;
+}
+
 message TableLocalityGlobal {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
@@ -898,4 +914,3 @@ message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
   bool in_24_3_or_later = 2;
 }
-

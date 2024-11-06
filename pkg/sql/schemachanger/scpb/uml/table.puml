@@ -270,6 +270,12 @@ object LDRJobIDs
 LDRJobIDs :  TableID
 LDRJobIDs : []JobIDs
 
+object NamedRangeZoneConfig
+
+NamedRangeZoneConfig :  RangeID
+NamedRangeZoneConfig :  ZoneConfig
+NamedRangeZoneConfig :  SeqNum
+
 object Namespace
 
 Namespace :  DatabaseID
