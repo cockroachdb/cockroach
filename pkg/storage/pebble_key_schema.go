@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -38,7 +39,8 @@ const (
 )
 
 var keySchema = colblk.KeySchema{
-	Name: "crdb1",
+	Name:       "crdb1",
+	HeaderSize: 1,
 	ColumnTypes: []colblk.DataType{
 		cockroachColRoachKey:       colblk.DataTypePrefixBytes,
 		cockroachColMVCCWallTime:   colblk.DataTypeUint,
@@ -57,11 +59,45 @@ var keySchema = colblk.KeySchema{
 	},
 }
 
+// suffixTypes is a bitfield indicating what kind of suffixes are present in a
+// block.
+type suffixTypes uint8
+
+const (
+	// hasMVCCSuffixes is set if there is at least one key with an MVCC suffix in
+	// the block.
+	hasMVCCSuffixes suffixTypes = (1 << iota)
+	// hasEmptySuffixes is set if there is at least one key with no suffix in the block.
+	hasEmptySuffixes
+	// hasNonMVCCSuffixes is set if there is at least one key with a non-empty,
+	// non-MVCC suffix.
+	hasNonMVCCSuffixes
+)
+
+func (s suffixTypes) String() string {
+	var suffixes []string
+	if s&hasMVCCSuffixes != 0 {
+		suffixes = append(suffixes, "mvcc")
+	}
+	if s&hasEmptySuffixes != 0 {
+		suffixes = append(suffixes, "empty")
+	}
+	if s&hasNonMVCCSuffixes != 0 {
+		suffixes = append(suffixes, "non-mvcc")
+	}
+	if len(suffixes) == 0 {
+		return "none"
+	}
+	return strings.Join(suffixes, ",")
+}
+
 type cockroachKeyWriter struct {
 	roachKeys       colblk.PrefixBytesBuilder
 	wallTimes       colblk.UintBuilder
 	logicalTimes    colblk.UintBuilder
 	untypedVersions colblk.RawBytesBuilder
+	suffixTypes     suffixTypes
+	prevRoachKeyLen int32
 	prevSuffix      []byte
 }
 
@@ -77,33 +113,63 @@ func makeCockroachKeyWriter() *cockroachKeyWriter {
 	return kw
 }
 
+func (kw *cockroachKeyWriter) Reset() {
+	kw.roachKeys.Reset()
+	kw.wallTimes.Reset()
+	kw.logicalTimes.Reset()
+	kw.untypedVersions.Reset()
+	kw.suffixTypes = 0
+	kw.prevRoachKeyLen = 0
+}
+
 func (kw *cockroachKeyWriter) ComparePrev(key []byte) colblk.KeyComparison {
-	var cmpv colblk.KeyComparison
-	cmpv.PrefixLen = int32(EngineKeySplit(key)) // TODO(jackson): Inline
+	prefixLen := EngineKeySplit(key)
 	if kw.roachKeys.Rows() == 0 {
-		cmpv.UserKeyComparison = 1
-		return cmpv
+		return colblk.KeyComparison{
+			PrefixLen:         int32(prefixLen),
+			CommonPrefixLen:   0,
+			UserKeyComparison: +1,
+		}
 	}
-	lp := kw.roachKeys.UnsafeGet(kw.roachKeys.Rows() - 1)
-	cmpv.CommonPrefixLen = int32(crbytes.CommonPrefix(lp, key[:cmpv.PrefixLen-1]))
-	if cmpv.CommonPrefixLen == cmpv.PrefixLen-1 {
-		// Adjust CommonPrefixLen to include the sentinel byte.
-		cmpv.CommonPrefixLen = cmpv.PrefixLen
-		cmpv.UserKeyComparison = int32(EnginePointSuffixCompare(key[cmpv.PrefixLen:], kw.prevSuffix))
-		return cmpv
+	lastRoachKey := kw.roachKeys.UnsafeGet(kw.roachKeys.Rows() - 1)
+	commonPrefixLen := crbytes.CommonPrefix(lastRoachKey, key[:prefixLen-1])
+	if len(lastRoachKey) == commonPrefixLen {
+		if buildutil.CrdbTestBuild && len(lastRoachKey) > prefixLen-1 {
+			panic(errors.AssertionFailedf("out-of-order keys: previous roach key %q > roach key of key %q",
+				lastRoachKey, key))
+		}
+		// All the bytes of the previous roach key form a byte-wise prefix of
+		// [key]'s prefix. The last byte of the previous prefix is the 0x00
+		// sentinel byte, which is not stored within roachKeys. It's possible
+		// that [key] also has a 0x00 byte in the same position (either also
+		// serving as a sentinel byte, in which case the prefixes are equal, or
+		// not in which case [key] is greater). In both cases, we need to
+		// increment CommonPrefixLen.
+		if key[commonPrefixLen] == 0x00 {
+			commonPrefixLen++
+			if commonPrefixLen == prefixLen {
+				// The prefixes are equal; compare the suffixes.
+				return colblk.KeyComparison{
+					PrefixLen:         int32(prefixLen),
+					CommonPrefixLen:   int32(commonPrefixLen),
+					UserKeyComparison: int32(EnginePointSuffixCompare(key[prefixLen:], kw.prevSuffix)),
+				}
+			}
+		}
+		// prefixLen > commonPrefixLen; key is greater.
+		return colblk.KeyComparison{
+			PrefixLen:         int32(prefixLen),
+			CommonPrefixLen:   int32(commonPrefixLen),
+			UserKeyComparison: +1,
+		}
 	}
-	// The keys have different MVCC prefixes. We haven't determined which is
-	// greater, but we know the index at which they diverge. The base.Comparer
-	// contract dictates that prefixes must be lexicographically ordered.
-	if len(lp) == int(cmpv.CommonPrefixLen) {
-		// cmpv.PrefixLen > cmpv.PrefixLenShared; key is greater.
-		cmpv.UserKeyComparison = +1
-	} else {
-		// Both keys have at least 1 additional byte at which they diverge.
-		// Compare the diverging byte.
-		cmpv.UserKeyComparison = int32(cmp.Compare(key[cmpv.CommonPrefixLen], lp[cmpv.CommonPrefixLen]))
+	// Both keys have at least 1 additional byte at which they diverge.
+	// Compare the diverging byte.
+	return colblk.KeyComparison{
+		PrefixLen:         int32(prefixLen),
+		CommonPrefixLen:   int32(commonPrefixLen),
+		UserKeyComparison: int32(cmp.Compare(key[commonPrefixLen], lastRoachKey[commonPrefixLen])),
 	}
-	return cmpv
 }
 
 func (kw *cockroachKeyWriter) WriteKey(
@@ -122,9 +188,10 @@ func (kw *cockroachKeyWriter) WriteKey(
 	// TODO(jackson): Avoid copying the previous suffix.
 	kw.prevSuffix = append(kw.prevSuffix[:0], key[keyPrefixLen:]...)
 
-	// When the roach key is the same, keyPrefixLenSharedWithPrev includes the
-	// separator byte.
-	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(keyPrefixLen)-1))
+	// When the roach key is the same or contain the previous key as a prefix,
+	// keyPrefixLenSharedWithPrev includes the previous key's separator byte.
+	kw.roachKeys.Put(key[:keyPrefixLen-1], min(int(keyPrefixLenSharedWithPrev), int(kw.prevRoachKeyLen)))
+	kw.prevRoachKeyLen = keyPrefixLen - 1
 
 	// NB: The w.logicalTimes builder was initialized with InitWithDefault, so
 	// if we don't set a value, the column value is implicitly zero. We only
@@ -134,16 +201,20 @@ func (kw *cockroachKeyWriter) WriteKey(
 	switch versionLen {
 	case 0:
 		// No-op.
+		kw.suffixTypes |= hasEmptySuffixes
 	case 9:
+		kw.suffixTypes |= hasMVCCSuffixes
 		wallTime = binary.BigEndian.Uint64(key[keyPrefixLen : keyPrefixLen+8])
 	case 13, 14:
+		kw.suffixTypes |= hasMVCCSuffixes
 		wallTime = binary.BigEndian.Uint64(key[keyPrefixLen : keyPrefixLen+8])
 		kw.logicalTimes.Set(row, uint64(binary.BigEndian.Uint32(key[keyPrefixLen+8:keyPrefixLen+12])))
 		// NOTE: byte 13 used to store the timestamp's synthetic bit, but this is no
 		// longer consulted and can be ignored during decoding.
 	default:
 		// Not a MVCC timestamp.
-		untypedVersion = key[keyPrefixLen:]
+		kw.suffixTypes |= hasNonMVCCSuffixes
+		untypedVersion = key[keyPrefixLen : len(key)-1]
 	}
 	kw.wallTimes.Set(row, wallTime)
 	kw.untypedVersions.Put(untypedVersion)
@@ -155,6 +226,7 @@ func (kw *cockroachKeyWriter) MaterializeKey(dst []byte, i int) []byte {
 	dst = append(dst, 0)
 	if untypedVersion := kw.untypedVersions.UnsafeGet(i); len(untypedVersion) > 0 {
 		dst = append(dst, untypedVersion...)
+		dst = append(dst, byte(len(untypedVersion)+1))
 		return dst
 	}
 	wall := kw.wallTimes.Get(i)
@@ -175,13 +247,6 @@ func (kw *cockroachKeyWriter) MaterializeKey(dst []byte, i int) []byte {
 	return dst
 }
 
-func (kw *cockroachKeyWriter) Reset() {
-	kw.roachKeys.Reset()
-	kw.wallTimes.Reset()
-	kw.logicalTimes.Reset()
-	kw.untypedVersions.Reset()
-}
-
 func (kw *cockroachKeyWriter) WriteDebug(dst io.Writer, rows int) {
 	fmt.Fprint(dst, "prefixes: ")
 	kw.roachKeys.WriteDebug(dst, rows)
@@ -195,6 +260,8 @@ func (kw *cockroachKeyWriter) WriteDebug(dst io.Writer, rows int) {
 	fmt.Fprint(dst, "untyped suffixes: ")
 	kw.untypedVersions.WriteDebug(dst, rows)
 	fmt.Fprintln(dst)
+	fmt.Fprint(dst, "suffix types: ")
+	fmt.Fprintln(dst, kw.suffixTypes.String())
 }
 
 func (kw *cockroachKeyWriter) NumColumns() int {
@@ -230,7 +297,9 @@ func (kw *cockroachKeyWriter) Finish(
 	}
 }
 
-func (kw *cockroachKeyWriter) FinishHeader(buf []byte) {}
+func (kw *cockroachKeyWriter) FinishHeader(buf []byte) {
+	buf[0] = byte(kw.suffixTypes)
+}
 
 type cockroachKeySeeker struct {
 	roachKeys       colblk.PrefixBytes
@@ -238,6 +307,7 @@ type cockroachKeySeeker struct {
 	mvccWallTimes   colblk.UnsafeUints
 	mvccLogical     colblk.UnsafeUints
 	untypedVersions colblk.RawBytes
+	suffixTypes     suffixTypes
 }
 
 // Assert that the cockroachKeySeeker fits inside KeySeekerMetadata.
@@ -252,12 +322,14 @@ func (ks *cockroachKeySeeker) init(d *colblk.DataBlockDecoder) {
 	ks.mvccWallTimes = bd.Uints(cockroachColMVCCWallTime)
 	ks.mvccLogical = bd.Uints(cockroachColMVCCLogical)
 	ks.untypedVersions = bd.RawBytes(cockroachColUntypedVersion)
+	header := d.KeySchemaHeader()
+	if len(header) != 1 {
+		panic(errors.AssertionFailedf("invalid key schema-specific header %x", header))
+	}
+	ks.suffixTypes = suffixTypes(header[0])
 }
 
-// IsLowerBound compares the provided key to the first user key
-// contained within the data block. It's equivalent to performing
-//
-//	Compare(firstUserKey, k) >= 0
+// IsLowerBound is part of the KeySeeker interface.
 func (ks *cockroachKeySeeker) IsLowerBound(k []byte, syntheticSuffix []byte) bool {
 	ek, ok := DecodeEngineKey(k)
 	if !ok {
@@ -319,69 +391,117 @@ func (ks *cockroachKeySeeker) SeekGE(
 // with the same prefix as index and a suffix greater than or equal to [suffix],
 // or if no such row exists, the next row with a different prefix.
 func (ks *cockroachKeySeeker) seekGEOnSuffix(index int, seekSuffix []byte) (row int) {
-	// The search key's prefix exactly matches the prefix of the row at index.
+	// We have three common cases:
+	// 1. The seek key has no suffix.
+	// 2. We are seeking to an MVCC timestamp in a block where all keys have
+	//    MVCC timestamps (e.g. SQL table data).
+	// 3. We are seeking to a non-MVCC timestamp in a block where no keys have
+	//    MVCC timestamps (e.g. lock keys).
+
+	if len(seekSuffix) == 0 {
+		// The search key has no suffix, so it's the smallest possible key with its
+		// prefix. Return the row. This is a common case where the user is seeking
+		// to the most-recent row and just wants the smallest key with the prefix.
+		return index
+	}
+
 	const withWall = 9
 	const withLogical = withWall + 4
 	const withSynthetic = withLogical + 1
-	var seekWallTime uint64
-	var seekLogicalTime uint32
-	switch len(seekSuffix) {
-	case 0:
-		// The search key has no suffix, so it's the smallest possible key with
-		// its prefix. Return the row. This is a common case where the user is
-		// seeking to the most-recent row and just wants the smallest key with
-		// the prefix.
-		return index
-	case withLogical, withSynthetic:
-		seekWallTime = binary.BigEndian.Uint64(seekSuffix)
-		seekLogicalTime = binary.BigEndian.Uint32(seekSuffix[8:])
-	case withWall:
-		seekWallTime = binary.BigEndian.Uint64(seekSuffix)
-	default:
-		// The suffix is untyped. Compare the untyped suffixes.
-		// Binary search between [index, prefixChanged.SeekSetBitGE(index+1)].
+
+	// If suffixTypes == hasMVCCSuffixes, all keys in the block have MVCC
+	// suffixes. Note that blocks that contain both MVCC and non-MVCC should be
+	// very rare, so it's ok to use the more general path below in that case.
+	if ks.suffixTypes == hasMVCCSuffixes && (len(seekSuffix) == withWall || len(seekSuffix) == withLogical || len(seekSuffix) == withSynthetic) {
+		// Fast path: seeking among MVCC versions using a MVCC timestamp.
+		seekWallTime := binary.BigEndian.Uint64(seekSuffix)
+		var seekLogicalTime uint32
+		if len(seekSuffix) >= withLogical {
+			seekLogicalTime = binary.BigEndian.Uint32(seekSuffix[8:])
+		}
+
+		// First check the suffix at index, because querying for the latest value is
+		// the most common case.
+		if latestWallTime := ks.mvccWallTimes.At(index); latestWallTime < seekWallTime ||
+			(latestWallTime == seekWallTime && uint32(ks.mvccLogical.At(index)) <= seekLogicalTime) {
+			return index
+		}
+
+		// Binary search between [index+1, prefixChanged.SeekSetBitGE(index+1)].
 		//
 		// Define f(i) = true iff key at i is >= seek key.
 		// Invariant: f(l-1) == false, f(u) == true.
-		l := index
+		l := index + 1
 		u := ks.roachKeyChanged.SeekSetBitGE(index + 1)
+
 		for l < u {
-			h := int(uint(l+u) >> 1) // avoid overflow when computing h
-			// l ≤ h < u
-			if bytes.Compare(ks.untypedVersions.At(h), seekSuffix) >= 0 {
-				u = h // preserves f(u) == true
+			m := int(uint(l+u) >> 1) // avoid overflow when computing m
+			// l ≤ m < u
+			mWallTime := ks.mvccWallTimes.At(m)
+			if mWallTime < seekWallTime ||
+				(mWallTime == seekWallTime && uint32(ks.mvccLogical.At(m)) <= seekLogicalTime) {
+				u = m // preserves f(u) = true
 			} else {
-				l = h + 1 // preserves f(l-1) == false
+				l = m + 1 // preserves f(l-1) = false
 			}
 		}
 		return l
 	}
-	// Seeking among MVCC versions using a MVCC timestamp.
 
-	// TODO(jackson): What if the row has an untyped suffix?
-
-	// First check the suffix at index, because querying for the latest value is
-	// the most common case.
-	if latestWallTime := ks.mvccWallTimes.At(index); latestWallTime < seekWallTime ||
-		(latestWallTime == seekWallTime && uint32(ks.mvccLogical.At(index)) <= seekLogicalTime) {
-		return index
+	// Remove the terminator byte, which we know is equal to len(seekSuffix)
+	// because we obtained the suffix by splitting the seek key.
+	version := seekSuffix[:len(seekSuffix)-1]
+	if buildutil.CrdbTestBuild && seekSuffix[len(version)] != byte(len(seekSuffix)) {
+		panic(errors.AssertionFailedf("invalid seek suffix %x", seekSuffix))
 	}
 
-	// Binary search between [index+1, prefixChanged.SeekSetBitGE(index+1)].
+	// Binary search for version between [index, prefixChanged.SeekSetBitGE(index+1)].
 	//
-	// Define f(i) = true iff key at i is >= seek key.
+	// Define f(i) = true iff key at i is >= seek key (i.e. suffix at i is <= seek suffix).
 	// Invariant: f(l-1) == false, f(u) == true.
-	l := index + 1
+	l := index
 	u := ks.roachKeyChanged.SeekSetBitGE(index + 1)
+	if ks.suffixTypes&hasEmptySuffixes != 0 {
+		// Check if the key at index has an empty suffix. Since empty suffixes sort
+		// first, this is the only key in the range [index, u) which could have an
+		// empty suffix.
+		if len(ks.untypedVersions.At(index)) == 0 && ks.mvccWallTimes.At(index) == 0 && ks.mvccLogical.At(index) == 0 {
+			// Our seek suffix is not empty, so it must come after the empty suffix.
+			l = index + 1
+		}
+	}
+
 	for l < u {
-		h := int(uint(l+u) >> 1) // avoid overflow when computing h
-		// l ≤ h < u
-		hWallTime := ks.mvccWallTimes.At(h)
-		if hWallTime < seekWallTime ||
-			(hWallTime == seekWallTime && uint32(ks.mvccLogical.At(h)) <= seekLogicalTime) {
-			u = h // preserves f(u) = true
+		m := int(uint(l+u) >> 1) // avoid overflow when computing m
+		// l ≤ m < u
+		mVer := ks.untypedVersions.At(m)
+		if len(mVer) == 0 {
+			wallTime := ks.mvccWallTimes.At(m)
+			logicalTime := uint32(ks.mvccLogical.At(m))
+			if buildutil.CrdbTestBuild && wallTime == 0 && logicalTime == 0 {
+				// This can only happen for row at index.
+				panic(errors.AssertionFailedf("unexpected empty suffix at %d (l=%d, u=%d)", m, l, u))
+			}
+
+			// Note: this path is not very performance sensitive: blocks that mix MVCC
+			// suffixes with non-MVCC suffixes should be rare.
+
+			//gcassert:noescape
+			var buf [12]byte
+			//gcassert:inline
+			binary.BigEndian.PutUint64(buf[:], wallTime)
+			if logicalTime == 0 {
+				mVer = buf[:8]
+			} else {
+				//gcassert:inline
+				binary.BigEndian.PutUint32(buf[8:], logicalTime)
+				mVer = buf[:12]
+			}
+		}
+		if bytes.Compare(mVer, version) <= 0 {
+			u = m // preserves f(u) == true
 		} else {
-			l = h + 1 // preserves f(l-1) = false
+			l = m + 1 // preserves f(l-1) == false
 		}
 	}
 	return l
@@ -391,6 +511,9 @@ func (ks *cockroachKeySeeker) seekGEOnSuffix(index int, seekSuffix []byte) (row 
 func (ks *cockroachKeySeeker) MaterializeUserKey(
 	ki *colblk.PrefixBytesIter, prevRow, row int,
 ) []byte {
+	if buildutil.CrdbTestBuild && (row < 0 || row >= ks.roachKeys.Rows()) {
+		panic(errors.AssertionFailedf("invalid row number %d", row))
+	}
 	if prevRow+1 == row && prevRow >= 0 {
 		ks.roachKeys.SetNext(ki)
 	} else {
@@ -410,13 +533,14 @@ func (ks *cockroachKeySeeker) MaterializeUserKey(
 			return res
 		}
 		// Slice first, to check that the capacity is sufficient.
-		res := ki.Buf[:roachKeyLen+1+len(untypedVersion)]
+		res := ki.Buf[:roachKeyLen+2+len(untypedVersion)]
 		*(*byte)(ptr) = 0
 		memmove(
 			unsafe.Pointer(uintptr(ptr)+1),
 			unsafe.Pointer(unsafe.SliceData(untypedVersion)),
 			uintptr(len(untypedVersion)),
 		)
+		*(*byte)(unsafe.Pointer(uintptr(ptr) + uintptr(len(untypedVersion)+1))) = byte(len(untypedVersion) + 1)
 		return res
 	}
 
