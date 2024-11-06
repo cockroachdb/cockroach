@@ -28,9 +28,9 @@ type (
 
 	// Event represents the result of a task execution.
 	Event struct {
-		Name           string
-		Err            error
-		ExpectedCancel bool
+		Name            string
+		Err             error
+		TriggeredByTest bool
 	}
 
 	manager struct {
@@ -59,7 +59,7 @@ func NewManager(ctx context.Context, l *logger.Logger) Manager {
 func (m *manager) defaultOptions() []Option {
 	// The default panic handler simply returns the panic as an error.
 	defaultPanicHandlerFn := func(_ context.Context, name string, l *logger.Logger, r interface{}) error {
-		return r.(error)
+		return fmt.Errorf("panic: %v", r)
 	}
 	// The default error handler simply returns the error as is.
 	defaultErrorHandlerFn := func(_ context.Context, name string, l *logger.Logger, err error) error {
@@ -98,10 +98,22 @@ func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 		}
 		err = internalFunc(l)
 		event := Event{
-			Name:           opt.Name,
-			Err:            err,
-			ExpectedCancel: err != nil && IsContextCanceled(groupCtx) && expectedContextCancellation.Load(),
+			Name: opt.Name,
+			Err:  err,
+			// TriggeredByTest is set to true if the task was canceled intentionally,
+			// by the test, and we encounter an error. The assumption is that we
+			// expect the error to have been caused by the cancelation, hence the
+			// error above was not caused by a failure. This ensures we don't register
+			// a test failure if the task was meant to be canceled. It's possible that
+			// `expectedContextCancellation` could be set before the context is
+			// canceled, thus we ensure also ensure that the context is canceled.
+			TriggeredByTest: err != nil && IsContextCanceled(groupCtx) && expectedContextCancellation.Load(),
 		}
+		// The select below intentionally does not send events if the context is
+		// canceled. This is because the context is canceled, and the test is
+		// already aware of the cancelation. Sending an event would be redundant.
+		// For instance a call to test Fatal would already have captured the error
+		// and canceled the context.
 		select {
 		case m.events <- event:
 			// exit goroutine
@@ -129,7 +141,9 @@ func (m *manager) Go(fn Func, opts ...Option) {
 }
 
 // Terminate will call the stop functions for every task started during the
-// test. Returns when all task functions have returned.
+// test. Returns when all task functions have returned, or after a 5-minute
+// timeout, whichever comes first. If the timeout is reached, the function logs
+// a warning message and returns.
 func (m *manager) Terminate(l *logger.Logger) {
 	func() {
 		m.mu.Lock()
