@@ -73,7 +73,7 @@ func createLogicalReplicationStreamPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_2) {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_3) {
 			return pgerror.New(pgcode.FeatureNotSupported,
 				"replication job not supported before V24.2")
 		}
