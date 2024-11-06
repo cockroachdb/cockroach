@@ -106,8 +106,10 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 		vectors := vector.MakeSet(141)
 		vectors.AddUndefined(2)
+		zeros := vectors.At(0)
 		ones := vectors.At(1)
 		for i := 0; i < len(ones); i++ {
+			zeros[i] = 0
 			ones[i] = 1
 		}
 		quantizedSet := quantizer.Quantize(ctx, &vectors).(*RaBitQuantizedVectorSet)
