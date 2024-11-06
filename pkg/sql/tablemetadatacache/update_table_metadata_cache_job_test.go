@@ -38,7 +38,7 @@ func TestUpdateTableMetadataCacheJobRunsOnRPCTrigger(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				TableMetadata: &tablemetadatacacheutil.TestingKnobs{
-					TableMetadataUpdater: &noopUpdater{},
+					TableMetadataUpdater: &tablemetadatacacheutil.NoopUpdater{},
 					OnJobComplete: func() {
 						jobCompleteCh <- struct{}{}
 					},
@@ -199,11 +199,3 @@ func (m *mockUpdaterWithSignal) RunUpdater(ctx context.Context) error {
 }
 
 var _ tablemetadatacacheutil.ITableMetadataUpdater = &mockUpdaterWithSignal{}
-
-type noopUpdater struct{}
-
-func (nu *noopUpdater) RunUpdater(_ctx context.Context) error {
-	return nil
-}
-
-var _ tablemetadatacacheutil.ITableMetadataUpdater = &noopUpdater{}
