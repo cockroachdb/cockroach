@@ -57,6 +57,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
+		Metrics:                   raft.NewMetrics(),
 	}
 	rn, err := raft.NewRawNode(c)
 	if err != nil {
@@ -217,6 +218,7 @@ func (n *node) restart() {
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
+		Metrics:                   raft.NewMetrics(),
 	}
 	rn, err := raft.NewRawNode(c)
 	if err != nil {
