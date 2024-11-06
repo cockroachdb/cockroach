@@ -193,6 +193,14 @@ func BootstrapTenant(
 	}
 
 	{
+		copiedKVs, err := CopyZoneConfigKVs(ctx, txn, codec)
+		if err != nil {
+			return tid, err
+		}
+		kvs = append(kvs, copiedKVs...)
+	}
+
+	{
 		// Populate the version setting for the tenant. This will allow the tenant
 		// to know what migrations need to be run in the future. The choice to use
 		// the active cluster version here is intentional; it allows tenants
@@ -240,6 +248,43 @@ func BootstrapTenant(
 	}
 
 	return tid, nil
+}
+
+func CopyZoneConfigKVs(
+	ctx context.Context, txn *kv.Txn, targetCodec keys.SQLCodec,
+) ([]roachpb.KeyValue, error) {
+	sourceCodec := keys.SystemSQLCodec
+	// get all keys for the table
+
+	zoneSpan := sourceCodec.TableSpan(keys.ZonesTableID)
+	batch := txn.NewBatch()
+	batch.Scan(zoneSpan.Key, zoneSpan.EndKey)
+
+	if err := txn.Run(ctx, batch); err != nil {
+		return nil, err
+	}
+
+	if len(batch.Results) != 1 {
+		return nil, errors.AssertionFailedf("expected exactly on batch result found %d: %+v", len(batch.Results), batch.Results[1])
+	}
+
+	if err := batch.Results[0].Err; err != nil {
+		return nil, err
+	}
+	rows := batch.Results[0].Rows
+
+	// rewrite keys
+	targetTenantPrefix := targetCodec.TenantPrefix()
+	ret := make([]roachpb.KeyValue, 0, len(rows))
+	for _, row := range rows {
+		v := roachpb.KeyValue{
+			Key:   append(targetTenantPrefix, row.Key...),
+			Value: *row.Value,
+		}
+		v.Value.ClearChecksum()
+		ret = append(ret, v)
+	}
+	return ret, nil
 }
 
 // CreateTenantRecord creates a tenant in system.tenants and installs an initial
