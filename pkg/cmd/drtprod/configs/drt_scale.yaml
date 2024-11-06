@@ -162,8 +162,8 @@ targets:
         flags:
           db: cct_tpcc
           warehouses: 400000
-          max-rate: 10000
-          workers: 5000
+          max-rate: 1000
+          workers: 400000
           conns: 5000
           duration: 12h
           ramp: 10m
