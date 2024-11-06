@@ -181,8 +181,10 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 						continue
 					}
 					totalBW := writeVal + readVal
-					if totalBW > bandwidthThreshold {
-						t.Fatalf("write + read bandwidth %f (%f + %f) exceeded threshold of %f", totalBW, writeVal, readVal, bandwidthThreshold)
+					// TODO(aaditya): We should be asserting on total bandwidth once reads
+					// are being paced.
+					if writeVal > bandwidthThreshold {
+						t.Fatalf("write bandwidth %f exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", writeVal, bandwidthThreshold, readVal, totalBW)
 					}
 					numSuccesses++
 				}
