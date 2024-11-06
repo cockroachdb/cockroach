@@ -201,6 +201,14 @@ vectorized: true
   uniqueness checks (tombstones): t_pkey, t_c_key
   size: 7 columns, 1 row
 
+query T
+EXPLAIN (OPT) INSERT INTO t VALUES (1, 'two', 3, 4, 5)
+----
+insert t
+ ├── unique w/tombstone indexes: t_pkey t_c_key
+ └── values
+      └── (1, 'two', 3, 4, 5, NULL, true)
+
 statement ok
 INSERT INTO t VALUES (1, 'two', 3, 4, 5)
 
@@ -236,6 +244,22 @@ vectorized: true
           spans: [/'one'/2 - /'one'/2] [/'two'/2 - /'two'/2] [/'three'/2 - /'three'/2] [/'four'/2 - /'four'/2] … (1 more)
           locking strength: for update
 
+query T
+EXPLAIN (OPT) UPDATE t SET c = 4 WHERE pk = 2
+----
+update t
+ ├── unique w/tombstone indexes: t_c_key
+ └── project
+      ├── scan t
+      │    └── constraint: /12/11
+      │         ├── [/'one'/2 - /'one'/2]
+      │         ├── [/'two'/2 - /'two'/2]
+      │         ├── [/'three'/2 - /'three'/2]
+      │         ├── [/'four'/2 - /'four'/2]
+      │         └── [/'five'/2 - /'five'/2]
+      └── projections
+           └── 4
+
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
 UPDATE t SET c = 4 WHERE pk = 2
 
@@ -262,6 +286,23 @@ vectorized: true
         │
         └── • values
               size: 6 columns, 1 row
+
+query T
+EXPLAIN (OPT) UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
+----
+upsert t
+ ├── arbiter constraints: t_pkey
+ ├── unique w/tombstone indexes: t_pkey t_c_key
+ └── project
+      ├── left-join (lookup t)
+      │    ├── flags: prefer lookup join (into right side)
+      │    ├── lookup columns are key
+      │    ├── locking: for-update,durability-guaranteed
+      │    ├── values
+      │    │    └── (1, 'five', 3, 4, 15, NULL)
+      │    └── filters (true)
+      └── projections
+           └── column2 IN ('one', 'two', 'three', 'four', 'five')
 
 statement ok
 UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
@@ -323,6 +364,24 @@ vectorized: true
         │
         └── • values
               size: 6 columns, 1 row
+
+query T
+EXPLAIN (OPT) INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
+----
+upsert t
+ ├── arbiter constraints: t_pkey
+ ├── unique w/tombstone indexes: t_pkey t_c_key
+ └── project
+      ├── left-join (lookup t)
+      │    ├── flags: prefer lookup join (into right side)
+      │    ├── lookup columns are key
+      │    ├── locking: for-update,durability-guaranteed
+      │    ├── values
+      │    │    └── (1, 'one', 3, 4, 5, NULL)
+      │    └── filters (true)
+      └── projections
+           ├── CASE WHEN a IS NULL THEN column2 ELSE a END IN ('one', 'two', 'three', 'four', 'five')
+           └── CASE WHEN a IS NULL THEN column5 ELSE d + 10 END
 
 statement ok
 INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
