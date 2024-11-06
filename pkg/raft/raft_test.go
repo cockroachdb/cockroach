@@ -4416,6 +4416,7 @@ func newTestConfig(
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 }
 

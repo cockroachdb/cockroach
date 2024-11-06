@@ -388,6 +388,7 @@ func newRaftConfig(
 	lazyReplication bool,
 	logger raftlogger.Logger,
 	storeLiveness raftstoreliveness.StoreLiveness,
+	metrics *raft.Metrics,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -408,6 +409,7 @@ func newRaftConfig(
 		PreVote:                     true,
 		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
 		CRDBVersion:                 storeCfg.Settings.Version,
+		Metrics:                     metrics,
 	}
 }
 
@@ -896,6 +898,7 @@ type Store struct {
 	raftEntryCache      *raftentry.Cache
 	limiters            batcheval.Limiters
 	txnWaitMetrics      *txnwait.Metrics
+	raftMetrics         *raft.Metrics
 	sstSnapshotStorage  SSTSnapshotStorage
 	protectedtsReader   spanconfig.ProtectedTSReader
 	ctSender            *sidetransport.Sender
@@ -1609,6 +1612,10 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
+
+	s.raftMetrics = raft.NewMetrics()
+	s.metrics.registry.AddMetricStruct(s.raftMetrics)
+
 	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
 	snapshotApplyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.snapshotApplyQueue.UpdateConcurrencyLimit(int(snapshotApplyLimit.Get(&cfg.Settings.SV)))
