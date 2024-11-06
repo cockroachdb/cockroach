@@ -108,6 +108,12 @@ func (vs *Set) AddUndefined(count int) {
 	vs.Data = vs.Data[:vs.Count*vs.Dims]
 }
 
+// Clear empties the set so that it has zero vectors.
+func (vs *Set) Clear() {
+	vs.Data = vs.Data[:0]
+	vs.Count = 0
+}
+
 // ReplaceWithLast removes the vector at the given offset from the set,
 // replacing it with the last vector in the set. The modified set has one less
 // element and the last vector's position changes.

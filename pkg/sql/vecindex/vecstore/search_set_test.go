@@ -75,7 +75,6 @@ func TestSearchSet(t *testing.T) {
 	// Empty.
 	searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
 	require.Nil(t, searchSet.PopResults())
-	require.Nil(t, searchSet.PopExtraResults())
 
 	// Exceed max results, outside of error bounds.
 	result1 := SearchResult{
@@ -90,41 +89,35 @@ func TestSearchSet(t *testing.T) {
 	searchSet.Add(&result2)
 	searchSet.Add(&result3)
 	searchSet.Add(&result4)
-	require.Equal(t, []SearchResult{result3, result1, result4}, searchSet.PopResults())
-	require.Nil(t, searchSet.PopExtraResults())
+	require.Equal(t, SearchResults{result3, result1, result4}, searchSet.PopResults())
 
 	// Exceed max results, but within error bounds.
 	result5 := SearchResult{
 		QuerySquaredDistance: 6, ErrorBound: 1.5, CentroidDistance: 50, ParentPartitionKey: 500, ChildKey: ChildKey{PrimaryKey: []byte{50}}}
 	result6 := SearchResult{
 		QuerySquaredDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{PrimaryKey: []byte{60}}}
-	searchSet.AddAll([]SearchResult{result1, result2, result3, result4, result5, result6})
-	require.Equal(t, []SearchResult{result3, result1, result4}, searchSet.PopResults())
-	require.Equal(t, []SearchResult{result6, result5}, searchSet.PopExtraResults())
+	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
 
 	// Don't allow extra results.
 	otherSet := SearchSet{MaxResults: 3}
-	otherSet.AddAll([]SearchResult{result1, result2, result3, result4, result5, result6})
-	require.Equal(t, []SearchResult{result3, result1, result4}, otherSet.PopResults())
-	require.Nil(t, otherSet.PopExtraResults())
+	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+	require.Equal(t, SearchResults{result3, result1, result4}, otherSet.PopResults())
 
 	// Add better results that invalidate farther candidates.
 	result7 := SearchResult{
 		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{PrimaryKey: []byte{70}}}
-	searchSet.AddAll([]SearchResult{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, []SearchResult{result3, result1, result7}, searchSet.PopResults())
-	require.Equal(t, []SearchResult{result4, result6, result5}, searchSet.PopExtraResults())
+	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+	require.Equal(t, SearchResults{result3, result1, result7, result4, result6, result5}, searchSet.PopResults())
 
 	result8 := SearchResult{
 		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{PrimaryKey: []byte{80}}}
-	searchSet.AddAll([]SearchResult{result1, result2, result3, result4})
-	searchSet.AddAll([]SearchResult{result5, result6, result7, result8})
-	require.Equal(t, []SearchResult{result8, result3, result1}, searchSet.PopResults())
-	require.Equal(t, []SearchResult{result7, result4}, searchSet.PopExtraResults())
+	searchSet.AddAll(SearchResults{result1, result2, result3, result4})
+	searchSet.AddAll(SearchResults{result5, result6, result7, result8})
+	require.Equal(t, SearchResults{result8, result3, result1, result7, result4}, searchSet.PopResults())
 
 	// Allow one extra result.
 	otherSet.MaxExtraResults = 1
-	otherSet.AddAll([]SearchResult{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, []SearchResult{result3, result1, result7}, otherSet.PopResults())
-	require.Equal(t, []SearchResult{result4}, otherSet.PopExtraResults())
+	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+	require.Equal(t, SearchResults{result3, result1, result7, result4}, otherSet.PopResults())
 }
