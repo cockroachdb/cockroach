@@ -518,12 +518,13 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		opts.Config.HTTPClient = httpClient
 	}
 
+	region := s.opts.region
 	if s.opts.endpoint != "" {
 		opts.Config.Endpoint = aws.String(s.opts.endpoint)
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
 
-		if s.opts.region == "" {
-			s.opts.region = "default-region"
+		if region == "" {
+			region = "default-region"
 		}
 
 		client, err := cloud.MakeHTTPClient(s.settings, s.metrics, "aws", s.opts.bucket, s.storageOptions.ClientName)
@@ -587,7 +588,6 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		}
 	}
 
-	region := s.opts.region
 	if region == "" {
 		if err := cloud.DelayedRetry(ctx, "s3manager.GetBucketRegion", s3ErrDelay, func() error {
 			region, err = s3manager.GetBucketRegion(ctx, sess, s.opts.bucket, "us-east-1")
