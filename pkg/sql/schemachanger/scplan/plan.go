@@ -96,6 +96,7 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p Plan, err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"building declarative schema changer plan in %s (rollback=%v) for %s",
 		redact.Safe(params.ExecutionPhase),
 		redact.Safe(params.InRollback),

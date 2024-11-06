@@ -178,6 +178,7 @@ func executeStage(
 ) (err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"executing declarative schema change %s (rollback=%v) for %s",
 		redact.Safe(stage),
 		redact.Safe(p.InRollback),
@@ -304,6 +305,7 @@ func makeState(
 ) (state scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"rebuilding declarative schema change state from descriptors %v",
 		redact.Safe(descriptorIDs),
 	).HandlePanicAndLogError(ctx, &err)
