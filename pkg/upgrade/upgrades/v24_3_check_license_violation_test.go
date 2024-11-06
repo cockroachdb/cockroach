@@ -29,6 +29,8 @@ func TestCheckLicenseViolations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 24, 3)
+
 	ctx := context.Background()
 
 	// Set up the storage cluster at v1.
