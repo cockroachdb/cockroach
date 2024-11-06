@@ -36,7 +36,9 @@ type EventLogger struct {
 // - defer StartEventf(...).HandlePanicAndLogError(...)
 func StartEventf(ctx context.Context, format string, args ...interface{}) EventLogger {
 	msg := redact.Safe(fmt.Sprintf(format, args...))
-	log.InfofDepth(ctx, 1, "%s", msg)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.InfofDepth(ctx, 1, "%s", msg)
+	}
 	return EventLogger{
 		msg:   msg,
 		start: timeutil.Now(),
