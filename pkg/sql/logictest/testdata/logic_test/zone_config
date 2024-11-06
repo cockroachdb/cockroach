@@ -303,13 +303,11 @@ onlyif config local-legacy-schema-changer
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 skipif config local-legacy-schema-changer
 statement error pq: pg_type is a system catalog
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 skipif config local-legacy-schema-changer
 statement error pq: columns is a virtual object and cannot be modified
