@@ -20,14 +20,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
-	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -752,31 +754,34 @@ func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 func TestTriggerMetadataUpdateJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, "too slow under stress")
 	jobCompletedChan := make(chan interface{})
 	jobReadyChan := make(chan interface{})
 	defer close(jobCompletedChan)
 	defer close(jobReadyChan)
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				TableMetadata: &tablemetadatacache_util.TestingKnobs{
-					OnJobReady: func() {
-						jobReadyChan <- struct{}{}
-					},
-					OnJobComplete: func() {
-						jobCompletedChan <- struct{}{}
-					},
+	ctx := context.Background()
+	var zeroDuration time.Duration
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableMetadata: &tablemetadatacacheutil.TestingKnobs{
+				OnJobReady: func() {
+					jobReadyChan <- struct{}{}
+				},
+				OnJobComplete: func() {
+					jobCompletedChan <- struct{}{}
+				},
+				TableMetadataUpdater: &tablemetadatacacheutil.NoopUpdater{},
+			},
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					Adopt: &zeroDuration,
 				},
 			},
 		},
 	})
-	ctx := context.Background()
-	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
+	defer ts.Stopper().Stop(ctx)
+	conn := ts.SQLConn(t)
 	defer conn.Close()
 	runner := sqlutils.MakeSQLRunner(conn)
-	ts := testCluster.Server(0)
 
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
@@ -784,7 +789,7 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 	url := ts.AdminURL().WithPath(uri).String()
 	<-jobReadyChan
 	t.Run("job triggered", func(t *testing.T) {
-		assertJobTriggered(t, client, url, jobCompletedChan)
+		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
 	})
 
 	t.Run("authorization", func(t *testing.T) {
@@ -792,49 +797,48 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		// User isn't authorized and will receive a 404 response
+		// User isn't authorized and will receive a 404 response.
 		failed := makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
 		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
 
-		// User is now authorized and will trigger job
-		assertJobTriggered(t, client, url, jobCompletedChan)
+		// User is now authorized and will trigger job.
+		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
 
 		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
 		failed = makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
 		runner.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
-		assertJobTriggered(t, client, url, jobCompletedChan)
+		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
 	})
 
 	t.Run("staleness", func(t *testing.T) {
-		assertJobTriggered(t, client, url, jobCompletedChan)
-		// Trigger again should succeed
-		assertJobTriggered(t, client, url, jobCompletedChan)
+		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
+		// Triggering again should succeed since the DataValidDurationSetting value is ignored by default.
+		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
 
 		tablemetadatacache.DataValidDurationSetting.Override(ctx, &ts.ClusterSettings().SV, time.Minute)
-		// call trigger job api with onlyIfStale flag. This shouldn't trigger the job again since a minute hasn't passed
+		// Call trigger job api with onlyIfStale flag. This shouldn't trigger the job again since a minute hasn't passed.
 		resp := makeApiRequest[tmJobTriggeredResponse](
 			t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale").String(), http.MethodPost)
 		require.Contains(t, resp.Message, "Not enough time has elapsed since last job run")
 		require.False(t, resp.JobTriggered)
 
-		// onlyIfStale=false won't check DataValidDurationSetting value
-		assertJobTriggered(t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale=false").String(), jobCompletedChan)
+		// onlyIfStale=false won't check against the DataValidDurationSetting value.
+		triggerAndWaitForJobToComplete(t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale=false").String(), jobCompletedChan)
 
-		// onlyIfStale with non "false" value will check DataValidDurationSetting value
+		// onlyIfStale with non "false" value will check against the DataValidDurationSetting value.
 		resp = makeApiRequest[tmJobTriggeredResponse](
 			t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale=somevalue").String(), http.MethodPost)
 		require.Contains(t, resp.Message, "Not enough time has elapsed since last job run")
 		require.False(t, resp.JobTriggered)
 
-		// set data_valid_duration to 1ms
 		tablemetadatacache.DataValidDurationSetting.Override(ctx, &ts.ClusterSettings().SV, time.Millisecond)
-		// call trigger job api with onlyIfStale flag. This should trigger the job again since 1ms has passed since last
-		// completion
-		assertJobTriggered(t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale").String(), jobCompletedChan)
+		// Call trigger job api with onlyIfStale flag. This should trigger the job again since 1ms has passed since last
+		// completion.
+		triggerAndWaitForJobToComplete(t, client, ts.AdminURL().WithPath(uri+"?onlyIfStale").String(), jobCompletedChan)
 	})
 }
 
@@ -894,11 +898,20 @@ func makeApiRequest[T any](
 	return mdResp
 }
 
-func assertJobTriggered(t *testing.T, client http.Client, url string, c chan interface{}) {
-	resp := makeApiRequest[tmJobTriggeredResponse](t, client, url, http.MethodPost)
-	require.Contains(t, resp.Message, "Job triggered successfully")
-	require.True(t, resp.JobTriggered)
-	<-c
+func triggerAndWaitForJobToComplete(
+	t *testing.T, client http.Client, url string, jobComplete chan interface{},
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+
+		resp := makeApiRequest[tmJobTriggeredResponse](t, client, url, http.MethodPost)
+		if !strings.Contains(string(resp.Message), "Job triggered successfully") || !resp.JobTriggered {
+			return errors.Newf("Job wasn't triggered successfully. Got message=%s, triggered=%t",
+				resp.Message, resp.JobTriggered)
+		}
+		return nil
+	})
+	<-jobComplete
 }
 
 func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int, dbId2 int) {
