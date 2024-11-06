@@ -2214,7 +2214,7 @@ func (c *SyncedCluster) Put(
 	defer ticker.Stop()
 	var finalErr error
 	setErr := func(e error) {
-		if finalErr != nil {
+		if finalErr == nil {
 			finalErr = e
 		}
 	}
@@ -2607,7 +2607,7 @@ func (c *SyncedCluster) Get(
 	defer ticker.Stop()
 	var finalErr error
 	setErr := func(e error) {
-		if finalErr != nil {
+		if finalErr == nil {
 			finalErr = e
 		}
 	}
