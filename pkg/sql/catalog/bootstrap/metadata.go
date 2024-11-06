@@ -555,7 +555,10 @@ func addZoneConfigKVsToSchema(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
-	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
+	var kvs []roachpb.KeyValue
+	if target.codec.TenantID != roachpb.TenantTwo {
+		kvs = InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
+	}
 	target.otherKV = append(target.otherKV, kvs...)
 }
 
