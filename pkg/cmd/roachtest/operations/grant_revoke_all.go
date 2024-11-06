@@ -56,7 +56,8 @@ func runGrant(
 	rng, _ := randutil.NewTestRand()
 	dbName := pickRandomDB(ctx, o, conn, systemDBs)
 	tableName := pickRandomTable(ctx, o, conn, dbName)
-	dbUser := randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet)
+	// the dbUser cannot have a number in the beginning. So, adding an "a" to ensure that the first letter will not be a number
+	dbUser := fmt.Sprintf("a%s", randutil.RandString(rng, 9, randutil.PrintableKeyAlphabet))
 
 	o.Status(fmt.Sprintf("Creating user %s", dbUser))
 	_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", dbUser, dbUser))
