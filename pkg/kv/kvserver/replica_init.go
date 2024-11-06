@@ -327,6 +327,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		r.mu.currentRACv2Mode == rac2.MsgAppPull,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
+		r.store.raftMetrics,
 	))
 	if err != nil {
 		return err

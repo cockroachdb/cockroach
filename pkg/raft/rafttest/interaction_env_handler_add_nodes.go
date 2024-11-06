@@ -153,6 +153,8 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			cfg.StoreLiveness = raftstoreliveness.Disabled{}
 		}
 
+		cfg.Metrics = raft.NewMetrics()
+
 		if env.Options.OnConfig != nil {
 			env.Options.OnConfig(&cfg)
 			if cfg.ID != id {
