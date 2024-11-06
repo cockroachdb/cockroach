@@ -105,7 +105,7 @@ func TestInMemoryStore(t *testing.T) {
 		result2 := SearchResult{QuerySquaredDistance: 13, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 1, ChildKey: childKey30}
 		results := searchSet.PopResults()
 		roundResults(results, 4)
-		require.Equal(t, []SearchResult{result1, result2}, results)
+		require.Equal(t, SearchResults{result1, result2}, results)
 		require.Equal(t, 3, partitionCounts[0])
 	})
 
@@ -156,7 +156,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, Level(2), level)
 		result3 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 0, ParentPartitionKey: 1, ChildKey: childKey2}
-		require.Equal(t, []SearchResult{result3}, searchSet.PopResults())
+		require.Equal(t, SearchResults{result3}, searchSet.PopResults())
 		require.Equal(t, 1, partitionCounts[0])
 	})
 
@@ -192,7 +192,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.Equal(t, Level(1), level)
 		result4 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.23606797749979, ParentPartitionKey: 2, ChildKey: childKey10}
 		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 1, ParentPartitionKey: 2, ChildKey: childKey40}
-		require.Equal(t, []SearchResult{result4, result5}, searchSet.PopResults())
+		require.Equal(t, SearchResults{result4, result5}, searchSet.PopResults())
 		require.Equal(t, 3, partitionCounts[0])
 	})
 
@@ -217,7 +217,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.Equal(t, Level(1), level)
 		result4 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 2, ChildKey: childKey30}
 		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 4.61, ParentPartitionKey: 3, ChildKey: childKey50}
-		require.Equal(t, []SearchResult{result4, result5}, roundResults(searchSet.PopResults(), 2))
+		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 2))
 		require.Equal(t, []int{3, 2}, partitionCounts)
 	})
 
@@ -282,7 +282,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 				ctx2, txn2, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
 			require.NoError(t, err)
 			result1 := SearchResult{QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: RootKey, ChildKey: childKey10}
-			require.Equal(t, []SearchResult{result1}, searchSet.PopResults())
+			require.Equal(t, SearchResults{result1}, searchSet.PopResults())
 			require.Equal(t, 1, partitionCounts[0])
 
 			wait.Done()

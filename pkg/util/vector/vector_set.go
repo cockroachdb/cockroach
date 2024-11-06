@@ -8,6 +8,7 @@ package vector
 import (
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/errors"
 )
@@ -47,7 +48,9 @@ func (vs *Set) AsMatrix() num32.Matrix {
 	}
 }
 
-// At returns the vector at the given offset in the set.
+// At returns the vector at the given offset in the set. The returned vector is
+// intended for transient use, since mutations to the vector set can invalidate
+// the reference.
 //
 //gcassert:inline
 func (vs *Set) At(offset int) T {
@@ -106,6 +109,24 @@ func (vs *Set) AddUndefined(count int) {
 	vs.Data = slices.Grow(vs.Data, count*vs.Dims)
 	vs.Count += count
 	vs.Data = vs.Data[:vs.Count*vs.Dims]
+	if buildutil.CrdbTestBuild {
+		// Write non-zero values to undefined memory.
+		for i := len(vs.Data) - count*vs.Dims; i < len(vs.Data); i++ {
+			vs.Data[i] = 0xBADF00D
+		}
+	}
+}
+
+// Clear empties the set so that it has zero vectors.
+func (vs *Set) Clear() {
+	if buildutil.CrdbTestBuild {
+		// Write non-zero values to cleared memory.
+		for i := 0; i < len(vs.Data); i++ {
+			vs.Data[i] = 0xBADF00D
+		}
+	}
+	vs.Data = vs.Data[:0]
+	vs.Count = 0
 }
 
 // ReplaceWithLast removes the vector at the given offset from the set,
@@ -115,6 +136,12 @@ func (vs *Set) ReplaceWithLast(offset int) {
 	targetStart := offset * vs.Dims
 	sourceEnd := len(vs.Data)
 	copy(vs.Data[targetStart:targetStart+vs.Dims], vs.Data[sourceEnd-vs.Dims:sourceEnd])
+	if buildutil.CrdbTestBuild {
+		// Write non-zero values to undefined memory.
+		for i := sourceEnd - vs.Dims; i < sourceEnd; i++ {
+			vs.Data[i] = 0xBADF00D
+		}
+	}
 	vs.Data = vs.Data[:sourceEnd-vs.Dims]
 	vs.Count--
 }
