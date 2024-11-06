@@ -47,6 +47,7 @@ go_library(
         "//pkg/util/timetz",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_crlib//crencoding",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_golang_mock//gomock",  # keep
@@ -60,6 +61,7 @@ go_test(
     srcs = [
         "data_test.go",
         "index_usage_stats_test.go",
+        "internal_test.go",
         "main_test.go",
         "merge_spans_test.go",
         "metadata_replicas_test.go",
