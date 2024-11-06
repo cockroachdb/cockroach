@@ -4619,7 +4619,7 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 			sc.CopyNonAtomicCount.Inc()
 		}
 	default:
-		if tree.CanModifySchema(stmt) {
+		if stmt.StatementReturnType() == tree.DDL || stmt.StatementType() == tree.TypeDDL {
 			sc.DdlCount.Inc()
 		} else {
 			sc.MiscCount.Inc()
