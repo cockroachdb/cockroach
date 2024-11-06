@@ -7,6 +7,7 @@ go_library(
         "doc.go",
         "log.go",
         "log_unstable.go",
+        "metrics.go",
         "node.go",
         "raft.go",
         "rawnode.go",
