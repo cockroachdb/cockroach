@@ -262,36 +262,58 @@ func (l *LivenessFabric) BumpEpoch(fromID pb.PeerID, forID pb.PeerID) {
 	forEntry.grantSupportFrom(fromID)
 }
 
+// WithdrawSupportFor causes the store liveness SupportFor() to return
+// not supported when fromID calls it for forID.
+func (l *LivenessFabric) WithdrawSupportFor(fromID pb.PeerID, forID pb.PeerID) {
+	fromEntry, exists := l.state[fromID]
+	if !exists {
+		panic("attempting to call WithdrawSupportFor() for a non-existing fromID entry")
+	}
+	fromEntry.withdrawSupportFor(forID)
+}
+
+// WithdrawSupportFor causes the store liveness SupportFrom() to return not
+// supported when fromID calls it for forID.
+func (l *LivenessFabric) WithdrawSupportFrom(fromID pb.PeerID, forID pb.PeerID) {
+	fromEntry, exists := l.state[fromID]
+	if !exists {
+		panic("attempting to call WithdrawSupportFrom() for a non-existing fromID entry")
+	}
+	fromEntry.withdrawSupportFrom(forID)
+}
+
 // WithdrawSupport withdraws the support by fromID for forID. We also update
 // state on forID to reflect the withdrawal of support.
 func (l *LivenessFabric) WithdrawSupport(fromID pb.PeerID, forID pb.PeerID) {
-	fromEntry, exists := l.state[fromID]
-	if !exists {
-		panic("attempting to call WithdrawSupport() for a non-existing fromID entry")
-	}
-	fromEntry.withdrawSupportFor(forID)
-
-	forEntry, exists := l.state[forID]
-	if !exists {
-		panic("attempting to call WithdrawSupport() for a non-existing forID entry")
-	}
-	forEntry.withdrawSupportFrom(fromID)
+	l.WithdrawSupportFor(fromID, forID)
+	l.WithdrawSupportFrom(forID, fromID)
 }
 
-// GrantSupport grants the support by fromID for forID. We also update state on
-// forID to reflect the withdrawal of support.
-func (l *LivenessFabric) GrantSupport(fromID pb.PeerID, forID pb.PeerID) {
+// GrantSupport causes the store liveness SupportFor() to return supported when
+// fromID calls it for forID.
+func (l *LivenessFabric) GrantSupportFor(fromID pb.PeerID, forID pb.PeerID) {
 	fromEntry, exists := l.state[fromID]
 	if !exists {
 		panic("attempting to call GrantSupport() for a non-existing fromID entry")
 	}
 	fromEntry.grantSupportFor(forID)
+}
 
-	forEntry, exists := l.state[forID]
+// GrantSupport causes the store liveness SupportFrom() to return supported when
+// fromID calls it for forID.
+func (l *LivenessFabric) GrantSupportFrom(fromID pb.PeerID, forID pb.PeerID) {
+	fromEntry, exists := l.state[fromID]
 	if !exists {
-		panic("attempting to call GrantSupport() for a non-existing forID entry")
+		panic("attempting to call GrantSupport() for a non-existing fromID entry")
 	}
-	forEntry.grantSupportFrom(fromID)
+	fromEntry.grantSupportFrom(forID)
+}
+
+// GrantSupport grants the support by fromID for forID. We also update state on
+// forID to reflect the support grant.
+func (l *LivenessFabric) GrantSupport(fromID pb.PeerID, forID pb.PeerID) {
+	l.GrantSupportFor(fromID, forID)
+	l.GrantSupportFrom(forID, fromID)
 }
 
 // SetSupportExpired explicitly controls what SupportExpired returns regardless
