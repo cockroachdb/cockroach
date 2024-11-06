@@ -2252,7 +2252,7 @@ func (c *SyncedCluster) Put(
 
 	var finalErr error
 	setErr := func(e error) {
-		if finalErr != nil {
+		if finalErr == nil {
 			finalErr = e
 		}
 	}
@@ -2596,7 +2596,7 @@ func (c *SyncedCluster) Get(
 
 	var finalErr error
 	setErr := func(e error) {
-		if finalErr != nil {
+		if finalErr == nil {
 			finalErr = e
 		}
 	}
