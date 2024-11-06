@@ -32,7 +32,8 @@ func _() {
 	_ = x[ReferencedSequenceIDs-17]
 	_ = x[ReferencedFunctionIDs-18]
 	_ = x[ReferencedColumnIDs-19]
-	_ = x[AttrMax-19]
+	_ = x[PartitionName-20]
+	_ = x[AttrMax-20]
 }
 
 func (i Attr) String() string {
@@ -75,6 +76,8 @@ func (i Attr) String() string {
 		return "ReferencedFunctionIDs"
 	case ReferencedColumnIDs:
 		return "ReferencedColumnIDs"
+	case PartitionName:
+		return "PartitionName"
 	default:
 		return "Attr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
