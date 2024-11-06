@@ -83,6 +83,13 @@ func TestCCLLogic_alter_table_locality(
 	runCCLLogicTest(t, "alter_table_locality")
 }
 
+func TestCCLLogic_cleanup_zone(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cleanup_zone")
+}
+
 func TestCCLLogic_global_placement_restricted(
 	t *testing.T,
 ) {

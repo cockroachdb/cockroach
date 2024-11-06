@@ -76,6 +76,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_cleanup_zone(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cleanup_zone")
+}
+
 func TestCCLLogic_multi_region(
 	t *testing.T,
 ) {
