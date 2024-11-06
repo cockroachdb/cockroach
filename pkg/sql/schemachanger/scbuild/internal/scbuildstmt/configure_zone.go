@@ -6,6 +6,9 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -33,14 +36,6 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 			"YAML config is deprecated and not supported in the declarative schema changer"))
 	}
 
-	// TODO(annie): implement complete support for CONFIGURE ZONE. This currently
-	// Supports:
-	// - Database
-	// - Table
-	// - Index
-	// - Partition/row
-	// Left to support:
-	// - System Ranges
 	zco, err := astToZoneConfigObject(b, n)
 	if err != nil {
 		panic(err)
@@ -115,8 +110,24 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 
 func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
 	zs := n.ZoneSpecifier
+
+	// We are named range.
+	if zs.NamedZone != "" {
+		if n.Discard {
+			// TODO(annie): Support discard for named range.
+			return nil, scerrors.NotImplementedErrorf(n, "discarding a zone config on a named "+
+				"range is not supported in the DSC")
+		}
+		namedZone := zonepb.NamedZone(zs.NamedZone)
+		id, found := zonepb.NamedZones[namedZone]
+		if !found {
+			return nil, fmt.Errorf("%q is not a built-in zone", string(zs.NamedZone))
+		}
+		return &namedRangeZoneConfigObj{rangeID: catid.DescID(id)}, nil
+	}
+
 	// We are a database object.
-	if n.Database != "" {
+	if zs.Database != "" {
 		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
 		return &databaseZoneConfigObj{databaseID: dbElem.DatabaseID}, nil
 	}
@@ -126,20 +137,20 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	//
 	// TODO(annie): remove this when we have something equivalent to
 	// expandMutableIndexName in the DSC.
-	targetsIndex := n.TargetsIndex()
-	if targetsIndex && n.TableOrIndex.Table.Table() == "" {
+	targetsIndex := zs.TargetsIndex()
+	if targetsIndex && zs.TableOrIndex.Table.Table() == "" {
 		return nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC")
 	}
 
-	if !n.TargetsTable() {
+	if !zs.TargetsTable() {
 		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on system ranges "+
 			"are not supported in the DSC")
 	}
 
 	// If this is an ALTER ALL PARTITIONS statement, fallback to the legacy schema
 	// changer.
-	if n.TargetsPartition() && n.ZoneSpecifier.StarIndex {
+	if zs.TargetsPartition() && zs.StarIndex {
 		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
 			"are not supported in the DSC")
 	}
@@ -165,7 +176,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	tzo := tableZoneConfigObj{tableID: tableID}
 
 	// We are a table object.
-	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
+	if zs.TargetsTable() && !zs.TargetsIndex() && !zs.TargetsPartition() {
 		return &tzo, nil
 	}
 
@@ -179,14 +190,14 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
 	// We are an index object. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
-	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
-	if targetsIndex && !n.TargetsPartition() {
+	izo.fillIndexFromZoneSpecifier(b, zs)
+	if targetsIndex && !zs.TargetsPartition() {
 		return &izo, nil
 	}
 
 	// We are a partition object.
-	if n.TargetsPartition() {
-		partObj := partitionZoneConfigObj{partitionName: string(n.ZoneSpecifier.Partition),
+	if zs.TargetsPartition() {
+		partObj := partitionZoneConfigObj{partitionName: string(zs.Partition),
 			indexZoneConfigObj: izo}
 		return &partObj, nil
 	}

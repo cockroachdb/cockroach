@@ -1507,3 +1507,7 @@ func (s *TestState) NodesStatusServer() *serverpb.OptionalNodesStatusServer {
 func (s *TestState) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error) {
 	return &serverpb.RegionsResponse{Regions: map[string]*serverpb.RegionsResponse_Region{}}, nil
 }
+
+func (s *TestState) GetDefaultZoneConfig() *zonepb.ZoneConfig {
+	return zonepb.DefaultSystemZoneConfigRef()
+}

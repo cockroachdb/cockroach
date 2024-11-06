@@ -8,6 +8,7 @@ package scbuildstmt
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -43,6 +44,7 @@ type BuildCtx interface {
 	Telemetry
 	NodeStatusInfo
 	RegionProvider
+	ZoneConfigProvider
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -60,9 +62,6 @@ type BuildCtx interface {
 
 	// Codec returns the codec for the current tenant.
 	Codec() keys.SQLCodec
-
-	// ZoneConfigGetter returns the zone config getter.
-	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 }
 
 // ClusterAndSessionInfo provides general cluster and session info.
@@ -481,4 +480,13 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
+}
+
+type ZoneConfigProvider interface {
+	// ZoneConfigGetter returns the zone config getter.
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
+
+	// GetDefaultZoneConfig is used to get the default zone config inside the
+	// server.
+	GetDefaultZoneConfig() *zonepb.ZoneConfig
 }
