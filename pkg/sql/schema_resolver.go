@@ -562,8 +562,15 @@ func maybeLookupRoutine(
 		return nil, nil
 	}
 
+	db := sr.CurrentDatabase()
+	if db == "" {
+		// The database is empty for queries run in the internal executor. None
+		// of the lookups below will succeed, so we can return early.
+		return nil, nil
+	}
+
 	if fn.ExplicitSchema && fn.Schema() != catconstants.CRDBInternalSchemaName {
-		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fn.Schema())
+		found, prefix, err := sr.LookupSchema(ctx, db, fn.Schema())
 		if err != nil {
 			return nil, err
 		}
@@ -579,7 +586,7 @@ func maybeLookupRoutine(
 	var udfDef *tree.ResolvedFunctionDefinition
 	for i, n := 0, path.NumElements(); i < n; i++ {
 		schema := path.GetSchema(i)
-		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
+		found, prefix, err := sr.LookupSchema(ctx, db, schema)
 		if err != nil {
 			return nil, err
 		}
