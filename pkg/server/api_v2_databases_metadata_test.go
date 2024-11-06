@@ -8,7 +8,6 @@ package server
 import (
 	"cmp"
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,8 +50,7 @@ func TestGetTableMetadata(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
-	defer conn.Close()
+	conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	var (
 		db1Name = "new_test_db_1"
 		db2Name = "new_test_db_2"
@@ -62,6 +60,7 @@ func TestGetTableMetadata(t *testing.T) {
 	ts := testCluster.Server(0)
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
+
 	t.Run("non GET method 405 error", func(t *testing.T) {
 		req, err := http.NewRequest("POST", ts.AdminURL().WithPath("/api/v2/table_metadata/?dbId=10").String(), nil)
 		require.NoError(t, err)
@@ -75,67 +74,53 @@ func TestGetTableMetadata(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, string(respBytes), http.StatusText(http.StatusMethodNotAllowed))
 	})
+
 	t.Run("unknown db id", func(t *testing.T) {
 		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/?dbId=1000").String(), http.MethodGet)
 		require.Len(t, mdResp.Results, 0)
 		require.Equal(t, int64(0), mdResp.PaginationInfo.TotalResults)
 	})
+
 	t.Run("authorization", func(t *testing.T) {
 		sessionUsername := username.TestUserName()
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		// Assert that the test user gets an empty response for db 1
 		uri1 := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d", db1Id)
-		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
-
-		require.Empty(t, mdResp.Results)
-		require.Zero(t, mdResp.PaginationInfo.TotalResults)
-
-		// Assert that the test user gets an empty response for db 2
 		uri2 := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d", db2Id)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
+		// System database has id 1.
+		uriSystem := "/api/v2/table_metadata/?dbId=1"
 
+		// By default, the test user should see results for db1 and db2 due to
+		// CONNECT on public.
+		for _, uri := range []string{uri1, uri2} {
+			mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+			require.NotEmpty(t, mdResp.Results)
+			require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
+		}
+
+		// Assert that user cannot see system db.
+		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uriSystem).String(), http.MethodGet)
 		require.Empty(t, mdResp.Results)
-		require.Zero(t, mdResp.PaginationInfo.TotalResults)
 
-		// Grant connect access to DB 1
-		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
-		require.NoError(t, e)
+		// Revoke connect access from db1.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
 		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		// Assert that user no longer sees results from db1.
+		require.Empty(t, mdResp.Results)
 
-		// Assert that user now see results for db1
+		// Make user admin.
+		conn.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
+		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		// Assert that user now see results for db1.
 		require.NotEmpty(t, mdResp.Results)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
-		// Assert that the test user gets an empty response for db 2
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
-
-		require.Empty(t, mdResp.Results)
-		require.Zero(t, mdResp.PaginationInfo.TotalResults)
-
-		// Revoke connect access from db1
-		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
-		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
-
-		// Assert that user no longer sees results from db1
-		require.Empty(t, mdResp.Results)
-
-		// Make user admin
-		// Revoke connect access from db1
-		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
-		require.NoError(t, e)
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
-
-		// Assert that user now see results for db1
-		require.NotEmpty(t, mdResp.Results)
-		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
-		// Assert that user now see results for db1
-		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri2).String(), http.MethodGet)
-
+		// Assert that user now see results for system db.
+		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uriSystem).String(), http.MethodGet)
 		require.NotEmpty(t, mdResp.Results)
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
 	})
+
 	t.Run("sorting", func(t *testing.T) {
 		nameComparator := func(first, second tableMetadata) int {
 			return cmp.Or(
@@ -223,6 +208,7 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("table name filter", func(t *testing.T) {
 		var tableNameTests = []struct {
 			name          string
@@ -251,6 +237,7 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("pagination", func(t *testing.T) {
 		var pageTests = []struct {
 			name             string
@@ -280,6 +267,7 @@ func TestGetTableMetadata(t *testing.T) {
 			require.Empty(t, mdResp.Results)
 		})
 	})
+
 	t.Run("filter store id", func(t *testing.T) {
 		storeIds := []int64{1, 2}
 		uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&storeId=%d&storeId=%d", db1Id, storeIds[0], storeIds[1])
@@ -291,6 +279,7 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("400 bad request", func(t *testing.T) {
 		var unprocessableTest = []struct {
 			name        string
@@ -315,6 +304,7 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("no views", func(t *testing.T) {
 		uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&name=%s", db1Id, "view")
 		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
@@ -329,16 +319,14 @@ func TestGetTableMetadataWithDetails(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
-	defer conn.Close()
-	runner := sqlutils.MakeSQLRunner(conn)
+	runner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	var (
 		db1Name   = "new_test_db_1"
 		db2Name   = "new_test_db_2"
 		myTable1  = "myTable1"
 		myTable11 = "myTable11"
 	)
-	setupTest(t, conn, db1Name, db2Name)
+	setupTest(t, runner, db1Name, db2Name)
 
 	ts := testCluster.Server(0)
 	client, err := ts.GetAdminHTTPClient()
@@ -354,29 +342,25 @@ func TestGetTableMetadataWithDetails(t *testing.T) {
 		require.NotEmpty(t, resp.Metadata)
 		require.Contains(t, resp.CreateStatement, myTable1)
 	})
+
 	t.Run("authorization", func(t *testing.T) {
 		sessionUsername := username.TestUserName()
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		failed := makeApiRequest[string](
-			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
-		require.Equal(t, TableNotFound, failed)
-
-		// grant connect access to db1 to allow request to succeed
-		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		// Request should succeed by default due to CONNECT on public.
 		resp := makeApiRequest[tableMetadataWithDetailsResponse](
 			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
 		require.NotEmpty(t, resp.Metadata)
 		require.Contains(t, resp.CreateStatement, myTable1)
 
-		// revoke access to db1.
-		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
-		failed = makeApiRequest[string](
+		// Revoke access to db1.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
+		failed := makeApiRequest[string](
 			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
 		require.Equal(t, TableNotFound, failed)
 
-		// grant admin access to the user
+		// Grant admin access to the user.
 		runner.Exec(t, fmt.Sprintf("GRANT ADMIN TO %s", sessionUsername.Normalized()))
 		resp = makeApiRequest[tableMetadataWithDetailsResponse](
 			t, userClient, ts.AdminURL().WithPath("/api/v2/table_metadata/1/").String(), http.MethodGet)
@@ -421,13 +405,12 @@ func TestGetDbMetadata(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
-	defer conn.Close()
+	conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	var (
 		db1Name = "new_test_db_1"
 		db2Name = "new_test_db_2"
 	)
-	db1Id, _ := setupTest(t, conn, db1Name, db2Name)
+	setupTest(t, conn, db1Name, db2Name)
 
 	ts := testCluster.Server(0)
 	client, err := ts.GetAdminHTTPClient()
@@ -493,41 +476,44 @@ func TestGetDbMetadata(t *testing.T) {
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		// Assert that the test user gets an empty response for db 1
-		uri := "/api/v2/database_metadata/"
+		verifyDatabases := func(expectedDbs []string, resp []dbMetadata) {
+			require.Len(t, resp, len(expectedDbs))
+			for i, db := range expectedDbs {
+				require.Equal(t, db, resp[i].DbName)
+			}
+		}
+
+		// All databases grant CONNECT to public by default, so the user should see all databases.
+		// There should be 4: defaultdb, postgres, new_test_db_1, and new_test_db_2.
+		// The system db should not be included, since it doe snot have CONNECT granted to public.
+		uri := "/api/v2/database_metadata/?sortBy=name"
 		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres"}, mdResp.Results)
 
-		require.Empty(t, mdResp.Results)
-		require.Zero(t, mdResp.PaginationInfo.TotalResults)
-
-		// Grant connect access to DB 1
-		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
-		require.NoError(t, e)
+		// Revoke connect access for public from db1.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
+		// Asser that user no longer sees db1.
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		verifyDatabases([]string{"defaultdb", "new_test_db_2", "postgres"}, mdResp.Results)
 
+		// Grant connect access to DB 1 for user.
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		// Assert that user now see results for db1
-		require.Len(t, mdResp.Results, 1)
-		require.True(t, mdResp.Results[0].DbId == int64(db1Id))
-		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
+		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres"}, mdResp.Results)
 
-		// Revoke connect access from db1
-		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
-		require.NoError(t, e)
+		// Revoke connect access from db1 again.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		// Assert that user no longer sees results from db1.
+		verifyDatabases([]string{"defaultdb", "new_test_db_2", "postgres"}, mdResp.Results)
 
-		// Assert that user no longer sees results from db1
-		require.Empty(t, mdResp.Results)
-
-		// Make user admin
-		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
-		require.NoError(t, e)
+		// Make user admin. The admin user should see all databases, including system.
+		conn.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
-
-		// Assert that user now see results for all dbs (new_test_db_1, new_test_db_2, system, postgres, and defaultdb)
-		require.Len(t, mdResp.Results, 5)
-		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
-
+		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres", "system"}, mdResp.Results)
 	})
+
 	t.Run("pagination", func(t *testing.T) {
 		var pageTests = []struct {
 			name             string
@@ -551,6 +537,7 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("db name filter", func(t *testing.T) {
 		var dbtableNameTests = []struct {
 			name          string
@@ -574,6 +561,7 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("filter store id", func(t *testing.T) {
 		storeIds := []int64{8, 9}
 		uri := fmt.Sprintf("/api/v2/database_metadata/?storeId=%d&storeId=%d", storeIds[0], storeIds[1])
@@ -584,6 +572,7 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("400 bad request", func(t *testing.T) {
 		var unprocessableTest = []struct {
 			name        string
@@ -607,6 +596,7 @@ func TestGetDbMetadata(t *testing.T) {
 			})
 		}
 	})
+
 	t.Run("table count only includes tables", func(t *testing.T) {
 		uri := fmt.Sprintf("/api/v2/database_metadata/?name=%s", db1Name)
 		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
@@ -630,11 +620,9 @@ func TestGetDbMetadataWithDetails(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	conn := testCluster.ServerConn(0)
-	defer conn.Close()
-	runner := sqlutils.MakeSQLRunner(conn)
+	runner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	db1Name := "new_test_db_1"
-	db1Id, _ := setupTest(t, conn, db1Name, "new_test_db_2")
+	db1Id, _ := setupTest(t, runner, db1Name, "new_test_db_2")
 
 	ts := testCluster.Server(0)
 	client, err := ts.GetAdminHTTPClient()
@@ -664,27 +652,31 @@ func TestGetDbMetadataWithDetails(t *testing.T) {
 		require.NoError(t, err)
 
 		uri := fmt.Sprintf("/api/v2/database_metadata/%d/", db1Id)
-		failed := makeApiRequest[string](
-			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
-		require.Equal(t, DatabaseNotFound, failed)
+		systemUri := "/api/v2/database_metadata/1/"
 
-		// grant connect access to db1 to allow request to succeed
-		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		// By default, dbs have CONNECT on public, so the user should see db1.
 		resp := makeApiRequest[dbMetadataWithDetailsResponse](
 			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
 
-		// revoke access to db1.
-		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+		// Assert that user cannot see system db.
+		failed := makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(systemUri).String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed)
+
+		// Revoke access to db1.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
 		failed = makeApiRequest[string](
 			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, DatabaseNotFound, failed)
 
-		// grant admin access to the user
+		// Grant admin access to the user.
 		runner.Exec(t, fmt.Sprintf("GRANT ADMIN TO %s", sessionUsername.Normalized()))
 		resp = makeApiRequest[dbMetadataWithDetailsResponse](
 			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+		// Assert that user can see system db.
+		resp = makeApiRequest[dbMetadataWithDetailsResponse](t, userClient, ts.AdminURL().WithPath(systemUri).String(), http.MethodGet)
+		require.Equal(t, int64(1), resp.Metadata.DbId)
 	})
 
 	t.Run("non GET method 405 error", func(t *testing.T) {
@@ -724,18 +716,14 @@ func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		failed := makeApiRequest[interface{}](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
-		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
-
-		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
-
 		mdResp := makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, "NOT_RUNNING", mdResp.CurrentStatus)
 		require.Equal(t, false, mdResp.AutomaticUpdatesEnabled)
 		require.Equal(t, 20*time.Minute, mdResp.DataValidDuration)
 
-		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
-		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", "public"))
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE postgres FROM %s", "public"))
+		failed := makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
 		conn.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
@@ -797,17 +785,13 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
 		require.NoError(t, err)
 
-		// User isn't authorized and will receive a 404 response.
-		failed := makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
-		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
-
-		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
-
-		// User is now authorized and will trigger job.
+		// User is authorized and will trigger job.
 		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
 
-		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
-		failed = makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
+		// User isn't authorized and will receive a 404 response.
+		runner.Exec(t, "REVOKE CONNECT ON DATABASE defaultdb FROM public")
+		runner.Exec(t, "REVOKE CONNECT ON DATABASE postgres FROM public")
+		failed := makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
 		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
 
 		runner.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
@@ -914,8 +898,9 @@ func triggerAndWaitForJobToComplete(
 	<-jobComplete
 }
 
-func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int, dbId2 int) {
-	runner := sqlutils.MakeSQLRunner(conn)
+func setupTest(
+	t *testing.T, runner *sqlutils.SQLRunner, db1 string, db2 string,
+) (dbId1 int, dbId2 int) {
 	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db1)
 
 	runner.Exec(t, `CREATE DATABASE IF NOT EXISTS `+db2)
@@ -926,6 +911,7 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 	row = runner.QueryRow(t, fmt.Sprintf(`SELECT crdb_internal.get_database_id('%s') AS database_id;`, db2))
 	row.Scan(&dbId2)
 
+	// Insert some tables with dbId 1 to mock system db.
 	runner.Exec(t, fmt.Sprintf(`
 		INSERT INTO system.table_metadata
 			(db_id,
@@ -959,7 +945,10 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 		(%[2]d, '%[4]s', 9, 'mySchema', 'myTable11', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:10Z', '{}'),
 		(%[2]d, '%[4]s', 12, 'mySchema', 'myTable12', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:11Z', '{}'),
 		(%[2]d, '%[4]s', 13, 'mySchema', 'myTable13', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z', '{}'),
-		(%[1]d, '%[3]s', 14, 'mySchema1', 'myView1', 'VIEW', 0, 0, 0, 0, 0, 11, 0, ARRAY[], null, '2025-06-20T00:00:00Z', '{}')
+		(%[1]d, '%[3]s', 14, 'mySchema1', 'myView1', 'VIEW', 0, 0, 0, 0, 0, 11, 0, ARRAY[], null, '2025-06-20T00:00:00Z', '{}'),
+		(1, 'system', 15, 'mySchema1', 'systemTable1', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z', '{}'),
+		(1, 'system', 16, 'mySchema1', 'systemTable2', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z', '{}'),
+		(1, 'system', 17, 'mySchema1', 'systemTable3', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z', '{}')
 `, dbId1, dbId2, db1, db2))
 
 	return dbId1, dbId2
