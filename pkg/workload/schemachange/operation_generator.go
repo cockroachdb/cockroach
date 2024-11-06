@@ -1278,6 +1278,18 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
+	hasBit0Type := func() bool {
+		for _, def := range stmt.Defs {
+			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), "BIT(0)") {
+				return true
+			}
+		}
+		return false
+	}()
+	mixedVersionTest, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_3.Version())
+	if err != nil {
+		return nil, err
+	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1297,6 +1309,10 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasVectorType},
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
+		// TODO(spilchen): In mixed-version tests, declaring a BIT(0) column can cause a
+		// syntax error. Support for this type was recently added and backported, but the
+		// backport release is still pending. This can be removed once 24.2.5 is publicly released.
+		{code: pgcode.InvalidParameterValue, condition: hasBit0Type && mixedVersionTest},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
