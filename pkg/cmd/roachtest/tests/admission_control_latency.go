@@ -948,19 +948,21 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("validating stats after the perturbation")
 	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
 	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
-	v.validateTokensReturned(ctx, t)
+	validateTokensReturned(ctx, t, v, v.stableNodes())
 }
 
-// validateTokensReturned ensures that all RAC tokens are returned to the pool
+// validateTokensReturned ensures that all RACv2 tokens are returned to the pool
 // at the end of the test.
-func (v variations) validateTokensReturned(ctx context.Context, t test.Test) {
+func validateTokensReturned(
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+) {
 	t.L().Printf("validating all tokens returned")
-	for _, node := range v.stableNodes() {
+	for _, node := range nodes {
 		// Wait for the tokens to be returned to the pool. Normally this will
 		// pass immediately however it is possible that there is still some
 		// recovery so loop a few times.
 		testutils.SucceedsWithin(t, func() error {
-			db := v.Conn(ctx, t.L(), node)
+			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
 			for _, sType := range []string{"send", "eval"} {
 				for _, tType := range []string{"elastic", "regular"} {
