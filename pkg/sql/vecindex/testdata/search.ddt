@@ -1,0 +1,186 @@
+# ----------
+# Construct new index with only root-level vectors.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+----
+• 1 (4, 3)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+└───• vec3 (4, 3)
+
+# Search for vector that has exact match.
+search
+(7, 4)
+----
+vec2: 0 (centroid=3.1623)
+3 leaf vectors, 3 vectors, 3 full vectors, 1 partitions
+
+# Search for vector with no exact match.
+search max-results=2
+(3, 5)
+----
+vec3: 5 (centroid=0)
+vec1: 13 (centroid=3.1623)
+3 leaf vectors, 3 vectors, 3 full vectors, 1 partitions
+
+# ----------
+# Construct new index with multiple levels.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (-4, 5)
+vec5: (1, 11)
+vec6: (1, -6)
+vec7: (0, 4)
+vec8: (-2, 8)
+vec9: (2, 8)
+vec10: (0, 3)
+vec11: (1, 1)
+vec12: (5, 4)
+vec13: (6, 2)
+----
+• 1 (2.0556, 1.1389)
+│
+├───• 8 (1, -6)
+│   │
+│   └───• 4 (1, -6)
+│       │
+│       └───• vec6 (1, -6)
+│
+├───• 9 (5.5, 3.25)
+│   │
+│   ├───• 3 (6.5, 3)
+│   │   │
+│   │   ├───• vec2 (7, 4)
+│   │   └───• vec13 (6, 2)
+│   │
+│   └───• 5 (4.5, 3.5)
+│       │
+│       ├───• vec3 (4, 3)
+│       └───• vec12 (5, 4)
+│
+└───• 10 (-0.3333, 6.1667)
+    │
+    ├───• 2 (-3, 6.5)
+    │   │
+    │   ├───• vec4 (-4, 5)
+    │   └───• vec8 (-2, 8)
+    │
+    ├───• 6 (0.5, 2.5)
+    │   │
+    │   ├───• vec1 (1, 2)
+    │   ├───• vec7 (0, 4)
+    │   ├───• vec10 (0, 3)
+    │   └───• vec11 (1, 1)
+    │
+    └───• 7 (1.5, 9.5)
+        │
+        ├───• vec5 (1, 11)
+        └───• vec9 (2, 8)
+
+# Search for closest vectors with beam-size=1.
+search max-results=2 beam-size=1
+(1, 6)
+----
+vec9: 5 (centroid=1.5811)
+vec5: 25 (centroid=1.5811)
+2 leaf vectors, 8 vectors, 2 full vectors, 3 partitions
+
+# Search for closest vectors with beam-size=2.
+search max-results=2 beam-size=2
+(1, 6)
+----
+vec9: 5 (centroid=1.5811)
+vec7: 5 (centroid=1.5811)
+6 leaf vectors, 12 vectors, 3 full vectors, 4 partitions
+
+# ----------
+# Construct new index with duplicate vectors.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (-3, 5)
+vec2: (10, -10)
+vec3: (4, 9)
+vec4: (1, 1)
+vec5: (4, 9)
+vec6: (6, 2)
+----
+• 1 (3.6667, 2.6667)
+│
+├───• 2 (8, -4)
+│   │
+│   ├───• vec2 (10, -10)
+│   └───• vec6 (6, 2)
+│
+├───• 3 (-1, 3)
+│   │
+│   ├───• vec1 (-3, 5)
+│   └───• vec4 (1, 1)
+│
+└───• 4 (4, 9)
+    │
+    ├───• vec3 (4, 9)
+    └───• vec5 (4, 9)
+
+# Ensure that search result returns multiple keys.
+search max-results=3
+(5, 10)
+----
+vec3: 2 (centroid=0)
+vec5: 2 (centroid=0)
+vec1: 89 (centroid=2.8284)
+4 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
+
+# ----------
+# Construct new index with duplicate keys. This can happen when a vector is
+# updated in the primary index, but it cannot be found in the secondary index.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (-4, 5)
+vec1: (10, 5)
+vec1: (12, 7)
+----
+• 1 (2.7222, 4.2778)
+│
+├───• 2 (9.6667, 5.3333)
+│   │
+│   ├───• vec2 (7, 4)
+│   ├───• vec1 (12, 7)
+│   └───• vec1 (12, 7)
+│
+├───• 3 (2.5, 2.5)
+│   │
+│   ├───• vec1 (12, 7)
+│   └───• vec3 (4, 3)
+│
+└───• 4 (-4, 5)
+    │
+    └───• vec4 (-4, 5)
+
+# Ensure that search result doesn't contain duplicates.
+search max-results=5
+(8, 9)
+----
+vec1: 20 (centroid=1.5811)
+vec2: 26 (centroid=2.9814)
+vec3: 52 (centroid=1.5811)
+5 leaf vectors, 8 vectors, 3 full vectors, 3 partitions
+
+# Do not rerank results. This may cause a different vec1 duplicate to be
+# returned.
+search max-results=5 skip-rerank
+(8, 9)
+----
+vec2: 26.3282 ±16.9822 (centroid=2.9814)
+vec3: 49.8042 ±19.0394 (centroid=1.5811)
+vec1: 100.1958 ±19.0394 (centroid=1.5811)
+5 leaf vectors, 8 vectors, 0 full vectors, 3 partitions
