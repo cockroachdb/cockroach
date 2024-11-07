@@ -225,7 +225,7 @@ func VerifyBackupRestoreStatementResult(
 		return err
 	}
 	if a, e := columns, []string{
-		"job_id", "status", "fraction_completed", "rows", "index_entries", "bytes",
+		"job_id", "status", "fraction_completed", "rows",
 	}; !reflect.DeepEqual(e, a) {
 		return errors.Errorf("unexpected columns:\n%s", strings.Join(pretty.Diff(e, a), "\n"))
 	}
@@ -247,7 +247,7 @@ func VerifyBackupRestoreStatementResult(
 		return errors.New("zero rows in result")
 	}
 	if err := rows.Scan(
-		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused, &unused, &unused,
+		&actualJob.id, &actualJob.status, &actualJob.fractionCompleted, &unused,
 	); err != nil {
 		return err
 	}

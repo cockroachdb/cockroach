@@ -853,16 +853,12 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
 
 	var unused string
-	var exportedRows, exportedIndexEntries int
+	var exportedRows int
 	sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1`, localFoo+"/alteredPK").Scan(
-		&unused, &unused, &unused, &exportedRows, &exportedIndexEntries, &unused,
+		&unused, &unused, &unused, &exportedRows,
 	)
 	if exportedRows != numAccounts {
 		t.Fatalf("expected %d rows, got %d", numAccounts, exportedRows)
-	}
-	expectedIndexEntries := numAccounts * 2 // Indexes id2 and balance_idx
-	if exportedIndexEntries != expectedIndexEntries {
-		t.Fatalf("expected %d index entries, got %d", expectedIndexEntries, exportedIndexEntries)
 	}
 }
 
@@ -893,9 +889,7 @@ func backupAndRestore(
 		})
 
 		var unused string
-		var exported struct {
-			rows, idx, bytes int64
-		}
+		var exportedRows int64
 
 		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s", backupURIFmtString)
@@ -907,19 +901,10 @@ func backupAndRestore(
 		}
 		queryArgs := append(backupURIArgs, kmsURIArgs...)
 		sqlDB.QueryRow(t, backupQuery, queryArgs...).Scan(
-			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.bytes,
+			&unused, &unused, &unused, &exportedRows,
 		)
-		// When numAccounts == 0, our approxBytes formula breaks down because
-		// backups of no data still contain the system.users and system.descriptor
-		// tables. Just skip the check in this case.
-		if numAccounts > 0 {
-			approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
-			if max := approxBytes * 3; exported.bytes < approxBytes || exported.bytes > max {
-				t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, exported.bytes)
-			}
-		}
-		if expected := int64(numAccounts * 1); exported.rows != expected {
-			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
+		if expected := int64(numAccounts * 1); exportedRows != expected {
+			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exportedRows)
 		}
 
 		found := false
@@ -1011,22 +996,13 @@ func verifyRestoreData(
 ) {
 
 	var unused string
-	var restored struct {
-		rows, idx, bytes int64
-	}
+	var restoredRows int64
 	sqlDB.QueryRow(t, restoreQuery, restoreURIArgs...).Scan(
-		&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
+		&unused, &unused, &unused, &restoredRows,
 	)
 
-	approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
-	if max := approxBytes * 3; restored.bytes < approxBytes || restored.bytes > max {
-		t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, restored.bytes)
-	}
-	if expected := int64(numAccounts); restored.rows != expected {
-		t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restored.rows)
-	}
-	if expected := int64(numAccounts); restored.idx != expected {
-		t.Fatalf("expected %d idx rows for %d accounts, got %d", expected, numAccounts, restored.idx)
+	if expected := int64(numAccounts); restoredRows != expected {
+		t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restoredRows)
 	}
 
 	var rowCount int64
@@ -8675,8 +8651,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	var jobID int64
 	var unused interface{}
-	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID, &unused, &unused, &unused, &unused,
-		&unused)
+	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID, &unused, &unused, &unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
