@@ -2029,14 +2029,14 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 		return nil
 	}
 	desc := r.descRLocked()
-	return &kvpb.BatchTimestampBeforeGCError{
+	return errors.WithStack(&kvpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
 		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(ctx, rspan),
 		RangeID:                desc.RangeID,
 		StartKey:               desc.StartKey.AsRawKey(),
 		EndKey:                 desc.EndKey.AsRawKey(),
-	}
+	})
 }
 
 // shouldWaitForPendingMergeRLocked determines whether the given batch request
