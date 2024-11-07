@@ -809,11 +809,13 @@ func (b *Builder) buildTriggerFunction(
 	//
 	// All triggers are called on NULL input.
 	const calledOnNullInput = true
+	const isTriggerFunc = true
 	udfDef := &memo.UDFDefinition{
 		Name:              resolvedDef.Name,
 		Typ:               tableTyp,
 		Volatility:        o.Volatility,
 		CalledOnNullInput: calledOnNullInput,
+		TriggerFunc:       isTriggerFunc,
 		RoutineType:       o.Type,
 		RoutineLang:       o.Language,
 		Params:            paramCols,

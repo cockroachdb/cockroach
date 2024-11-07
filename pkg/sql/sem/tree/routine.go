@@ -124,6 +124,11 @@ type RoutineExpr struct {
 	// Procedure is true if the routine is a procedure being invoked by CALL.
 	Procedure bool
 
+	// TriggerFunc is true if this routine is a trigger function. Note that it is
+	// only set for the outermost routine, and not any sub-routines used to
+	// implement the PL/pgSQL body.
+	TriggerFunc bool
+
 	// BlockStart is true if this routine marks the start of a PL/pgSQL block with
 	// an exception handler. It determines when to initialize the state shared
 	// between sub-routines for the block.
@@ -150,6 +155,7 @@ func NewTypedRoutineExpr(
 	generator bool,
 	tailCall bool,
 	procedure bool,
+	triggerFunc bool,
 	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
@@ -165,6 +171,7 @@ func NewTypedRoutineExpr(
 		Generator:         generator,
 		TailCall:          tailCall,
 		Procedure:         procedure,
+		TriggerFunc:       triggerFunc,
 		BlockStart:        blockStart,
 		BlockState:        blockState,
 		CursorDeclaration: cursorDeclaration,

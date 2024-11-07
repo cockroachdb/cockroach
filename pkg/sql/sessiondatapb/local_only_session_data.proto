@@ -560,6 +560,9 @@ message LocalOnlySessionData {
   // performed by the vectorized engine when transitioning into the draining
   // state in some cases.
   bool disable_vec_union_eager_cancellation = 143;
+  // RecursionDepthLimit is the maximum depth that nested trigger-function calls
+  // can reach.
+  int64 recursion_depth_limit = 144;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

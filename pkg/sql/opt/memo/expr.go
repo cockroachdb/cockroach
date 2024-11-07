@@ -708,6 +708,11 @@ type UDFDefinition struct {
 	// applies to direct as well as indirect recursive calls (mutual recursion).
 	IsRecursive bool
 
+	// TriggerFunc indicates whether the routine is a trigger function. It is only
+	// set for the outermost routine, and not for any sub-routines that implement
+	// the PL/pgSQL body.
+	TriggerFunc bool
+
 	// BlockStart indicates whether the routine marks the start of a PL/pgSQL
 	// block with an exception handler. This is used to determine when to
 	// initialize the common state held between sub-routines within the same
