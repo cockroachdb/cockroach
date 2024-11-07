@@ -26,6 +26,7 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/ctxgroup",

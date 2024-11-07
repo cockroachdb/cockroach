@@ -9,13 +9,19 @@ package roachtestutil
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // CheckReplicaDivergenceOnDB runs a consistency check via the provided DB. It
@@ -117,4 +123,46 @@ func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 		return errors.Errorf("the following descriptor ids are invalid\n%v", invalidIDs)
 	}
 	return nil
+}
+
+// validateTokensReturned ensures that all RACv2 tokens are returned to the pool
+// at the end of the test.
+func ValidateTokensReturned(
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+) {
+	t.L().Printf("validating all tokens returned")
+	for _, node := range nodes {
+		// Wait for the tokens to be returned to the pool. Normally this will
+		// pass immediately however it is possible that there is still some
+		// recovery so loop a few times.
+		testutils.SucceedsWithin(t, func() error {
+			db := c.Conn(ctx, t.L(), node)
+			defer db.Close()
+			for _, sType := range []string{"send", "eval"} {
+				for _, tType := range []string{"elastic", "regular"} {
+					statPrefix := fmt.Sprintf("kvflowcontrol.tokens.%s.%s", sType, tType)
+					query := fmt.Sprintf(`
+		SELECT d.value::INT8 AS deducted, r.value::INT8 AS returned
+		FROM
+		  crdb_internal.node_metrics d,
+		  crdb_internal.node_metrics r
+		WHERE
+		  d.name='%s.deducted' AND
+		  r.name='%s.returned'`,
+						statPrefix, statPrefix)
+					rows, err := db.QueryContext(ctx, query)
+					require.NoError(t, err)
+					require.True(t, rows.Next())
+					var deducted, returned int64
+					if err := rows.Scan(&deducted, &returned); err != nil {
+						return err
+					}
+					if deducted != returned {
+						return errors.Newf("tokens not returned for %s: deducted %d returned %d", statPrefix, deducted, returned)
+					}
+				}
+			}
+			return nil
+		}, 5*time.Second)
+	}
 }
