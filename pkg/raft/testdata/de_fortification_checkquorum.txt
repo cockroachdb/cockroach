@@ -81,6 +81,7 @@ ok
 # which is what we're interested in for this test.
 tick-election 1
 ----
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
 
 raft-state 1
@@ -105,12 +106,14 @@ stabilize
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
 > 3 receiving messages
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
@@ -246,7 +249,7 @@ stabilize 3
 > 3 handling Ready
   Ready MustSync=true:
   State:StatePreCandidate
-  HardState Term:2 Commit:12 Lead:0 LeadEpoch:0
+  HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgPreVote Term:3 Log:2/12
   3->2 MsgPreVote Term:3 Log:2/12
@@ -372,10 +375,15 @@ raft-log 2
 1/11 EntryNormal ""
 2/12 EntryNormal ""
 
+# Make sure 2 doesn't attempt to campaign on the next tick-heartbeat.
+set-randomized-election-timeout 2 timeout=5
+----
+ok
+
 # And as a result, it continues to send out de-fortification requests.
 tick-heartbeat 2
 ----
-ok
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 
 stabilize
 ----

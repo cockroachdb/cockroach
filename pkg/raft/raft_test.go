@@ -1984,7 +1984,7 @@ func testLeaderStepdownWhenQuorumLost(t *testing.T, storeLivenessEnabled bool) {
 	sm.becomeLeader()
 	assert.Equal(t, pb.StateLeader, sm.state)
 
-	for i := int64(0); i < sm.electionTimeout+1; i++ {
+	for i := int64(0); i < sm.electionTimeout; i++ {
 		sm.tick()
 	}
 
@@ -1999,39 +1999,39 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 }
 func testLeaderSupersedingWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
 	var fabric *raftstoreliveness.LivenessFabric
-	var a, b, c *raft
+	var n1, n2, n3 *raft
 
 	if storeLivenessEnabled {
 		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(fabric.GetStoreLiveness(3)))
 	} else {
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(raftstoreliveness.Disabled{}))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(raftstoreliveness.Disabled{}))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
 			withStoreLiveness(raftstoreliveness.Disabled{}))
 	}
 
-	a.checkQuorum = true
-	b.checkQuorum = true
-	c.checkQuorum = true
+	n1.checkQuorum = true
+	n2.checkQuorum = true
+	n3.checkQuorum = true
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
-	setRandomizedElectionTimeout(b, b.electionTimeout+1)
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	setRandomizedElectionTimeout(n2, n2.electionTimeout+1)
 
-	for i := int64(0); i < b.electionTimeout; i++ {
-		b.tick()
+	for i := int64(0); i < n2.electionTimeout; i++ {
+		n2.tick()
 	}
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
-	assert.Equal(t, pb.StateLeader, a.state)
-	assert.Equal(t, pb.StateFollower, c.state)
+	assert.Equal(t, pb.StateLeader, n1.state)
+	assert.Equal(t, pb.StateFollower, n3.state)
 
 	if storeLivenessEnabled {
 		// We need to withdraw support from 1 so 3 can campaign and not get rejected
@@ -2041,16 +2041,22 @@ func testLeaderSupersedingWithCheckQuorum(t *testing.T, storeLivenessEnabled boo
 
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
-	// Peer b rejected c's vote since its electionElapsed had not reached to electionTimeout
-	assert.Equal(t, pb.StateCandidate, c.state)
+	if storeLivenessEnabled {
+		// 2 voted for 3 since its support for 1 was withdrawn.
+		assert.Equal(t, pb.StateLeader, n3.state)
+	} else {
+		// 2 rejected 3's vote request since its electionElapsed had not reached to
+		// electionTimeout.
+		assert.Equal(t, pb.StateCandidate, n3.state)
+	}
 
 	// Letting b's electionElapsed reach to electionTimeout
-	for i := int64(0); i < b.electionTimeout; i++ {
-		b.tick()
+	for i := int64(0); i < n2.electionTimeout; i++ {
+		n2.tick()
 	}
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
-	assert.Equal(t, pb.StateLeader, c.state)
+	assert.Equal(t, pb.StateLeader, n3.state)
 }
 
 func TestLeaderElectionWithCheckQuorum(t *testing.T) {
@@ -2165,7 +2171,6 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 	c.checkQuorum = true
 
 	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
-	setRandomizedElectionTimeout(b, b.electionTimeout+1)
 
 	for i := int64(0); i < b.electionTimeout; i++ {
 		b.tick()
@@ -2174,8 +2179,12 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 
 	nt.isolate(1)
 	if storeLivenessEnabled {
-		// Isolate node 1 in the store liveness layer as well.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+		// For the purposes of this test, we want 3 to campaign and get rejected.
+		// However, if we withdraw the support between 2 and 1, 2 will vote for 3
+		// when it campaigns. Therefore, we only withdraw the support between
+		// 1 and 3.
+		nt.livenessFabric.WithdrawSupport(1, 3)
+		nt.livenessFabric.WithdrawSupport(3, 1)
 	}
 
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -2336,12 +2345,21 @@ func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
 	// check state
 	require.Equal(t, pb.StateFollower, n1.state)
 	require.Equal(t, pb.StateFollower, n2.state)
-	require.Equal(t, pb.StateCandidate, n3.state)
-
-	// check term
-	require.Equal(t, uint64(3), n1.Term)
-	require.Equal(t, uint64(2), n2.Term)
-	require.Equal(t, uint64(3), n3.Term)
+	if storeLivenessEnabled {
+		// Since the support for 1 was withdrawn, the inFortifyLease is no longer
+		// valid, and n3 will receive votes and become a leader.
+		require.Equal(t, pb.StateLeader, n3.state)
+		require.Equal(t, uint64(3), n1.Term)
+		require.Equal(t, uint64(3), n2.Term)
+		require.Equal(t, uint64(3), n3.Term)
+	} else {
+		// Since other peers still hold a valid inHeartbeatLease, n3 will not
+		// receive enough votes to become a leader.
+		require.Equal(t, pb.StateCandidate, n3.state)
+		require.Equal(t, uint64(3), n1.Term)
+		require.Equal(t, uint64(2), n2.Term)
+		require.Equal(t, uint64(3), n3.Term)
+	}
 }
 
 // TestDisruptiveFollowerPreVote tests isolated follower,
@@ -2414,7 +2432,15 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	// check state
 	require.Equal(t, pb.StateLeader, n1.state)
 	require.Equal(t, pb.StateFollower, n2.state)
-	require.Equal(t, pb.StatePreCandidate, n3.state)
+	if storeLivenessEnabled {
+		// Since the peers no longer hold a valid inFortifyLease, 3 will receive
+		// rejection votes and become a follower again.
+		require.Equal(t, pb.StateFollower, n3.state)
+	} else {
+		// Peers will just ignore the MsgVoteRequest due to the inHeartbeatLease and
+		// 3 will remain a preCandidate.
+		require.Equal(t, pb.StatePreCandidate, n3.state)
+	}
 
 	// check term
 	require.Equal(t, uint64(2), n1.Term)
