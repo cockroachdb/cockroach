@@ -3896,6 +3896,10 @@ func (m *sessionDataMutator) SetUnsafeAllowTriggersModifyingCascades(val bool) {
 	m.data.UnsafeAllowTriggersModifyingCascades = val
 }
 
+func (m *sessionDataMutator) SetTriggerDepthLimit(val int) {
+	m.data.TriggerDepthLimit = int64(val)
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
