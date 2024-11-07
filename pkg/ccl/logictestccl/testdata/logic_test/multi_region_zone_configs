@@ -2078,3 +2078,27 @@ SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl11_id)
 
 query error user testuser must be owner of test or have CREATE privilege on database test
 SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest drop_all_backrefs
+
+user root
+
+statement ok
+CREATE DATABASE db1 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+CREATE TABLE db1.t1_with_index_zone(x INT, j INT REFERENCES db1.t1_with_index_zone(x), PRIMARY KEY(x)) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER PARTITION "ap-southeast-2" OF INDEX db1.t1_with_index_zone@t1_with_index_zone_pkey CONFIGURE ZONE USING gc.ttlseconds = 32000;
+
+statement ok
+ALTER PARTITION "ca-central-1" OF INDEX db1.t1_with_index_zone@t1_with_index_zone_pkey CONFIGURE ZONE USING gc.ttlseconds = 34000;
+
+statement ok
+ALTER PARTITION "us-east-1" OF INDEX db1.t1_with_index_zone@t1_with_index_zone_pkey CONFIGURE ZONE USING gc.ttlseconds = 38000;
+
+statement ok
+DROP TABLE db1.t1_with_index_zone CASCADE;
+
+subtest end
