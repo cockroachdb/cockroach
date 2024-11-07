@@ -5,6 +5,8 @@
 
 package tablemetadatacacheutil
 
+import "context"
+
 // TestingKnobs provides hooks into the table metadata cache job
 type TestingKnobs struct {
 	// onJobResume is called when the job is ready
@@ -56,3 +58,13 @@ func CreateTestingKnobs() *TestingKnobs {
 		aostClause: "AS OF SYSTEM TIME '-1us'",
 	}
 }
+
+// NoopUpdater is an implementation of ITableMetadataUpdater that performs a noop when RunUpdater is called.
+// This should only be used in tests when the updating of the table_metadata system table isn't necessary.
+type NoopUpdater struct{}
+
+func (nu *NoopUpdater) RunUpdater(_ctx context.Context) error {
+	return nil
+}
+
+var _ ITableMetadataUpdater = &NoopUpdater{}

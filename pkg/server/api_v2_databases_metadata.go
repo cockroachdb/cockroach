@@ -474,10 +474,10 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
 		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
 		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
-		WHERE (rm.role = 'admin' OR tbm.db_name in (
+		WHERE (rm.role = 'admin' OR tbm.db_name IN (
 	  			SELECT cdp.database_name
 	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE grantee = $
+	  			WHERE (grantee = $ OR grantee = 'public')
 	  			AND privilege_type = 'CONNECT'
 	  		))
 		AND tbm.table_type = 'TABLE'
@@ -880,11 +880,11 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 			FROM system.table_metadata, unnest(store_ids) as unnested_ids
 			GROUP BY db_id
 		) s ON s.db_id = tbm.db_id
-		WHERE (rm.role = 'admin' OR n.name in (
-			SELECT cdp.database_name
-			FROM "".crdb_internal.cluster_database_privileges cdp
-			WHERE grantee = $
-			AND privilege_type = 'CONNECT'
+		WHERE (rm.role = 'admin' OR n.name IN (
+	  			SELECT cdp.database_name
+	  			FROM "".crdb_internal.cluster_database_privileges cdp
+	  			WHERE (grantee = $ OR grantee = 'public')
+	  			AND privilege_type = 'CONNECT'
 		))
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
@@ -1063,7 +1063,7 @@ func (a *apiV2Server) updateTableMetadataJobAuthorized(
 		UNION
 		SELECT 1 
 		FROM "".crdb_internal.cluster_database_privileges cdp
-	 	WHERE cdp.grantee = $ 
+	 	WHERE (cdp.grantee = $ OR cdp.grantee = 'public') 
 	 	AND cdp.privilege_type = 'CONNECT' 
 	)
 `, sqlUserStr, sqlUserStr)
