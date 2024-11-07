@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -620,10 +617,12 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
 	for i := range lrw.bh {
-		var rp RowProcessor
+		var rp BatchHandler
 		var err error
+		sd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
+
 		if lrw.spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, lrw.configByTable)
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, sd, lrw.spec, lrw.configByTable)
 			if err != nil {
 				return err
 			}
@@ -631,9 +630,11 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 			rp, err = makeSQLProcessor(
 				ctx, flowCtx.Cfg.Settings, lrw.configByTable,
 				jobspb.JobID(lrw.spec.JobID),
+				flowCtx.Cfg.DB,
 				// Initialize the executor with a fresh session data - this will
 				// avoid creating a new copy on each executor usage.
 				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+				sd, lrw.spec,
 			)
 			if err != nil {
 				return err
@@ -646,13 +647,7 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 			}
 		}
 
-		lrw.bh[i] = &txnBatch{
-			db:       flowCtx.Cfg.DB,
-			rp:       rp,
-			settings: flowCtx.Cfg.Settings,
-			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
-			spec:     lrw.spec,
-		}
+		lrw.bh[i] = rp
 	}
 	return nil
 }
@@ -758,6 +753,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// TODO(dt): consider keeping these goroutines running for lifetime of proc
 	// rather than starting new ones for each flush.
 	chunks := make(chan []streampb.StreamEvent_KV)
+
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh[:requiredWorkers] {
 		w := worker
@@ -1075,83 +1071,12 @@ type BatchHandler interface {
 	Close(context.Context)
 }
 
-// RowProcessor knows how to process a single row from an event stream.
-type RowProcessor interface {
-	// ProcessRow processes a single KV update by inserting or deleting a row.
-	// Txn argument can be nil. The provided value is the "previous value",
-	// before the change was applied on the source.
-	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
-	GetLastRow() cdcevent.Row
-	SetSyntheticFailurePercent(uint32)
-	ReportMutations(*stats.Refresher)
-	Close(context.Context)
-}
-
-type txnBatch struct {
-	db       descs.DB
-	rp       RowProcessor
-	settings *cluster.Settings
-	sd       *sessiondata.SessionData
-	spec     execinfrapb.LogicalReplicationWriterSpec
-}
-
 var useImplicitTxns = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.use_implicit_txns.enabled",
 	"determines whether the consumer processes each row in a separate implicit txn",
 	metamorphic.ConstantWithTestBool("logical_replication.consumer.use_implicit_txns.enabled", true),
 )
-
-func (t *txnBatch) HandleBatch(
-	ctx context.Context, batch []streampb.StreamEvent_KV,
-) (batchStats, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "txnBatch.HandleBatch")
-	defer sp.Finish()
-
-	stats := batchStats{}
-	var err error
-	if len(batch) == 1 {
-		if t.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(batch[0].KeyValue.Value.RawBytes) == 0 {
-			return stats, nil
-		}
-		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
-		if err != nil {
-			return stats, err
-		}
-		stats.Add(s)
-	} else {
-		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			for _, kv := range batch {
-				if t.spec.Discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(kv.KeyValue.Value.RawBytes) == 0 {
-					continue
-				}
-				s, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
-				if err != nil {
-					return err
-				}
-				stats.Add(s)
-			}
-			return nil
-		}, isql.WithSessionData(t.sd))
-	}
-	return stats, err
-}
-
-func (t *txnBatch) GetLastRow() cdcevent.Row {
-	return t.rp.GetLastRow()
-}
-
-func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
-	t.rp.SetSyntheticFailurePercent(rate)
-}
-
-func (t *txnBatch) ReportMutations(s *stats.Refresher) {
-	t.rp.ReportMutations(s)
-}
-
-func (t *txnBatch) Close(ctx context.Context) {
-	t.rp.Close(ctx)
-}
 
 func init() {
 	rowexec.NewLogicalReplicationWriterProcessor = newLogicalReplicationWriterProcessor
