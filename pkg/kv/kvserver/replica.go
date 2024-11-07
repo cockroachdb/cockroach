@@ -1736,10 +1736,6 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	// We don't care about this field; see comment on
-	// DeprecatedUsingAppliedStateKey for more details. This can be removed once
-	// we stop loading the replica state from snapshot protos.
-	diskState.DeprecatedUsingAppliedStateKey = r.shMu.state.DeprecatedUsingAppliedStateKey
 	if !diskState.Equal(r.shMu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//

@@ -54,41 +54,6 @@ message ReplicaState {
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
   storage.enginepb.MVCCStats stats = 7;
-  // DeprecatedUsingAppliedStateKey was previously used to check whether the
-  // Range had upgraded to begin using the RangeAppliedState key. When set to
-  // true, replicas receiving the state (through a ReplicatedEvalResult) knew to
-  // begin using the new key. In #58088 (21.1) we introduced a migration to
-  // iterate through all ranges in the system and have them start using the
-  // RangeAppliedState key. This field was always set to true in 21.2, nodes
-  // nodes were already using the RangeAppliedState key, or receiving messages
-  // from 21.1 nodes that were also already using the RangeAppliedState key. In
-  // 21.2 (and in 21.1 for that matter) we no longer needed to trigger the "if
-  // set to true in an incoming message, upgrade to start using the
-  // RangeAppliedState key" code path.
-  //
-  // When looking to get rid of this field in 22.1 (#70464), we observed that
-  // there was an unintentional read of this field in 21.2 nodes (#72029). The
-  // saga is as follows:
-  //  - Removing this field in 22.1 meant it was set as false when received at
-  //    21.2 nodes.
-  //  - This should've been fine! We weren't using this field to trigger any
-  //    upgrade code paths (like it was originally intended for).
-  //  - It turns out that in 21.2 we were using the ReplicaState from the
-  //    incoming snapshot to update our in-memory replica state
-  //  - Because the proto field was being phased out, there was now a divergence
-  //    between the on-disk state (field set to true, from earlier 21.2
-  //    operations) and the in-memory state (field set to false, because sent
-  //    from a version that attempted to get rid of this field).
-  //
-  // Removing proto fields from the replica state are not possible until we stop
-  // using the protobuf copy of the replica state when applying a snapshot
-  // (#72222). Once that's done, we should be able to stop sending the replica
-  // state as part of the snapshot in the subsequent release.
-  //
-  // TODO(irfansharif): Remove this field in the release after the one where we
-  // stop consulting the protobuf copy of the replica state when applying a
-  // snapshot.
-  bool deprecated_using_applied_state_key = 11;
   // Version tells us which migrations can be assumed to have run against this
   // particular replica. When we introduce backwards incompatible changes to the
   // replica state (for example using the unreplicated truncated state instead
@@ -139,7 +104,7 @@ message ReplicaState {
   // with other related ranges to reduce load on pebble.
   roachpb.GCHint gc_hint = 15 [(gogoproto.customname) = "GCHint"];
 
-  reserved 8, 9, 10;
+  reserved 8, 9, 10, 11;
 }
 
 // RangeInfo is used for reporting status information about a range out through
