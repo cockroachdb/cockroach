@@ -9002,6 +9002,10 @@ func TestReplicaMetrics(t *testing.T) {
 		status.HardState.Lead = lead
 		return status
 	}
+	leadSupportedStatus := func(leadSupportedUntil hlc.Timestamp) raft.LeadSupportStatus {
+		status := raft.LeadSupportStatus{LeadSupportUntil: leadSupportedUntil}
+		return status
+	}
 	desc := func(ids ...int) roachpb.RangeDescriptor {
 		var d roachpb.RangeDescriptor
 		for i, id := range ids {
@@ -9025,52 +9029,57 @@ func TestReplicaMetrics(t *testing.T) {
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	testCases := []struct {
-		replicas    int32
-		storeID     roachpb.StoreID
-		desc        roachpb.RangeDescriptor
-		raftStatus  *raft.SparseStatus
-		liveness    livenesspb.NodeVitalityInterface
-		raftLogSize int64
-		expected    ReplicaMetrics
+		replicas            int32
+		storeID             roachpb.StoreID
+		desc                roachpb.RangeDescriptor
+		raftStatus          *raft.SparseStatus
+		liveness            livenesspb.NodeVitalityInterface
+		raftLogSize         int64
+		leaderSupportStatus raft.LeadSupportStatus
+		expected            ReplicaMetrics
 	}{
 		// The leader of a 1-replica range is up.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 0,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 2-replica range is up (only 1 replica present).
-		{2, 1, desc(1), status(1, progress(2)), live(1), 0,
+		{2, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: true,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    true,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 2-replica range is up.
-		{2, 1, desc(1, 2), status(1, progress(2)), live(1), 0,
+		{2, 1, desc(1, 2), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date.
-		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date (local replica is not leader)
-		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2), 0,
+		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -9078,90 +9087,99 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
-		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     21,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        21,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
-		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 3-replica range is up.
-		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     11,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        11,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date (match = 0 is
 		// considered up to date).
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are live but one replica is behind.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     31,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        31,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are live but two replicas are behind.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     32,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        32,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but one replica is dead.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: true,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    true,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but two replicas are dead.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but two replicas are
 		// dead, including the leader.
-		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(2), 0,
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9170,7 +9188,7 @@ func TestReplicaMetrics(t *testing.T) {
 				BehindCount:     0,
 			}},
 		// Range has no leader, local replica is the range counter.
-		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9178,7 +9196,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is the range counter.
-		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9186,7 +9204,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is not the range counter.
-		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -9194,7 +9212,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is not the range counter.
-		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -9202,14 +9220,35 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// The leader of a 1-replica range is up and raft log is too large.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogTruncationThreshold,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogTruncationThreshold, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     10,
-				RaftLogTooLarge: true,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				RaftLogTooLarge:    true,
+				LeaderNotFortified: true,
+			}},
+		// The leader of a 1-replica range is up, and the leader support expired.
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.MinTimestamp),
+			ReplicaMetrics{
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: true, // the support expired
+			}},
+		// The leader of a 1-replica range is up, and the support hasn't expired.
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.MaxTimestamp),
+			ReplicaMetrics{
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: false, // The support hasn't expired yet
 			}},
 	}
 
@@ -9233,6 +9272,8 @@ func TestReplicaMetrics(t *testing.T) {
 				ticking:            c.expected.Ticking,
 				raftLogSize:        c.raftLogSize,
 				raftLogSizeTrusted: true,
+				now:                tc.Clock().NowAsClockTimestamp(),
+				leadSupportStatus:  c.leaderSupportStatus,
 			})
 			require.Equal(t, c.expected, metrics)
 		})

@@ -33,6 +33,10 @@ type ReplicaMetrics struct {
 	ViolatingLeasePreferences bool
 	LessPreferredLease        bool
 
+	// LeaderNotFortified indicates whether the leader believes itself to be
+	// fortified or not.
+	LeaderNotFortified bool
+
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
 	// Ticking indicates whether the store is ticking the replica. It should be
@@ -95,6 +99,8 @@ func (r *Replica) Metrics(
 		clusterNodes:             clusterNodes,
 		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
+		leadSupportStatus:        r.raftLeadSupportStatusRLocked(),
+		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
 		storeAttrs:               storeAttrs,
@@ -126,6 +132,8 @@ type calcReplicaMetricsInput struct {
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
 	raftStatus               *raft.SparseStatus
+	leadSupportStatus        raft.LeadSupportStatus
+	now                      hlc.ClockTimestamp
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
@@ -176,9 +184,11 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	// behind.
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raftpb.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
+	var leaderNotFortified bool
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
+		leaderNotFortified = d.leadSupportStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
 	}
 
 	return ReplicaMetrics{
@@ -190,6 +200,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		LivenessLease:             livenessLease,
 		ViolatingLeasePreferences: violatingLeasePreferences,
 		LessPreferredLease:        lessPreferredLease,
+		LeaderNotFortified:        leaderNotFortified,
 		Quiescent:                 d.quiescent,
 		Ticking:                   d.ticking,
 		RangeCounter:              rangeCounter,
