@@ -69,7 +69,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			setAdmissionControl(ctx, t, c, true)
+			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
 			dataDir := "/mnt/data1"
 			if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", 128<<20 /* 128MiB */, false, dataDir); err != nil {

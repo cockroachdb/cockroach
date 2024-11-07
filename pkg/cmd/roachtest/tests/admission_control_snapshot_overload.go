@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -68,7 +69,7 @@ func registerSnapshotOverload(r registry.Registry) {
 
 				// Defensive, since admission control is enabled by default. This
 				// test can fail if admission control is disabled.
-				setAdmissionControl(ctx, t, c, true)
+				roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
 				// Set high snapshot rates.
 				if _, err := db.ExecContext(
@@ -102,7 +103,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			// leaseholders on just n1.
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", time.Minute))
 			if !t.SkipInit() {
-				splits := ifLocal(c, " --splits=10", " --splits=100")
+				splits := roachtestutil.IfLocal(c, " --splits=10", " --splits=100")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv "+splits+" {pgurl:1}")
 
 				if _, err := db.ExecContext(ctx, fmt.Sprintf(
@@ -115,20 +116,20 @@ func registerSnapshotOverload(r registry.Registry) {
 
 			t.Status(fmt.Sprintf("initializing tpcc dataset (<%s)", 20*time.Minute))
 			if !t.SkipInit() {
-				warehouses := ifLocal(c, " --warehouses=10", " --warehouses=2000")
+				warehouses := roachtestutil.IfLocal(c, " --warehouses=10", " --warehouses=2000")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
 			}
 
 			const iters = 4
-			padDuration, err := time.ParseDuration(ifLocal(c, "20s", "5m"))
+			padDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "20s", "5m"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			leaseWaitDuration, err := time.ParseDuration(ifLocal(c, "20s", "5m"))
+			leaseWaitDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "20s", "5m"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			replicaWaitDuration, err := time.ParseDuration(ifLocal(c, "40s", "25m"))
+			replicaWaitDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "40s", "25m"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,9 +143,9 @@ func registerSnapshotOverload(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				duration := " --duration=" + totalWorkloadDuration.String()
 				histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
-				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=256")
-				maxRate := ifLocal(c, "  --max-rate=100", " --max-rate=12000")
-				splits := ifLocal(c, "  --splits=10", " --splits=100")
+				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=256")
+				maxRate := roachtestutil.IfLocal(c, "  --max-rate=100", " --max-rate=12000")
+				splits := roachtestutil.IfLocal(c, "  --splits=10", " --splits=100")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 					"./cockroach workload run kv --max-block-bytes=1 --read-percent=95 "+
 						histograms+duration+concurrency+maxRate+splits+fmt.Sprintf(" {pgurl%s}", c.CRDBNodes()),

@@ -56,7 +56,7 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// tolerate the removal of a store. Today, the mapping of failover
 	// secondaries is fixed, making WAL failover incompatible with the removal
 	// of a store.
-	startOpts.RoachprodOpts.WALFailover = "disabled"
+	startOpts.RoachprodOpts.WALFailover = ""
 	startSettings := install.MakeClusterSettings()
 	// Speed up the replicate queue.
 	startSettings.Env = append(startSettings.Env, "COCKROACH_SCAN_INTERVAL=30s")

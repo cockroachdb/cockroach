@@ -9,6 +9,8 @@ go_library(
         "health_checker.go",
         "httpclient.go",
         "jaeger.go",
+        "load_group.go",
+        "profile.go",
         "replication.go",
         "utils.go",
         "validation_check.go",
@@ -26,6 +28,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
+        "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/protoutil",
@@ -33,12 +36,19 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
 go_test(
     name = "roachtestutil_test",
-    srcs = ["commandbuilder_test.go"],
+    srcs = [
+        "commandbuilder_test.go",
+        "load_group_test.go",
+    ],
     embed = [":roachtestutil"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/cmd/roachtest/option",
+        "@com_github_stretchr_testify//require",
+    ],
 )

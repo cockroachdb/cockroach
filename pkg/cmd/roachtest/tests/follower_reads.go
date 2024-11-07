@@ -988,6 +988,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 			mixedversion.SystemOnlyDeployment,
 			mixedversion.SharedProcessDeployment,
 		),
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 }
 

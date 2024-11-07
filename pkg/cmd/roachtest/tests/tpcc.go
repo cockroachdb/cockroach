@@ -1527,9 +1527,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Cockroach nodes and a single load generator.
 	numLoadGroups := b.LoadConfig.numLoadNodes(b.Distribution)
 	numZones := len(b.Distribution.zones())
-	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
-	roachNodes := loadGroups.roachNodes()
-	loadNodes := loadGroups.loadNodes()
+	loadGroups := roachtestutil.MakeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
+	roachNodes := loadGroups.RoachNodes()
+	loadNodes := loadGroups.LoadNodes()
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
@@ -1643,9 +1643,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			groupIdx := groupIdx
 			group := group
 			m.Go(func(ctx context.Context) error {
-				sqlGateways := group.roachNodes
+				sqlGateways := group.RoachNodes
 				if useHAProxy {
-					sqlGateways = group.loadNodes
+					sqlGateways = group.LoadNodes
 				}
 
 				extraFlags := ""
@@ -1676,7 +1676,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
 					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
-				err := c.RunE(ctx, option.WithNodes(group.loadNodes), cmd)
+				err := c.RunE(ctx, option.WithNodes(group.LoadNodes), cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
 					// NB: this will let the line search continue at a lower warehouse
@@ -1685,7 +1685,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				}
 				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
 				if err := c.Get(
-					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.loadNodes,
+					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
 				); err != nil {
 					// NB: this will let the line search continue. The reason we do this
 					// is because it's conceivable that we made it here, but a VM just
