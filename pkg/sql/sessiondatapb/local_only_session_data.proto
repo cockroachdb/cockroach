@@ -524,6 +524,10 @@ message LocalOnlySessionData {
   // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
   // optimizer should push limit expressions into projects of filtered scans.
   bool optimizer_push_limit_into_project_filtered_scan = 139;
+  // DisableVecUnionEagerCancellation disables the eager cancellation that is
+  // performed by the vectorized engine when transitioning into the draining
+  // state in some cases.
+  bool disable_vec_union_eager_cancellation = 143;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
