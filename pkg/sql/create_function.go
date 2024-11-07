@@ -226,6 +226,15 @@ func (n *createFunctionNode) replaceFunction(
 		udfDesc.ReturnType.Type = retType
 	}
 
+	// Make sure that a trigger function is not replaced.
+	if retType.Identical(types.Trigger) && len(udfDesc.DependedOnBy) > 0 {
+		return errors.WithHint(
+			unimplemented.NewWithIssue(134555,
+				"cannot replace a trigger function with an active trigger"),
+			"consider dropping and recreating the trigger",
+		)
+	}
+
 	// Verify whether changes, if any, to the parameter names and classes are
 	// allowed. This needs to happen after the return type has already been
 	// checked.
