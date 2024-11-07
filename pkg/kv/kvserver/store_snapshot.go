@@ -265,6 +265,8 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	return nil
 }
 
+// NB: when nextKey is non-nil, do not do anything in this function to cause
+// nextKey at the caller to escape to the heap.
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.EngineKey) error {
 	currSpan := msstw.currentSpan()
 	if msstw.currSpanIsMVCCSpan() {
@@ -310,32 +312,37 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	if nextKey != nil {
 		meta := msstw.currSST.Meta
 		encodedNextKey := nextKey.Encode()
+		// Use nextKeyCopy for the remainder of this function. Calling
+		// errors.Errorf with nextKey caused it to escape to the heap in the
+		// caller of finalizeSST (even when finalizeSST was not called), which was
+		// costly.
+		nextKeyCopy := *nextKey
 		if meta.HasPointKeys && storage.EngineKeyCompare(meta.LargestPoint.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestPoint.UserKey)
 			if !ok {
 				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
-					meta.LargestPoint.UserKey, nextKey)
+					meta.LargestPoint.UserKey, nextKeyCopy)
 			}
 			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
-				metaEndKey, nextKey)
+				metaEndKey, nextKeyCopy)
 		}
 		if meta.HasRangeDelKeys && storage.EngineKeyCompare(meta.LargestRangeDel.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestRangeDel.UserKey)
 			if !ok {
 				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
-					meta.LargestRangeDel.UserKey, nextKey)
+					meta.LargestRangeDel.UserKey, nextKeyCopy)
 			}
 			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
-				metaEndKey, nextKey)
+				metaEndKey, nextKeyCopy)
 		}
 		if meta.HasRangeKeys && storage.EngineKeyCompare(meta.LargestRangeKey.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestRangeKey.UserKey)
 			if !ok {
 				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
-					meta.LargestRangeKey.UserKey, nextKey)
+					meta.LargestRangeKey.UserKey, nextKeyCopy)
 			}
 			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
-				metaEndKey, nextKey)
+				metaEndKey, nextKeyCopy)
 		}
 	}
 	// Account for any additional bytes written other than the KV data.
