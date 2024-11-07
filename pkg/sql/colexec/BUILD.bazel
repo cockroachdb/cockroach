@@ -73,6 +73,7 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/storage/enginepb",
