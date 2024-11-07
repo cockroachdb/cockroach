@@ -57,6 +57,7 @@ type TestState struct {
 	sessionData             sessiondata.SessionData
 	statements              []string
 	semaCtx                 *tree.SemaContext
+	evalCtx                 *eval.Context
 	testingKnobs            *scexec.TestingKnobs
 	jobs                    []jobs.Record
 	createdJobsInCurrentTxn []jobspb.JobID
@@ -79,7 +80,6 @@ type TestState struct {
 	approximateTimestamp time.Time
 
 	catalogChanges     catalogChanges
-	idGenerator        eval.DescIDGenerator
 	refProviderFactory scbuild.ReferenceProviderFactory
 }
 
@@ -241,7 +241,7 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 
 // DescIDGenerator implements scbuild.Dependencies.
 func (s *TestState) DescIDGenerator() eval.DescIDGenerator {
-	return s.idGenerator
+	return s.evalCtx.DescIDGenerator
 }
 
 // ReferenceProviderFactory implements scbuild.Dependencies.
