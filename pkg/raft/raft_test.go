@@ -3514,10 +3514,6 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 	require.Equal(t, uint64(1), lead.Term)
 	checkLeaderTransferState(t, lead, pb.StateFollower, 1)
 
-	// TODO(arul): a leader that steps down will currently never campaign due to
-	// the fortification promise that it made to itself. We'll need to fix this.
-	lead.deFortify(lead.lead, lead.Term)
-
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term.
 	for i := int64(0); i < lead.randomizedElectionTimeout; i++ {
@@ -3982,10 +3978,6 @@ func TestLeaderTransferStaleFollower(t *testing.T) {
 		require.Equal(t, pb.StateFollower, n.state)
 		require.Equal(t, uint64(1), n.Term)
 	}
-
-	// TODO(arul): a leader that steps down will currently never campaign due to
-	// the fortification promise that it made to itself. We'll need to fix this.
-	n1.deFortify(n1.lead, n1.Term)
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term. Node 3 does not hear about this
