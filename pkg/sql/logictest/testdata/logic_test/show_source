@@ -66,6 +66,7 @@ disable_changefeed_replication                             off
 disable_hoist_projection_in_join_limitation                off
 disable_partially_distributed_plans                        off
 disable_plan_gists                                         off
+disable_vec_union_eager_cancellation                       off
 disallow_full_table_scans                                  off
 distsql                                                    off
 distsql_plan_gateway_bias                                  2

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -126,6 +127,14 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 	return s.inputs[nth].Root
 }
 
+func eagerCancellationDisabled(flowCtx *execinfra.FlowCtx) bool {
+	var sd *sessiondata.SessionData
+	if flowCtx.EvalCtx != nil { // EvalCtx can be nil in tests
+		sd = flowCtx.EvalCtx.SessionData()
+	}
+	return !flowCtx.Local || (sd != nil && sd.DisableVecUnionEagerCancellation)
+}
+
 // hasParallelUnorderedSync returns whether there is at least one parallel
 // unordered sync in the tree of operators rooted in op.
 func hasParallelUnorderedSync(op execopnode.OpNode) bool {
@@ -166,7 +175,7 @@ func NewParallelUnorderedSynchronizer(
 	// TODO(yuzefovich): we could allow eager cancellation in the distributed
 	// plans too, but only of inputs that don't have inboxes in the input tree.
 	var allowEagerCancellationOnDrain bool
-	if flowCtx.Local {
+	if !eagerCancellationDisabled(flowCtx) {
 		// If the plan is local, then the only requirement for allowing eager
 		// cancellation on drain is that there are no other parallel unordered
 		// syncs in the input trees. This is needed since the "child" sync won't
@@ -467,7 +476,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	}
 
 	bufferMeta := func(meta []execinfrapb.ProducerMetadata) {
-		if !s.flowCtx.Local {
+		if eagerCancellationDisabled(s.flowCtx) {
 			s.bufferedMeta = append(s.bufferedMeta, meta...)
 			return
 		}
