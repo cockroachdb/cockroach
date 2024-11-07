@@ -1358,6 +1358,18 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	if err != nil {
 		return nil, err
 	}
+	mixedVersion, err := isMixedVersionState(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	hasUnsupportedBit0Type := func() bool {
+		for _, def := range stmt.Defs {
+			if col, ok := def.(*tree.ColumnTableDef); ok && isUnsupportedBit0Type(col.Type.SQLString(), mixedVersion) {
+				return true
+			}
+		}
+		return false
+	}()
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1385,6 +1397,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.UndefinedObject, condition: refCursorNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
+		{code: pgcode.InvalidParameterValue, condition: hasUnsupportedBit0Type},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -3861,7 +3874,16 @@ func (og *operationGenerator) randType(
 		}
 		return typName, typ, nil
 	}
+	mixedVersion, err := isMixedVersionState(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	typ := randgen.RandSortingType(og.params.rng)
+	for isUnsupportedBit0Type(typ.SQLString(), mixedVersion) {
+		typ = randgen.RandSortingType(og.params.rng)
+	}
+
 	typeName := tree.MakeUnqualifiedTypeName(typ.SQLString())
 	return &typeName, typ, nil
 }
@@ -4611,6 +4633,22 @@ func isClusterVersionLessThan(
 		return false, err
 	}
 	return clusterVersion.Less(targetVersion), nil
+}
+
+// isMixedVersionState works similarly to isClusterVersionLessThan, but without
+// specifying a version. It returns true if the cluster version is not the
+// latest, indicating a mixed-version test.
+func isMixedVersionState(ctx context.Context, tx pgx.Tx) (bool, error) {
+	return isClusterVersionLessThan(ctx, tx, clusterversion.Latest.Version())
+}
+
+func isUnsupportedBit0Type(typName string, mixedVersion bool) bool {
+	// TODO(spilchen): In mixed-version testing, declaring a BIT(0) column can cause a
+	// syntax error. Support for this type was recently added and backported, but the
+	// backport release is still pending. We need to regenerate the type until
+	// something other than BIT(0) is generated. This can be removed once 23.2.15 is
+	// publicly released.
+	return mixedVersion && strings.HasPrefix(typName, "BIT(0)")
 }
 
 func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {
