@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -294,10 +293,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	engine := &testEngine{
-		Engine:     storage.NewDefaultInMemForTesting(),
-		blockingCh: make(chan struct{}, 1),
-	}
+	engine := NewTestEngine(store)
 	defer engine.Close()
 	settings := clustersettings.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
@@ -331,7 +327,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 
 	// Start blocking writes.
-	engine.setBlockOnWrite(true)
+	engine.SetBlockOnWrite(true)
 	sender.drainSentMessages()
 
 	// Send heartbeats in a separate goroutine. It will block on writing the
@@ -352,8 +348,8 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	require.True(t, supported)
 
 	// Stop blocking writes.
-	engine.blockingCh <- struct{}{}
-	engine.setBlockOnWrite(false)
+	engine.SignalToUnblock()
+	engine.SetBlockOnWrite(false)
 
 	// Ensure the heartbeat is unblocked and sent out.
 	ensureHeartbeats(t, sender, 1)
@@ -463,88 +459,4 @@ func ensureNoHeartbeats(
 		}, hbInterval*10,
 	)
 	require.Regexp(t, err, "no heartbeats")
-}
-
-// testMessageSender implements the MessageSender interface and stores all sent
-// messages in a slice.
-type testMessageSender struct {
-	mu       syncutil.Mutex
-	messages []slpb.Message
-}
-
-func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (sent bool) {
-	tms.mu.Lock()
-	defer tms.mu.Unlock()
-	tms.messages = append(tms.messages, msg)
-	return true
-}
-
-func (tms *testMessageSender) drainSentMessages() []slpb.Message {
-	tms.mu.Lock()
-	defer tms.mu.Unlock()
-	msgs := tms.messages
-	tms.messages = nil
-	return msgs
-}
-
-func (tms *testMessageSender) getNumSentMessages() int {
-	tms.mu.Lock()
-	defer tms.mu.Unlock()
-	return len(tms.messages)
-}
-
-var _ MessageSender = (*testMessageSender)(nil)
-
-// testEngine is a wrapper around storage.Engine that helps simulate failed and
-// stalled writes.
-type testEngine struct {
-	storage.Engine
-	mu           syncutil.Mutex
-	blockingCh   chan struct{}
-	blockOnWrite bool
-	errorOnWrite bool
-}
-
-func (te *testEngine) NewBatch() storage.Batch {
-	return testBatch{
-		Batch:        te.Engine.NewBatch(),
-		blockingCh:   te.blockingCh,
-		blockOnWrite: te.blockOnWrite,
-		errorOnWrite: te.errorOnWrite,
-	}
-}
-
-func (te *testEngine) setBlockOnWrite(bow bool) {
-	te.mu.Lock()
-	defer te.mu.Unlock()
-	te.blockOnWrite = bow
-}
-
-func (te *testEngine) PutUnversioned(key roachpb.Key, value []byte) error {
-	te.mu.Lock()
-	defer te.mu.Unlock()
-	if te.blockOnWrite {
-		<-te.blockingCh
-	}
-	if te.errorOnWrite {
-		return errors.New("error writing")
-	}
-	return te.Engine.PutUnversioned(key, value)
-}
-
-type testBatch struct {
-	storage.Batch
-	blockingCh   chan struct{}
-	blockOnWrite bool
-	errorOnWrite bool
-}
-
-func (tb testBatch) Commit(sync bool) error {
-	if tb.blockOnWrite {
-		<-tb.blockingCh
-	}
-	if tb.errorOnWrite {
-		return errors.New("error committing batch")
-	}
-	return tb.Batch.Commit(sync)
 }
