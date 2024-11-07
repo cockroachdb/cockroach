@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -130,7 +128,7 @@ func registerKV(r registry.Registry) {
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
+			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := ""
 			if opts.splits > 0 {
 				splits = " --splits=" + strconv.Itoa(opts.splits)
@@ -167,8 +165,8 @@ func registerKV(r registry.Registry) {
 				sequential = " --sequential"
 			}
 
-			defaultDuration := ifLocal(c, "10s", opts.duration.String())
-			duration := getEnvWorkloadDurationValueOrDefault(defaultDuration)
+			defaultDuration := roachtestutil.IfLocal(c, "10s", opts.duration.String())
+			duration := roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
 			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
@@ -603,15 +601,15 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Set up statement bundles for the (now known) top queries, with reasonable
 			// criteria. This gives us something to look into should the test fail to
 			// meet its qps targets.
-			require.NoError(t, profileTopStatements(ctx, c, t.L(), profDbName("kv")))
+			require.NoError(t, roachtestutil.ProfileTopStatements(ctx, c, t.L(), roachtestutil.ProfDbName("kv")))
 			defer func() {
-				if err := downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
+				if err := roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
 					t.L().PrintfCtx(ctx, "failed to download stmt bundles: %v", err)
 				}
 			}()
 
 			verifyQPS := func(ctx context.Context) error {
-				if qps := measureQPS(ctx, t, c, time.Second, c.Range(1, nodes-1)); qps < expectedQPS {
+				if qps := roachtestutil.MeasureQPS(ctx, t, c, time.Second, c.Range(1, nodes-1)); qps < expectedQPS {
 					return errors.Newf(
 						"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",
 						qps, timeutil.Now(), expectedQPS)
@@ -754,8 +752,8 @@ func registerKVSplits(r registry.Registry) {
 				m := c.NewMonitor(workloadCtx, c.CRDBNodes())
 				m.Go(func(ctx context.Context) error {
 					defer workloadCancel()
-					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
-					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
+					concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + roachtestutil.IfLocal(c, "2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
 						"./cockroach workload run kv --init --max-ops=1"+
 							concurrency+splits+
@@ -851,7 +849,7 @@ func registerKVRangeLookups(r registry.Registry) {
 			if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 				return err
 			}
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(len(c.CRDBNodes())*64))
+			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(len(c.CRDBNodes())*64))
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
@@ -946,58 +944,6 @@ func registerKVRangeLookups(r registry.Registry) {
 	}
 }
 
-// measureQPS will measure the approx QPS at the time this command is run. The
-// duration is the interval to measure over. Setting too short of an interval
-// can mean inaccuracy in results. Setting too long of an interval may mean the
-// impact is blurred out.
-func measureQPS(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	duration time.Duration,
-	nodes option.NodeListOption,
-) float64 {
-	totalOpsCompleted := func() int {
-		// NB: We mgight not be able to hold the connection open during the full duration.
-		var dbs []*gosql.DB
-		for _, nodeId := range nodes {
-			db := c.Conn(ctx, t.L(), nodeId)
-			defer db.Close()
-			dbs = append(dbs, db)
-		}
-		// Count the inserts before sleeping.
-		var total atomic.Int64
-		group := ctxgroup.WithContext(ctx)
-		for _, db := range dbs {
-			group.Go(func() error {
-				var v float64
-				if err := db.QueryRowContext(
-					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
-				).Scan(&v); err != nil {
-					return err
-				}
-				total.Add(int64(v))
-				return nil
-			})
-		}
-
-		require.NoError(t, group.Wait())
-		return int(total.Load())
-	}
-
-	// Measure the current time and the QPS now.
-	startTime := timeutil.Now()
-	beforeOps := totalOpsCompleted()
-	// Wait for the duration minus the first query time.
-	select {
-	case <-ctx.Done():
-		return 0
-	case <-time.After(duration - timeutil.Since(startTime)):
-		afterOps := totalOpsCompleted()
-		return float64(afterOps-beforeOps) / duration.Seconds()
-	}
-}
-
 // registerKVRestartImpact measures the impact of stopping and then restarting
 // a node during a write-heavy workload. Specifically the Raft log on the node
 // falls behind when the node is down and when it comes back up it goes into IO
@@ -1083,7 +1029,7 @@ func registerKVRestartImpact(r registry.Registry) {
 				for {
 					// Measure QPS every few seconds throughout the test. measureQPS takes time
 					// to run, so we don't sleep between invocations.
-					qps := measureQPS(ctx, t, c, 5*time.Second, c.Range(1, nodes-1))
+					qps := roachtestutil.MeasureQPS(ctx, t, c, 5*time.Second, c.Range(1, nodes-1))
 					if qps < passingQPS {
 						return errors.Newf(
 							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",

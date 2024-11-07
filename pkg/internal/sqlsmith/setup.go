@@ -123,6 +123,10 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	// Since we use the stats mutator, disable auto stats generation.
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;`)
+	// We randomly run CREATE STATISTICS and ANALYZE statements. The
+	// nondeterministic createAt times of these statements make any forecasts
+	// based on them nondeterministic, so disable stats forecasting.
+	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.forecasts.enabled = false;`)
 
 	// Create the random tables.
 	opt := randgen.TableOptCrazyNames

@@ -128,8 +128,8 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 				}
 
 				payload := " --payload=64"
-				concurrency := ifLocal(c, "", " --concurrency="+strconv.Itoa(conc))
-				duration := " --duration=" + ifLocal(c, "10s", "10m")
+				concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+strconv.Itoa(conc))
+				duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
 				runCmd := fmt.Sprintf("./workload run indexes --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), runCmd)

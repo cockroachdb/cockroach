@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -108,7 +109,7 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
+	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {

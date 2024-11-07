@@ -191,10 +191,6 @@ go_library(
         "ts_util.go",
         "typeorm.go",
         "unoptimized_query_oracle.go",
-        "util.go",
-        "util_disk_usage.go",
-        "util_if_local.go",
-        "util_load_group.go",
         "validate_system_schema_after_version_upgrade.go",
         "versionupgrade.go",
         "ycsb.go",
@@ -344,7 +340,6 @@ go_test(
         "query_comparison_util_test.go",
         "restore_test.go",
         "tpcc_test.go",
-        "util_load_group_test.go",
         ":mocks_drt",  # keep
     ],
     embed = [":tests"],
