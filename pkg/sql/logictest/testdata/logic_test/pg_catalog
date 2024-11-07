@@ -2900,6 +2900,7 @@ disable_changefeed_replication                             off                 N
 disable_hoist_projection_in_join_limitation                off                 NULL      NULL        NULL        string
 disable_partially_distributed_plans                        off                 NULL      NULL        NULL        string
 disable_plan_gists                                         off                 NULL      NULL        NULL        string
+disable_vec_union_eager_cancellation                       off                 NULL      NULL        NULL        string
 disallow_full_table_scans                                  off                 NULL      NULL        NULL        string
 distsql                                                    off                 NULL      NULL        NULL        string
 distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
@@ -3095,6 +3096,7 @@ disable_changefeed_replication                             off                 N
 disable_hoist_projection_in_join_limitation                off                 NULL  user     NULL      off                 off
 disable_partially_distributed_plans                        off                 NULL  user     NULL      off                 off
 disable_plan_gists                                         off                 NULL  user     NULL      off                 off
+disable_vec_union_eager_cancellation                       off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                                  off                 NULL  user     NULL      off                 off
 distsql                                                    off                 NULL  user     NULL      off                 off
 distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
@@ -3286,6 +3288,7 @@ disable_changefeed_replication                             NULL    NULL     NULL
 disable_hoist_projection_in_join_limitation                NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                        NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
+disable_vec_union_eager_cancellation                       NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                                  NULL    NULL     NULL     NULL        NULL
 distsql                                                    NULL    NULL     NULL     NULL        NULL
 distsql_plan_gateway_bias                                  NULL    NULL     NULL     NULL        NULL
