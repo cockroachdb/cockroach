@@ -1168,6 +1168,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 			}
 		}
 		shouldWaitChange = rs.handleReadyEntriesRaftMuLocked(ctx, rs.scratchEvent, rd) || shouldWaitChange
+		rs.scratchEvent = raftEventForReplica{}
 	}
 
 	// If there was a quorum change, update the voter sets, triggering the
