@@ -1161,6 +1161,10 @@ func createImportingDescriptors(
 	// Set the new descriptors' states to offline.
 	for _, desc := range mutableTables {
 		desc.SetOffline("restoring")
+
+		// Remove any LDR Jobs from the table descriptor, ensuring schema changes
+		// can be run on the table descriptor.
+		desc.LDRJobIDs = nil
 	}
 	for _, desc := range typesToWrite {
 		desc.SetOffline("restoring")
