@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/redact"
 )
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
@@ -138,7 +139,7 @@ func (p *planner) checkPasswordOptionConstraints(
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {
-	var opName string
+	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
 		opName = "alter-role"
@@ -422,7 +423,7 @@ func (p *planner) processSetOrResetClause(
 }
 
 func (n *alterRoleSetNode) startExec(params runParams) error {
-	var opName string
+	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
 		opName = "alter-role"
@@ -559,7 +560,7 @@ func deepEqualIgnoringOrders(s1, s2 []string) bool {
 // getRoleName resolves the roleName and performs additional validation
 // to make sure the role is safe to edit.
 func (n *alterRoleSetNode) getRoleName(
-	params runParams, opName string,
+	params runParams, opName redact.RedactableString,
 ) (needsUpdate bool, retRoleName username.SQLUsername, err error) {
 	if n.allRoles {
 		return true, username.MakeSQLUsernameFromPreNormalizedString(""), nil
@@ -632,7 +633,7 @@ func (n *alterRoleSetNode) getRoleName(
 //  2. newSettings = {timezone=America/New_York, statement_timeout=10s}
 //  3. err = nil
 func (n *alterRoleSetNode) makeNewSettings(
-	params runParams, opName string, roleName username.SQLUsername,
+	params runParams, opName redact.RedactableString, roleName username.SQLUsername,
 ) (oldSettings []string, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,

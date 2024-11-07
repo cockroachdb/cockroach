@@ -133,7 +133,7 @@ func init() {
 	builtins.ExecuteQueryViaJobExecContext = func(
 		evalCtx *eval.Context,
 		ctx context.Context,
-		opName string,
+		opName redact.RedactableString,
 		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
