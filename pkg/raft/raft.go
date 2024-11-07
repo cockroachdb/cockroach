@@ -1238,6 +1238,25 @@ func (r *raft) tickHeartbeat() {
 // function instead; in there, we can add safety checks to ensure we're not
 // overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
+	if r.leadEpoch == 0 && lead == r.id {
+		// A non-zero lead epoch indicates that the leader fortified its term.
+		// Fortification promises should hold true even if the leader steps down, so
+		// as the leader, we remember that we were the leader even after we step
+		// down.
+		//
+		// In cases where the leader wasn't fortified prior to stepping down, we
+		// eschew remembering that we were the leader. This maintains parity with
+		// the behavior of leaders stepping down before the fortification protocol
+		// was introduced. This gives us time to stabilize the following state as
+		// the v24.3 release is rolled out:
+		//
+		//   r.state = StateFollower && r.lead = r.id
+		//
+		// Once this state is stabilized (within and above pkg/raft), we can remove
+		// this special case.
+		r.lead = None
+		lead = None
+	}
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
