@@ -2857,4 +2857,17 @@ CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f
 statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
 DROP TRIGGER foo ON xy CASCADE;
 
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# CREATE OR REPLACE still works if there are no referencing triggers.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
 subtest end
