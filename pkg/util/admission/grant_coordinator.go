@@ -135,6 +135,23 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					remainingTicks = ticker.remainingTicks()
 				}
 
+				// We do error accounting for disk reads and writes. This is important
+				// since disk token accounting is based on estimates over adjustment
+				// intervals. Like any model, these linear models have error terms, and
+				// need to be adjusted for greater accuracy. We adjust for these errors
+				// at a higher frequency than the adjustment interval.
+				if ticker.shouldAdjustForError() {
+					metrics := pebbleMetricsProvider.GetPebbleMetrics()
+					for _, m := range metrics {
+						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
+							gc.adjustDiskTokenError(m)
+						} else {
+							log.Warningf(ctx,
+								"seeing metrics for unknown storeID %d", m.StoreID)
+						}
+					}
+				}
+
 				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
 					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
@@ -707,6 +724,17 @@ func (coord *GrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
 	}
 	// Else, let the grant chain finish. NB: we turn off grant chains on the
 	// GrantCoordinators used for IO, so the if-condition is always true.
+}
+
+// adjustDiskTokenError is used to account for errors in disk read and write
+// token estimation. Refer to the comment in adjustDiskTokenErrorLocked for more
+// details.
+func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
+	coord.mu.Lock()
+	defer coord.mu.Unlock()
+	if storeGranter, ok := coord.granters[KVWork].(*kvStoreTokenGranter); ok {
+		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+	}
 }
 
 // testingTryGrant is only for unit tests, since they sometimes cut out

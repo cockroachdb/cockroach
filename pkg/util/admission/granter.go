@@ -302,7 +302,13 @@ type kvStoreTokenGranter struct {
 		// TODO(aaditya): add support for read/IOPS tokens.
 		// Disk bandwidth tokens.
 		diskTokensAvailable diskTokens
-		diskTokensUsed      [admissionpb.NumStoreWorkTypes]diskTokens
+		diskTokensError     struct {
+			prevObservedWrites             uint64
+			prevObservedReads              uint64
+			diskWriteTokensAlreadyDeducted int64
+			diskReadTokensAlreadyDeducted  int64
+		}
+		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 	}
 
 	ioTokensExhaustedDurationMetric [admissionpb.NumWorkClasses]*metric.Counter
@@ -423,6 +429,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -433,6 +440,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -441,6 +449,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		// writeByteTokens.
 		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 {
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -477,13 +486,61 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	case admissionpb.RegularStoreWorkType, admissionpb.ElasticStoreWorkType:
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskTokenCount
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += count
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
 	}
+}
+
+// adjustDiskTokenErrorLocked is used to account for extra reads and writes that
+// are in excess of tokens already deducted. The logic here is a little
+// different for accounting for reads and writes.
+//
+// (1) For writes, we deduct tokens at admission for each request. If the actual
+// writes seen on disk for a given interval is higher than the tokens already
+// deducted, the delta is the write error. This value is then subtracted from
+// available disk tokens.
+//
+// (2) For reads, we do not deduct any tokens at admission. However, we deduct
+// tokens in advance during token estimation in the diskBandwidthLimiter for the
+// next adjustment interval. We then use this "bucket" of deducted tokens to
+// deduct further tokens until we saturate the bucket. Any additional reads will
+// then subtract directly from the available disk tokens.
+func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
+	intWrites := int64(writeBytes - sg.coordMu.diskTokensError.prevObservedWrites)
+	intReads := int64(readBytes - sg.coordMu.diskTokensError.prevObservedReads)
+
+	// Compensate for error due to writes.
+	writeError := intWrites - sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted
+	if writeError > 0 {
+		if sg.coordMu.diskTokensAvailable.writeByteTokens < 0 {
+			sg.coordMu.diskTokensAvailable.writeByteTokens = 0
+		}
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeError
+	}
+	// We have compensated for error, if any, in this interval, so we reset the
+	// deducted count for the next compensation interval.
+	sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
+
+	// Compensate for error due to reads.
+	var readError int64
+	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted -= intReads
+	if sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted < 0 {
+		readError = -(sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted)
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= readError
+		if sg.coordMu.diskTokensAvailable.writeByteTokens < 0 {
+			sg.coordMu.diskTokensAvailable.writeByteTokens = 0
+		}
+		sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = 0
+	}
+
+	sg.coordMu.diskTokensError.prevObservedWrites = writeBytes
+	sg.coordMu.diskTokensError.prevObservedReads = readBytes
 }
 
 func (sg *kvStoreTokenGranter) tookWithoutPermission(
@@ -592,9 +649,11 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	elasticDiskWriteTokens int64,
+	elasticDiskReadTokens int64,
 	ioTokenCapacity int64,
 	elasticIOTokenCapacity int64,
 	elasticDiskWriteTokensCapacity int64,
+	elasticDiskReadTokensCapacity int64,
 	lastTick bool,
 ) (ioTokensUsed int64, ioTokensUsedByElasticWork int64) {
 	sg.coord.mu.Lock()
@@ -637,6 +696,11 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	sg.coordMu.diskTokensAvailable.writeByteTokens += elasticDiskWriteTokens
 	if sg.coordMu.diskTokensAvailable.writeByteTokens > elasticDiskWriteTokensCapacity {
 		sg.coordMu.diskTokensAvailable.writeByteTokens = elasticDiskWriteTokensCapacity
+	}
+
+	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted += elasticDiskReadTokens
+	if sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted > elasticDiskReadTokensCapacity {
+		sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = elasticDiskReadTokensCapacity
 	}
 
 	return ioTokensUsed, ioTokensUsedByElasticWork

@@ -247,11 +247,15 @@ type ioLoadListenerState struct {
 	totalNumElasticByteTokens  int64
 	elasticByteTokensAllocated int64
 
-	// elasticDiskBWTokens represents the tokens to give out until the next call
-	// to adjustTokens. They are parceled out in small intervals.
-	// elasticDiskTokensAllocated represents what has been given out.
+	// elasticDiskWriteTokens represents the tokens to give out until the next
+	// call to adjustTokens. They are parceled out in small intervals.
+	// elasticDiskWriteTokensAllocated represents what has been given out.
 	elasticDiskWriteTokens          int64
 	elasticDiskWriteTokensAllocated int64
+	// elasticDiskReadTokens are tokens that were already deducted during token
+	// estimation. These tokens are used for read error accounting.
+	elasticDiskReadTokens          int64
+	elasticDiskReadTokensAllocated int64
 }
 
 type cumStoreCompactionStats struct {
@@ -399,6 +403,7 @@ const loadedDuration = tickDuration(1 * time.Millisecond)
 type tokenAllocationTicker struct {
 	expectedTickDuration        time.Duration
 	adjustmentIntervalStartTime time.Time
+	lastErrorAdjustmentTime     time.Time
 	ticker                      *time.Ticker
 }
 
@@ -439,6 +444,14 @@ func (t *tokenAllocationTicker) remainingTicks() uint64 {
 	}
 	remainingTime := adjustmentInterval*time.Second - timePassed
 	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
+}
+
+func (t *tokenAllocationTicker) shouldAdjustForError() bool {
+	if timeutil.Since(t.lastErrorAdjustmentTime) < time.Second {
+		return false
+	}
+	t.lastErrorAdjustmentTime = timeutil.Now()
+	return true
 }
 
 func (t *tokenAllocationTicker) stop() {
@@ -482,6 +495,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				totalNumByteTokens:        unlimitedTokens,
 				totalNumElasticByteTokens: unlimitedTokens,
 				elasticDiskWriteTokens:    unlimitedTokens,
+				elasticDiskReadTokens:     unlimitedTokens,
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
@@ -558,9 +572,23 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 			remainingTicks,
 		)
 	if toAllocateElasticDiskWriteTokens < 0 {
-		panic(errors.AssertionFailedf("toAllocateElasticDiskBWTokens is negative %d",
+		panic(errors.AssertionFailedf("toAllocateElasticDiskWriteTokens is negative %d",
 			toAllocateElasticDiskWriteTokens))
 	}
+	io.elasticDiskWriteTokensAllocated += toAllocateElasticDiskWriteTokens
+
+	toAllocateElasticDiskReadTokens :=
+		allocateFunc(
+			io.elasticDiskReadTokens,
+			io.elasticDiskReadTokensAllocated,
+			remainingTicks,
+		)
+	if toAllocateElasticDiskReadTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateElasticDiskReadTokens is negative %d",
+			toAllocateElasticDiskReadTokens))
+	}
+	io.elasticDiskReadTokensAllocated += toAllocateElasticDiskReadTokens
+
 	// INVARIANT: toAllocate >= 0.
 	io.byteTokensAllocated += toAllocateByteTokens
 	if io.byteTokensAllocated < 0 {
@@ -571,23 +599,28 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf(
 			"tokens allocated is negative %d", io.elasticByteTokensAllocated))
 	}
-	io.elasticDiskWriteTokensAllocated += toAllocateElasticDiskWriteTokens
 
 	tokensMaxCapacity := allocateFunc(
 		io.totalNumByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 	elasticTokensMaxCapacity := allocateFunc(
 		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval())
-	diskBWTokenMaxCapacity := allocateFunc(
+	diskWriteBWTokenMaxCapacity := allocateFunc(
 		io.elasticDiskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
+	diskReadBWTokenMaxCapacity := allocateFunc(
+		io.elasticDiskReadTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+	)
+
 	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
 		toAllocateElasticDiskWriteTokens,
+		toAllocateElasticDiskReadTokens,
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
-		diskBWTokenMaxCapacity,
+		diskWriteBWTokenMaxCapacity,
+		diskReadBWTokenMaxCapacity,
 		remainingTicks == 1,
 	)
 	io.byteTokensUsed += tokensUsed
@@ -647,10 +680,13 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 			intDiskLoadInfo, diskTokensUsed)
 		io.elasticDiskWriteTokens = tokens.writeByteTokens
 		io.elasticDiskWriteTokensAllocated = 0
+		io.elasticDiskReadTokens = tokens.readByteTokens
+		io.elasticDiskWriteTokensAllocated = 0
 	}
 	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
 		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
 		io.elasticDiskWriteTokens = unlimitedTokens
+		io.elasticDiskReadTokens = unlimitedTokens
 	}
 	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
