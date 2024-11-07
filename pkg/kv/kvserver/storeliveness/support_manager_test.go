@@ -49,7 +49,7 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -123,7 +123,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Pause the clock so support is not withdrawn before calling SupportFor.
@@ -204,7 +204,7 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
@@ -238,7 +238,7 @@ func TestSupportManagerRestart(t *testing.T) {
 	clock := hlc.NewClockForTesting(manual)
 	clockBehind := hlc.NewClockForTesting(manualBehind)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -271,7 +271,7 @@ func TestSupportManagerRestart(t *testing.T) {
 
 	// Simulate a restart by creating a new SupportManager with the same engine.
 	// Use a regressed clock.
-	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, sender)
+	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, sender, nil)
 	now := sm.clock.Now()
 	require.False(t, requestedTime.Less(now))
 	require.False(t, withdrawalTime.Less(now))
@@ -301,7 +301,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -370,7 +370,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -414,7 +414,7 @@ func TestSupportManagerHeartbeatNewStore(t *testing.T) {
 	// Set a very large heartbeat interval to ensure heartbeats for new stores are
 	// sent out before the heartbeat ticker is signalled.
 	options.HeartbeatInterval = time.Hour
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.

@@ -40,3 +40,24 @@ func NewOptions(
 		SupportWithdrawalGracePeriod: supportWithdrawalGracePeriod,
 	}
 }
+
+// TransportKnobs includes all knobs that facilitate testing Transport.
+type TransportKnobs struct {
+	// OverrideIdleTimeout overrides the idleTimeout, which controls how
+	// long until an instance of processQueue winds down after not observing any
+	// messages.
+	OverrideIdleTimeout func() time.Duration
+}
+
+// SupportManagerKnobs includes all knobs that facilitate testing the
+// SupportManager.
+type SupportManagerKnobs struct {
+	// TestEngine is a test engine to be used instead of a real one.
+	TestEngine *TestEngine
+}
+
+// TestingKnobs is a wrapper around TransportKnobs and SupportManagerKnobs.
+type TestingKnobs struct {
+	TransportKnobs
+	SupportManagerKnobs
+}
