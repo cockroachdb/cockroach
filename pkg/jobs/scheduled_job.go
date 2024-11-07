@@ -179,6 +179,12 @@ func (j *ScheduledJob) SetSchedule(scheduleExpr string) error {
 	return j.ScheduleNextRun()
 }
 
+// SetScheduleExpr updates schedule expression for this schedule without updating next run time.
+func (j *ScheduledJob) SetScheduleExpr(scheduleExpr string) {
+	j.rec.ScheduleExpr = scheduleExpr
+	j.markDirty("schedule_expr")
+}
+
 // HasRecurringSchedule returns true if this schedule job runs periodically.
 func (j *ScheduledJob) HasRecurringSchedule() bool {
 	return len(j.rec.ScheduleExpr) > 0
