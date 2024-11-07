@@ -2373,7 +2373,6 @@ func addPostQueriesFromPlan(
 	// In cyclical reference situations, the number of cascading operations can
 	// be arbitrarily large. To avoid OOM, we enforce a limit. This is also a
 	// safeguard in case we have a bug that results in an infinite cascade loop.
-	// TODO(drewk): add something similar for triggers.
 	if limit := int(evalCtx.SessionData().OptimizerFKCascadesLimit); len(toPlan.cascades) > limit {
 		telemetry.Inc(sqltelemetry.CascadesLimitReached)
 		err := pgerror.Newf(pgcode.TriggeredActionException, "cascades limit (%d) reached", limit)
