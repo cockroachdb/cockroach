@@ -8145,6 +8145,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
 	cfg.RaftTickInterval = time.Hour
+	// The replica timeout is computed based on a multiple of RaftTickInterval.
+	// Set this high enough to avoid tripping circuit breakers during the test.
+	replicaCircuitBreakerSlowReplicationThreshold.Override(ctx, &cfg.Settings.SV, 24*time.Hour)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)

@@ -231,13 +231,13 @@ func replicaUnavailableError(
 	err error,
 	desc *roachpb.RangeDescriptor,
 	replDesc roachpb.ReplicaDescriptor,
-	lm livenesspb.IsLiveMap,
+	liveness livenesspb.NodeVitalityInterface,
 	rs *raft.Status,
 	closedTS hlc.Timestamp,
 ) error {
 	nonLiveRepls := roachpb.MakeReplicaSet(nil)
 	for _, rDesc := range desc.Replicas().Descriptors() {
-		if lm[rDesc.NodeID].IsLive {
+		if liveness.GetNodeVitalityFromCache(rDesc.NodeID).IsLive(livenesspb.LossOfQuorum) {
 			continue
 		}
 		nonLiveRepls.AddReplica(rDesc)
@@ -245,7 +245,7 @@ func replicaUnavailableError(
 
 	canMakeProgress := desc.Replicas().CanMakeProgress(
 		func(replDesc roachpb.ReplicaDescriptor) bool {
-			return lm[replDesc.NodeID].IsLive
+			return liveness.GetNodeVitalityFromCache(replDesc.NodeID).IsLive(livenesspb.LossOfQuorum)
 		},
 	)
 
@@ -271,8 +271,6 @@ func replicaUnavailableError(
 func (r *Replica) replicaUnavailableError(err error) error {
 	desc := r.Desc()
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
-
-	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	ct := r.GetCurrentClosedTimestamp(context.Background())
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
+	return replicaUnavailableError(err, desc, replDesc, r.store.cfg.NodeLiveness, r.RaftStatus(), ct)
 }
