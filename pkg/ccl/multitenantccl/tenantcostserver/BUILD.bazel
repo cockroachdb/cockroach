@@ -49,7 +49,6 @@ go_test(
     embed = [":tenantcostserver"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
@@ -72,7 +71,6 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//errbase",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],

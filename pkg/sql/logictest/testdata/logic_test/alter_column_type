@@ -940,7 +940,6 @@ ALTER TABLE t_bytes ALTER COLUMN c1 SET DATA TYPE STRING;
 # rewritten, but with different result. The correct one is from the
 # declarative schema changer. So we skip when running the legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 query T
 SELECT c1 FROM t_bytes ORDER BY c1;
 ----
@@ -951,7 +950,6 @@ hello
 # allow it, which is wrong. So we expect success for legacy, but correctly fail
 # for dsc.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bytes ALTER COLUMN c2 SET DATA TYPE CHAR(4);
 
@@ -983,7 +981,6 @@ ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID USING c3::UUID;
 # The output for the the dsc is correct, but wrong for legacy. So, skipping if
 # legacy.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 query TT
 SELECT c2,c3 FROM t_bytes ORDER BY c1;
 ----
@@ -1043,7 +1040,6 @@ ALTER TABLE t_decimal ALTER COLUMN c1 SET DATA TYPE DECIMAL(7,2);
 # Reduce just the scale of the decimal. The legacy schema changer doesn't
 # properly detect this case.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_decimal ALTER COLUMN c2 SET DATA TYPE DECIMAL(10,2);
 
@@ -1105,7 +1101,6 @@ NULL  NULL  NULL   NULL   NULL
 
 # Skip for the legacy schema changer as it doesn't allow multiple alters in one statement.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE BIT(4), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
@@ -1113,7 +1108,6 @@ statement ok
 UPDATE t_bit_string SET C2=B'1010' WHERE pk = 1;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement ok
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE VARBIT(8), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
@@ -1146,7 +1140,6 @@ ALTER TABLE t_bit_string ALTER COLUMN c3 SET DATA TYPE BYTES USING C3::BYTES;
 # Skipping this for legacy since it allows the data type conversion when it
 # shouldn't be allowed.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c4 SET DATA TYPE CHAR(4);
 
@@ -1171,7 +1164,6 @@ NULL  NULL  NULL   NULL   NULL
 # Change c5 from VARCHAR(30) to CHAR(6). This is erroneously allowed in the
 # legacy schema changer so skipping in that mode.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c5 SET DATA TYPE CHAR(6);
 
