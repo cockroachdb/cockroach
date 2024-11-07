@@ -3268,10 +3268,6 @@ func (r *Replica) followerSendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
-	// explicitly for snapshots going out to followers.
-	snap.State.DeprecatedUsingAppliedStateKey = true
-
 	// Use shared replication if shared storage is enabled and we're sending
 	// a snapshot for a non-system range. This allows us to send metadata of
 	// sstables in shared storage as opposed to streaming their contents. Keys
