@@ -53,7 +53,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 			j := h.newScheduledJob(t, "test_job", "test sql")
 			j.rec.ExecutorType = InlineExecutorName
 
-			require.NoError(t, j.SetSchedule("@daily"))
+			require.NoError(t, j.SetScheduleAndNextRun("@daily"))
 			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: test.onError}))
 
 			ctx := context.Background()

@@ -56,7 +56,7 @@ func TestScheduleControl(t *testing.T) {
 	makeSchedule := func(name string, cron string) jobspb.ScheduleID {
 		schedule := th.newScheduledJob(t, name, "sql")
 		if cron != "" {
-			require.NoError(t, schedule.SetSchedule(cron))
+			require.NoError(t, schedule.SetScheduleAndNextRun(cron))
 		}
 
 		require.NoError(t, schedules.Create(ctx, schedule))
@@ -77,7 +77,7 @@ func TestScheduleControl(t *testing.T) {
 
 	t.Run("pause-active-schedule", func(t *testing.T) {
 		schedule := th.newScheduledJob(t, "test schedule", "select 42")
-		require.NoError(t, schedule.SetSchedule("@weekly"))
+		require.NoError(t, schedule.SetScheduleAndNextRun("@weekly"))
 		// Datums only store up until microseconds.
 		ms := time.Microsecond
 		firstRunTime := timeutil.Now().Add(10 * time.Second).Truncate(ms)

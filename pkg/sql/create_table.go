@@ -2514,7 +2514,7 @@ func newRowLevelTTLScheduledJob(
 		CreationClusterVersion: clusterVersion,
 	})
 
-	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
+	if err := sj.SetScheduleAndNextRun(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
