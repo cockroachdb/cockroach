@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -133,6 +135,24 @@ func (p *planner) EvalRoutineExpr(
 		}
 	}
 
+	if expr.TriggerFunc {
+		// In cyclical reference situations, the number of nested trigger actions
+		// can be arbitrarily large. To avoid OOM, we enforce a limit on the depth
+		// of nested triggers. This is also a safeguard in case we have a bug that
+		// results in an infinite trigger loop.
+		var triggerDepth int
+		if triggerDepthValue := ctx.Value(triggerDepthKey{}); triggerDepthValue != nil {
+			triggerDepth = triggerDepthValue.(int)
+		}
+		if limit := int(p.SessionData().RecursionDepthLimit); triggerDepth > limit {
+			telemetry.Inc(sqltelemetry.RecursionDepthLimitReached)
+			err = pgerror.Newf(pgcode.TriggeredActionException,
+				"trigger reached recursion depth limit: %d", limit)
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, triggerDepthKey{}, triggerDepth+1)
+	}
+
 	var g routineGenerator
 	g.init(p, expr, args)
 	defer g.Close(ctx)
@@ -167,6 +187,8 @@ func (p *planner) EvalRoutineExpr(
 	}
 	return res, nil
 }
+
+type triggerDepthKey struct{}
 
 // RoutineExprGenerator returns an eval.ValueGenerator that produces the results
 // of a routine.
