@@ -105,6 +105,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/builtins/builtinsregistry",
