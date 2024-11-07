@@ -14,12 +14,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -82,11 +84,12 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		tableNameDst := createTable(t, schemaTmpl)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+		sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 		rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 			dstDesc.GetID(): {
 				srcDesc: srcDesc,
 			},
-		}, jobspb.JobID(1), s.InternalExecutor().(isql.Executor))
+		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{})
 		require.NoError(t, err)
 		return rp, func(datums ...interface{}) roachpb.KeyValue {
 			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
@@ -154,7 +157,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 		desc.GetID(): {
 			srcDesc: desc,
 		},
-	}, jobspb.JobID(1), s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
+	}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)), sd, execinfrapb.LogicalReplicationWriterSpec{})
 	require.NoError(b, err)
 
 	// In some configs, we'll be simulating processing the same INSERT over and
@@ -329,19 +332,20 @@ func TestLWWConflictResolution(t *testing.T) {
 	// can be ingested by the RowProcessor
 	type encoderFn func(originTimestamp hlc.Timestamp, datums ...interface{}) roachpb.KeyValue
 
-	setup := func(t *testing.T, useKVProc bool) (string, RowProcessor, encoderFn) {
+	setup := func(t *testing.T, useKVProc bool) (string, BatchHandler, encoderFn) {
 		tableNameSrc := createTable(t)
 		tableNameDst := createTable(t)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+		sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 
 		// We need the SQL row processor even when testing the KW row processor since it's the fallback
-		var rp RowProcessor
+		var rp BatchHandler
 		rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 			dstDesc.GetID(): {
 				srcDesc: srcDesc,
 			},
-		}, jobspb.JobID(1), s.InternalExecutor().(isql.Executor))
+		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{})
 		require.NoError(t, err)
 
 		if useKVProc {
@@ -352,7 +356,7 @@ func TestLWWConflictResolution(t *testing.T) {
 				}, &eval.Context{
 					Codec:    s.Codec(),
 					Settings: s.ClusterSettings(),
-				}, map[descpb.ID]sqlProcessorTableConfig{
+				}, sd, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
 					dstDesc.GetID(): {
 						srcDesc: srcDesc,
 					},
@@ -366,8 +370,8 @@ func TestLWWConflictResolution(t *testing.T) {
 		}
 	}
 
-	insertRow := func(rp RowProcessor, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
-		_, err := rp.ProcessRow(ctx, nil, keyValue, prevValue)
+	insertRow := func(rp BatchHandler, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
+		_, err := rp.HandleBatch(ctx, []streampb.StreamEvent_KV{{KeyValue: keyValue, PrevValue: prevValue}})
 		return err
 	}
 

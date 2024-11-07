@@ -12,11 +12,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,10 +55,10 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 
 	type encoderFn func(datums ...interface{}) roachpb.KeyValue
 
-	setup := func(t *testing.T, schema string) (string, RowProcessor, encoderFn) {
+	setup := func(t *testing.T, schema string) (string, BatchHandler, encoderFn) {
 		tableName := createTable(t, schema)
 		desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-
+		sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 		rp, err := newKVRowProcessor(ctx,
 			&execinfra.ServerConfig{
 				DB:           s.InternalDB().(descs.DB),
@@ -63,7 +66,7 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 			}, &eval.Context{
 				Codec:    s.Codec(),
 				Settings: s.ClusterSettings(),
-			}, map[descpb.ID]sqlProcessorTableConfig{
+			}, sd, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
 				desc.GetID(): {
 					srcDesc: desc,
 				},
@@ -76,8 +79,8 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 		}
 	}
 
-	insertRow := func(rp RowProcessor, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
-		_, err := rp.ProcessRow(ctx, nil, keyValue, prevValue)
+	insertRow := func(rp BatchHandler, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
+		_, err := rp.HandleBatch(ctx, []streampb.StreamEvent_KV{{KeyValue: keyValue, PrevValue: prevValue}})
 		return err
 	}
 

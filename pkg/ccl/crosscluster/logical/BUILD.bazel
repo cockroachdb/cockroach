@@ -133,6 +133,7 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
