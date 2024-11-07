@@ -556,6 +556,9 @@ message LocalOnlySessionData {
   // part of a cascading foreign key action. This is unsafe because it can
   // lead to constraint violations.
   bool unsafe_allow_triggers_modifying_cascades = 142;
+  // RecursionDepthLimit is the maximum depth that nested trigger actions can
+  // reach.
+  int64 recursion_depth_limit = 143;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
