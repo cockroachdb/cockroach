@@ -505,6 +505,10 @@ message LocalOnlySessionData {
   // PlanCacheMode indicates the method that the optimizer should use to choose
   // between a custom and generic query plan.
   PlanCacheMode plan_cache_mode = 133;
+  // DisableVecUnionEagerCancellation disables the eager cancellation that is
+  // performed by the vectorized engine when transitioning into the draining
+  // state in some cases.
+  bool disable_vec_union_eager_cancellation = 143;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
