@@ -281,7 +281,7 @@ func MakeFixture(
 	for _, t := range gen.Tables() {
 		t := t
 		g.Go(func() error {
-			q := fmt.Sprintf(`BACKUP "%s"."%s" TO $1`, dbName, t.Name)
+			q := fmt.Sprintf(`BACKUP "%s"."%s" INTO $1`, dbName, t.Name)
 			output := config.ObjectPathToURI(filepath.Join(fixtureFolder, t.Name))
 			log.Infof(ctx, "Backing %s up to %q...", t.Name, output)
 			_, err := sqlDB.Exec(q, output)
@@ -638,7 +638,7 @@ func RestoreFixture(
 		table := table
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2, unsafe_restore_incompatible_version`, genName, table.TableName)
+			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM LATEST IN $1 WITH into_db=$2, unsafe_restore_incompatible_version`, genName, table.TableName)
 			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
