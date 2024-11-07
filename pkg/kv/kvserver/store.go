@@ -2212,9 +2212,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	livenessInterval, heartbeatInterval := s.cfg.StoreLivenessDurations()
 	supportGracePeriod := s.cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
 	options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
+	knobs := &storeliveness.SupportManagerKnobs{}
+	if s.cfg.TestingKnobs.StoreLivenessKnobs != nil {
+		knobs = s.cfg.TestingKnobs.StoreLivenessKnobs.SupportManagerKnobs
+	}
 	sm := storeliveness.NewSupportManager(
 		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.StateEngine(), options,
-		s.cfg.Settings, s.stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport,
+		s.cfg.Settings, s.stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport, knobs,
 	)
 	s.cfg.StoreLivenessTransport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm
