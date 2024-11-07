@@ -783,8 +783,13 @@ func (r *Refresher) ensureAllTables(
 // NotifyMutation is called by SQL mutation operations to signal to the
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
-// number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+// number of rows written as part of the mutation operation. If rowsAffected <
+// math.MaxInt32 then the Refresher will flip a weighted coin to decide whether
+// to collect stats after this mutation. If rowsAffected >= math.MaxInt32 then
+// the Refresher will be forced to collect stats after this mutation.
+func (r *Refresher) NotifyMutation(
+	ctx context.Context, table catalog.TableDescriptor, rowsAffected int,
+) {
 	if !r.autoStatsEnabled(table) {
 		return
 	}
@@ -811,10 +816,12 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		}:
 		default:
 			// Don't block if there is no room in the buffered channel.
-			if bufferedChanFullLogLimiter.ShouldLog() {
-				log.Warningf(context.TODO(),
-					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
-					table.GetName(), table.GetID())
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				if bufferedChanFullLogLimiter.ShouldLog() {
+					log.Warningf(ctx,
+						"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
+						table.GetName(), table.GetID())
+				}
 			}
 		}
 	}
@@ -829,10 +836,12 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	}:
 	default:
 		// Don't block if there is no room in the buffered channel.
-		if bufferedChanFullLogLimiter.ShouldLog() {
-			log.Warningf(context.TODO(),
-				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
-				table.GetName(), table.GetID(), rowsAffected)
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			if bufferedChanFullLogLimiter.ShouldLog() {
+				log.Warningf(ctx,
+					"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
+					table.GetName(), table.GetID(), rowsAffected)
+			}
 		}
 	}
 }

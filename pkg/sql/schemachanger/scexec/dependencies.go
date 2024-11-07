@@ -374,7 +374,7 @@ type StatsRefreshQueue interface {
 type StatsRefresher interface {
 	// NotifyMutation notifies the stats refresher that a table needs its
 	// statistics updated.
-	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
+	NotifyMutation(ctx context.Context, table catalog.TableDescriptor, rowsAffected int)
 }
 
 // ProtectedTimestampManager used to install a protected timestamp before

@@ -1047,7 +1047,7 @@ func (r *importResumer) publishTables(
 	// sure that stats always get created/refreshed here.
 	for i := range details.Tables {
 		desc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
-		execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+		execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil

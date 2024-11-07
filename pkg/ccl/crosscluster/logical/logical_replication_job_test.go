@@ -1417,10 +1417,10 @@ func (m mockBatchHandler) HandleBatch(
 	}
 	return batchStats{}, nil
 }
-func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
-func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
-func (m mockBatchHandler) Close(context.Context)               {}
-func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
+func (m mockBatchHandler) GetLastRow() cdcevent.Row                              { return cdcevent.Row{} }
+func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32)                   {}
+func (m mockBatchHandler) Close(context.Context)                                 {}
+func (m mockBatchHandler) ReportMutations(_ context.Context, _ *stats.Refresher) {}
 
 type mockDLQ int
 

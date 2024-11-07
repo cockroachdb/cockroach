@@ -4415,7 +4415,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			// Initiate a run of CREATE STATISTICS. We use a large number
 			// for rowsAffected because we want to make sure that stats always get
 			// created/refreshed here.
-			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+			ex.planner.execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
 		}
 	}
 }

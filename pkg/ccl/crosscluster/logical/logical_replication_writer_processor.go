@@ -562,7 +562,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	}
 
 	for _, p := range lrw.bh {
-		p.ReportMutations(lrw.FlowCtx.Cfg.StatsRefresher)
+		p.ReportMutations(ctx, lrw.FlowCtx.Cfg.StatsRefresher)
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	lrw.debug.RecordCheckpoint(lrw.frontier.Frontier().GoTime())
@@ -1071,7 +1071,7 @@ type BatchHandler interface {
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
-	ReportMutations(*stats.Refresher)
+	ReportMutations(context.Context, *stats.Refresher)
 	Close(context.Context)
 }
 
@@ -1083,7 +1083,7 @@ type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
-	ReportMutations(*stats.Refresher)
+	ReportMutations(context.Context, *stats.Refresher)
 	Close(context.Context)
 }
 
@@ -1145,8 +1145,8 @@ func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
 	t.rp.SetSyntheticFailurePercent(rate)
 }
 
-func (t *txnBatch) ReportMutations(s *stats.Refresher) {
-	t.rp.ReportMutations(s)
+func (t *txnBatch) ReportMutations(ctx context.Context, s *stats.Refresher) {
+	t.rp.ReportMutations(ctx, s)
 }
 
 func (t *txnBatch) Close(ctx context.Context) {
