@@ -460,6 +460,37 @@ func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
 	replicationutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
 }
 
+func TestRestoreFromLDR(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dataDir, dirCleanupFunc := testutils.TempDir(t)
+	defer dirCleanupFunc()
+	args := testClusterBaseClusterArgs
+	args.ServerArgs.ExternalIODir = dataDir
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	var jobBID jobspb.JobID
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	dbB.Exec(t, "BACKUP DATABASE b INTO 'nodelocal://1/backup'")
+	dbB.Exec(t, "RESTORE DATABASE b FROM LATEST IN 'nodelocal://1/backup' with new_db_name = 'c'")
+
+	// Verify that the index backfill schema changes can run on the restored table.
+	dbC := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("c")))
+	dbC.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT DEFAULT 2")
+	dbC.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "hello", "2"}})
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
