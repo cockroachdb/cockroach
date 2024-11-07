@@ -56,6 +56,7 @@ func NewBuilderDependencies(
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
 	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
 	defaultZoneConfig *zonepb.ZoneConfig,
 ) scbuild.Dependencies {
 	return &buildDeps{
@@ -80,6 +81,7 @@ func NewBuilderDependencies(
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
 		semaCtx:                  semaCtx,
+		evalCtx:                  evalCtx,
 		defaultZoneConfig:        defaultZoneConfig,
 	}
 }
@@ -104,6 +106,7 @@ type buildDeps struct {
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
 	semaCtx                  *tree.SemaContext
+	evalCtx                  *eval.Context
 	defaultZoneConfig        *zonepb.ZoneConfig
 }
 
@@ -372,6 +375,11 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
+}
+
+// EvalCtx implements the scbuild.Dependencies interface.
+func (d *buildDeps) EvalCtx() *eval.Context {
+	return d.evalCtx
 }
 
 // SemaCtx implements the scbuild.Dependencies interface.

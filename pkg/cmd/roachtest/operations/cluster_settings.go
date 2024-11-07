@@ -92,6 +92,12 @@ func registerClusterSettings(r registry.Registry) {
 			}),
 			Owner: registry.OwnerStorage,
 		},
+		{
+			// Observe if there is any unexpected impact with running the job periodically.
+			Name:      "obs.tablemetadata.automatic_updates.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 12*time.Hour),
+			Owner:     registry.OwnerObservability,
+		},
 	}
 	sanitizeOpName := func(name string) string {
 		return strings.ReplaceAll(name, ".", "_")

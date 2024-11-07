@@ -688,15 +688,50 @@ CREATE TABLE t127043_2 (k2 INT, v2 INT, INDEX (k2));
 INSERT INTO t127043_2 VALUES (1, 1);
 CREATE TABLE t127043_3 (k3 INT, v3 INT, INDEX (k3));
 INSERT INTO t127043_3 VALUES (1, 1);
-CREATE VIEW v127043 (k, v) AS
+CREATE VIEW v127043_3 (k, v) AS
+  SELECT
+    k1 AS k, v1 AS v FROM t127043_1
+  UNION SELECT
+    k2 AS k, v2 AS v FROM t127043_2
+  UNION SELECT
+    k3 AS k, v3 AS v FROM t127043_3;
+CREATE VIEW v127043_3_idx (k, v) AS
   SELECT
     k1 AS k, v1 AS v FROM t127043_1@t127043_1_k1_idx
   UNION SELECT
     k2 AS k, v2 AS v FROM t127043_2@t127043_2_k2_idx
   UNION SELECT
     k3 AS k, v3 AS v FROM t127043_3@t127043_3_k3_idx;
+CREATE VIEW v127043_2 (k, v) AS
+  SELECT
+    k1 AS k, v1 AS v FROM t127043_1
+  UNION SELECT
+    k2 AS k, v2 AS v FROM t127043_2;
 
+statement ok
+ANALYZE t127043_1;
+
+statement ok
+ANALYZE t127043_2;
+
+statement ok
+ANALYZE t127043_3;
+
+# Scan and filter in all UNION branches.
 query II
-SELECT k, v FROM v127043 WHERE k = 1 LIMIT 1;
+SELECT k, v FROM v127043_3 WHERE k = 1 LIMIT 1;
+----
+1  1
+
+# Scan and index join in all UNION branches.
+query II
+SELECT k, v FROM v127043_3_idx WHERE k = 1 LIMIT 1;
+----
+1  1
+
+# Hash join with two UNION branches (with a scan and an index join) on one side
+# and a scan on the other.
+query II
+SELECT k, v FROM v127043_2 INNER JOIN t127043_3 ON k = k3 WHERE k = 1 LIMIT 1;
 ----
 1  1

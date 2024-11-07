@@ -57,6 +57,9 @@ type Dependencies interface {
 	// Statements returns the statements behind this schema change.
 	Statements() []string
 
+	// EvalCtx returns the eval.Context for the schema change statement.
+	EvalCtx() *eval.Context
+
 	// SemaCtx returns the tree.SemaContext for the schema change statement.
 	SemaCtx() *tree.SemaContext
 
