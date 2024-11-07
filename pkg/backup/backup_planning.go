@@ -376,7 +376,7 @@ func backupTypeCheck(
 	if detached {
 		header = jobs.DetachedJobExecutionResultHeader
 	} else {
-		header = jobs.BulkJobExecutionResultHeader
+		header = jobs.BackupRestoreJobResultHeader
 	}
 	if err := exprutil.TypeCheck(
 		ctx, "BACKUP", p.SemaCtx(),
@@ -740,7 +740,7 @@ func backupPlanHook(
 	if detached {
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, jobs.BackupRestoreJobResultHeader, nil, false, nil
 }
 
 func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs ...string) error {

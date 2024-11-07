@@ -1023,8 +1023,6 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(b.backupStats.Rows)),
-		tree.NewDInt(tree.DInt(b.backupStats.IndexEntries)),
-		tree.NewDInt(tree.DInt(b.backupStats.DataSize)),
 	}:
 		return nil
 	}
