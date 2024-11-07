@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -126,8 +128,18 @@ SELECT node_id
 					return
 				}
 				const sleepDur = 1 * time.Second
+				timer := time.AfterFunc(2*time.Second, func() {
+					// This is an attempt to debug a rare issue in which either the `Printf`
+					// or the `time.Sleep()` surprisingly take >>20s which causes the test
+					// to fail.
+					//
+					// See https://github.com/cockroachdb/cockroach/issues/130737#issuecomment-2352473436.
+					_, _ = fmt.Fprintf(os.Stderr, "%s", allstacks.Get())
+					t.L().Printf("sleep took too long, dumped stacks to Stderr")
+				})
 				t.L().Printf("sleeping for %s (%.0fs)\n", sleepDur, timeutil.Since(start).Seconds())
 				time.Sleep(sleepDur)
+				timer.Stop()
 			}
 		}
 

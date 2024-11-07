@@ -269,6 +269,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/ts/tspb",
         "//pkg/util",
+        "//pkg/util/allstacks",
         "//pkg/util/cancelchecker",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
