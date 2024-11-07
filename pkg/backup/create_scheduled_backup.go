@@ -492,7 +492,7 @@ func makeBackupSchedule(
 		args.BackupType = backuppb.ScheduledBackupExecutionArgs_FULL
 	}
 
-	if err := sj.SetSchedule(recurrence.Cron); err != nil {
+	if err := sj.SetScheduleAndNextRun(recurrence.Cron); err != nil {
 		return nil, nil, err
 	}
 
