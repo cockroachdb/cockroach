@@ -2406,9 +2406,7 @@ func TestImportCSVStmt(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
 
 			var unused string
-			var restored struct {
-				rows, idx, bytes int
-			}
+			var rows int
 
 			if tc.createQuery != "" {
 				sqlDB.Exec(t, tc.createQuery)
@@ -2421,9 +2419,7 @@ func TestImportCSVStmt(t *testing.T) {
 				sqlDB.ExpectErr(t, tc.err, query)
 				return
 			}
-			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
-			)
+			sqlDB.QueryRow(t, query).Scan(&unused, &unused, &unused, &rows)
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t`, intodb)
 
@@ -2455,7 +2451,7 @@ func TestImportCSVStmt(t *testing.T) {
 				return
 			}
 
-			if expected, actual := expectedRows, restored.rows; expected != actual {
+			if expected, actual := expectedRows, rows; expected != actual {
 				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
@@ -3234,9 +3230,7 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
 
 			var unused string
-			var restored struct {
-				rows, idx, bytes int
-			}
+			var rows int
 
 			// Insert the test data
 			insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -3255,7 +3249,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
+				&unused, &unused, &unused, &rows,
 			)
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
@@ -3276,7 +3270,7 @@ func TestImportIntoCSV(t *testing.T) {
 				return
 			}
 
-			if expected, actual := insertedRows, restored.rows; expected != actual {
+			if expected, actual := insertedRows, rows; expected != actual {
 				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
@@ -3391,7 +3385,7 @@ func TestImportIntoCSV(t *testing.T) {
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(importBodyFinished)
 			return sqlDB.DB.QueryRowContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`,
-				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
+				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused)
 		})
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(delayImportFinish)
@@ -6033,8 +6027,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		var importJobID int
 		var unused interface{}
 		sqlDB.QueryRow(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements, "+
-			"log_ignored_statements=$2", srv.URL, ignoredLog).Scan(&importJobID, &unused, &unused,
-			&unused, &unused, &unused)
+			"log_ignored_statements=$2", srv.URL, ignoredLog).Scan(&importJobID, &unused, &unused, &unused)
 		// Check that statements which are not expected to be ignored, are still
 		// processed.
 		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
@@ -7077,8 +7070,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	var jobID int64
 	var unused interface{}
 	sqlDB.Exec(t, createQuery)
-	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
-		&unused)
+	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{

@@ -504,16 +504,18 @@ func importFixtureTable(
 			return 0, err
 		}
 	} else {
-		if err := res.Scan(
-			&discard, &discard, &discard, &rows, &index, &tableBytes,
-		); err != nil {
+		if err := res.Scan(&discard, &discard, &discard, &rows); err != nil {
 			return 0, err
 		}
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
-		humanizeutil.IBytes(tableBytes), table.Name, rows, index, elapsed,
-		humanizeutil.DataRate(tableBytes, elapsed))
+	if len(resCols) == 7 {
+		log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
+			humanizeutil.IBytes(tableBytes), table.Name, rows, index, elapsed,
+			humanizeutil.DataRate(tableBytes, elapsed))
+	} else {
+		log.Infof(ctx, `imported %s table (%d rows, took %s)`, table.Name, rows, elapsed)
+	}
 
 	// Inject pre-calculated stats.
 	if injectStats && len(table.Stats) > 0 {
@@ -652,17 +654,20 @@ func RestoreFixture(
 					return err
 				}
 			} else {
-				if err := res.Scan(
-					&discard, &discard, &discard, &rows, &index, &tableBytes,
-				); err != nil {
+				if err := res.Scan(&discard, &discard, &discard, &rows); err != nil {
 					return err
 				}
 			}
 			atomic.AddInt64(&bytesAtomic, tableBytes)
 			elapsed := timeutil.Since(start)
-			log.Infof(ctx, `loaded %s table %s in %s (%d rows, %d index entries, %s)`,
-				humanizeutil.IBytes(tableBytes), table.TableName, elapsed, rows, index,
-				humanizeutil.IBytes(int64(float64(tableBytes)/elapsed.Seconds())))
+			if len(resCols) == 7 {
+				log.Infof(ctx, `loaded %s table %s in %s (%d rows, %d index entries, %s)`,
+					humanizeutil.IBytes(tableBytes), table.TableName, elapsed, rows, index,
+					humanizeutil.IBytes(int64(float64(tableBytes)/elapsed.Seconds())))
+			} else {
+				log.Infof(ctx, `loaded table %s in %s (%d rows)`, table.TableName, elapsed, rows)
+
+			}
 			return nil
 		})
 	}

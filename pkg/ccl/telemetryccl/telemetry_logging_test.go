@@ -359,7 +359,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		if strings.Contains(tc.query, "WITH detached") {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID)
 		} else {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
+			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused)
 		}
 		if err != nil {
 			t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
