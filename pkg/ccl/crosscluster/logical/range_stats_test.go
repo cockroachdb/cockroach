@@ -32,7 +32,7 @@ func TestRangeStats(t *testing.T) {
 				RangeCount: 10,
 			},
 			fraction:    1,
-			expectedMsg: "catching up on 0 out of 10 ranges",
+			expectedMsg: "all 10 ranges are caught up",
 			inputStats: map[int32]*streampb.StreamEvent_RangeStats{
 				1: {RangeCount: 5},
 				2: {RangeCount: 3},

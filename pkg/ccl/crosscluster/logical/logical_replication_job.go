@@ -552,11 +552,11 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 				}
 			}
 			progress.RunningStatus = status
-			if fractionCompleted > 0 {
+			if fractionCompleted > 0 && fractionCompleted < 1 {
 				// If 0, the coordinator has not gotten a complete range stats update
 				// from all nodes yet.
 				//
-				// TODO (msbutler): confirm that the fraction completed can get reset.
+				// If 1, the job is all caught up.
 				progress.Progress = &jobspb.Progress_FractionCompleted{
 					FractionCompleted: fractionCompleted,
 				}
