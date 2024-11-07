@@ -3900,6 +3900,10 @@ func (m *sessionDataMutator) SetUnsafeAllowTriggersModifyingCascades(val bool) {
 	m.data.UnsafeAllowTriggersModifyingCascades = val
 }
 
+func (m *sessionDataMutator) SetRecursionDepthLimit(val int) {
+	m.data.RecursionDepthLimit = int64(val)
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
