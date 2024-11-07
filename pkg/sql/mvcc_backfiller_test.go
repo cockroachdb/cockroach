@@ -57,7 +57,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "TODO(ssd) test times out under race")
+	skip.UnderDuress(t, "this test fails under duress")
 
 	params, _ := createTestServerParams()
 
