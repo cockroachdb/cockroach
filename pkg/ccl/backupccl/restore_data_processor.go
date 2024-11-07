@@ -82,6 +82,10 @@ type restoreDataProcessor struct {
 	// can be used by this processor to open iterators on SSTs.
 	qp *backuputils.MemoryBackedQuotaPool
 
+	// setLDRSource is set to true if the restore should populate the origin
+	// cluster and origin timestamp fields that are populated by LDR.
+	setLDRSource bool
+
 	// progressMade is true if the processor has successfully processed a
 	// restore span entry.
 	progressMade bool
@@ -136,6 +140,16 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// TODO(jeffswenson): remove this setting
+// This setting is intended as a short term work around until LDR supports an
+// initial scan that uses add sst to optimize ingestion.
+var setLDRSource = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.restore.experimental_mascarade_ldr_source",
+	"whether restored rows should have a source timestamp and source cluster",
+	metamorphic.ConstantWithTestBool("bulkio.restore.experimental_mascarade_ldr_source", false),
+)
+
 func newRestoreDataProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -145,9 +159,10 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	rd := &restoreDataProcessor{
-		input:  input,
-		spec:   spec,
-		progCh: make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		input:        input,
+		spec:         spec,
+		progCh:       make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		setLDRSource: setLDRSource.Get(&flowCtx.Cfg.Settings.SV),
 	}
 
 	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0)
@@ -552,8 +567,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if err != nil {
 			return summary, err
 		}
-		valueScratch = append(valueScratch[:0], v...)
-		value, err := storage.DecodeValueFromMVCCValue(valueScratch)
+		value, err := storage.DecodeValueFromMVCCValue(v)
 		if err != nil {
 			return summary, err
 		}
@@ -584,12 +598,24 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
 
-		// Using valueScratch here assumes that
-		// DecodeValueFromMVCCValue, ClearChecksum, and
-		// InitChecksum don't copy/reallocate the slice they
-		// were given. We expect that value.ClearChecksum and
-		// value.InitChecksum calls above have modified
-		// valueScratch.
+		if rd.setLDRSource {
+			// setLdrHeader assumes the value bytes do not contain a header. This
+			// must be true because if there was a header, it was stripped by
+			// DecodeValueFromMVCCValue.
+			var mvccValue storage.MVCCValue
+			mvccValue.Value = value
+			mvccValue.OriginID = 1
+			mvccValue.OriginTimestamp = key.Timestamp
+			// NOTE: since we are setting header values, EncodeMVCCValueToBuf will
+			// always use the sctarch buffer or return an error.
+			valueScratch, _, err = storage.EncodeMVCCValueToBuf(mvccValue, valueScratch)
+			if err != nil {
+				return summary, err
+			}
+		} else {
+			valueScratch = append(valueScratch[:0], value.RawBytes...)
+		}
+
 		if err := batcher.AddMVCCKey(ctx, key, valueScratch); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}

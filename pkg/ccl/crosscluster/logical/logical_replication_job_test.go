@@ -75,7 +75,7 @@ var (
 
 	testClusterBaseClusterArgs = base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(134857),
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -2272,4 +2272,69 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+}
+
+func TestLogicalReplicationStartFromRestore(t *testing.T) {
+	tempdir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	args := testClusterBaseClusterArgs
+	args.ServerArgs.ExternalIODir = tempdir
+	_, s, sqlRunners, dbNames := setupServerWithNumDBs(t, context.Background(), args, 1, 2)
+	sqlA, sqlB := sqlRunners[0], sqlRunners[1]
+	dbA, dbB := dbNames[0], dbNames[1]
+
+	sqlA.Exec(t, "SET CLUSTER SETTING bulkio.restore.experimental_mascarade_ldr_source = true;")
+	sqlA.Exec(t, "CREATE TABLE kv (k string primary key not null, v int8 not null)")
+
+	sqlA.Exec(t, "INSERT INTO kv VALUES ('a', 0);")
+	sqlA.Exec(t, "INSERT INTO kv VALUES ('b', 0);")
+
+	var backupTime string
+	sqlA.Exec(t, "BACKUP TABLE kv INTO 'nodelocal://1/kv'")
+	sqlA.QueryRow(t,
+		"SELECT end_time FROM [SHOW BACKUP FROM LATEST in 'nodelocal://1/kv'] where object_name = 'kv';",
+	).Scan(&backupTime)
+
+	// Update rows in kv after completing the backup. These rows will have a
+	// timestamp that is newer than the backup timestamp and older than the
+	// restore time. When LDR is started after the restore, these rows should be
+	// replicated to overwrite the data from the restore. If mascarade ldr were
+	// not set to true, b would ignore these rows because they are older than the
+	// restore time.
+	sqlA.Exec(t, "UPDATE kv SET v = 1;")
+
+	sqlB.Exec(t, fmt.Sprintf("RESTORE TABLE %s.kv FROM LATEST IN 'nodelocal://1/kv' WITH into_db = %s", dbA, dbB))
+	restoreFinished := s.Clock().Now()
+
+	var jobA, jobB jobspb.JobID
+	urlA, cleanupA := s.PGUrl(t, serverutils.DBName(dbA))
+	defer cleanupA()
+	urlB, cleanupB := s.PGUrl(t, serverutils.DBName(dbB))
+	defer cleanupB()
+
+	sqlA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE kv ON $1 INTO TABLE kv WITH mode = 'immediate', cursor = $2",
+		urlB.String(),
+		restoreFinished.AsOfSystemTime(),
+	).Scan(&jobA)
+	sqlB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE KV ON $1 INTO TABLE kv WITH mode = 'immediate', cursor = $2",
+		urlA.String(), backupTime,
+	).Scan(&jobB)
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, sqlB, jobB)
+	WaitUntilReplicatedTime(t, now, sqlA, jobA)
+
+	for i, sql := range sqlRunners {
+		require.Equal(t,
+			[][]string{
+				{"a", "1"},
+				{"b", "1"},
+			},
+			sql.QueryStr(t, "SELECT * FROM kv ORDER BY k"),
+			"sql %d", i,
+		)
+	}
 }
