@@ -634,8 +634,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *InsertExpr:
-		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatIndexes(tp, "arbiter", t.ArbiterIndexes, t.Table)
 		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -648,6 +649,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpdateExpr:
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -663,8 +665,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpsertExpr:
-		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatIndexes(tp, "arbiter", t.ArbiterIndexes, t.Table)
 		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -1408,18 +1411,18 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	}
 }
 
-// formatArbiterIndexes constructs a new treeprinter child containing the
-// specified list of arbiter indexes.
-func (f *ExprFmtCtx) formatArbiterIndexes(
-	tp treeprinter.Node, arbiters cat.IndexOrdinals, tabID opt.TableID,
+// formatIndexes constructs a new treeprinter child containing the
+// specified list of indexes with the label specified.
+func (f *ExprFmtCtx) formatIndexes(
+	tp treeprinter.Node, label string, indexes cat.IndexOrdinals, tabID opt.TableID,
 ) {
 	md := f.Memo.Metadata()
 	tab := md.Table(tabID)
 
-	if len(arbiters) > 0 {
+	if len(indexes) > 0 {
 		f.Buffer.Reset()
-		f.Buffer.WriteString("arbiter indexes:")
-		for _, idx := range arbiters {
+		f.Buffer.WriteString(fmt.Sprintf("%s indexes:", label))
+		for _, idx := range indexes {
 			name := string(tab.Index(idx).Name())
 			f.space()
 			f.Buffer.WriteString(name)
