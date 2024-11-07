@@ -89,6 +89,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaderNotFortifiedCount = metric.Metadata{
+		Name:        "raft.leader.not_fortified",
+		Help:        "Number of non-fortified raft leaders",
+		Measurement: "Raft Leaders",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Range metrics.
 	metaRangeCount = metric.Metadata{
@@ -2589,6 +2595,7 @@ type StoreMetrics struct {
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
 	UninitializedCount            *metric.Gauge
+	LeaderNotFortifiedCount       *metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -3290,6 +3297,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
 		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
+		LeaderNotFortifiedCount:       metric.NewGauge(metaLeaderNotFortifiedCount),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),

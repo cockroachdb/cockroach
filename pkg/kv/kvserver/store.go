@@ -3290,6 +3290,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		raftLeaderNotLeaseHolderCount  int64
 		raftLeaderInvalidLeaseCount    int64
 		quiescentCount                 int64
+		leaderNotFortifiedCount        int64
 		uninitializedCount             int64
 		averageQueriesPerSecond        float64
 		averageRequestsPerSecond       float64
@@ -3385,6 +3386,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if metrics.Quiescent {
 			quiescentCount++
 		}
+		if metrics.LeaderNotFortified {
+			leaderNotFortifiedCount++
+		}
 		if metrics.RangeCounter {
 			rangeCount++
 			if metrics.Unavailable {
@@ -3451,6 +3455,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.LeaderNotFortifiedCount.Update(leaderNotFortifiedCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
 	s.metrics.AverageRequestsPerSecond.Update(averageRequestsPerSecond)

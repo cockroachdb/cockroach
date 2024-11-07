@@ -1376,6 +1376,7 @@ var cockroachdbMetrics = map[string]string{
 	"replicas_leaders_not_leaseholders":                           "replicas.leaders.not_leaseholders",
 	"replicas_leaseholders":                                       "replicas.leaseholders",
 	"replicas_quiescent":                                          "replicas.quiescent",
+	"raft_leader_not_fortified":                                   "raft.leader.not_fortified",
 	"replicas_reserved":                                           "replicas.reserved",
 	"replicas_uninitialized":                                      "replicas.uninitialized",
 	"requests_backpressure_split":                                 "requests.backpressure.split",

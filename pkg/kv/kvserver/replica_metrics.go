@@ -39,6 +39,10 @@ type ReplicaMetrics struct {
 	// the opposite of Quiescent.
 	Ticking bool
 
+	// LeaderNotFortified indicates whether the leader believes itself to be
+	// fortified or not.
+	LeaderNotFortified bool
+
 	// RangeCounter is true if the current replica is responsible for range-level
 	// metrics (generally the leaseholder, if live, otherwise the first replica in the
 	// range descriptor).
@@ -95,6 +99,8 @@ func (r *Replica) Metrics(
 		clusterNodes:             clusterNodes,
 		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
+		leadSupportStatus:        r.raftLeadSupportStatusRLocked(),
+		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
 		storeAttrs:               storeAttrs,
@@ -126,6 +132,8 @@ type calcReplicaMetricsInput struct {
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
 	raftStatus               *raft.SparseStatus
+	leadSupportStatus        raft.LeadSupportStatus
+	now                      hlc.ClockTimestamp
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
@@ -176,9 +184,12 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	// behind.
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raftpb.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
+	var leaderNotFortified bool
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
+		leaderNotFortified = d.leadSupportStatus.LeadSupportUntil == (hlc.Timestamp{}) ||
+			d.leadSupportStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
 	}
 
 	return ReplicaMetrics{
@@ -191,6 +202,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		ViolatingLeasePreferences: violatingLeasePreferences,
 		LessPreferredLease:        lessPreferredLease,
 		Quiescent:                 d.quiescent,
+		LeaderNotFortified:        leaderNotFortified,
 		Ticking:                   d.ticking,
 		RangeCounter:              rangeCounter,
 		Unavailable:               unavailable,
