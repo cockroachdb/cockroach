@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RunFirstUpgradePrecondition short-circuits FirstUpgradeFromReleasePrecondition if set to false.
@@ -154,12 +155,12 @@ func FirstUpgradeFromReleasePrecondition(
 	// there are no corruptions now. Otherwise, we retry and do everything
 	// without an AOST clause henceforth.
 	withAOST := firstUpgradePreconditionUsesAOST
-	diagnose := func(tbl string) (hasRows bool, err error) {
+	diagnose := func(tbl redact.SafeString) (hasRows bool, err error) {
 		q := fmt.Sprintf("SELECT count(*) FROM \"\".crdb_internal.%s", tbl)
 		if withAOST {
 			q = q + " AS OF SYSTEM TIME '-10s'"
 		}
-		row, err := d.InternalExecutor.QueryRow(ctx, "query-"+tbl, nil /* txn */, q)
+		row, err := d.InternalExecutor.QueryRow(ctx, redact.Sprintf("query-%s", tbl), nil /* txn */, q)
 		if err == nil && row[0].String() != "0" {
 			hasRows = true
 		}

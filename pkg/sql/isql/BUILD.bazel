@@ -18,5 +18,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/util/admission/admissionpb",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -828,7 +829,7 @@ func wrapTxn(txn isql.Txn, errFunc func(statement string) error) *wrappedInterna
 
 func (txn *wrappedInternalTxn) QueryBufferedExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	_ *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -840,14 +841,18 @@ func (txn *wrappedInternalTxn) QueryBufferedExWithCols(
 var _ isql.Executor = &wrappedInternalTxn{}
 
 func (txn *wrappedInternalTxn) Exec(
-	ctx context.Context, opName string, _ *kv.Txn, statement string, params ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	_ *kv.Txn,
+	statement string,
+	params ...interface{},
 ) (int, error) {
 	panic("unimplemented")
 }
 
 func (txn *wrappedInternalTxn) ExecEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	kvTxn *kv.Txn,
 	o sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -863,7 +868,7 @@ func (txn *wrappedInternalTxn) ExecEx(
 
 func (txn *wrappedInternalTxn) ExecParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	_ *kv.Txn,
 	o sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
@@ -874,7 +879,7 @@ func (txn *wrappedInternalTxn) ExecParsed(
 
 func (txn *wrappedInternalTxn) QueryRowEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	kvTxn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -890,7 +895,7 @@ func (txn *wrappedInternalTxn) QueryRowEx(
 
 func (txn *wrappedInternalTxn) QueryRowExParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	kvTxn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
@@ -905,14 +910,18 @@ func (txn *wrappedInternalTxn) QueryRowExParsed(
 }
 
 func (txn *wrappedInternalTxn) QueryRow(
-	ctx context.Context, opName string, _ *kv.Txn, statement string, qargs ...interface{},
+	ctx context.Context,
+	opName redact.RedactableString,
+	_ *kv.Txn,
+	statement string,
+	qargs ...interface{},
 ) (tree.Datums, error) {
 	panic("not implemented")
 }
 
 func (txn *wrappedInternalTxn) QueryRowExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	_ *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -922,14 +931,14 @@ func (txn *wrappedInternalTxn) QueryRowExWithCols(
 }
 
 func (txn *wrappedInternalTxn) QueryBuffered(
-	ctx context.Context, opName string, _ *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName redact.RedactableString, _ *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
 	panic("not implemented")
 }
 
 func (txn *wrappedInternalTxn) QueryBufferedEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	_ *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -939,14 +948,14 @@ func (txn *wrappedInternalTxn) QueryBufferedEx(
 }
 
 func (txn *wrappedInternalTxn) QueryIterator(
-	ctx context.Context, opName string, _ *kv.Txn, stmt string, qargs ...interface{},
+	ctx context.Context, opName redact.RedactableString, _ *kv.Txn, stmt string, qargs ...interface{},
 ) (isql.Rows, error) {
 	panic("not implemented")
 }
 
 func (txn *wrappedInternalTxn) QueryIteratorEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	kvTxn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,

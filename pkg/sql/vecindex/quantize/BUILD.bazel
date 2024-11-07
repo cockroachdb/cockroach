@@ -29,6 +29,8 @@ go_library(
     name = "quantize",
     srcs = [
         "quantizer.go",
+        "rabitq.go",
+        "rabitqpb.go",
         "unquantizedpb.go",
         "unquantizer.go",
     ],
@@ -36,6 +38,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/vecindex/internal",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
@@ -45,11 +48,16 @@ go_library(
 go_test(
     name = "quantize_test",
     srcs = [
+        "rabitq_test.go",
+        "rabitqpb_test.go",
         "unquantizedpb_test.go",
         "unquantizer_test.go",
     ],
+    data = ["//pkg/sql/vecindex:testdata"],
     embed = [":quantize"],
     deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/testutils",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // clusterBackupInclusion is an enum that specifies whether a system table
@@ -107,7 +108,7 @@ func defaultSystemTableRestoreFunc(
 	ctx context.Context, _ customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string,
 ) error {
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
-	opName := systemTableName + "-data-deletion"
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
@@ -118,7 +119,7 @@ func defaultSystemTableRestoreFunc(
 
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
 		systemTableName, tempTableName)
-	opName = systemTableName + "-data-insert"
+	opName = redact.Sprintf("%s-data-insert", systemTableName)
 	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
@@ -151,7 +152,7 @@ func tenantSettingsTableRestoreFunc(
 
 func queryTableRowCount(ctx context.Context, txn isql.Txn, tableName string) (int64, error) {
 	countQuery := fmt.Sprintf("SELECT count(1) FROM %s", tableName)
-	row, err := txn.QueryRow(ctx, fmt.Sprintf("count-%s", tableName), txn.KV(), countQuery)
+	row, err := txn.QueryRow(ctx, redact.Sprintf("count-%s", tableName), txn.KV(), countQuery)
 	if err != nil {
 		return 0, errors.Wrapf(err, "counting rows in %q", tableName)
 	}
@@ -180,7 +181,7 @@ func usersRestoreFunc(
 	}
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
-	opName := systemTableName + "-data-deletion"
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
@@ -226,7 +227,7 @@ func usersRestoreFunc(
 
 		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
 			systemTableName)
-		opName = systemTableName + "-data-insert"
+		opName = redact.Sprintf("%s-data-insert", systemTableName)
 		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, password, isRole, id); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 		}
@@ -253,12 +254,12 @@ func roleMembersRestoreFunc(
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
 
-	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	_, err = txn.Exec(ctx, redact.Sprintf("%s-data-deletion", systemTableName), txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	roleMembers, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+	roleMembers, err := txn.QueryBufferedEx(ctx, redact.Sprintf("%s-query-all-rows", systemTableName),
 		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
 	)
@@ -273,7 +274,7 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 		role := tree.MustBeDString(roleMember[0])
 		member := tree.MustBeDString(roleMember[1])
 		isAdmin := tree.MustBeDBool(roleMember[2])
-		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+		if _, err := txn.ExecEx(ctx, redact.Sprintf("%s-data-insert", systemTableName),
 			txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			restoreQuery, role, member, isAdmin,
 		); err != nil {
@@ -301,7 +302,7 @@ func roleOptionsRestoreFunc(
 	}
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
-	opName := systemTableName + "-data-deletion"
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
@@ -349,7 +350,7 @@ func roleOptionsRestoreFunc(
 
 		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
 			systemTableName)
-		opName = systemTableName + "-data-insert"
+		opName = redact.Sprintf("%s-data-insert", systemTableName)
 		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, option, val, id); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 		}
@@ -374,12 +375,12 @@ func systemPrivilegesRestoreFunc(
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
 
-	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	_, err = txn.Exec(ctx, redact.Sprintf("%s-data-deletion", systemTableName), txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	systemPrivilegesRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+	systemPrivilegesRows, err := txn.QueryBufferedEx(ctx, redact.Sprintf("%s-query-all-rows", systemTableName),
 		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
 	)
@@ -397,7 +398,7 @@ VALUES ($1, $2, $3, $4, (
 ))`,
 		systemTableName, username.PublicRole, username.PublicRoleID)
 	for _, row := range systemPrivilegesRows {
-		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+		if _, err := txn.ExecEx(ctx, redact.Sprintf("%s-data-insert", systemTableName),
 			txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			restoreQuery, row[0], row[1], row[2], row[3],
 		); err != nil {
@@ -425,12 +426,12 @@ func systemDatabaseRoleSettingsRestoreFunc(
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
 
-	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	_, err = txn.Exec(ctx, redact.Sprintf("%s-data-deletion", systemTableName), txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	databaseRoleSettingsRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+	databaseRoleSettingsRows, err := txn.QueryBufferedEx(ctx, redact.Sprintf("%s-query-all-rows", systemTableName),
 		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
 	)
@@ -448,7 +449,7 @@ VALUES ($1, $2, $3, (
 ))`,
 		systemTableName, username.EmptyRole, username.EmptyRoleID)
 	for _, row := range databaseRoleSettingsRows {
-		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+		if _, err := txn.ExecEx(ctx, redact.Sprintf("%s-data-insert", systemTableName),
 			txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			restoreQuery, row[0], row[1], row[2],
 		); err != nil {
@@ -476,12 +477,12 @@ func systemExternalConnectionsRestoreFunc(
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
 
-	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
+	_, err = txn.Exec(ctx, redact.Sprintf("%s-data-deletion", systemTableName), txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	externalConnectionsRows, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+	externalConnectionsRows, err := txn.QueryBufferedEx(ctx, redact.Sprintf("%s-query-all-rows", systemTableName),
 		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
 	)
@@ -493,7 +494,7 @@ func systemExternalConnectionsRestoreFunc(
 INSERT INTO system.%s (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
 VALUES ($1, $2, $3, $4, $5, $6, (SELECT user_id FROM system.users WHERE username = $6))`, systemTableName)
 	for _, row := range externalConnectionsRows {
-		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+		if _, err := txn.ExecEx(ctx, redact.Sprintf("%s-data-insert", systemTableName),
 			txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			restoreQuery, row[0], row[1], row[2], row[3], row[4], row[5],
 		); err != nil {
@@ -547,7 +548,7 @@ func systemTenantSettingsTableRestoreFunc(
 	systemTableName, tempTableName string,
 ) error {
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
-	opName := systemTableName + "-data-deletion"
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
@@ -559,7 +560,7 @@ func systemTenantSettingsTableRestoreFunc(
 	restoreQuery := fmt.Sprintf(
 		"INSERT INTO system.%s (SELECT * FROM %s WHERE NOT (tenant_id = 0 AND name = 'version'));",
 		systemTableName, tempTableName)
-	opName = systemTableName + "-data-insert"
+	opName = redact.Sprintf("%s-data-insert", systemTableName)
 	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
@@ -576,7 +577,7 @@ func settingsRestoreFunc(
 	systemTableName, tempTableName string,
 ) error {
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
-	opName := systemTableName + "-data-deletion"
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
@@ -587,7 +588,7 @@ func settingsRestoreFunc(
 
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s WHERE name <> 'version');",
 		systemTableName, tempTableName)
-	opName = systemTableName + "-data-insert"
+	opName = redact.Sprintf("%s-data-insert", systemTableName)
 	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
@@ -891,7 +892,7 @@ func rekeySystemTable(
 		}
 		fmt.Fprintf(&q, "ELSE %s END)::%s", colName, typ)
 		if _, err := txn.Exec(
-			ctx, fmt.Sprintf("remap-%s", tempTableName), txn.KV(), q.String(),
+			ctx, redact.Sprintf("remap-%s", tempTableName), txn.KV(), q.String(),
 		); err != nil {
 			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
 		}
@@ -904,7 +905,7 @@ func rekeySystemTable(
 		// ID system tables that we do not restore directly, and thus have no entry
 		// in our remapping, but the configuration of them (comments, zones, etc) is
 		// expected to be restored.
-		if _, err := txn.Exec(ctx, fmt.Sprintf("remap-remove-%s", tempTableName), txn.KV(),
+		if _, err := txn.Exec(ctx, redact.Sprintf("remap-remove-%s", tempTableName), txn.KV(),
 			fmt.Sprintf("DELETE FROM %s WHERE %s >= 50 AND %s < %d", tempTableName, colName, colName, offset),
 		); err != nil {
 			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
@@ -912,7 +913,7 @@ func rekeySystemTable(
 
 		// Now slide remapped the IDs back down by offset, to their intended values.
 		if _, err := txn.Exec(ctx,
-			fmt.Sprintf("remap-%s-deoffset", tempTableName),
+			redact.Sprintf("remap-%s-deoffset", tempTableName),
 			txn.KV(),
 			fmt.Sprintf("UPDATE %s SET %s = (%s::int - %d)::%s WHERE %s::int >= %d", tempTableName, colName, colName, offset, typ, colName, offset),
 		); err != nil {

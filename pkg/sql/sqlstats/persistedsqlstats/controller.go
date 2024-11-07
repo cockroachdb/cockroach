@@ -7,7 +7,6 @@ package persistedsqlstats
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // Controller implements the SQL Stats subsystem control plane. This exposes
@@ -92,7 +92,7 @@ func (s *Controller) resetSysTableStats(ctx context.Context, tableName string) (
 	ex := s.db.Executor()
 	_, err = ex.ExecEx(
 		ctx,
-		fmt.Sprintf("reset-%s", tableName),
+		redact.Sprintf("reset-%s", tableName),
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		"TRUNCATE "+tableName)

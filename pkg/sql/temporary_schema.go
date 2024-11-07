@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -364,7 +365,7 @@ func cleanupTempSchemaObjects(
 				query.WriteString(tbName.FQString())
 			}
 			query.WriteString(" CASCADE")
-			_, err = txn.ExecEx(ctx, "delete-temp-"+toDelete.typeName, txn.KV(), override, query.String())
+			_, err = txn.ExecEx(ctx, redact.Sprintf("delete-temp-%s", toDelete.typeName), txn.KV(), override, query.String())
 			if err != nil {
 				return err
 			}

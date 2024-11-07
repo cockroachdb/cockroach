@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,7 +125,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		})
 		_, err := ie.ExecEx(
 			execCtx,
-			t.Name(),
+			redact.RedactableString(t.Name()),
 			nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
 			testStmt,

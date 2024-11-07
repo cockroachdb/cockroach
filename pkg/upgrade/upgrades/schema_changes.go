@@ -8,7 +8,6 @@ package upgrades
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -129,7 +128,7 @@ func migrateTable(
 		log.Infof(ctx, "performing operation: %s", op.name)
 		if _, err := d.InternalExecutor.ExecEx(
 			ctx,
-			fmt.Sprintf("migration-alter-table-%d", storedTableID),
+			redact.Sprintf("migration-alter-table-%d", storedTableID),
 			nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
 			op.query); err != nil {
