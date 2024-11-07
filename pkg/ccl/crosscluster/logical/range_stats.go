@@ -51,8 +51,10 @@ func (r *rangeStatsByProcessorID) RollupStats() (streampb.StreamEvent_RangeStats
 	if !initialScanComplete {
 		return total, fractionCompleted, fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount)
 	}
-
-	return total, fractionCompleted, fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount)
+	if total.LaggingRangeCount != 0 {
+		return total, fractionCompleted, fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount)
+	}
+	return total, 1, fmt.Sprintf("all %d ranges are caught up", total.RangeCount)
 }
 
 func newRangeStatsCollector(processorCount int) rangeStatsByProcessorID {
