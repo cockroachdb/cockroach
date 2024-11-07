@@ -194,3 +194,88 @@ func TestAlterBackupScheduleSetsIncrementalClusterID(t *testing.T) {
 	)
 	require.Len(t, rows, 2)
 }
+
+func TestAlterBackupScheduleDoesNotResumePausedSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	t.Run("standalone paused full backup is not resumed", func(t *testing.T) {
+		rows := th.sqlDB.QueryStr(t,
+			`CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup/alter-schedule' RECURRING '@daily' FULL BACKUP ALWAYS;`)
+		require.Len(t, rows, 1)
+		scheduleID, err := strconv.Atoi(rows[0][0])
+		require.NoError(t, err)
+
+		th.sqlDB.Exec(t, fmt.Sprintf(`PAUSE SCHEDULE %d;`, scheduleID))
+		th.sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				`ALTER BACKUP SCHEDULE %d SET RECURRING '@hourly',
+SET INTO 'nodelocal://1/backup/alter-schedule-2';`,
+				scheduleID,
+			))
+
+		require.Equal(t, "PAUSED", getScheduleStatus(t, th, scheduleID))
+	})
+
+	t.Run("paused incremental and full backup pair is not resumed", func(t *testing.T) {
+		rows := th.sqlDB.QueryStr(t,
+			`CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup-2/alter-schedule' RECURRING '@hourly' FULL BACKUP '@daily';`)
+		require.Len(t, rows, 2)
+		scheduleID1, err := strconv.Atoi(rows[0][0])
+		require.NoError(t, err)
+		scheduleID2, err := strconv.Atoi(rows[1][0])
+		require.NoError(t, err)
+
+		th.sqlDB.Exec(t, fmt.Sprintf(`PAUSE SCHEDULE %d;`, scheduleID1))
+		th.sqlDB.Exec(t, fmt.Sprintf(`PAUSE SCHEDULE %d;`, scheduleID2))
+
+		th.sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				`ALTER BACKUP SCHEDULE %d SET RECURRING '*/30 * * * *',
+SET FULL BACKUP '@hourly', SET INTO 'nodelocal://1/backup-2/alter-schedule-2';`,
+				scheduleID1,
+			),
+		)
+
+		require.Equal(t, "PAUSED", getScheduleStatus(t, th, scheduleID1))
+		require.Equal(t, "PAUSED", getScheduleStatus(t, th, scheduleID2))
+	})
+}
+
+func TestAlterBackupSchedulePausesIncrementalForNewCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	rows := th.sqlDB.QueryStr(
+		t,
+		`CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup/alter-schedule' RECURRING '@hourly' FULL BACKUP '@daily';`,
+	)
+	require.Len(t, rows, 2)
+	incSchedID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	fullSchedID, err := strconv.Atoi(rows[1][0])
+	require.NoError(t, err)
+
+	th.sqlDB.Exec(
+		t,
+		fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET INTO 'nodelocal://1/backup/alter-schedule-2';`, fullSchedID),
+	)
+
+	require.Equal(t, "PAUSED", getScheduleStatus(t, th, incSchedID))
+	require.Equal(t, "ACTIVE", getScheduleStatus(t, th, fullSchedID))
+}
+
+func getScheduleStatus(t *testing.T, th *alterSchedulesTestHelper, id int) string {
+	t.Helper()
+	var status string
+	th.sqlDB.QueryRow(t, `SELECT schedule_status FROM [SHOW SCHEDULES] WHERE id=$1`, id).Scan(&status)
+	return status
+}
