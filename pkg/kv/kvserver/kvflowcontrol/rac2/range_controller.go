@@ -1069,6 +1069,8 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	var numOptionalForceFlushes [2]int
 	for r, rs := range rc.replicaMap {
 		info := e.ReplicasStateInfo[r]
+		// Defensive, since we already clear the scratchEvent later in this method.
+		// Intended invariant: scratchEvent is always empty except in this method.
 		rs.scratchEvent = raftEventForReplica{}
 		mode := e.MsgAppMode
 		if info.State == tracker.StateReplicate {
@@ -1168,6 +1170,8 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 			}
 		}
 		shouldWaitChange = rs.handleReadyEntriesRaftMuLocked(ctx, rs.scratchEvent, rd) || shouldWaitChange
+		// Clear scratchEvent, since it contains a reference to a raft.LogSnapshot.
+		rs.scratchEvent = raftEventForReplica{}
 	}
 
 	// If there was a quorum change, update the voter sets, triggering the
