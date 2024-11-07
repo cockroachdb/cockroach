@@ -6,6 +6,7 @@
 package kvflowcontrol
 
 import (
+	"context"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 )
@@ -32,11 +33,11 @@ type TestingKnobs struct {
 	// mode, while also having the ability to switch between the two
 	// apply_to_(elastic|all) modes.
 	OverridePullPushMode func() bool
-	// OverrideBypassAdmitWaitForEval is used to override the behavior of the
-	// WaitForEval. When set to true, WaitForEval will return immediately and
-	// pretend that the request was admitted. Otherwise, when set to false, or
-	// unset, WaitForEval will behave normally.
-	OverrideBypassAdmitWaitForEval func() bool
+	// OverrideBypassAdmitWaitForEval is used to override the behavior of
+	// WaitForEval. When bypass is set to true, WaitForEval will return
+	// immediately and return the waited value. Otherwise, when bypass is set
+	// to false, or unset, WaitForEval will behave normally.
+	OverrideBypassAdmitWaitForEval func(ctx context.Context) (bypass bool, waited bool)
 	// OverrideAlwaysRefreshSendStreamStats is used to override the behavior of
 	// the send stream stats refresh. When set to true, the send stream stats
 	// will always be refreshed on a HandleRaftEventRaftMuLocked call. Otherwise,

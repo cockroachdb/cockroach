@@ -12,6 +12,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -697,14 +698,14 @@ func (rc *rangeController) WaitForEval(
 	waitCategory, waitCategoryChangeCh := rc.opts.WaitForEvalConfig.Current()
 	bypass := waitCategory.Bypass(wc)
 	if knobs := rc.opts.Knobs; knobs != nil &&
-		knobs.OverrideBypassAdmitWaitForEval != nil &&
-		rc.opts.Knobs.OverrideBypassAdmitWaitForEval() {
-		// This is used by some tests to bypass the wait for eval, in order to get
-		// the entry into HandleRaftEventRaftMuLocked, where normally the write
-		// would block here.
-		bypass = true
-		// We pretend the request also waited, even though it didn't.
-		waited = true
+		knobs.OverrideBypassAdmitWaitForEval != nil {
+		// This is used by some tests to bypass the wait for eval, for two different
+		// purposes:
+		// - to get the entry into HandleRaftEventRaftMuLocked, where normally the
+		//   request would block here.
+		// - to prevent the entry from being subject to replication admission
+		//   control.
+		bypass, waited = rc.opts.Knobs.OverrideBypassAdmitWaitForEval(ctx)
 	}
 	if bypass {
 		if expensiveLoggingEnabled {
@@ -2073,15 +2074,41 @@ func (rss *replicaSendStream) holdsTokensRaftMuLocked() bool {
 
 func (rss *replicaSendStream) admitRaftMuLocked(ctx context.Context, av AdmittedVector) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if log.V(2) {
-		log.VInfof(ctx, 2, "r%v:%v stream %v admit %v",
-			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
-	}
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
 	returnedSend, returnedEval := rss.raftMu.tracker.Untrack(av,
 		rss.mu.nextRaftIndexInitial)
+	if log.V(2) {
+		returnedSomething := false
+		for _, tokenArray := range [2][raftpb.NumPriorities]kvflowcontrol.Tokens{returnedSend, returnedEval} {
+			for _, t := range tokenArray {
+				if t > 0 {
+					returnedSomething = true
+				}
+			}
+		}
+		if returnedSomething {
+			var b strings.Builder
+			printReturned := func(prefix string, returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
+				first := true
+				for pri, tokens := range returned {
+					if tokens > 0 {
+						if first {
+							fmt.Fprintf(&b, "%s:", prefix)
+							first = false
+						}
+						fmt.Fprintf(&b, "%v:%v", raftpb.Priority(pri), tokens)
+					}
+				}
+			}
+			printReturned("send", returnedSend)
+			printReturned(" eval", returnedEval)
+			log.VInfof(ctx, 2, "r%v:%v stream %v admit %v returned %s",
+				rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av,
+				redact.SafeString(b.String()))
+		}
+	}
 	rss.returnSendTokensRaftMuAndStreamLocked(ctx, returnedSend, false /* disconnect */)
 	rss.returnEvalTokensRaftMuAndStreamLocked(ctx, returnedEval)
 }

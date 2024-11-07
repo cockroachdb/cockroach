@@ -4507,6 +4507,18 @@ ORDER BY streams DESC;
 	h.query(n2, v2FlowTokensQueryStr)
 }
 
+type testGeneratedPut struct{}
+
+func contextWithTestGeneratedPut(ctx context.Context) context.Context {
+	return context.WithValue(ctx, testGeneratedPut{}, &testGeneratedPut{})
+}
+
+func isTestGeneratedPut(ctx context.Context) bool {
+	val := ctx.Value(testGeneratedPut{})
+	_, ok := val.(*testGeneratedPut)
+	return ok
+}
+
 // TestFlowControlSendQueue exercises the send queue formation, prevention and
 // flushing via selective (logical) admission of entries and token return. See
 // the initial comment for an overview of the test structure.
@@ -4518,7 +4530,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	const numNodes = 5
 	var noopWaitForEval atomic.Bool
 	disableWorkQueueGrantingServers := make([]atomic.Bool, numNodes)
-	toggleTokenReturn := func(enabled bool, serverIdxs ...int) {
+	setTokenReturnEnabled := func(enabled bool, serverIdxs ...int) {
 		for _, serverIdx := range serverIdxs {
 			disableWorkQueueGrantingServers[serverIdx].Store(!enabled)
 		}
@@ -4567,8 +4579,19 @@ func TestFlowControlSendQueue(t *testing.T) {
 							return kvflowcontrol.Tokens(
 								int64(math.Round(float64(tokens)/float64(1<<20))) * 1 << 20)
 						},
-						OverrideBypassAdmitWaitForEval: func() bool {
-							return noopWaitForEval.Load()
+						OverrideBypassAdmitWaitForEval: func(ctx context.Context) (bypass bool, waited bool) {
+							bypassAndWaited := noopWaitForEval.Load()
+							// TODO: remove printf.
+							if bypassAndWaited {
+								fmt.Printf("bypass and waited ****\n")
+								return true, true
+							}
+							if !isTestGeneratedPut(ctx) {
+								fmt.Printf("not test generated ****\n")
+								return true, false
+							}
+							fmt.Printf("not bypassed ****\n")
+							return false, false
 						},
 						// We want to test the behavior of the send queue, so we want to
 						// always have up-to-date stats. This ensures that the send queue
@@ -4611,6 +4634,13 @@ func TestFlowControlSendQueue(t *testing.T) {
 	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	// We shouldn't need this, since we use contextWithTestGeneratedPut to only
+	// subject the test's puts to RAC. But there was a test failure that had
+	// 4KiB of tokens deducted and returned, so a send-queue must have formed,
+	// possibly because the replica was not in StateReplicate when some entries
+	// not subject to RAC were processed.
+	h.resetV2TokenMetrics(ctx)
+
 	h.comment(`
 -- This test exercises send queue formation, prevention and flushing.
 -- The structure roughly follows:
@@ -4653,7 +4683,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x16MiB regular, 3x replicated write that's not admitted.)`)
-	h.put(ctx, k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 48<<20 /* 48MiB */, 0 /* serverIdx */)
 	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
 	h.query(n1, `
@@ -4666,7 +4696,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`
 -- (Allowing below-raft admission to proceed on n1 and n2.)
 -- [n1(enabled),n2(enabled),n3(blocked)]`)
-	toggleTokenReturn(true /* enabled */, 0, 1)
+	setTokenReturnEnabled(true /* enabled */, 0, 1)
 	// Wait for token return on n1, n2. We should only be tracking the tokens for
 	// n3 now.
 	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1))
@@ -4682,13 +4712,13 @@ func TestFlowControlSendQueue(t *testing.T) {
 	// Re-disable admission on n2. This is to track a write to n2 that won't be
 	// admitted before it's stopped.
 	h.comment(`-- (Blocking below-raft admission on n2.)`)
-	toggleTokenReturn(false /* enabled */, 1)
+	setTokenReturnEnabled(false /* enabled */, 1)
 
 	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
-	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	// NB: The write won't be tracked because the quorum [n1,n2] have tokens for
 	// eval.
-	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 17<<20 /* 16 MiB */, 0 /* serverIdx */)
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 17<<20 /* 17 MiB */, 0 /* serverIdx */)
 	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0))
 	h.waitForSendQueueSize(ctx, desc.RangeID, 1<<20 /* 1MiB expSize */, 0 /* serverIdx */)
 	h.comment(`
@@ -4729,7 +4759,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`-- (Enabling wait-for-eval bypass.)`)
 	noopWaitForEval.Store(true)
 	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
-	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	h.comment(`-- (Disabling wait-for-eval bypass.)`)
 	noopWaitForEval.Store(false)
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 18<<20 /* 18 MiB */, 0 /* serverIdx */)
@@ -4747,9 +4777,9 @@ func TestFlowControlSendQueue(t *testing.T) {
 `, "range_id", "store_id", "total_tracked_tokens")
 
 	h.comment(`
--- (Allowing below-raft admission to proceed on n2 and n3.)
+-- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
 -- [n1(enabled),n2(enabled),n3(enabled)]`)
-	toggleTokenReturn(true /* enabled */, 0, 1, 2)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2)
 	h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 	h.comment(`-- Flow token metrics from n1.`)
 	h.query(n1, v2FlowTokensQueryStr)
@@ -4785,7 +4815,7 @@ ORDER BY streams DESC;
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Issuing 1x16MiB regular, 5x replicated write that's not admitted.)`)
-	h.put(ctx, k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
 	// Expect the unblocked streams (n1,n2,n3) to track, then untrack quickly as
 	// admission is allowed. While n4,n5 will continue to track as they are
 	// blocked from admitting.
@@ -4803,7 +4833,7 @@ ORDER BY streams DESC;
 `, "range_id", "store_id", "total_tracked_tokens")
 
 	h.comment(`-- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)`)
-	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	// The total tracked tokens should not change, as the quorum (n1,n2,n3)
 	// quickly admits and untracks. While n4,n5 queue the write, not sending the
 	// msg, deducting and tracking the entry tokens.
@@ -4819,7 +4849,7 @@ ORDER BY streams DESC;
 	h.comment(`
 -- (Allowing below-raft admission to proceed on n4 and n5.)
 -- [n1(enabled),n2(enabled),n3(enabled),n4(enabled),n5(enabled)]`)
-	toggleTokenReturn(true /* enabled */, 0, 1, 2, 3, 4)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 	h.comment(`
 -- Per-store tokens available from n1. Expect these to return to the same as 
@@ -4828,10 +4858,10 @@ ORDER BY streams DESC;
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Blocking below-raft admission on [n2,n3,n4,n5].)`)
-	toggleTokenReturn(false /* enabled */, 1, 2, 3, 4)
+	setTokenReturnEnabled(false /* enabled */, 1, 2, 3, 4)
 
 	h.comment(`-- (Issuing 1x16MiB regular, 5x replicated write that's not admitted.)`)
-	h.put(ctx, k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 16<<20 /* 16MiB */, admissionpb.NormalPri)
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 64<<20 /* 64 MiB */, 0 /* serverIdx */)
 	h.comment(`
 -- Send queue and flow token metrics from n1. The 16 MiB write should not be
@@ -4844,7 +4874,7 @@ ORDER BY streams DESC;
 	h.comment(`-- (Enabling wait-for-eval bypass.)`)
 	noopWaitForEval.Store(true)
 	h.comment(`-- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)`)
-	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	h.comment(`-- (Disabling wait-for-eval bypass.)`)
 	noopWaitForEval.Store(false)
 	// Expect 4 x 16 MiB tracked tokens for the 16 MiB write = 64 MiB.
@@ -4867,7 +4897,7 @@ ORDER BY streams DESC;
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Allowing below-raft admission on [n1,n2,n3,n4,n5].)`)
-	toggleTokenReturn(true /* enabled */, 0, 1, 2, 3, 4)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
 
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 	h.comment(`
