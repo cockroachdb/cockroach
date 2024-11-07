@@ -12,11 +12,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -422,6 +425,123 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	compareEqual("SELECT * FROM t1 ORDER BY j")
 	compareEqual("SELECT * FROM v1 ORDER BY 1")
 	compareEqual("SELECT * FROM t2 ORDER BY j, i")
+
+}
+
+// TestReaderCatalogTSAdvanceWithLongTxn confirms that timestamps can advance
+// with PCR even if a long running txn is running.
+func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer ts.Stop(ctx)
+	srcTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantID:   serverutils.TestTenantID(),
+		TenantName: "src",
+	})
+	require.NoError(t, err)
+	destSettings := cluster.MakeClusterSettings()
+	const LeaseExpirationTime = time.Second * 15
+	lease.LeaseDuration.Override(ctx, &destSettings.SV, LeaseExpirationTime)
+	lease.LeaseJitterFraction.Override(ctx, &destSettings.SV, 0)
+	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantID:   serverutils.TestTenantID2(),
+		TenantName: "dest",
+		Settings:   destSettings,
+	})
+	require.NoError(t, err)
+	srcConn := srcTenant.SQLConn(t)
+	srcRunner := sqlutils.MakeSQLRunner(srcConn)
+
+	ddlToExec := []string{
+		"CREATE USER roacher WITH CREATEROLE;",
+		"GRANT ADMIN TO roacher;",
+		"ALTER USER roacher SET timezone='America/New_York';",
+		"CREATE SEQUENCE sq1;",
+		"CREATE TABLE t1(n int default nextval('sq1'), val TEXT);",
+		"INSERT INTO t1(val) VALUES('open');",
+		"INSERT INTO t1(val) VALUES('closed');",
+		"INSERT INTO t1(val) VALUES('inactive');",
+		"CREATE TABLE t2(n int);",
+	}
+	for _, ddl := range ddlToExec {
+		srcRunner.Exec(t, ddl)
+	}
+
+	now := ts.Clock().Now()
+	idb := destTenant.InternalDB().(*sql.InternalDB)
+	var setupCompleteTS atomic.Value
+	setupCompleteTS.Store(hlc.Timestamp{})
+
+	advanceTS := func(now hlc.Timestamp) error {
+		err = replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings())
+		if err != nil {
+			return err
+		}
+		setupCompleteTS.Store(ts.Clock().Now())
+		return nil
+	}
+
+	require.NoError(t, advanceTS(now))
+	// Connect only after the reader catalog is setup, so the connection
+	// executor is aware.
+	destConn := destTenant.SQLConn(t)
+	destRunner := sqlutils.MakeSQLRunner(destConn)
+
+	compareEqual := func(query string) {
+		lm := destTenant.LeaseManager().(*lease.Manager)
+		testutils.SucceedsSoon(t, func() error {
+			// Waiting for leases to catch up to when the setup was done.
+			if lm.GetSafeReplicationTS().Less(setupCompleteTS.Load().(hlc.Timestamp)) {
+				return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
+			}
+			return nil
+		})
+
+		tx := srcRunner.Begin(t)
+		_, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", now.AsOfSystemTime()))
+		require.NoError(t, err)
+		srcRows, err := tx.Query(query)
+		require.NoError(t, err)
+		srcRes, err := sqlutils.RowsToStrMatrix(srcRows)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit())
+		destRes := destRunner.QueryStr(t, query)
+		require.Equal(t, srcRes, destRes)
+	}
+
+	// Validate all tables match,
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM t2 ORDER BY n")
+	compareEqual("SELECT * FROM sq1")
+
+	// Next attempt to advance the TS with a long-running
+	// txn.
+	tx := destRunner.Begin(t)
+	_, err = tx.Exec("SELECT * FROM t1")
+	require.NoError(t, err)
+
+	// Attempt to advance the TS, this will wait for
+	// the lease on t1 to expire.
+	advanceStartTime := timeutil.Now()
+	now = ts.Clock().Now()
+	require.NoError(t, advanceTS(now))
+	// Confirm we waited for the lease to expire.
+	require.LessOrEqual(t, LeaseExpirationTime, timeutil.Since(advanceStartTime))
+
+	// Validate the long-running txn is fine and can
+	// still commit after.
+	_, err = tx.Exec("SELECT * FROM t1")
+	require.NoError(t, err)
+	_, err = tx.Exec("SELECT * FROM t2")
+	require.NoError(t, err)
+	_, err = tx.Exec("SELECT * FROM sq1")
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
 
 }
 
