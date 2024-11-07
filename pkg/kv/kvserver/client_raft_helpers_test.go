@@ -466,7 +466,7 @@ func dropRaftMessagesFrom(
 		},
 	})
 	srv.StoreLivenessTransport().(*storeliveness.Transport).ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
-		MessageHandler: store.TestingStoreLivenessMessageHandler(),
+		MessageHandler: store.TestingStoreLivenessSupportManager(),
 		UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
 			DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
 				drop := shouldDropFromStore(msg.From.StoreID)

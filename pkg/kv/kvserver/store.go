@@ -4102,9 +4102,9 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 	}
 }
 
-// TestingStoreLivenessMessageHandler returns the store's store liveness
-// message handler for testing purposes.
-func (s *Store) TestingStoreLivenessMessageHandler() storeliveness.MessageHandler {
+// TestingStoreLivenessSupportManager returns the store's store liveness
+// support manager for testing purposes.
+func (s *Store) TestingStoreLivenessSupportManager() *storeliveness.SupportManager {
 	return s.storeLiveness.(*storeliveness.SupportManager)
 }
 
