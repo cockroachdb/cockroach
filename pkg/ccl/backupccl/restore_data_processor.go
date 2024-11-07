@@ -82,6 +82,10 @@ type restoreDataProcessor struct {
 	// can be used by this processor to open iterators on SSTs.
 	qp *backuputils.MemoryBackedQuotaPool
 
+	// setLDRSource is set to true if the restore should populate the origin
+	// cluster and origin timestamp fields that are populated by LDR.
+	setLDRSource bool
+
 	// progressMade is true if the processor has successfully processed a
 	// restore span entry.
 	progressMade bool
@@ -136,6 +140,16 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// TODO(jeffswenson): remove this setting
+// This setting is intended as a short term work around until LDR supports an
+// initial scan that uses add sst to optimize ingestion.
+var setLDRSource = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.restore.experimental_mascarade_ldr_source",
+	"whether restored rows should have a source timestamp and source cluster",
+	metamorphic.ConstantWithTestBool("bulkio.restore.experimental_mascarade_ldr_source", false),
+)
+
 func newRestoreDataProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -145,9 +159,10 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	rd := &restoreDataProcessor{
-		input:  input,
-		spec:   spec,
-		progCh: make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		input:        input,
+		spec:         spec,
+		progCh:       make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		setLDRSource: setLDRSource.Get(&flowCtx.Cfg.Settings.SV),
 	}
 
 	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0)
@@ -552,8 +567,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if err != nil {
 			return summary, err
 		}
-		valueScratch = append(valueScratch[:0], v...)
-		value, err := storage.DecodeValueFromMVCCValue(valueScratch)
+		mvccValue, err := storage.DecodeMVCCValue(v)
 		if err != nil {
 			return summary, err
 		}
@@ -571,27 +585,34 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			// since the key's table gets restored to its pre-import state. Therefore,
 			// we elide ingesting this key.
 			if verbose {
-				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
+				log.Infof(ctx, "skipping %s %s", key.Key, mvccValue.Value.PrettyPrint())
 			}
 			continue
 		}
 
 		// Rewriting the key means the checksum needs to be updated.
-		value.ClearChecksum()
-		value.InitChecksum(key.Key)
+		mvccValue.Value.ClearChecksum()
+		mvccValue.Value.InitChecksum(key.Key)
 
 		if verbose {
-			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
+			log.Infof(ctx, "Put %s -> %s", key.Key, mvccValue.Value.PrettyPrint())
 		}
 
-		// Using valueScratch here assumes that
-		// DecodeValueFromMVCCValue, ClearChecksum, and
-		// InitChecksum don't copy/reallocate the slice they
-		// were given. We expect that value.ClearChecksum and
-		// value.InitChecksum calls above have modified
-		// valueScratch.
-		if err := batcher.AddMVCCKey(ctx, key, valueScratch); err != nil {
-			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
+		if rd.setLDRSource {
+			mvccValue.MVCCValueHeader.OriginID = 1
+			mvccValue.MVCCValueHeader.OriginTimestamp = mvccValue.Value.Timestamp
+		}
+
+		buf, canRetainBuffer, err := storage.EncodeMVCCValueToBuf(mvccValue, valueScratch[:0])
+		if err != nil {
+			return summary, err
+		}
+		if canRetainBuffer {
+			valueScratch = buf
+		}
+
+		if err := batcher.AddMVCCKey(ctx, key, buf); err != nil {
+			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, mvccValue.Value.PrettyPrint())
 		}
 	}
 	// Flush out the last batch.
