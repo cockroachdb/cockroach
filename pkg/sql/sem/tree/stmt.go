@@ -44,8 +44,8 @@ const (
 	//
 	// Note: this is the type indicated back to the client; it is not a
 	// sufficient test for schema mutation for planning purposes. There
-	// are schema-modifying statements (e.g. CREATE TABLE AS) which
-	// report RowsAffected to the client, not DDL.
+	// are schema-modifying statements (e.g. DISCARD ALL) which
+	// report Ack to the client, not DDL.
 	// Use CanModifySchema() below instead.
 	DDL
 	// RowsAffected indicates that the statement returns the count of

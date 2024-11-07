@@ -34,9 +34,15 @@ type EventLogger struct {
 //
 // Typical usage is along the lines of:
 // - defer StartEventf(...).HandlePanicAndLogError(...)
-func StartEventf(ctx context.Context, format string, args ...interface{}) EventLogger {
+func StartEventf(
+	ctx context.Context, level log.Level, format string, args ...interface{},
+) EventLogger {
 	msg := redact.Safe(fmt.Sprintf(format, args...))
-	log.InfofDepth(ctx, 1, "%s", msg)
+	// Use depth=1 since we want to log as the caller of StartEventf.
+	const depth = 1
+	if log.VDepth(level, depth) {
+		log.InfofDepth(ctx, depth, "%s", msg)
+	}
 	return EventLogger{
 		msg:   msg,
 		start: timeutil.Now(),
