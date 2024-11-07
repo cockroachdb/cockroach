@@ -51,6 +51,7 @@ type SupportManager struct {
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
 	metrics               *SupportManagerMetrics
+	knobs                 *SupportManagerKnobs
 }
 
 var _ Fabric = (*SupportManager)(nil)
@@ -66,7 +67,11 @@ func NewSupportManager(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	sender MessageSender,
+	knobs *SupportManagerKnobs,
 ) *SupportManager {
+	if knobs != nil && knobs.TestEngine != nil && knobs.TestEngine.storeID == storeID {
+		engine = knobs.TestEngine
+	}
 	return &SupportManager{
 		storeID:               storeID,
 		engine:                engine,
@@ -75,6 +80,7 @@ func NewSupportManager(
 		stopper:               stopper,
 		clock:                 clock,
 		sender:                sender,
+		knobs:                 knobs,
 		receiveQueue:          newReceiveQueue(),
 		storesToAdd:           newStoresToAdd(),
 		requesterStateHandler: newRequesterStateHandler(),
