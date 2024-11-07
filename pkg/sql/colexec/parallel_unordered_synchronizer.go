@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -123,6 +124,14 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 	return s.inputs[nth].Root
 }
 
+func eagerCancellationDisabled(flowCtx *execinfra.FlowCtx) bool {
+	var sd *sessiondata.SessionData
+	if flowCtx.EvalCtx != nil { // EvalCtx can be nil in tests
+		sd = flowCtx.EvalCtx.SessionData()
+	}
+	return !flowCtx.Local || (sd != nil && sd.DisableVecUnionEagerCancellation)
+}
+
 // NewParallelUnorderedSynchronizer creates a new ParallelUnorderedSynchronizer.
 // On the first call to Next, len(inputs) goroutines are spawned to read each
 // input asynchronously (to not be limited by a slow input). These will
@@ -177,7 +186,7 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(
 			s.Ctx, s.flowCtx, fmt.Sprintf("parallel unordered sync input %d", i), s.processorID,
 		)
-		if s.flowCtx.Local {
+		if !eagerCancellationDisabled(s.flowCtx) {
 			// If the plan is local, there are no colrpc.Inboxes in this input
 			// tree, and the synchronizer can cancel the current work eagerly
 			// when transitioning into draining.
