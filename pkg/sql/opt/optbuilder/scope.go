@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1077,6 +1078,20 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 					defer wrapColTupleStarPanic(resolveErr)
 					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
 				}()
+			}
+			if sqlerrors.IsUndefinedRelationError(resolveErr) && t.TableName.Object() != "" {
+				// Attempt to resolve as columnname.fieldname in order to provide a more
+				// helpful error message.
+				_, sourceResolveErr := colinfo.ResolveColumnItem(
+					s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
+				)
+				if sourceResolveErr == nil {
+					panic(errors.WithIssueLink(errors.WithHint(resolveErr,
+						"to access a field of a composite-typed column or variable, "+
+							"surround the column/variable name in parentheses: (varName).fieldName"),
+						errors.IssueLink{IssueURL: build.MakeIssueURL(114687)},
+					))
+				}
 			}
 			panic(resolveErr)
 		}

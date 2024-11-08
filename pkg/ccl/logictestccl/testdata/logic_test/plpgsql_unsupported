@@ -1,3 +1,6 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
 statement error pq: unimplemented: RECORD type for PL/pgSQL variables is not yet supported.*
 CREATE OR REPLACE PROCEDURE foo() AS $$
   DECLARE
@@ -48,5 +51,17 @@ BEGIN
   END CASE;
 END;
 $$;
+
+# Add a helpful hint to the error when the user attempts to access an element of
+# a composite-typed variable without parentheses.
+subtest element_access_parens
+
+statement error pgcode 42P01 pq: no data source matches prefix: val in this context\nHINT: to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: \(varName\).fieldName
+CREATE FUNCTION f(val xy) RETURNS xy AS $$
+  BEGIN
+    val.x := val.x + 100;
+    RETURN val;
+  END
+$$ LANGUAGE PLpgSQL;
 
 subtest end
