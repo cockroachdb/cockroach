@@ -37,7 +37,7 @@ const (
 type Service interface {
 	// LoginCheck determines whether a login request should be allowed to
 	// proceed. It rate limits login attempts from IP addresses.
-	LoginCheck(connection ConnectionTags) (time.Time, error)
+	LoginCheck(ctx context.Context, connection ConnectionTags) (time.Time, error)
 
 	// Report an authentication attempt. The throttleTime is used to
 	// retroactively throttle the request if a racing request triggered the
@@ -46,5 +46,5 @@ type Service interface {
 	// error instead of authentication success/failure. This limits the
 	// information a malicious user gets from using racing requests to guess
 	// multiple passwords in one throttle window.
-	ReportAttempt(context context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus) error
+	ReportAttempt(ctx context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus) error
 }
