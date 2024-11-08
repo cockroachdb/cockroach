@@ -655,9 +655,10 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 					// All disjunctions fully represent the original condition
 					// plus derived predicates, so we only have to make spans on
 					// the list of disjunctions.
+					origSkip := c.skipComputedColPredDerivation
 					c.skipComputedColPredDerivation = true
+					defer func() { c.skipComputedColPredDerivation = origSkip }()
 					localTight := c.binaryMergeSpansForOr(offset, disjunctions, out)
-					c.skipComputedColPredDerivation = false
 					return localTight
 				}
 			}
