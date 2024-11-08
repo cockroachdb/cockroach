@@ -337,7 +337,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
 	var targets []spanconfig.Target
-	if f.codec.ForSystemTenant() {
+	if f.codec.ForSystemTenant() || f.tenID == roachpb.TenantOne {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
 		//
