@@ -134,6 +134,18 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaScanningRanges = metric.Metadata{
+		Name:        "logical_replication.scanning_ranges",
+		Help:        "Source side ranges undergoing an initial scan (innacurate with multiple LDR jobs)",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCatchupRanges = metric.Metadata{
+		Name:        "logical_replication.catchup_ranges",
+		Help:        "Source side ranges undergoing catch up scans (innacurate with multiple LDR jobs)",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Labeled metrics.
 	metaLabeledReplicatedTime = metric.Metadata{
@@ -152,6 +164,18 @@ var (
 		Name:        "logical_replication.events_dlqed_by_label",
 		Help:        "Row update events sent to DLQ by label",
 		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledScanningRanges = metric.Metadata{
+		Name:        "logical_replication.scanning_ranges_by_label",
+		Help:        "Source side ranges undergoing an initial scan",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledCatchupRanges = metric.Metadata{
+		Name:        "logical_replication.catchup_ranges_by_label",
+		Help:        "Source side ranges undergoing catch up scans",
+		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -182,6 +206,9 @@ type Metrics struct {
 	RetriedApplySuccesses *metric.Counter
 	RetriedApplyFailures  *metric.Counter
 
+	ScanningRanges *metric.Gauge
+	CatchupRanges  *metric.Gauge
+
 	// Internal numbers that are useful for determining why a stream is behaving
 	// a specific way.
 	CheckpointEvents *metric.Counter
@@ -193,6 +220,8 @@ type Metrics struct {
 	LabeledReplicatedTime *metric.GaugeVec
 	LabeledEventsIngested *metric.CounterVec
 	LabeledEventsDLQed    *metric.CounterVec
+	LabeledScanningRanges *metric.GaugeVec
+	LabeledCatchupRanges  *metric.GaugeVec
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -233,9 +262,14 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		KVUpdateTooOld:   metric.NewCounter(metaKVUpdateTooOld),
 		KVValueRefreshes: metric.NewCounter(metaKVValueRefreshes),
 
+		ScanningRanges: metric.NewGauge(metaScanningRanges),
+		CatchupRanges:  metric.NewGauge(metaCatchupRanges),
+
 		// Labeled export-only metrics.
 		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
 		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngetsted, []string{"label"}),
 		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
+		LabeledScanningRanges: metric.NewExportedGaugeVec(metaLabeledScanningRanges, []string{"label"}),
+		LabeledCatchupRanges:  metric.NewExportedGaugeVec(metaLabeledCatchupRanges, []string{"label"}),
 	}
 }
