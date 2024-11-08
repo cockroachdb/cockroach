@@ -77,7 +77,11 @@ export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --build-tag-override="$build_name" --platform $platform
+cat licenses/THIRD-PARTY-NOTICES.txt > /tmp/THIRD-PARTY-NOTICES.txt.tmp
+echo "Additional licenses" >> /tmp/THIRD-PARTY-NOTICES.txt.tmp 
+echo >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+cat $(ls -1 licenses/* | grep -v THIRD-PARTY-NOTICES.txt | sort ) >> /tmp/THIRD-PARTY-NOTICES.txt.tmp
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt.tmp
 
 EOF
 tc_end_block "Compile and publish artifacts"
