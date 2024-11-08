@@ -1735,8 +1735,9 @@ func partitionPair(ctx context.Context, c cluster.Cluster, t test.Test, srcNodes
 	srcNode := srcNodes.RandNode()[0]
 	srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
 
-	var dstNode int
-	srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
+	var dstNodeNormalized int
+	srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNodeNormalized)
+	dstNode := dstNodeNormalized + len(srcNodes)
 
 	t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
 		dstNode, disconnectDuration.Minutes())
