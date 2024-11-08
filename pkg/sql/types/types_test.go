@@ -107,7 +107,7 @@ func TestTypes(t *testing.T) {
 		{MakeCollatedString(MakeVarChar(20), enCollate),
 			MakeScalar(CollatedStringFamily, oid.T_varchar, 0, 20, enCollate)},
 
-		{MakeCollatedString(typeBpChar, enCollate), &T{InternalType: InternalType{
+		{MakeCollatedString(BPChar, enCollate), &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: oid.T_bpchar, Locale: &enCollate}}},
 		{MakeCollatedString(MakeChar(20), enCollate), &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: oid.T_bpchar, Width: 20, Locale: &enCollate}}},
@@ -841,7 +841,7 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: StringFamily}, String},
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR}, VarChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR, Width: 20}, MakeVarChar(20)},
-		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, typeBpChar},
+		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, BPChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR, Width: 1}, QChar},
 	}
 
@@ -1083,11 +1083,11 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{MakeVarBit(2), VarBit},
 		{MakeString(2), String},
 		{MakeVarChar(2), VarChar},
-		{MakeChar(2), typeBpChar},
+		{MakeChar(2), BPChar},
 		{QChar, typeQChar},
 		{MakeCollatedString(MakeString(2), "en"), MakeCollatedString(String, "en")},
 		{MakeCollatedString(MakeVarChar(2), "en"), MakeCollatedString(VarChar, "en")},
-		{MakeCollatedString(MakeChar(2), "en"), MakeCollatedString(typeBpChar, "en")},
+		{MakeCollatedString(MakeChar(2), "en"), MakeCollatedString(BPChar, "en")},
 		{MakeCollatedString(QChar, "en"), MakeCollatedString(typeQChar, "en")},
 		{MakeDecimal(5, 1), Decimal},
 		{MakeTime(2), Time},

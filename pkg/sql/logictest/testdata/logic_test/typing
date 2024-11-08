@@ -122,6 +122,169 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 ----
 2010-09-28 12:00:00.1 +0000 +0000
 
+# Test qualified type references.
+query IITR
+SELECT 1::pg_catalog.int4, 1::pg_catalog.int8, 'aa'::pg_catalog.text, 4.2::pg_catalog.float4
+----
+1 1 aa 4.2
+
+# Test fixed-length types.
+
+query TTT
+SELECT VARCHAR(4) 'foo', CHAR(2) 'bar', STRING(1) 'cat'
+----
+foo  ba  c
+
+# Test that we error out referencing unknown types in pg_catalog.
+query error pq: type "pg_catalog.special_int" does not exist
+SELECT 1::pg_catalog.special_int
+
+# Test that we error out trying to reference types in schemas that
+# don't have types.
+query error pq: type "crdb_internal.mytype" does not exist
+SELECT 1::crdb_internal.mytype
+
+# Untyped string literals in binary operators assume the type of the other
+# argument, if an overload exists with exactly matching parameter types. The
+# values are adjusted as necessary, e.g., trailing spaces are trimmed from
+# string literals when they assume the BPCHAR type.
+query B
+SELECT 'foo'::BPCHAR = 'foo   '
+----
+true
+
+query B
+SELECT 'foo'::BPCHAR != 'foo   '
+----
+false
+
+query B
+SELECT 'foo'::BPCHAR >= 'foo   '
+----
+true
+
+query B
+SELECT 'foo'::BPCHAR <= 'foo   '
+----
+true
+
+query B
+SELECT 'foo'::BPCHAR > 'foo   '
+----
+false
+
+query B
+SELECT 'foo'::BPCHAR < 'foo   '
+----
+false
+
+query B
+SELECT 'foo'::BPCHAR IN ('foo   ')
+----
+true
+
+query B
+SELECT 'foo'::BPCHAR IN ('foo   ', 'bar')
+----
+true
+
+# There is no LIKE overload for BPCHAR, so the string literal does not assume
+# the other argument's type.
+query B
+SELECT 'foo'::BPCHAR LIKE 'foo   '
+----
+false
+
+# There is no ~ overload for BPCHAR, so the string literal does not assume
+# that type.
+query B
+SELECT 'foo'::BPCHAR ~ 'foo   '
+----
+false
+
+statement ok
+PREPARE p AS SELECT 'foo'::BPCHAR = $1
+
+query B
+EXECUTE p('foo   ')
+----
+true
+
+statement ok
+DEALLOCATE p;
+PREPARE p AS SELECT 'foo'::BPCHAR = $1
+
+query B
+EXECUTE p('foo   ')
+----
+true
+
+query B
+SELECT 'foo'::CHAR = 'f  '
+----
+true
+
+# The LHS is typed as CHAR(1) and truncated and the RHS is typed as BPCHAR and
+# not truncated, so they do not match.
+query B
+SELECT 'foo'::CHAR = 'foo'
+----
+false
+
+query B
+SELECT 'foo'::CHAR = 'foo  '
+----
+false
+
+statement ok
+CREATE TABLE chars (
+  bp BPCHAR,
+  c CHAR(20)
+)
+
+statement ok
+INSERT INTO chars VALUES ('foo   ', 'bar    ');
+
+query TI
+SELECT bp, length(bp) FROM chars WHERE bp = 'foo   '
+----
+foo  3
+
+statement ok
+DEALLOCATE p;
+PREPARE p AS SELECT bp, length(bp) FROM chars WHERE bp = $1
+
+query TI
+EXECUTE p('foo   ')
+----
+foo  3
+
+query TI
+SELECT c, length(c) FROM chars WHERE c = 'bar   '
+----
+bar                   3
+
+statement ok
+DEALLOCATE p;
+PREPARE p AS SELECT c, length(c) FROM chars WHERE c = $1
+
+query TI
+EXECUTE p('bar   ')
+----
+bar                   3
+
+query B
+SELECT ROW('foo'::BPCHAR) = ROW('foo   ')
+----
+true
+
+query B
+SELECT bp = c FROM
+  (VALUES ('foo'::BPCHAR)) v1(bp),
+  (VALUES ('foo  ')) v2(c)
+----
+false
+
 # Regression tests for #15050
 
 statement error pq: parsing as type timestamp: could not parse "Not Timestamp"
@@ -220,28 +383,6 @@ query T
 SELECT max(NULL) FROM (VALUES (NULL), (NULL)) t0(c0)
 ----
 NULL
-
-# Test qualified type references.
-query IITR
-SELECT 1::pg_catalog.int4, 1::pg_catalog.int8, 'aa'::pg_catalog.text, 4.2::pg_catalog.float4
-----
-1 1 aa 4.2
-
-# Test fixed-length types.
-
-query TTT
-SELECT VARCHAR(4) 'foo', CHAR(2) 'bar', STRING(1) 'cat'
-----
-foo  ba  c
-
-# Test that we error out referencing unknown types in pg_catalog.
-query error pq: type "pg_catalog.special_int" does not exist
-SELECT 1::pg_catalog.special_int
-
-# Test that we error out trying to reference types in schemas that
-# don't have types.
-query error pq: type "crdb_internal.mytype" does not exist
-SELECT 1::crdb_internal.mytype
 
 # Regression test for #50978.
 query T

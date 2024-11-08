@@ -208,6 +208,7 @@ build
 SELECT array_agg(NULL)
 ----
 error (42725): ambiguous call: array_agg(unknown), candidates are:
+array_agg(bool) -> bool[]
 array_agg(bool[]) -> bool[][]
 array_agg(box2d) -> box2d[]
 array_agg(box2d[]) -> box2d[][]
@@ -255,7 +256,6 @@ array_agg(anyenum) -> anyenum[]
 array_agg(anyenum[]) -> anyenum[][]
 array_agg(tuple) -> tuple[]
 array_agg(tuple[]) -> tuple[][]
-array_agg(bool) -> bool[]
 
 # With an explicit cast, this works as expected.
 build
@@ -2747,9 +2747,9 @@ build
 SELECT corr(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: corr(int, unknown), candidates are:
+corr(int, decimal) -> float
 corr(int, int) -> float
 corr(int, float) -> float
-corr(int, decimal) -> float
 
 build
 SELECT corr('foo', v) FROM kv
@@ -2819,9 +2819,9 @@ build
 SELECT covar_pop(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: covar_pop(int, unknown), candidates are:
+covar_pop(int, decimal) -> float
 covar_pop(int, int) -> float
 covar_pop(int, float) -> float
-covar_pop(int, decimal) -> float
 
 build
 SELECT covar_pop('foo', v) FROM kv
@@ -2891,9 +2891,9 @@ build
 SELECT regr_intercept(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_intercept(int, unknown), candidates are:
+regr_intercept(int, decimal) -> float
 regr_intercept(int, int) -> float
 regr_intercept(int, float) -> float
-regr_intercept(int, decimal) -> float
 
 build
 SELECT regr_intercept('foo', v) FROM kv
@@ -2963,9 +2963,9 @@ build
 SELECT regr_r2(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_r2(int, unknown), candidates are:
+regr_r2(int, decimal) -> float
 regr_r2(int, int) -> float
 regr_r2(int, float) -> float
-regr_r2(int, decimal) -> float
 
 build
 SELECT regr_r2('foo', v) FROM kv
@@ -3035,9 +3035,9 @@ build
 SELECT regr_slope(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_slope(int, unknown), candidates are:
+regr_slope(int, decimal) -> float
 regr_slope(int, int) -> float
 regr_slope(int, float) -> float
-regr_slope(int, decimal) -> float
 
 build
 SELECT regr_slope('foo', v) FROM kv
@@ -3108,9 +3108,9 @@ build
 SELECT regr_sxx(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_sxx(int, unknown), candidates are:
+regr_sxx(int, decimal) -> float
 regr_sxx(int, int) -> float
 regr_sxx(int, float) -> float
-regr_sxx(int, decimal) -> float
 
 build
 SELECT regr_sxx('foo', v) FROM kv
@@ -3180,9 +3180,9 @@ build
 SELECT regr_sxy(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_sxy(int, unknown), candidates are:
+regr_sxy(int, decimal) -> float
 regr_sxy(int, int) -> float
 regr_sxy(int, float) -> float
-regr_sxy(int, decimal) -> float
 
 build
 SELECT regr_sxy('foo', v) FROM kv
@@ -3252,9 +3252,9 @@ build
 SELECT regr_syy(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_syy(int, unknown), candidates are:
+regr_syy(int, decimal) -> float
 regr_syy(int, int) -> float
 regr_syy(int, float) -> float
-regr_syy(int, decimal) -> float
 
 build
 SELECT regr_syy('foo', v) FROM kv
@@ -3324,9 +3324,9 @@ build
 SELECT regr_count(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_count(int, unknown), candidates are:
+regr_count(int, decimal) -> int
 regr_count(int, int) -> int
 regr_count(int, float) -> int
-regr_count(int, decimal) -> int
 
 build
 SELECT regr_count('foo', v) FROM kv
@@ -3396,9 +3396,9 @@ build
 SELECT regr_avgx(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_avgx(int, unknown), candidates are:
+regr_avgx(int, decimal) -> float
 regr_avgx(int, int) -> float
 regr_avgx(int, float) -> float
-regr_avgx(int, decimal) -> float
 
 build
 SELECT regr_avgx('foo', v) FROM kv
@@ -3468,9 +3468,9 @@ build
 SELECT regr_avgy(k, NULL) FROM kv
 ----
 error (42725): ambiguous call: regr_avgy(int, unknown), candidates are:
+regr_avgy(int, decimal) -> float
 regr_avgy(int, int) -> float
 regr_avgy(int, float) -> float
-regr_avgy(int, decimal) -> float
 
 build
 SELECT regr_avgy('foo', v) FROM kv

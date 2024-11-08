@@ -771,9 +771,9 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			// Simulate PostgreSQL's ambiguity type resolving check that prefers
 			// strings over JSON.
-			PreferredOverload: true,
-			Info:              infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
-			Volatility:        volatility.Immutable,
+			OverloadPreference: tree.OverloadPreferencePreferred,
+			Info:               infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
+			Volatility:         volatility.Immutable,
 		},
 		jsonOverload1(
 			func(_ context.Context, _ *eval.Context, s json.JSON) (tree.Datum, error) {
