@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,14 +134,14 @@ func GetDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
 	var result install.RunResultDetails
-	for {
-		var err error
-		// `du` can warn if files get removed out from under it (which
-		// happens during RocksDB compactions, for example). Discard its
-		// stderr to avoid breaking Atoi later.
-		// TODO(bdarnell): Refactor this stack to not combine stdout and
-		// stderr so we don't need to do this (and the Warning check
-		// below).
+	var err error
+	// `du` can warn if files get removed out from under it (which
+	// happens during RocksDB compactions, for example). Discard its
+	// stderr to avoid breaking Atoi later.
+	// TODO(bdarnell): Refactor this stack to not combine stdout and
+	// stderr so we don't need to do this (and the Warning check
+	// below).
+	for r := retry.StartWithCtx(ctx, *install.DefaultRetryOpt); r.Next(); {
 		result, err = c.RunWithDetailsSingleNode(
 			ctx,
 			logger,
@@ -148,19 +149,8 @@ func GetDiskUsageInBytes(
 			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
 		)
 		if err != nil {
-			if ctx.Err() != nil {
-				return 0, ctx.Err()
-			}
-			// If `du` fails, retry.
-			// TODO(bdarnell): is this worth doing? It was originally added
-			// because of the "files removed out from under it" problem, but
-			// that doesn't result in a command failure, just a stderr
-			// message.
-			logger.Printf("retrying disk usage computation after spurious error: %s", err)
-			continue
+			return 0, err
 		}
-
-		break
 	}
 
 	// We need this check because sometimes the first line of the roachprod output is a warning
