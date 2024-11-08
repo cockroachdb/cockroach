@@ -122,7 +122,7 @@ func (b *Builder) buildWhenForTrigger(
 	// Check that the expression is of type bool. Disallow subqueries inside the
 	// WHEN clause.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("WHEN", tree.RejectSubqueries)
+	b.semaCtx.Properties.Require(exprKindWhen.String(), tree.RejectSubqueries)
 	typedWhen := whenScope.resolveAndRequireType(ct.When, types.Bool)
 
 	// Check for invalid NEW or OLD variable references. Also resolve

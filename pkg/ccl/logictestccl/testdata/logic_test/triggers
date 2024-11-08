@@ -583,7 +583,7 @@ statement error pgcode 42804 pq: argument of WHEN must be type bool, not type in
 CREATE TRIGGER foo AFTER INSERT ON xy WHEN (1) EXECUTE FUNCTION f();
 
 # The WHEN clause cannot reference table columns.
-statement error pgcode 42703 pq: column "x" does not exist
+statement error pgcode 42703 pq: column "x" does not exist\nHINT: column references in a trigger WHEN clause must be prefixed with NEW or OLD
 CREATE TRIGGER foo AFTER INSERT ON xy WHEN (x = 1) EXECUTE FUNCTION f();
 
 # The WHEN clause cannot contain a subquery.
