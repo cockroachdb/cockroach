@@ -1454,6 +1454,8 @@ func init() {
 	pebbleTool := tool.New(
 		tool.Mergers(storage.MVCCMerger),
 		tool.DefaultComparer(storage.EngineComparer),
+		tool.KeySchema(storage.DefaultKeySchema),
+		tool.KeySchemas(storage.KeySchemas...),
 		tool.FS(pebbleToolFS),
 		tool.OpenErrEnhancer(func(err error) error {
 			if pebble.IsCorruptionError(err) {
