@@ -1067,6 +1067,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
 			// Attempt to resolve as a TupleStar.
 			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				if s.context == exprKindWhen {
+					panic(errors.WithHint(resolveErr,
+						"column references in a trigger WHEN clause must be prefixed with NEW or OLD"))
+				}
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
 				return func() (bool, tree.Expr) {
