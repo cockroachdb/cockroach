@@ -23,7 +23,7 @@ func encodeUntaggedTuple(t *tree.DTuple, appendTo []byte, scratch []byte) ([]byt
 
 	var err error
 	for _, dd := range t.D {
-		appendTo, err = Encode(appendTo, NoColumnID, dd, scratch)
+		appendTo, err = EncodeWithScratch(appendTo, NoColumnID, dd, scratch)
 		if err != nil {
 			return nil, err
 		}

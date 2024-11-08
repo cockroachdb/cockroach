@@ -29,7 +29,15 @@ import (
 // datum types (JSON, arrays, tuples).
 //
 // See also: docs/tech-notes/encoding.md, keyside.Encode().
-func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte) ([]byte, error) {
+func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum) ([]byte, error) {
+	return EncodeWithScratch(appendTo, colID, val, nil /* scratch */)
+}
+
+// EncodeWithScratch is similar to Encode, but requires a scratch buffer that is
+// used as a temporary buffer for certain datum types (JSON, arrays, tuples).
+func EncodeWithScratch(
+	appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte,
+) ([]byte, error) {
 	if val == tree.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}

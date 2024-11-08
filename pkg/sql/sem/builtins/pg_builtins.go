@@ -2043,7 +2043,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var totalSize int
 				for _, arg := range args {
-					encodeTableValue, err := valueside.Encode(nil, valueside.NoColumnID, arg, nil)
+					encodeTableValue, err := valueside.Encode(nil, valueside.NoColumnID, arg)
 					if err != nil {
 						return tree.DNull, err
 					}
