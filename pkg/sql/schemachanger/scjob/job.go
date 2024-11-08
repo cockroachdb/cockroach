@@ -62,6 +62,12 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 ) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
+	// Permanent error has been done, there is no rollback
+	// from here.
+	if jobs.IsPermanentJobError(err) {
+		log.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
+		return nil
+	}
 	n.rollbackCause = err
 
 	// Clean up any protected timestamps as a last resort, in case the job
@@ -148,7 +154,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		// permanent job error, so that non-cancelable jobs don't get retried. If a
 		// descriptor has gone missing, it isn't likely to come back.
 		if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
-			err = jobs.MarkAsPermanentJobError(err)
+			return jobs.MarkAsPermanentJobError(err)
 		}
 		return err
 	}
