@@ -387,6 +387,9 @@ func (ks *cockroachKeySeeker) IsLowerBound(k []byte, syntheticSuffix []byte) boo
 func (ks *cockroachKeySeeker) SeekGE(
 	key []byte, boundRow int, searchDir int8,
 ) (row int, equalPrefix bool) {
+	if buildutil.CrdbTestBuild && len(key) == 0 {
+		panic(errors.AssertionFailedf("seeking to empty key"))
+	}
 	// TODO(jackson): Inline EngineKeySplit.
 	si := EngineKeySplit(key)
 	row, eq := ks.roachKeys.Search(key[:si-1])
