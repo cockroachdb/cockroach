@@ -2297,6 +2297,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	if err != nil {
 		return err // err could be io.EOF
 	}
+	pStmt, ok := cmd.(PrepareStmt)
+	if ok {
+		log.Infof(ctx, "prepared statement: %v", pStmt)
+	}
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",

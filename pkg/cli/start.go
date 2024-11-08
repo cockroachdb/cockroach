@@ -81,6 +81,7 @@ import (
 // [...]
 //
 // See #64329 for details.
+var cockroachInjectDelay = envutil.EnvOrDefaultInt64("COCKROACH_INJECT_DELAY", 0)
 var debugTSImportFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_FILE", "")
 var debugTSImportMappingFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE", "")
 
@@ -314,6 +315,10 @@ type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *sto
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
+	if cockroachInjectDelay > 0 {
+		time.Sleep(time.Second * time.Duration(cockroachInjectDelay))
+	}
+
 	joinFlag := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name)
 	if joinFlag.Changed {
 		return errCannotUseJoin
