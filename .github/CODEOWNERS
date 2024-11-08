@@ -36,6 +36,9 @@
 /docs/RFCS/                  @cockroachdb/rfc-prs
 /docs/generated/redact_safe.md @cockroachdb/security
 
+/LICENSE                     @cockroachdb/release-eng-prs
+/licenses                    @cockroachdb/release-eng-prs
+
 /Makefile                    @cockroachdb/dev-inf
 
 #!/pkg                         @cockroachdb/unowned
