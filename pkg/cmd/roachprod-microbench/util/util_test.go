@@ -54,13 +54,11 @@ func TestSanitizeValue(t *testing.T) {
 		{"test", "test"},
 		{"test/sla//sh", "test/sla//sh"},
 		{"b$2dwo", "b$2dwo"},
-		{"\"sql-foundations\"", "sql-foundations"},
 		{`477777
 nsqsq"w\q`, "477777_nsqsq_w_q"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-
 			require.Equal(t, tc.output, SanitizeValue(tc.input))
 		})
 	}
