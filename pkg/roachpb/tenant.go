@@ -131,7 +131,8 @@ func (t TenantID) IsSystem() bool {
 // IsSystemTenantID returns whether the provided ID corresponds to that of the
 // system tenant.
 func IsSystemTenantID(id uint64) bool {
-	return id == TenantTwo.ToUint64() || id == TenantOne.ToUint64()
+	return (!EnableExperimentalUA && id == TenantOne.ToUint64()) ||
+		(EnableExperimentalUA && id == TenantTwo.ToUint64())
 }
 
 type tenantKey struct{}
