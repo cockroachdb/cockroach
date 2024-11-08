@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 const putValue = "thekvproberwrotethis"
@@ -531,7 +532,7 @@ func (p *Prober) quarantineProbe(ctx context.Context, pl planner) {
 // log messages indicating leaseholder information, extracts leaseholder
 // node ID, and returns this information. Returns an empty string if
 // leaseholder information is not found.
-func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
+func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) redact.RedactableString {
 	// The leaseholder is determined by the kvclient in dist_sender.go,
 	// which decides the node to handle the request and sends it. The log
 	// entry with "node received request" shows the leaseholder acknowledging
@@ -546,10 +547,10 @@ func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
 	if isPresent {
 		// Regular expression to extract leaseholder node ID.
 		leaseRegex := regexp.MustCompile(`\[n(\d+)\]`)
-		leaseholder := leaseRegex.FindStringSubmatch(informationLog)
+		leaseholder := leaseRegex.FindStringSubmatch(string(informationLog))
 		// Return leaseholder node ID if found.
 		if len(leaseholder) == 2 {
-			return leaseholder[1]
+			return redact.RedactableString(leaseholder[1])
 		}
 	}
 	return ""
@@ -560,13 +561,15 @@ func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
 //
 // This method strips the redaction markers from all the log messages, which is
 // pretty inefficient.
-func (p *Prober) findLastLogMessage(r tracingpb.Recording, pattern string) (string, bool) {
+func (p *Prober) findLastLogMessage(
+	r tracingpb.Recording, pattern string,
+) (redact.RedactableString, bool) {
 	re := regexp.MustCompile(pattern)
 	for i := len(r) - 1; i >= 0; i-- {
 		sp := r[i]
 		for j := len(sp.Logs) - 1; j >= 0; j-- {
-			msg := sp.Logs[j].Msg().StripMarkers()
-			if re.MatchString(msg) {
+			msg := sp.Logs[j].Msg()
+			if re.MatchString(string(msg)) {
 				return msg, true
 			}
 		}
