@@ -8,15 +8,24 @@ package cdctest
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,6 +102,63 @@ func TestOrderValidator(t *testing.T) {
 				`: saw new row timestamp 2.0000000000 after 3.0000000000 was resolved`,
 		)
 	})
+}
+
+func TestBeforeAfterValidatorForGeometry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	tsRaw := make([]string, 1)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY,  geom geometry(point))`)
+	sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'point(1 2)') RETURNING cluster_logical_timestamp()`).Scan(&tsRaw[0])
+
+	ts := make([]hlc.Timestamp, len(tsRaw))
+	for i := range tsRaw {
+		var err error
+		ts[i], err = hlc.ParseHLC(tsRaw[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+	require.NoError(t, err)
+	assertValidatorFailures(t, v)
+	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0])
+}
+
+func TestConvertFieldFromJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 134904)
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	testutils.RunValues(t, "types=",
+		[]*types.T{types.Geometry, types.Int, types.Geography, types.JSONBArray}, func(t *testing.T, typ *types.T) {
+			for i := 0; i < 10; i++ {
+				datum := randgen.RandDatum(rng, typ, true)
+				jsonStr, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+				require.NoError(t, err)
+				actualStr, err := convertFieldFromJSON(jsonStr)
+				require.NoError(t, err)
+				expectedStr, err := workloadrand.DatumToGoSQL(datum)
+				require.NoError(t, err)
+				require.Equal(t, fmt.Sprint(expectedStr), fmt.Sprint(actualStr))
+				if randgen.IsAllowedForArray(typ) {
+					typ = types.MakeArray(typ)
+					datum := randgen.RandDatum(rng, typ, true)
+					jsonStr, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+					require.NoError(t, err)
+					actualStr, err := convertFieldFromJSON(jsonStr)
+					require.NoError(t, err)
+					expectedStr, err := workloadrand.DatumToGoSQL(datum)
+					require.NoError(t, err)
+					require.Equal(t, fmt.Sprint(expectedStr), fmt.Sprint(actualStr))
+					require.NoError(t, err)
+				}
+			}
+		})
 }
 
 func TestBeforeAfterValidator(t *testing.T) {
