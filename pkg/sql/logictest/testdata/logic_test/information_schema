@@ -1161,7 +1161,6 @@ table_constraints
 table_columns
 
 # Check that the metadata is reported properly.
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
@@ -1605,7 +1604,6 @@ SET DATABASE = test
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTTTTTT colnames
 SELECT *
@@ -1972,7 +1970,6 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTT colnames
 SELECT *
@@ -2256,7 +2253,6 @@ system              public             check_sampling_probability               
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
@@ -2399,7 +2395,6 @@ system         public        users                            username          
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
@@ -2542,7 +2537,6 @@ system         public        users                            username          
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTT colnames
 SELECT *
@@ -2916,7 +2910,6 @@ select data_type, column_default from information_schema.columns where table_nam
 data_type  column_default
 smallint   0
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
@@ -3934,7 +3927,6 @@ root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 # root can see everything
 query TTTTTTTT colnames,rowsort
@@ -4660,7 +4652,6 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                        SELECT          YES           YES
 NULL     root     system         public              zones                                        UPDATE          YES           NO
 
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants

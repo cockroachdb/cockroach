@@ -87,7 +87,6 @@ go_test(
         "permanent_mvcc_statistics_migration_test.go",
         "permanent_sql_stats_ttl_test.go",
         "permanent_system_activity_update_job_test.go",
-        "redacted_stmt_diagnostics_requests_test.go",
         "schema_changes_external_test.go",
         "schema_changes_helpers_test.go",
         "upgrades_test.go",

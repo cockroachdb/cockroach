@@ -2435,6 +2435,13 @@ func TestRepeatableReadLogic_update_from(
 	runLogicTest(t, "update_from")
 }
 
+func TestRepeatableReadLogic_upgrade_skip_version(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upgrade_skip_version")
+}
+
 func TestRepeatableReadLogic_upsert(
 	t *testing.T,
 ) {
