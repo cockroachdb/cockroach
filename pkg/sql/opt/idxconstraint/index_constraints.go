@@ -628,7 +628,8 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	// it to derive predicates/constraints on computed columns.
 	if !c.skipComputedColPredDerivation &&
 		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
-		c.computedColSet.Intersects(c.keyCols) {
+		c.computedColSet.Intersects(c.keyCols) &&
+		c.computedColInSuffix(offset) {
 		switch t := e.(type) {
 		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
 		// Skip over scalar expressions that are not conditions, require special
@@ -1320,4 +1321,15 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) *types.T {
 	return c.md.ColumnMeta(c.columns[offset].ID()).Type
+}
+
+// computedColInSuffix returns true if one of the key columns at or after offset
+// is a computed column.
+func (c *indexConstraintCtx) computedColInSuffix(offset int) bool {
+	for _, col := range c.columns[offset:] {
+		if c.computedColSet.Contains(col.ID()) {
+			return true
+		}
+	}
+	return false
 }
