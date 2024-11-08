@@ -411,7 +411,7 @@ func runOneRoundQueryComparison(
 			// state of the database.
 			if i < numInitialMutations || i%25 == 0 {
 				mConn, mConnInfo := h.chooseConn()
-				runMutationStatement(mConn, mConnInfo, mutatingSmither, logStmt)
+				runMutationStatement(t, mConn, mConnInfo, mutatingSmither, logStmt)
 				continue
 			}
 

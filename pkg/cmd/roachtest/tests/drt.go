@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -233,8 +234,8 @@ func (ep *tpccChaosEventProcessor) err() error {
 	return err
 }
 
-func (ep *tpccChaosEventProcessor) listen(ctx context.Context, l *logger.Logger) {
-	go func() {
+func (ep *tpccChaosEventProcessor) listen(ctx context.Context, t task.Tasker, l *logger.Logger) {
+	t.Go(func(context.Context, *logger.Logger) error {
 		var prevTime time.Time
 		started := false
 		for ev := range ep.ch {
@@ -294,5 +295,6 @@ func (ep *tpccChaosEventProcessor) listen(ctx context.Context, l *logger.Logger)
 			}
 			prevTime = ev.Time
 		}
-	}()
+		return nil
+	})
 }

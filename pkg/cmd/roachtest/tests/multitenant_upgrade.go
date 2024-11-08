@@ -164,10 +164,11 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		}
 
 		returnCh := make(chan struct{})
-		go func() {
+		h.Go(func(context.Context, *logger.Logger) error {
 			wg.Wait()
 			close(returnCh)
-		}()
+			return nil
+		})
 
 		return returnCh
 	}
@@ -280,16 +281,18 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 			var wg sync.WaitGroup
 			wg.Add(2) // tpcc worklaod and upgrade finalization
 
-			go func() {
+			h.Go(func(_ context.Context, l *logger.Logger) error {
 				defer wg.Done()
 				<-tpccFinished
 				l.Printf("tpcc workload finished running on tenants")
-			}()
-			go func() {
+				return nil
+			})
+			h.Go(func(_ context.Context, l *logger.Logger) error {
 				defer wg.Done()
 				<-upgradeFinished
 				l.Printf("tenant upgrades finished")
-			}()
+				return nil
+			})
 
 			wg.Wait()
 			return nil
