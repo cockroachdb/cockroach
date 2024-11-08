@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 const putValue = "thekvproberwrotethis"
@@ -428,7 +429,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	if tracingEnabled.Get(&p.settings.SV) {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
-		log.Health.Infof(ctx, "kv.Get(%s), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
+		log.Health.Infof(ctx, "kv.Get(%s), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, redact.Safe(leaseholder), d)
 	} else {
 		log.Health.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.Key, step.RangeID, d)
 	}
@@ -509,7 +510,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	if tracingEnabled.Get(&p.settings.SV) {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
-		log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
+		log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, redact.Safe(leaseholder), d)
 	} else {
 		log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v returned success in %v", step.Key, step.RangeID, d)
 	}
