@@ -1231,7 +1231,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 }
 
 // saveDiskUsageToLogsDir collects a summary of the disk usage to logs/diskusage.txt on each node.
-func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
+func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster, l *logger.Logger) error {
 	// TODO(jackson): This is temporary for debugging out-of-disk-space
 	// failures like #44845.
 	if c.Spec().NodeCount == 0 || c.IsLocal() {
@@ -1242,8 +1242,8 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 
 	// Don't hang forever.
 	return timeutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
-		return c.RunE(ctx, option.WithNodes(c.All()),
-			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
+		_, err := roachtestutil.GetDiskUsage(ctx, c, l, c.All(), "-c --exclude lost+found >> logs/diskusage.txt")
+		return err
 	})
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -128,40 +129,41 @@ func NewDiskUsageTracker(
 	return &DiskUsageTracker{c: c, l: diskLogger}, nil
 }
 
+func GetDiskUsage(
+	ctx context.Context,
+	c cluster.Cluster,
+	logger *logger.Logger,
+	nodes option.NodeListOption,
+	args ...interface{},
+) ([]install.RunResultDetails, error) {
+	var result []install.RunResultDetails
+	var err error
+	// Retry a few times since `du` can warn if files get removed out from under
+	// it (which happens during pebble compactions, for example).
+	for r := retry.StartWithCtx(ctx, *install.DefaultRetryOpt); r.Next(); {
+		result, err = c.RunWithDetails(
+			ctx,
+			logger,
+			option.WithNodes(nodes),
+			fmt.Sprintf("du {store-dir} %s", args...),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, err
+}
+
 // GetDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func GetDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
-	var result install.RunResultDetails
-	for {
-		var err error
-		// `du` can warn if files get removed out from under it (which
-		// happens during RocksDB compactions, for example). Discard its
-		// stderr to avoid breaking Atoi later.
-		// TODO(bdarnell): Refactor this stack to not combine stdout and
-		// stderr so we don't need to do this (and the Warning check
-		// below).
-		result, err = c.RunWithDetailsSingleNode(
-			ctx,
-			logger,
-			option.WithNodes(c.Node(nodeIdx)),
-			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
-		)
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0, ctx.Err()
-			}
-			// If `du` fails, retry.
-			// TODO(bdarnell): is this worth doing? It was originally added
-			// because of the "files removed out from under it" problem, but
-			// that doesn't result in a command failure, just a stderr
-			// message.
-			logger.Printf("retrying disk usage computation after spurious error: %s", err)
-			continue
-		}
 
-		break
+	resultSlice, err := GetDiskUsage(ctx, c, logger, c.Node(nodeIdx), "-sk 2>/dev/null | grep -oE '^[0-9]+'")
+	if err != nil {
+		return 0, err
 	}
+	result := resultSlice[0]
 
 	// We need this check because sometimes the first line of the roachprod output is a warning
 	// about adding an ip to a list of known hosts.
