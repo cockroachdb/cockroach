@@ -1,5 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
 filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
     visibility = ["//pkg/sql/vecindex:__subpackages__"],
+)
+
+go_library(
+    name = "vecindex",
+    srcs = ["kmeans.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "vecindex_test",
+    srcs = ["kmeans_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":vecindex"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/testutils",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
+        "@org_gonum_v1_gonum//stat",
+    ],
 )
