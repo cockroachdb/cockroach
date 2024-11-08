@@ -626,9 +626,10 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Attempt to build a single tight constraint from a scalar expression and use
 	// it to derive predicates/constraints on computed columns.
-	if c.computedColSet.Intersects(c.keyCols) &&
+	if !c.skipComputedColPredDerivation &&
 		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
-		!c.skipComputedColPredDerivation {
+		c.computedColSet.Intersects(c.keyCols) &&
+		c.computedColInSuffix(offset) {
 		switch t := e.(type) {
 		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
 		// Skip over scalar expressions that are not conditions, require special
@@ -655,9 +656,10 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 					// All disjunctions fully represent the original condition
 					// plus derived predicates, so we only have to make spans on
 					// the list of disjunctions.
+					origSkip := c.skipComputedColPredDerivation
 					c.skipComputedColPredDerivation = true
+					defer func() { c.skipComputedColPredDerivation = origSkip }()
 					localTight := c.binaryMergeSpansForOr(offset, disjunctions, out)
-					c.skipComputedColPredDerivation = false
 					return localTight
 				}
 			}
@@ -1319,4 +1321,15 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) *types.T {
 	return c.md.ColumnMeta(c.columns[offset].ID()).Type
+}
+
+// computedColInSuffix returns true if one of the key columns at or after offset
+// is a computed column.
+func (c *indexConstraintCtx) computedColInSuffix(offset int) bool {
+	for _, col := range c.columns[offset:] {
+		if c.computedColSet.Contains(col.ID()) {
+			return true
+		}
+	}
+	return false
 }
