@@ -1274,6 +1274,9 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
+	// Descriptor IDs for the two tables under test
+	var test1ID int32
+	var test2ID int32
 	var minimumDescID descpb.ID
 	var params base.TestClusterArgs
 	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
@@ -1310,7 +1313,15 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 				if id < minimumDescID || typ == lease.AcquireBackground {
 					return
 				}
+				if int32(id) != atomic.LoadInt32(&test1ID) && int32(id) != atomic.LoadInt32(&test2ID) {
+					return
+				}
 				atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				// The test sets the IDs of the two tables only when we shouldn't  block. So if we
+				// see a block event dump a stack to aid in debugging.
+				log.Infof(ctx,
+					"Lease acquisition of ID %d resulted in a block event. Stack trace to follow:\n%s",
+					id, debug.Stack())
 			},
 		},
 	}
@@ -1363,8 +1374,10 @@ CREATE TABLE t.test2 ();
 	}
 	eo2 := ts2.Expiration(ctx)
 
-	// Reset testAcquisitionBlockCount as the first acqusition will always block.
-	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+	// Save off the IDs of the two tables so that we increment testAcquisitionBlockCount
+	// if we ever block waiting for those leases to expire.
+	atomic.StoreInt32(&test1ID, int32(test1Desc.GetID()))
+	atomic.StoreInt32(&test2ID, int32(test2Desc.GetID()))
 
 	testutils.SucceedsSoon(t, func() error {
 		// Acquire another lease by name on test1. At first this will be the
