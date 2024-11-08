@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
@@ -89,7 +91,8 @@ func registerExportParquet(r registry.Registry) {
 			wg := sync.WaitGroup{}
 			for i := 0; i < numConcurrentExports; i++ {
 				wg.Add(1)
-				go func(i int, target string) {
+				target := allTpccTargets[i%len(allTpccTargets)]
+				t.Go(func(context.Context, *logger.Logger) error {
 					t.Status(fmt.Sprintf("worker %d/%d starting export of target %s", i+1, numConcurrentExports, target))
 					fileNum := 0
 					db := c.Conn(ctx, t.L(), 1)
@@ -103,7 +106,8 @@ func registerExportParquet(r registry.Registry) {
 					}
 					t.Status(fmt.Sprintf("worker %d/%d terminated", i+1, numConcurrentExports))
 					wg.Done()
-				}(i, allTpccTargets[i%len(allTpccTargets)])
+					return nil
+				})
 			}
 			wg.Wait()
 
@@ -150,9 +154,10 @@ func registerExportParquet(r registry.Registry) {
 			wg := sync.WaitGroup{}
 			for i := 0; i < numWorkers; i++ {
 				wg.Add(1)
-				go func(i int, target string) {
+				target := allTpccTargets[i]
+				t.Go(func(taskCtx context.Context, l *logger.Logger) error {
 					t.Status(fmt.Sprintf("worker %d/%d starting export of target %s", i+1, numWorkers, target))
-					db := c.Conn(ctx, t.L(), 1)
+					db := c.Conn(taskCtx, l, 1)
 					_, err := db.Exec(
 						fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://1/outputfile%d' FROM SELECT * FROM %s", i, target))
 					if err != nil {
@@ -160,7 +165,8 @@ func registerExportParquet(r registry.Registry) {
 					}
 					t.Status(fmt.Sprintf("worker %d/%d terminated", i+1, numWorkers))
 					wg.Done()
-				}(i, allTpccTargets[i])
+					return nil
+				}, task.Name(fmt.Sprintf("parquet-export-worker-%d", i+1)))
 			}
 			wg.Wait()
 		},

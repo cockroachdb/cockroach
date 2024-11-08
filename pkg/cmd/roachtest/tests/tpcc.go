@@ -263,7 +263,7 @@ func runTPCC(
 		if err != nil {
 			t.Fatal(err)
 		}
-		cep.listen(ctx, l)
+		cep.listen(ctx, t, l)
 		ep = &cep
 	}
 
