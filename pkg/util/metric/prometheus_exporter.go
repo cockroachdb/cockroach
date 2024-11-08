@@ -8,6 +8,7 @@ package metric
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -125,6 +126,9 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 func (pm *PrometheusExporter) printAsText(w io.Writer, contentType expfmt.Format) error {
 	enc := expfmt.NewEncoder(w, contentType)
 	for _, family := range pm.families {
+		if left, _, found := strings.Cut(*family.Help, "\n"); found {
+			family.Help = &left
+		}
 		// Encode expects that metrics exist in family. Filter them out since
 		// there's a possibility where the metric has been removed from the
 		// registry, but the exporter still keeps track of it.

@@ -20,7 +20,10 @@ func TestPrometheusExporter(t *testing.T) {
 	// r2 has a registry-level label, r1 does not.
 	r2.AddLabel("registry", "two")
 
-	r1.AddMetric(NewGauge(Metadata{Name: "one.gauge"}))
+	r1.AddMetric(NewGauge(Metadata{
+		Name: "one.gauge",
+		Help: "this is a multiline\nhelp message",
+	}))
 	g1Dup := NewGauge(Metadata{Name: "one.gauge_dup"})
 	r1.AddMetric(g1Dup)
 	r2.AddMetric(NewGauge(Metadata{Name: "two.gauge"}))
@@ -151,6 +154,8 @@ func TestPrometheusExporter(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 	require.Regexp(t, "one_gauge 0", output)
+	require.Regexp(t, "this is a multiline", output)
+	require.NotRegexp(t, "help message", output)
 	require.Regexp(t, "one_gauge_dup 0", output)
 	require.Regexp(t, "shared_counter{counter=\"one\"}", output)
 	require.Len(t, strings.Split(output, "\n"), 10)
