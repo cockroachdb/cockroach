@@ -2224,35 +2224,36 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		t *testing.T,
 		tc *testcluster.TestCluster,
 		db *gosql.DB,
-	) (numVoters, numNonVoters int, err error) {
+	) (desc *roachpb.RangeDescriptor, numVoters, numNonVoters int, err error) {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
-			return 0, 0, err
+			return nil, 0, 0, err
 		}
 
 		var rangeID roachpb.RangeID
 		if err := db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID); err != nil {
-			return 0, 0, err
+			return nil, 0, 0, err
 		}
 		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
+			t.Helper()
 			if replica, err := s.GetReplica(rangeID); err == nil && replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp()) {
-				desc := replica.Desc()
+				desc = replica.Desc()
 				numVoters = len(desc.Replicas().VoterDescriptors())
 				numNonVoters = len(desc.Replicas().NonVoterDescriptors())
 			}
 			return nil
 		})
-		return numVoters, numNonVoters, nil
+		return desc, numVoters, numNonVoters, nil
 	}
 
 	// Ensure we are meeting our ZONE survival configuration.
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		desc, numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
 		require.NoError(t, err)
 		if numVoters != 3 {
-			return errors.Newf("expected 3 voters; got %d", numVoters)
+			return errors.Newf("expected 3 voters; got %v", desc)
 		}
 		if numNonVoters != 2 {
-			return errors.Newf("expected 2 non-voters; got %v", numNonVoters)
+			return errors.Newf("expected 2 non-voters; got %v", desc)
 		}
 		return nil
 	})
@@ -2264,13 +2265,13 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 
 	// Ensure we are meeting our REGION survival configuration.
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		desc, numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
 		require.NoError(t, err)
 		if numVoters != 5 {
-			return errors.Newf("expected 5 voters; got %d", numVoters)
+			return errors.Newf("expected 5 voters; got %v", desc)
 		}
 		if numNonVoters != 0 {
-			return errors.Newf("expected 0 non-voters; got %v", numNonVoters)
+			return errors.Newf("expected 0 non-voters; got %v", desc)
 		}
 		return nil
 	})
