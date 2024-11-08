@@ -1791,9 +1791,8 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 // EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
 // use in testing window functions in RANGE mode with offsets.
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
-	var encoded, scratch []byte
-	encoded, err := valueside.Encode(
-		encoded, valueside.NoColumnID, offset, scratch)
+	var encoded []byte
+	encoded, err := valueside.Encode(encoded, valueside.NoColumnID, offset)
 	require.NoError(t, err)
 	return encoded
 }

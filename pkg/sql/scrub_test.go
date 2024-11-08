@@ -487,7 +487,7 @@ INSERT INTO t.test VALUES (10, 2);
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
 	// Encode the column value.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1])
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

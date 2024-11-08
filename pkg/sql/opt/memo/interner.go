@@ -1388,7 +1388,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 		}
 	}
 
-	b, err = valueside.Encode(b, valueside.NoColumnID, val, nil /* scratch */)
+	b, err = valueside.Encode(b, valueside.NoColumnID, val)
 	if err != nil {
 		panic(err)
 	}
