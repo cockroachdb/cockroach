@@ -144,15 +144,15 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	)
 	// Return permanent errors back, otherwise we will try to retry
 	if sql.IsPermanentSchemaChangeError(err) {
+		return err
+	}
+	if err != nil {
 		// If a descriptor can't be found, we additionally mark the error as a
 		// permanent job error, so that non-cancelable jobs don't get retried. If a
 		// descriptor has gone missing, it isn't likely to come back.
 		if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
 			err = jobs.MarkAsPermanentJobError(err)
 		}
-		return err
-	}
-	if err != nil {
 		return jobs.MarkAsRetryJobError(err)
 	}
 	return nil
