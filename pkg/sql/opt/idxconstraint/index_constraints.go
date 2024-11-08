@@ -626,9 +626,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Attempt to build a single tight constraint from a scalar expression and use
 	// it to derive predicates/constraints on computed columns.
-	if c.computedColSet.Intersects(c.keyCols) &&
+	if !c.skipComputedColPredDerivation &&
 		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
-		!c.skipComputedColPredDerivation {
+		c.computedColSet.Intersects(c.keyCols) {
 		switch t := e.(type) {
 		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
 		// Skip over scalar expressions that are not conditions, require special
