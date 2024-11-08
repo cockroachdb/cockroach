@@ -118,6 +118,21 @@ func (p *partitionedStreamClient) Heartbeat(
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// The heartbeat function is called in a loop with the same connection. If
+	// that connection closes, attempt to re-establish it to prevent the hearbeat
+	// loop from failing repeatedly.
+	if p.mu.srcConn.IsClosed() {
+		conn, err := pgx.ConnectConfig(ctx, p.pgxConfig)
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, errors.Wrapf(err, "error reconnecting to replication stream %d", streamID)
+		}
+		p.mu.srcConn = conn
+		if err := p.mu.srcConn.Ping(ctx); err != nil {
+			return streampb.StreamReplicationStatus{}, errors.Wrapf(err, "error pinging on reconnecting replication stream %d", streamID)
+		}
+	}
+
 	row := p.mu.srcConn.QueryRow(ctx,
 		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
 	var rawStatus []byte
