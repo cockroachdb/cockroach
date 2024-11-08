@@ -102,8 +102,8 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// columnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
-var columnarBlocksEnabled = settings.RegisterBoolSetting(
+// ColumnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
+var ColumnarBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"storage.columnar_blocks.enabled",
 	"set to true to enable columnar-blocks to store KVs in a columnar format",
@@ -1246,7 +1246,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
-		return columnarBlocksEnabled.Get(&cfg.settings.SV)
+		return ColumnarBlocksEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
