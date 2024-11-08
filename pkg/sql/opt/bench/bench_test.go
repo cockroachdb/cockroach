@@ -208,6 +208,30 @@ var schemas = []string{
 	)
 	`,
 	`
+	CREATE TABLE comp
+	(
+		a INT,
+		b INT,
+		c INT,
+		d INT,
+		e INT,
+		f INT,
+		a1 INT AS (a+1) STORED,
+		b1 INT AS (b+1) STORED,
+		c1 INT AS (c+1) STORED,
+		d1 INT AS (d+1) VIRTUAL,
+		e1 INT AS (e+1) VIRTUAL,
+		f1 INT AS (f+1) VIRTUAL,
+		shard INT AS (mod(fnv32(crdb_internal.datums_to_bytes(a, b, c, d, e)), 8)) VIRTUAL,
+		CHECK (shard IN (0, 1, 2, 3, 4, 5, 6, 7)),
+		PRIMARY KEY (shard, a, b, c, d, e),
+		INDEX (a, b, a1),
+		INDEX (c1, a, c),
+		INDEX (f),
+		INDEX (d1, d, e)
+	)
+	`,
+	`
 	CREATE TABLE json_table
 	(
 		k INT PRIMARY KEY,
@@ -463,6 +487,16 @@ var queries = [...]benchQuery{
 			GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 		`,
 		args: []interface{}{1, 2},
+	},
+	{
+		name:  "comp-pk",
+		query: "SELECT * FROM comp WHERE a = $1 AND b = $2 AND c = $3 AND d = $4 AND e = $5",
+		args:  []interface{}{1, 2, 3, 4, 5},
+	},
+	{
+		name:  "comp-insert-on-conflict",
+		query: "INSERT INTO comp VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (shard, a, b, c, d, e) DO UPDATE SET f = excluded.f + 1",
+		args:  []interface{}{1, 2, 3, 4, 5, 6},
 	},
 	{
 		name:  "single-col-histogram-range",
