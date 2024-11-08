@@ -140,6 +140,15 @@ func MinIdx(s []float32) int {
 	return ind
 }
 
+// Sum returns the sum of the elements of the given slice.
+func Sum(x []float32) float32 {
+	var sum float32
+	for _, v := range x {
+		sum += v
+	}
+	return sum
+}
+
 // Zero sets every element of the given slice to zero.
 //
 //gcassert:inline

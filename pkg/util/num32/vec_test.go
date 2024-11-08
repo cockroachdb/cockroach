@@ -126,27 +126,42 @@ func TestMinMax(t *testing.T) {
 		{v: []float32{}, panics: true},
 	}
 
-	equalOrNaN := func(v1, v2 float32) {
-		require.True(t, v1 == v2 || (IsNaN(v1) && IsNaN(v2)), "%v != %v", v1, v2)
-	}
-
 	for _, tc := range testCases {
 		if !tc.panics {
 			ind := MinIdx(tc.v)
 			require.Equal(t, tc.min, ind)
 			res := Min(tc.v)
-			equalOrNaN(tc.v[tc.min], res)
+			testEqualOrNaN(t, tc.v[tc.min], res)
 
 			ind = MaxIdx(tc.v)
 			require.Equal(t, tc.max, ind)
 			res = Max(tc.v)
-			equalOrNaN(tc.v[tc.max], res)
+			testEqualOrNaN(t, tc.v[tc.max], res)
 		} else {
 			require.Panics(t, func() { MinIdx(tc.v) })
 			require.Panics(t, func() { Min(tc.v) })
 			require.Panics(t, func() { MaxIdx(tc.v) })
 			require.Panics(t, func() { Max(tc.v) })
 		}
+	}
+}
+
+func TestSum(t *testing.T) {
+	testCases := []struct {
+		v   []float32
+		sum float32
+	}{
+		{v: []float32{}, sum: 0},
+		{v: []float32{1}, sum: 1},
+		{v: []float32{1, 2, 3}, sum: 6},
+		{v: []float32{-1, -2, -3}, sum: -6},
+		{v: []float32{Inf32, Inf32}, sum: Inf32},
+		{v: []float32{Inf32, -Inf32}, sum: NaN32},
+		{v: []float32{0, NaN32, 1}, sum: NaN32},
+	}
+
+	for _, tc := range testCases {
+		testEqualOrNaN(t, tc.sum, Sum(tc.v))
 	}
 }
 
@@ -357,4 +372,8 @@ func makeRandomVector(rng *rand.Rand, dims int) []float32 {
 		v[i] = float32(rng.NormFloat64())
 	}
 	return v
+}
+
+func testEqualOrNaN(t *testing.T, v1, v2 float32) {
+	require.True(t, v1 == v2 || (IsNaN(v1) && IsNaN(v2)), "%v != %v", v1, v2)
 }
