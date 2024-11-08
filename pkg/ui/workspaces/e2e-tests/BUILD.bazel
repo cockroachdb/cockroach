@@ -1,3 +1,4 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//pkg/ui/workspaces/e2e-tests:eslint/package_json.bzl", eslint_bin = "bin")
 
@@ -24,4 +25,24 @@ eslint_bin.eslint_test(
             "cypress/support/**",
         ],
     ),
+)
+
+go_library(
+    name = "e2e-tests",
+    srcs = ["embed.go"],
+    embedsrcs = [
+        "cypress.config.ts",
+        "cypress/e2e/health-check/authenticated.cy.ts",
+        "cypress/e2e/health-check/unauthenticated.cy.ts",
+        "cypress/e2e/statementBundles/statementBundles.cy.ts",
+        "cypress/fixtures/users.json",
+        "cypress/support/commands.ts",
+        "cypress/support/e2e.ts",
+        "cypress/support/index.ts",
+        "cypress/support/types.ts",
+        "package.json",
+        "tsconfig.json",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/workspaces/e2e-tests",
+    visibility = ["//visibility:public"],
 )
