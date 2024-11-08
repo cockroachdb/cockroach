@@ -8,6 +8,7 @@ package metric
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -60,9 +61,15 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 		return family
 	}
 
+	// The Help field for metric metadata is written as a string literal
+	// which is formatted for reading in a code editor. When outputting
+	// to Prometheus and other systems, we want to remove all the
+	// newlines an only capture the first sentence for brevity.
+	left, _, _ := strings.Cut(strings.Join(strings.Fields(prom.GetHelp()), " "), ".")
+
 	family := &prometheusgo.MetricFamily{
 		Name: proto.String(familyName),
-		Help: proto.String(prom.GetHelp()),
+		Help: proto.String(left),
 		Type: prom.GetType(),
 	}
 
