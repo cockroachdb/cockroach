@@ -117,7 +117,7 @@ const upperBoundsKeyEncodedVersion = HistogramVersion(2)
 func EncodeUpperBound(version HistogramVersion, upperBound tree.Datum) ([]byte, error) {
 	if version >= upperBoundsValueEncodedVersion || upperBound.ResolvedType().Family() == types.TSQueryFamily {
 		// TSQuery doesn't have key-encoding, so we must use value-encoding.
-		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound, nil /* scratch */)
+		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound)
 	}
 	return keyside.Encode(nil /* b */, upperBound, encoding.Ascending)
 }
