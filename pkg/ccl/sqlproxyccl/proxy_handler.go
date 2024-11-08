@@ -443,11 +443,17 @@ func (handler *proxyHandler) handle(
 	defer removeListener()
 
 	throttleTags := throttler.ConnectionTags{IP: ipAddr, TenantID: tenID.String()}
-	throttleTime, err := handler.throttleService.LoginCheck(throttleTags)
+	throttleTime, err := handler.throttleService.LoginCheck(ctx, throttleTags)
 	if err != nil {
 		clientErr := authThrottledError
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
-		return errors.Wrap(err, "throttler refused connection")
+		// The throttle service is used to rate limit invalid login attempts
+		// from IP addresses, and it is commonly prone to generating excessive
+		// traffic in practice. Due to that, we'll return a nil here to prevent
+		// callers from logging this request. However, LoginCheck itself
+		// periodically logs an error when such requests are rate limited, so
+		// we won't miss any signals by doing this.
+		return nil //nolint:returnerrcheck
 	}
 
 	connector := &connector{
