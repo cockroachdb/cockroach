@@ -39,6 +39,7 @@ describe("statementsDiagnostics sagas", () => {
       minExecutionLatencySeconds: minExecLatency,
       expiresAfterSeconds: expiresAfter,
       planGist: planGist,
+      redacted: false,
     };
 
     const insertResponse: InsertStmtDiagnosticResponse = {
