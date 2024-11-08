@@ -8,6 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -160,10 +161,32 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	blockTransferTarget.Store(true)
 	setLeasePreferences(nextPreferredNode)
+	rangeIDs := func() map[roachpb.RangeID]struct{} {
+		rows := tdb.Query(t, `SELECT range_id FROM [ SHOW RANGES FROM TABLE t ]`)
+		var rangeID roachpb.RangeID
+		m := map[roachpb.RangeID]struct{}{}
+		for rows.Next() {
+			require.NoError(t, rows.Scan(&rangeID))
+			m[rangeID] = struct{}{}
+		}
+		require.NoError(t, rows.Err())
+		return m
+	}()
+	require.Len(t, rangeIDs, numRanges)
 	testutils.SucceedsSoon(t, func() error {
 		require.NoError(t, store.ForceLeaseQueueProcess())
-		if purgLen := store.LeaseQueuePurgatoryLength(); purgLen != numRanges {
-			return errors.Errorf("expected %d in purgatory but got %v", numRanges, purgLen)
+		purg := store.LeaseQueuePurgatory()
+		var missing []roachpb.RangeID
+		for k := range rangeIDs {
+			if _, ok := purg[k]; !ok {
+				missing = append(missing, k)
+			}
+		}
+		sort.Slice(missing, func(i, j int) bool {
+			return missing[i] < missing[j]
+		})
+		if len(missing) > 0 {
+			return errors.Errorf("replicas missing from purgatory: %v", missing)
 		}
 		return nil
 	})
