@@ -152,22 +152,30 @@ func (t RoutineType) String() string {
 	}
 }
 
+// OverloadPreference is used to disambiguate between eligible overload
+// candidates during type-checking. When multiple overloads are eligible based
+// on types even after applying all the other disambiguation heuristics, the
+// overload with the highest preference will be chosen, if no other overloads
+// have the same preference.
+//
+// NOTE: This is a hack that is necessary because we do not follow all of
+// Postgres's type conversion rules. It should be used sparingly.
+// See #75101.
+type OverloadPreference int
+
+const (
+	OverloadPreferenceUnpreferred = OverloadPreference(-1)
+	OverloadPreferenceNone        = OverloadPreference(0)
+	OverloadPreferencePreferred   = OverloadPreference(1)
+)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
 	Types      TypeList
 	ReturnType ReturnTyper
 	Volatility volatility.V
-
-	// PreferredOverload determines overload resolution as follows.
-	// When multiple overloads are eligible based on types even after all of of
-	// the heuristics to pick one have been used, if one of the overloads is a
-	// Overload with the `PreferredOverload` flag set to true it can be selected
-	// rather than returning a no-such-method error.
-	// This should generally be avoided -- avoiding introducing ambiguous
-	// overloads in the first place is a much better solution -- and only done
-	// after consultation with @knz @nvanbenschoten.
-	PreferredOverload bool
+	OverloadPreference
 
 	// Info is a description of the function, which is surfaced on the CockroachDB
 	// docs site on the "Functions and Operators" page. Descriptions typically use
@@ -305,7 +313,7 @@ func (b Overload) params() TypeList { return b.Types }
 func (b Overload) returnType() ReturnTyper { return b.ReturnType }
 
 // preferred implements the overloadImpl interface.
-func (b Overload) preferred() bool { return b.PreferredOverload }
+func (b Overload) preference() OverloadPreference { return b.OverloadPreference }
 
 func (b Overload) outParamInfo() (RoutineType, []int32, TypeList) {
 	return b.Type, b.OutParamOrdinals, b.OutParamTypes
@@ -392,8 +400,7 @@ func (b Overload) SignatureWithDefaults(simplify bool, includeDefaults bool) str
 type overloadImpl interface {
 	params() TypeList
 	returnType() ReturnTyper
-	// allows manually resolving preference between multiple compatible overloads.
-	preferred() bool
+	preference() OverloadPreference
 	// outParamInfo is only used for routines. See comment on
 	// Overload.OutParamOrdinals and Overload.OutParamTypes for more details.
 	outParamInfo() (_ RoutineType, outParamOrdinals []int32, outParamTypes TypeList)
@@ -1183,6 +1190,43 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 
+	// If this is a binary operator with one untyped literal or placeholder,
+	// check for a binary operator with parameter types matching the type of the
+	// opposite argument.
+	if inBinOp && len(s.exprs) == 2 {
+		var typ *types.T
+		numConsts := s.constIdxs.Len()
+		numPlaceholders := s.placeholderIdxs.Len()
+		if (numConsts == 1 && numPlaceholders == 0) ||
+			(numConsts == 0 && numPlaceholders == 1) {
+			// If one argument is a constant then it assumes the same type
+			// as the other argument. This matches Postgres's behavior. See
+			// the documentation about "unknown" types (this is how Postgres
+			// initially types constant values):
+			// https://www.postgresql.org/docs/17/typeconv-oper.html.
+			if s.typedExprs[0] != nil {
+				typ = s.typedExprs[0].ResolvedType()
+			} else if s.typedExprs[1] != nil {
+				typ = s.typedExprs[1].ResolvedType()
+			}
+		}
+		if typ != nil {
+			exactOverloads := filterOverloads(s.overloadIdxs, s.overloads,
+				func(ov overloadImpl) bool {
+					typs := ov.params().Types()
+					return typ.Oid() == typs[0].Oid() && typ.Oid() == typs[1].Oid()
+				})
+			if len(exactOverloads) == 1 {
+				prevOverloadIdxs := s.overloadIdxs
+				s.overloadIdxs = exactOverloads
+				if ok, err := checkReturn(ctx, semaCtx, s); ok {
+					return err
+				}
+				s.overloadIdxs = prevOverloadIdxs
+			}
+		}
+	}
+
 	if !s.constIdxs.Empty() {
 		allConstantsAreHomogenous := false
 		if ok, err := filterAttempt(ctx, semaCtx, s, func() {
@@ -1321,11 +1365,19 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 
-	// The fifth heuristic is to defer to preferred candidates, if one has been
-	// specified in the overload list.
+	// The fifth heuristic is to defer to candidates with the highest
+	// preference.
+	maxPreference := OverloadPreferenceUnpreferred
+	for _, idx := range s.overloadIdxs {
+		if p := s.overloads[idx].preference(); p > maxPreference {
+			maxPreference = p
+		}
+	}
 	if ok, err := filterAttempt(ctx, semaCtx, s, func() {
 		s.overloadIdxs = filterOverloads(
-			s.overloadIdxs, s.overloads, overloadImpl.preferred,
+			s.overloadIdxs, s.overloads, func(o overloadImpl) bool {
+				return o.preference() == maxPreference
+			},
 		)
 	}); ok {
 		return err
@@ -1433,6 +1485,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// we prefer overloads where we infer the type of the NULL to be the same as the
 	// other argument. This is used to differentiate the behavior of
 	// STRING[] || NULL and STRING || NULL.
+	// TODO(mgartner): I think we can remove this heuristic in favor of the rule
+	// applied above that types untyped literals and placeholders based on the
+	// input types of overloads.
 	if inBinOp && len(s.exprs) == 2 {
 		if ok, err := filterAttempt(ctx, semaCtx, s, func() {
 			var err error
@@ -1700,8 +1755,11 @@ func formatCandidates(prefix string, candidates []overloadImpl, filter []uint8) 
 		}
 		buf.WriteString(") -> ")
 		buf.WriteString(returnTypeToFixedType(candidate.returnType(), inputTyps).String())
-		if candidate.preferred() {
+		switch candidate.preference() {
+		case OverloadPreferencePreferred:
 			buf.WriteString(" [preferred]")
+		case OverloadPreferenceUnpreferred:
+			buf.WriteString(" [unpreferred]")
 		}
 		buf.WriteByte('\n')
 	}

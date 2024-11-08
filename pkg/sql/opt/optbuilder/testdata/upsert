@@ -3369,7 +3369,7 @@ upsert assn_cast
       │    │    │    │    │    │    │    ├── columns: k_cast:15!null c_cast:16!null qc_cast:17!null s_cast:18!null column4:13!null
       │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null
-      │    │    │    │    │    │    │    │    └── (1.0, ' ', 'foo', 1, 2)
+      │    │    │    │    │    │    │    │    └── (1.0, '', 'foo', 1, 2)
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=k_cast:15]
       │    │    │    │    │    │    │         │    └── column1:10
@@ -3454,7 +3454,7 @@ upsert assn_cast
       │    │    │    │    │    │    │    ├── columns: k_cast:14 c_cast:15!null qc_cast:16!null column4:13!null
       │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    ├── columns: column1:10 column2:11!null column3:12!null column4:13!null
-      │    │    │    │    │    │    │    │    └── (1.0::DECIMAL, ' ', 'foo', 1)
+      │    │    │    │    │    │    │    │    └── (1.0::DECIMAL, '', 'foo', 1)
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── assignment-cast: INT8 [as=k_cast:14]
       │    │    │    │    │    │    │         │    └── column1:10
@@ -3529,7 +3529,7 @@ insert assn_cast
       │    │    │    │    │    ├── columns: k_cast:15!null c_cast:16!null qc_cast:17!null s_cast:18!null column4:13!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null
-      │    │    │    │    │    │    └── (1.0, ' ', 'foo', 1, 2)
+      │    │    │    │    │    │    └── (1.0, '', 'foo', 1, 2)
       │    │    │    │    │    └── projections
       │    │    │    │    │         ├── assignment-cast: INT8 [as=k_cast:15]
       │    │    │    │    │         │    └── column1:10
@@ -3651,7 +3651,7 @@ upsert assn_cast
       │    │    │    │    └── filters
       │    │    │    │         └── k_cast:15 = k:21
       │    │    │    └── projections
-      │    │    │         ├── ' ' [as=c_new:30]
+      │    │    │         ├── '' [as=c_new:30]
       │    │    │         ├── 'foo' [as=qc_new:31]
       │    │    │         ├── 1 [as=i_new:32]
       │    │    │         └── 2 [as=s_new:33]
