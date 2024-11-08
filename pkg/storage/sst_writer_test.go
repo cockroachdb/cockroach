@@ -87,6 +87,7 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 			st: func() *cluster.Settings {
 				st := cluster.MakeTestingClusterSettings()
 				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, true)
+				columnarBlocksEnabled.Override(context.Background(), &st.SV, false)
 				return st
 			}(),
 			want: want{
@@ -99,11 +100,38 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 			st: func() *cluster.Settings {
 				st := cluster.MakeTestingClusterSettings()
 				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, false)
+				columnarBlocksEnabled.Override(context.Background(), &st.SV, false)
 				return st
 			}(),
 			want: want{
 				format:             sstable.TableFormatPebblev4,
 				disableValueBlocks: true,
+			},
+		},
+		{
+			name: "enable columnar blocks",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, false)
+				columnarBlocksEnabled.Override(context.Background(), &st.SV, true)
+				return st
+			}(),
+			want: want{
+				format:             sstable.TableFormatPebblev5,
+				disableValueBlocks: true,
+			},
+		},
+		{
+			name: "enable columnar blocks with value blocks",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, true)
+				columnarBlocksEnabled.Override(context.Background(), &st.SV, true)
+				return st
+			}(),
+			want: want{
+				format:             sstable.TableFormatPebblev5,
+				disableValueBlocks: false,
 			},
 		},
 	}
