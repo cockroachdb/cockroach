@@ -266,6 +266,19 @@ func (p *planner) dropTableImpl(
 		}
 	}
 
+	// Remove trigger dependencies on other tables.
+	//
+	// NOTE: we don't have to explicitly do this for other types of backreferences
+	// because they use the "GetAll..." methods.
+	for i := range tableDesc.Triggers {
+		trigger := &tableDesc.Triggers[i]
+		for _, id := range trigger.DependsOn {
+			if err := p.removeTriggerBackReference(ctx, tableDesc, id); err != nil {
+				return droppedViews, err
+			}
+		}
+	}
+
 	// Remove function dependencies
 	fnIDs, err := tableDesc.GetAllReferencedFunctionIDs()
 	if err != nil {
@@ -648,6 +661,30 @@ func removeFKBackReferenceFromTable(
 	// Delete our match.
 	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx],
 		referencedTableDesc.InboundFKs[matchIdx+1:]...)
+	return nil
+}
+
+// removeTriggerBackReference removes the trigger back reference for the
+// referenced table with the given ID.
+func (p *planner) removeTriggerBackReference(
+	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID,
+) error {
+	var refTableDesc *tabledesc.Mutable
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == refID {
+		refTableDesc = tableDesc
+	} else {
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, refID)
+		if err != nil {
+			return errors.Wrapf(err, "error resolving referenced table ID %d", refID)
+		}
+		refTableDesc = lookup
+	}
+	if refTableDesc.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
+	refTableDesc.DependedOnBy = removeMatchingReferences(refTableDesc.DependedOnBy, tableDesc.ID)
 	return nil
 }
 
