@@ -244,7 +244,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 			arch:              vm.ArchAMD64,
 			numUpgrades:       3,
 			enableSkipVersion: true,
-			expectedReleases:  []string{"23.1.17", "23.2.4", "24.1.1"},
+			expectedReleases:  []string{"23.2.4", "24.1.1", "24.2.2"},
 		},
 	}
 

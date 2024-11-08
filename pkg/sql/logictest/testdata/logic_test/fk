@@ -4234,7 +4234,6 @@ NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to re
 
 # Test trivial data type change
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
@@ -4250,7 +4249,6 @@ NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to refer
 
 # Test validation data type change
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
@@ -4266,7 +4264,6 @@ NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to re
 
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 query TT
 SHOW CREATE TABLE t2_fk
 ----

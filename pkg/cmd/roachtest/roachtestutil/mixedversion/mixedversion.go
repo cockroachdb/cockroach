@@ -499,12 +499,11 @@ func supportsSkipUpgradeTo(v *clusterupgrade.Version) bool {
 	case major < 24:
 		return false
 	case major == 24:
-		// v24.2 supported skip upgrades experimentally.
 		// v24.3 is the first version which officially supports the skip upgrade.
-		return minor == 2 || minor == 3
+		return minor == 3
 	default:
 		// The current plan for 2025+ is for .1 and .3 to be skippable innovation
-		// releases.
+		// releases and thus allow skip upgrades to 25.2 and 25.4.
 		return minor == 2 || minor == 4
 	}
 }

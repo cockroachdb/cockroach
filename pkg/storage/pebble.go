@@ -2572,7 +2572,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V24_1: pebble.FormatSyntheticPrefixSuffix,
+	clusterversion.V24_2: pebble.FormatSyntheticPrefixSuffix,
 	clusterversion.V24_3: pebble.FormatColumnarBlocks,
 }
 
