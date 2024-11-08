@@ -62,7 +62,7 @@ elif [[ "${TC_BUILD_BRANCH}" =~ ^release- && "${ROACHTEST_FORCE_RUN_INVALID_RELE
 else
   # Use a 0.1 default in all other branches, to reduce the chances of
   # an accidental full-suite run on feature branches.
-  select_probability="${SELECT_PROBABILITY:-0.1}"
+  select_probability="${SELECT_PROBABILITY:-1.0}"
 fi
 
 build/teamcity-roachtest-invoke.sh \
@@ -84,4 +84,5 @@ build/teamcity-roachtest-invoke.sh \
   --suite nightly \
   --selective-tests="${SELECTIVE_TESTS:-true}" \
   --side-eye-token="${SIDE_EYE_API_TOKEN}" \
+  --export-openmetrics=true \
   "${TESTS}"
