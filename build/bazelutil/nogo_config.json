@@ -12,7 +12,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code"
         }
     },
     "deepequalerrors": {
@@ -30,6 +31,7 @@
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
             "_test\\.go$": "tests",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code",
             "pkg/ccl/backupccl/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
             "pkg/ccl/backupccl/restore_job.go": "flagged by linter, should be evaluated",
             "pkg/ccl/backupccl/restore_progress.go": "flagged by linter, should be evaluated",
@@ -194,7 +196,8 @@
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
-            "pkg/raft/.*": "imported third-party package"
+            "pkg/raft/.*": "imported third-party package",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code"
         }
     },
     "errcmp": {
@@ -216,14 +219,15 @@
             "pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
             "pkg/util/timeutil/timeout_error\\.go$": "invalid direct cast on error object",
             "pkg/util/sysutil/sysutil_.*": "type can change by system",
-            "pkg/cloud/gcp/gcs_retry\\.go$": "invalid direct cast on error object"
+            "pkg/cloud/gcp/gcs_retry\\.go$": "invalid direct cast on error object",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code"
         }
     },
     "errwrap": {
         "exclude_files": {
-            "external/": "exclude all third-party code for all analyzers",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code",
             "external/": "exclude all third-party code for all analyzers"
         }
     },
@@ -243,7 +247,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code"
         }
     },
     "nilness": {
@@ -1626,7 +1631,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb(_[0-9]+)?\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/.*_optimized_pb\\.go$": "semi-generated code"
         }
     },
     "U1000": {
