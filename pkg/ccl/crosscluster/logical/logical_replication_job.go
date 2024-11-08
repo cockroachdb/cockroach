@@ -7,7 +7,6 @@ package logical
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -207,11 +207,6 @@ func (r *logicalReplicationResumer) ingest(
 	}()
 
 	execPlan := func(ctx context.Context) error {
-
-		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.VInfof(ctx, 2, "received producer meta: %v", meta)
-			return nil
-		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
@@ -219,11 +214,12 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
+			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
@@ -292,9 +288,10 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans      []roachpb.Span
-	streamAddress    []string
-	destTableBySrcID map[descpb.ID]dstTableMetadata
+	sourceSpans         []roachpb.Span
+	streamAddress       []string
+	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	writeProcessorCount int
 }
 
 func makeLogicalReplicationPlanner(
@@ -455,6 +452,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 					LogicalReplicationWriter: &sp,
 				},
 			})
+			info.writeProcessorCount++
 		}
 	}
 
@@ -481,7 +479,25 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
+	rangeStats rangeStatsByProcessorID
+
 	lastPartitionUpdate time.Time
+}
+
+func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+	if meta.BulkProcessorProgress == nil {
+		log.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
+		return nil
+	}
+
+	var stats streampb.StreamEvent_RangeStats
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
+		return errors.Wrap(err, "unable to unmarshal progress details")
+	}
+
+	rh.rangeStats.Add(meta.BulkProcessorProgress.ProcessorID, &stats)
+
+	return nil
 }
 
 func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
@@ -523,6 +539,10 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			progress := md.Progress
 			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
+
+			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
+			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
+
 			if rh.replicatedTimeAtStart.Less(replicatedTime) {
 				prog.ReplicatedTime = replicatedTime
 				// The HighWater is for informational purposes
@@ -531,13 +551,31 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 					HighWater: &replicatedTime,
 				}
 			}
-			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
+			progress.RunningStatus = status
+			if fractionCompleted > 0 && fractionCompleted < 1 {
+				// If 0, the coordinator has not gotten a complete range stats update
+				// from all nodes yet.
+				//
+				// If 1, the job is all caught up.
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: fractionCompleted,
+				}
+			}
 			ju.UpdateProgress(progress)
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
 			}
 			if l := rh.job.Details().(jobspb.LogicalReplicationDetails).MetricsLabel; l != "" {
 				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
+
+				if aggRangeStats.RangeCount != 0 {
+					rh.metrics.LabeledScanningRanges.Update(map[string]string{"label": l}, aggRangeStats.ScanningRangeCount)
+					rh.metrics.LabeledCatchupRanges.Update(map[string]string{"label": l}, aggRangeStats.LaggingRangeCount)
+				}
+			}
+			if aggRangeStats.RangeCount != 0 {
+				rh.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
+				rh.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
 			}
 			return nil
 		}); err != nil {
