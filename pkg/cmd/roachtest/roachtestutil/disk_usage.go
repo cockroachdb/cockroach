@@ -128,39 +128,23 @@ func NewDiskUsageTracker(
 	return &DiskUsageTracker{c: c, l: diskLogger}, nil
 }
 
-// GetDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
+// GetDiskUsageInBytes executes the command `du {store-dir}` on node `nodeIdx` and
+// parses the result to bytes. nodeIdx starts at one.
 func GetDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
 	var result install.RunResultDetails
-	for {
-		var err error
-		// `du` can warn if files get removed out from under it (which
-		// happens during RocksDB compactions, for example). Discard its
-		// stderr to avoid breaking Atoi later.
-		// TODO(bdarnell): Refactor this stack to not combine stdout and
-		// stderr so we don't need to do this (and the Warning check
-		// below).
-		result, err = c.RunWithDetailsSingleNode(
-			ctx,
-			logger,
-			option.WithNodes(c.Node(nodeIdx)),
-			"du -sk {store-dir} 2>/dev/null | grep -oE '^[0-9]+'",
-		)
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0, ctx.Err()
-			}
-			// If `du` fails, retry.
-			// TODO(bdarnell): is this worth doing? It was originally added
-			// because of the "files removed out from under it" problem, but
-			// that doesn't result in a command failure, just a stderr
-			// message.
-			logger.Printf("retrying disk usage computation after spurious error: %s", err)
-			continue
-		}
-
-		break
+	var err error
+	// Retry a few times since `du` can warn if files get removed out from under
+	// it (which happens during pebble compactions, for example).
+	result, err = c.RunWithDetailsSingleNode(
+		ctx,
+		logger,
+		option.WithNodes(c.Node(nodeIdx)).WithShouldRetryFn(install.AlwaysTrue),
+		"du {store-dir} -sk 2>/dev/null | grep -oE '^[0-9]+'",
+	)
+	if err != nil {
+		return 0, err
 	}
 
 	// We need this check because sometimes the first line of the roachprod output is a warning
