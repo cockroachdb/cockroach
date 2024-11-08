@@ -41,6 +41,7 @@ describe("statementsSagas", () => {
         minExecutionLatencySeconds: minExecLatency,
         expiresAfterSeconds: expiresAfter,
         planGist: planGist,
+        redacted: false,
       };
       const action = createStatementDiagnosticsReportAction(
         insertStmtDiagnosticsRequest,
@@ -72,6 +73,7 @@ describe("statementsSagas", () => {
       minExecutionLatencySeconds: minExecLatency,
       expiresAfterSeconds: expiresAfter,
       planGist: planGist,
+      redacted: false,
     };
     const action = createStatementDiagnosticsReportAction(
       insertStmtDiagnosticsRequest,
