@@ -16,10 +16,7 @@ import (
 var (
 	readSystemTables = []catconstants.SystemTableName{
 		catconstants.NamespaceTableName,
-		catconstants.DescriptorTableName,
 		catconstants.DescIDSequenceTableName,
-		catconstants.TenantIDSequenceTableName,
-		catconstants.TenantsTableName,
 		catconstants.ProtectedTimestampsMetaTableName,
 		catconstants.ProtectedTimestampsRecordsTableName,
 		catconstants.StatementStatisticsTableName,
@@ -29,6 +26,9 @@ var (
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
+		catconstants.TenantsTableName,
+		catconstants.DescriptorTableName,
+		catconstants.TenantIDSequenceTableName,
 		catconstants.UsersTableName,
 		catconstants.ZonesTableName,
 		catconstants.SettingsTableName,
