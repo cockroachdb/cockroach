@@ -360,7 +360,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		mb.setFetchColIDs(mb.outScope.cols)
 
 		// Cascades can fire triggers on the child table.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, true /* cascade */)
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
 
 		mb.buildDelete(nil /* returning */)
 		return mb.outScope.expr
