@@ -57,7 +57,7 @@ function jobToVisualForReplicationIngestion(job: Job): JobStatusVisual {
   if (job.fraction_completed > 0 && job.status === JOB_STATUS_RUNNING) {
     return JobStatusVisual.ProgressBarWithDuration;
   }
-  return JobStatusVisual.BadgeOnly;
+  return JobStatusVisual.BadgeWithMessage;
 }
 
 export const JOB_STATUS_SUCCEEDED = "succeeded";
