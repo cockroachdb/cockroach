@@ -545,8 +545,8 @@ github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZe
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895 h1:XANOgPYtvELQ/h4IrmPAohXqe2pWA8Bwhejr3VQoZsA=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895/go.mod h1:aPd7gM9ov9M8v32Yy5NJrDyOcD8z642dqs+F0CeNXfA=
-github.com/cockroachdb/pebble v0.0.0-20241108211821-b2cb561a44a4 h1:TyMOx3p4BT2WOjndOQkCuvpeuaDc4WCXHd/mVjQCF3M=
-github.com/cockroachdb/pebble v0.0.0-20241108211821-b2cb561a44a4/go.mod h1:6/y5AMSI64bnNjTmDbxhWG8Hm2E/NF0KCElcQxUYrvo=
+github.com/cockroachdb/pebble v0.0.0-20241109152504-461c46d31be6 h1:8de13dV6GqZq1ZlHq6MZDl2uPi1lAwXsCs/tx+mW1Mo=
+github.com/cockroachdb/pebble v0.0.0-20241109152504-461c46d31be6/go.mod h1:6/y5AMSI64bnNjTmDbxhWG8Hm2E/NF0KCElcQxUYrvo=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/redact v1.1.5 h1:u1PMllDkdFfPWaNGMyLD1+so+aq3uUItthCFqzwPJ30=
 github.com/cockroachdb/redact v1.1.5/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
