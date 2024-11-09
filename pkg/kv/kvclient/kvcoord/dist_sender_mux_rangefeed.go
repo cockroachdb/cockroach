@@ -357,6 +357,11 @@ func (m *rangefeedMuxer) establishMuxConnection(
 		return nil, ctx.Err()
 	case <-init.Done():
 		c := init.Get()
+		if c.err != nil {
+			// Remove the mux client from the cache if it
+			// hit an error.
+			m.muxClients.Delete(nodeID)
+		}
 		return c.stream, c.err
 	}
 }
