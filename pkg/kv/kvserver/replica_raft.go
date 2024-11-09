@@ -999,6 +999,21 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
 		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs, logSnapshot,
 		r.raftMu.msgAppScratchForFlowControl, replicaStateInfoMap)
+	// The scratch map is used only while in this Ready handling call. Stop
+	// referencing the entry data from the content of this map, after the call is
+	// done. Not doing so could result in holding entry data for extended periods
+	// of time and lead to OOMs if these entries are large (like AddSSTable).
+	//
+	// TODO(pav-kv): clean up / specify the lifetime and "ownership" semantics of
+	// these scratch maps. Hide clearing them behind helpers.
+	defer func() {
+		for id, msgs := range r.raftMu.msgAppScratchForFlowControl {
+			for i := range msgs {
+				msgs[i] = raftpb.Message{}
+			}
+			r.raftMu.msgAppScratchForFlowControl[id] = msgs[:0]
+		}
+	}()
 	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftNodeBasicState, raftEvent)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
