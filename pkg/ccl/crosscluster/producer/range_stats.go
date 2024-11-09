@@ -44,8 +44,8 @@ func startStatsPoller(
 		g:      ctxgroup.WithContext(ctx),
 	}
 	poller.g.GoCtx(func(ctx context.Context) error {
-		timer := time.NewTimer(interval)
-		defer timer.Stop()
+		tick := time.NewTicker(interval)
+		defer tick.Stop()
 		for {
 			stats, err := computeRangeStats(ctx, spans, frontier, ranges)
 			if err != nil {
@@ -59,7 +59,7 @@ func startStatsPoller(
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-timer.C:
+			case <-tick.C:
 				//continue
 			}
 		}
@@ -85,7 +85,6 @@ func computeRangeStats(
 	frontier span.Frontier,
 	ranges rangedesc.IteratorFactory,
 ) (streampb.StreamEvent_RangeStats, error) {
-	now := timeutil.Now()
 	var stats streampb.StreamEvent_RangeStats
 	for _, initialSpan := range spans {
 		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100)
@@ -93,6 +92,7 @@ func computeRangeStats(
 			return streampb.StreamEvent_RangeStats{}, err
 		}
 		for ; lazyIterator.Valid(); lazyIterator.Next() {
+			now := timeutil.Now()
 			rangeSpan := roachpb.Span{
 				Key:    lazyIterator.CurRangeDescriptor().StartKey.AsRawKey(),
 				EndKey: lazyIterator.CurRangeDescriptor().EndKey.AsRawKey(),
@@ -104,7 +104,7 @@ func computeRangeStats(
 					if timestamp.IsEmpty() {
 						stats.ScanningRangeCount += 1
 						return span.StopMatch
-					} else if timestamp.GoTime().Before(now.Add(-laggingSpanThreshold)) {
+					} else if now.Sub(timestamp.GoTime()) > laggingSpanThreshold {
 						stats.LaggingRangeCount += 1
 						return span.StopMatch
 					}
