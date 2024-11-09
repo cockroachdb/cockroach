@@ -2846,6 +2846,240 @@ statement ok
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
+# Test row-level trigger interaction with computed columns.
+# ==============================================================================
+
+# BEFORE triggers do not observe the values of computed columns. Instead, they
+# see NULLs. In addition, while a BEFORE trigger can modify a computed column,
+# the changed value is ignored. In contrast, the computed column *does* show
+# the effect of modifications to the columns it depends on.
+subtest before_computed_columns
+
+statement ok
+CREATE TABLE computed (a INT, b INT, c INT AS (a + b) STORED, d INT AS (a - b) VIRTUAL);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'g()';
+    RAISE NOTICE 'NEW: %', NEW;
+    NEW.c = 12345;
+    NEW.d = 67890;
+    RAISE NOTICE 'NEW after change: %', NEW;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER b_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION g();
+
+# BEFORE triggers do not observe the values of computed columns. Instead, they
+# see NULLs. In addition, while a BEFORE trigger can modify a computed column,
+# the changed value is ignored.
+query T noticetrace
+INSERT INTO computed VALUES (1, 2);
+----
+NOTICE: g()
+NOTICE: NEW: (1,2,,)
+NOTICE: NEW after change: (1,2,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+1  2  3  -1
+
+query T noticetrace
+UPDATE computed SET a = 10, b = 20 WHERE a = 1;
+----
+NOTICE: g()
+NOTICE: NEW: (10,20,,)
+NOTICE: NEW after change: (10,20,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10  20  30  -10
+
+# The computed column *does* show the effect of modifications to the columns it
+# depends on.
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'h()';
+    RAISE NOTICE 'NEW: %', NEW;
+    NEW.a = (NEW).a + 100;
+    NEW.b = (NEW).b + 200;
+    RAISE NOTICE 'NEW after change: %', NEW;
+    RETURN NEW;
+  END
+$$;
+
+# Create triggers that fire before and after the previous one.
+statement ok
+CREATE TRIGGER a_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER c_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+INSERT INTO computed VALUES (3, 4);
+----
+NOTICE: h()
+NOTICE: NEW: (3,4,,)
+NOTICE: NEW after change: (103,204,,)
+NOTICE: g()
+NOTICE: NEW: (103,204,,)
+NOTICE: NEW after change: (103,204,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (103,204,12345,67890)
+NOTICE: NEW after change: (203,404,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+203  404  607  -201
+
+query T noticetrace
+UPDATE computed SET a = 30, b = 40 WHERE a = 203;
+----
+NOTICE: h()
+NOTICE: NEW: (30,40,,)
+NOTICE: NEW after change: (130,240,,)
+NOTICE: g()
+NOTICE: NEW: (130,240,,)
+NOTICE: NEW after change: (130,240,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (130,240,12345,67890)
+NOTICE: NEW after change: (230,440,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+230  440  670  -210
+
+# AFTER triggers observe the values of computed columns. They can also modify
+# computed columns, but the updated value is ignored (in fact, any modification
+# is ignored for AFTER triggers).
+subtest after_computed_columns
+
+statement ok
+CREATE TRIGGER trig AFTER INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO computed VALUES (5, 6);
+----
+NOTICE: h()
+NOTICE: NEW: (5,6,,)
+NOTICE: NEW after change: (105,206,,)
+NOTICE: g()
+NOTICE: NEW: (105,206,,)
+NOTICE: NEW after change: (105,206,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (105,206,12345,67890)
+NOTICE: NEW after change: (205,406,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (205,406,611,-201)
+NOTICE: NEW after change: (205,406,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+230  440  670  -210
+205  406  611  -201
+
+query T noticetrace
+UPDATE computed SET a = 50, b = 60 WHERE a = 230;
+----
+NOTICE: h()
+NOTICE: NEW: (50,60,,)
+NOTICE: NEW after change: (150,260,,)
+NOTICE: g()
+NOTICE: NEW: (150,260,,)
+NOTICE: NEW after change: (150,260,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (150,260,12345,67890)
+NOTICE: NEW after change: (250,460,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (250,460,710,-210)
+NOTICE: NEW after change: (250,460,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+
+statement ok
+DROP TRIGGER trig ON computed;
+
+statement ok
+DROP TRIGGER a_foo ON computed;
+
+statement ok
+DROP TRIGGER b_foo ON computed;
+
+statement ok
+DROP TRIGGER c_foo ON computed;
+
+# The WHEN clause for a BEFORE trigger should observe NULL values for computed
+# columns. For an AFTER trigger, the WHEN clause should observe the computed
+# values.
+subtest when_computed_columns
+
+statement ok
+CREATE TRIGGER trig BEFORE INSERT OR UPDATE ON computed
+FOR EACH ROW WHEN ((NEW).c IS NULL AND (NEW).d IS NULL) EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER trig_after AFTER INSERT OR UPDATE ON computed
+FOR EACH ROW WHEN ((NEW).c IS NOT NULL AND (NEW).d IS NOT NULL) EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO computed VALUES (7, 8);
+----
+NOTICE: g()
+NOTICE: NEW: (7,8,,)
+NOTICE: NEW after change: (7,8,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (7,8,15,-1)
+NOTICE: NEW after change: (7,8,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+7    8    15   -1
+
+query T noticetrace
+UPDATE computed SET a = 70, b = 80 WHERE a = 7;
+----
+NOTICE: g()
+NOTICE: NEW: (70,80,,)
+NOTICE: NEW after change: (70,80,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (70,80,150,-10)
+NOTICE: NEW after change: (70,80,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+70   80   150  -10
+
+statement ok
+DROP TABLE computed;
+DROP FUNCTION g;
+DROP FUNCTION h;
+
+# ==============================================================================
 # Test unsupported syntax.
 # ==============================================================================
 
