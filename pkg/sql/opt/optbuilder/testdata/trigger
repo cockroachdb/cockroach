@@ -751,19 +751,19 @@ root
  │         ├── columns: <none>
  │         ├── fetch columns: k:13 child.x:14
  │         └── barrier
- │              ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │              ├── columns: k:13 child.x:14 old:17 f:31 "check-rows":32
  │              └── select
- │                   ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │                   ├── columns: k:13 child.x:14 old:17 f:31 "check-rows":32
  │                   ├── barrier
- │                   │    ├── columns: k:13 child.x:14 new:17 f:31 "check-rows":32
+ │                   │    ├── columns: k:13 child.x:14 old:17 f:31 "check-rows":32
  │                   │    └── project
- │                   │         ├── columns: "check-rows":32 k:13 child.x:14 new:17 f:31
+ │                   │         ├── columns: "check-rows":32 k:13 child.x:14 old:17 f:31
  │                   │         ├── project
- │                   │         │    ├── columns: f:31 k:13 child.x:14 new:17
+ │                   │         │    ├── columns: f:31 k:13 child.x:14 old:17
  │                   │         │    ├── barrier
- │                   │         │    │    ├── columns: k:13 child.x:14 new:17
+ │                   │         │    │    ├── columns: k:13 child.x:14 old:17
  │                   │         │    │    └── project
- │                   │         │    │         ├── columns: new:17 k:13 child.x:14
+ │                   │         │    │         ├── columns: old:17 k:13 child.x:14
  │                   │         │    │         ├── select
  │                   │         │    │         │    ├── columns: k:13 child.x:14
  │                   │         │    │         │    ├── scan child
@@ -772,11 +772,11 @@ root
  │                   │         │    │         │         ├── child.x:14 = 1
  │                   │         │    │         │         └── child.x:14 IS DISTINCT FROM CAST(NULL AS INT8)
  │                   │         │    │         └── projections
- │                   │         │    │              └── ((k:13, child.x:14) AS k, x) [as=new:17]
+ │                   │         │    │              └── ((k:13, child.x:14) AS k, x) [as=old:17]
  │                   │         │    └── projections
- │                   │         │         └── f(new:17, NULL, 'tr_child', 'BEFORE', 'ROW', 'INSERT', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:31]
+ │                   │         │         └── f(NULL, old:17, 'tr_child', 'BEFORE', 'ROW', 'DELETE', 54, 'child', 'child', 'public', 0, ARRAY[]) [as=f:31]
  │                   │         └── projections
- │                   │              └── CASE WHEN f:31 IS DISTINCT FROM new:17 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a row in a cascade operation: ' || new:17::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":32]
+ │                   │              └── CASE WHEN f:31 IS DISTINCT FROM old:17 THEN crdb_internal.plpgsql_raise('ERROR', 'trigger tr_child attempted to modify or filter a row in a cascade operation: ' || old:17::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END [as="check-rows":32]
  │                   └── filters
  │                        └── f:31 IS DISTINCT FROM NULL
  └── after-triggers
