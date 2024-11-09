@@ -542,17 +542,16 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 
 			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
 			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
+			progress.RunningStatus = status
 
-			if rh.replicatedTimeAtStart.Less(replicatedTime) {
+			if replicatedTime.IsSet() {
 				prog.ReplicatedTime = replicatedTime
 				// The HighWater is for informational purposes
 				// only.
 				progress.Progress = &jobspb.Progress_HighWater{
 					HighWater: &replicatedTime,
 				}
-			}
-			progress.RunningStatus = status
-			if fractionCompleted > 0 && fractionCompleted < 1 {
+			} else if fractionCompleted > 0 && fractionCompleted < 1 {
 				// If 0, the coordinator has not gotten a complete range stats update
 				// from all nodes yet.
 				//
