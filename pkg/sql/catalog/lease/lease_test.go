@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -989,6 +990,7 @@ CREATE TABLE t.foo (v INT);
 	// Descriptor has been acquired one more time than it has been released.
 	aCount, rCount := atomic.LoadInt32(&fooAcquiredCount), atomic.LoadInt32(&fooReleaseCount)
 	if aCount != rCount+1 {
+		t.Logf("\nall stacks:\n\n%s\n", allstacks.Get())
 		t.Fatalf("invalid descriptor acquisition counts = %d, %d", aCount, rCount)
 	}
 
