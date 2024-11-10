@@ -538,6 +538,8 @@ github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce h1:giXvy4KSc/6g/e
 github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce/go.mod h1:9/y3cnZ5GKakj/H4y9r9GTjCvAFta7KLgSHPJJYc52M=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
+github.com/cockroachdb/gogoproto v1.3.3-0.20241109062938-377591e94c84 h1:Z/ygD6am9F5DdsXABiK7CxrQO0vTxFSAXIkv6UvpzEo=
+github.com/cockroachdb/gogoproto v1.3.3-0.20241109062938-377591e94c84/go.mod h1:y7Nyzg2bqpB1FFDrxTf+bYCaBekxKlFDQVG5WvdEUzc=
 github.com/cockroachdb/gostdlib v1.19.0 h1:cSISxkVnTlWhTkyple/T6NXzOi5659FkhxvUgZv+Eb0=
 github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTymPZUKMfURjBtY=
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=

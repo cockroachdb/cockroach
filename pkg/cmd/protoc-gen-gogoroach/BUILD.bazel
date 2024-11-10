@@ -7,9 +7,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_gogo_protobuf//protoc-gen-gogo/descriptor",
-        "@com_github_gogo_protobuf//vanity",
-        "@com_github_gogo_protobuf//vanity/command",
+        "@com_github_cockroachdb_gogoproto//protoc-gen-gogo/descriptor",
+        "@com_github_cockroachdb_gogoproto//vanity",
+        "@com_github_cockroachdb_gogoproto//vanity/command",
     ],
 )
 
