@@ -99,6 +99,7 @@ type tpcc struct {
 	scatter bool
 
 	partitions         int
+	ignoreParts        bool
 	clientPartitions   int
 	affinityPartitions []int
 	wPart              *partitioner
@@ -288,6 +289,7 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
 		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
+		g.flags.BoolVar(&g.ignoreParts, `ignore-partitions`, false, `Ignore partitions during load generation`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
 			`Note that if one value is provided, the assumption is that all urls are associated with that partition. In all other cases the assumption `+
@@ -438,16 +440,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 			}
 
-			if w.waitFraction > 0 && w.activeWorkers != w.activeWarehouses*NumWorkersPerWarehouse {
-				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --active-workers=%d`,
+			if w.waitFraction > 0 && w.activeWorkers != w.activeWarehouses*NumWorkersPerWarehouse && len(w.affinityPartitions) == 0 {
+				return errors.Errorf(`--wait > 0 and --warehouses=%d and affinity_partitions=0 requires --active-workers=%d`,
 					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
 			}
 
 			if w.queryTraceFile != `` && w.workers != 1 {
 				return errors.Errorf(`--query-trace-file must be used with exactly one worker`)
 			}
-
-			w.auditor = newAuditor(w.activeWarehouses)
 
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
@@ -470,6 +470,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 					return errors.Wrap(err, "error creating multi-region partitioner")
 				}
 			}
+
+			w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			return initializeMix(w)
 		},
 		PreCreate: func(db *gosql.DB) error {
@@ -587,6 +589,12 @@ func (w *tpcc) Hooks() workload.Hooks {
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
 
+			partitionFactor := 1
+			countAffinity := len(w.affinityPartitions)
+			if countAffinity > 0 && w.wPart.parts > 0 {
+				partitionFactor = w.wPart.parts / countAffinity
+			}
+
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
@@ -594,7 +602,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses)),
+						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses/partitionFactor)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
@@ -958,9 +966,16 @@ func (w *tpcc) Ops(
 		// URLs are mapped to partitions in a round-robin fashion.
 		// Imagine there are 5 partitions and 15 urls, this code assumes that urls
 		// 0, 5, and 10 correspond to the 0th partition.
-		for i, db := range dbs {
-			p := i % w.partitions
-			partitionDBs[p] = append(partitionDBs[p], db)
+		if len(w.affinityPartitions) == 0 {
+			for i, db := range dbs {
+				p := i % w.partitions
+				partitionDBs[p] = append(partitionDBs[p], db)
+			}
+		} else {
+			// todo(gourav): update this later if affinity partitions are < dbs[i] or > than !=
+			for i, p := range w.affinityPartitions {
+				partitionDBs[p] = append(partitionDBs[p], dbs[i])
+			}
 		}
 		for i := range partitionDBs {
 			// Possible if we have more partitions than DB connections.
@@ -1007,13 +1022,22 @@ func (w *tpcc) Ops(
 	// Limit the amount of workers we initialize in parallel, to avoid running out
 	// of memory (#36897).
 	sem := make(chan struct{}, 100)
+	elemIndex := -1
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		workerIdx := workerIdx
 		var warehouse int
 		var p int
 		if len(w.multiRegionCfg.regions) == 0 {
-			warehouse = w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
-			p = w.wPart.partElemsMap[warehouse]
+			// todo (gourav): fix this later
+			for {
+				elemIndex = elemIndex + 1
+				warehouse = w.wPart.totalElems[elemIndex%len(w.wPart.totalElems)]
+				part := w.wPart.partElemsMap[warehouse]
+				if isMyPart(part) {
+					p = part
+					break
+				}
+			}
 		} else {
 			// For multi-region workloads, use the multi-region partitioning.
 			warehouse = w.wMRPart.totalElems[workerIdx%len(w.wMRPart.totalElems)]
@@ -1124,6 +1148,9 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 		// Repartitioning can take upwards of 10 minutes, so determine if
 		// the dataset is already partitioned before launching the operation
 		// again.
+		if w.ignoreParts {
+			return nil
+		}
 		if parts, err := partitionCount(db); err != nil {
 			return errors.Wrapf(err, "could not determine if tables are partitioned")
 		} else if parts == 0 {
