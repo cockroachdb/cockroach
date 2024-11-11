@@ -102,13 +102,6 @@ func TestGranterBasic(t *testing.T) {
 
 		case "init-store-grant-coordinator":
 			clearRequesterAndCoord()
-			metrics := makeGrantCoordinatorMetrics()
-			regularWorkQueueMetrics := makeWorkQueueMetrics("regular", registry)
-			elasticWorkQUeueMetrics := makeWorkQueueMetrics("elastic", registry)
-			snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
-			workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
-				regularWorkQueueMetrics, elasticWorkQUeueMetrics,
-			}
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
@@ -139,21 +132,13 @@ func TestGranterBasic(t *testing.T) {
 					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
-				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-				kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
-				kvIOTokensTaken:             metrics.KVIOTokensTaken,
-				kvIOTokensReturned:          metrics.KVIOTokensReturned,
-				kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
-				l0CompactedBytes:            metrics.L0CompactedBytes,
-				l0TokensProduced:            metrics.L0TokensProduced,
-				workQueueMetrics:            workQueueMetrics,
-				snapshotQueueMetrics:        snapshotQueueMetrics,
-				disableTickerForTesting:     true,
-				knobs:                       &TestingKnobs{},
+				disableTickerForTesting: true,
+				knobs:                   &TestingKnobs{},
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
-			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, &metricsProvider)
+			registryProvider := &testRegistryProvider{registry: registry}
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, registryProvider, &metricsProvider)
 			var ok bool
 			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
@@ -395,9 +380,10 @@ func TestStoreCoordinators(t *testing.T) {
 	metrics := pebble.Metrics{}
 	mp := testMetricsProvider{}
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
+	registryProvider := &testRegistryProvider{registry: registry}
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, registryProvider, &mp)
 	// Now we have 1+2*2 = 5 KVWork requesters.
 	require.Equal(t, 5, len(requesters))
 	// Confirm that the store IDs are as expected.
@@ -560,3 +546,11 @@ func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(context.Context, LogEntryAdmit
 }
 
 var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}
+
+type testRegistryProvider struct {
+	registry *metric.Registry
+}
+
+func (r *testRegistryProvider) GetMetricsRegistry(roachpb.StoreID) *metric.Registry {
+	return r.registry
+}
