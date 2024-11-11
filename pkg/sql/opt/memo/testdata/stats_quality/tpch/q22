@@ -105,8 +105,8 @@ sort
       │    │    │    └── filters
       │    │    │         ├── substring(c_phone:5, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5), immutable]
       │    │    │         └── gt [type=bool, outer=(6), immutable, subquery, constraints=(/6: (/NULL - ])]
-      │    │    │              ├── c_acctbal:6 [type=float]
-      │    │    │              └── subquery [type=float]
+      │    │    │              ├── c_acctbal:6 [type=float8]
+      │    │    │              └── subquery [type=float8]
       │    │    │                   └── scalar-group-by
       │    │    │                        ├── save-table-name: q22_scalar_group_by_7
       │    │    │                        ├── columns: avg:21(float)
@@ -134,15 +134,15 @@ sort
       │    │    │                        │         ├── c_acctbal:16 > 0.0 [type=bool, outer=(16), constraints=(/16: [/5e-324 - ]; tight)]
       │    │    │                        │         └── substring(c_phone:15, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(15), immutable]
       │    │    │                        └── aggregations
-      │    │    │                             └── avg [as=avg:21, type=float, outer=(16)]
-      │    │    │                                  └── c_acctbal:16 [type=float]
+      │    │    │                             └── avg [as=avg:21, type=float8, outer=(16)]
+      │    │    │                                  └── c_acctbal:16 [type=float8]
       │    │    └── filters (true)
       │    └── projections
       │         └── substring(c_phone:5, 1, 2) [as=cntrycode:34, type=string, outer=(5), immutable]
       └── aggregations
-           ├── count-rows [as=count_rows:35, type=int]
-           └── sum [as=sum:36, type=float, outer=(6)]
-                └── c_acctbal:6 [type=float]
+           ├── count-rows [as=count_rows:35, type=int8]
+           └── sum [as=sum:36, type=float8, outer=(6)]
+                └── c_acctbal:6 [type=float8]
 
 ----Stats for q22_sort_1----
 column_names  row_count  distinct_count  null_count

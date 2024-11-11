@@ -131,26 +131,26 @@ project
            │    │    │    │    │    │    │         │    └── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
            │    │    │    │    │    │    │         └── filters
            │    │    │    │    │    │    │              └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
-           │    │    │    │    │    │    │                   ├── variable: y:8 [type=int]
-           │    │    │    │    │    │    │                   └── const: 1 [type=int]
+           │    │    │    │    │    │    │                   ├── variable: y:8 [type=int8]
+           │    │    │    │    │    │    │                   └── const: 1 [type=int8]
            │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int, volatile]
+           │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int8, volatile]
            │    │    │    │    │    └── projections
-           │    │    │    │    │         └── plus [as=c_comp:13, type=int, outer=(8), immutable]
-           │    │    │    │    │              ├── variable: y:8 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [as=c_comp:13, type=int8, outer=(8), immutable]
+           │    │    │    │    │              ├── variable: y:8 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    └── aggregations
-           │    │    │    │         ├── first-agg [as=x:7, type=int, outer=(7)]
-           │    │    │    │         │    └── variable: x:7 [type=int]
-           │    │    │    │         └── first-agg [as=rowid_default:12, type=int, outer=(12)]
-           │    │    │    │              └── variable: rowid_default:12 [type=int]
+           │    │    │    │         ├── first-agg [as=x:7, type=int8, outer=(7)]
+           │    │    │    │         │    └── variable: x:7 [type=int8]
+           │    │    │    │         └── first-agg [as=rowid_default:12, type=int8, outer=(12)]
+           │    │    │    │              └── variable: rowid_default:12 [type=int8]
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid)
            │    │    │    │    ├── computed column expressions
            │    │    │    │    │    └── c:16
-           │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── variable: b:15 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │              ├── variable: b:15 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    ├── key: (17)
            │    │    │    │    ├── fd: (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)-->(16)
            │    │    │    │    ├── prune: (14-19)
@@ -158,53 +158,53 @@ project
            │    │    │    │    └── unfiltered-cols: (14-19)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
-           │    │    │         │    ├── variable: y:8 [type=int]
-           │    │    │         │    └── variable: b:15 [type=int]
+           │    │    │         │    ├── variable: y:8 [type=int8]
+           │    │    │         │    └── variable: b:15 [type=int8]
            │    │    │         └── eq [type=bool, outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
-           │    │    │              ├── variable: c_comp:13 [type=int]
-           │    │    │              └── variable: c:16 [type=int]
+           │    │    │              ├── variable: c_comp:13 [type=int8]
+           │    │    │              └── variable: c:16 [type=int8]
            │    │    └── projections
-           │    │         ├── const: 1 [as=a_new:20, type=int]
-           │    │         └── plus [as=b_new:21, type=int, outer=(8,16), immutable]
-           │    │              ├── variable: y:8 [type=int]
-           │    │              └── variable: c:16 [type=int]
+           │    │         ├── const: 1 [as=a_new:20, type=int8]
+           │    │         └── plus [as=b_new:21, type=int8, outer=(8,16), immutable]
+           │    │              ├── variable: y:8 [type=int8]
+           │    │              └── variable: c:16 [type=int8]
            │    └── projections
-           │         └── plus [as=c_comp:22, type=int, outer=(21), immutable]
-           │              ├── variable: b_new:21 [type=int]
-           │              └── const: 1 [type=int]
+           │         └── plus [as=c_comp:22, type=int8, outer=(21), immutable]
+           │              ├── variable: b_new:21 [type=int8]
+           │              └── const: 1 [type=int8]
            └── projections
-                ├── case [as=upsert_a:23, type=int, outer=(7,17,20)]
+                ├── case [as=upsert_a:23, type=int8, outer=(7,17,20)]
                 │    ├── true [type=bool]
-                │    ├── when [type=int]
+                │    ├── when [type=int8]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:17 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int8]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: x:7 [type=int]
-                │    └── variable: a_new:20 [type=int]
-                ├── case [as=upsert_b:24, type=int, outer=(8,17,21)]
+                │    │    └── variable: x:7 [type=int8]
+                │    └── variable: a_new:20 [type=int8]
+                ├── case [as=upsert_b:24, type=int8, outer=(8,17,21)]
                 │    ├── true [type=bool]
-                │    ├── when [type=int]
+                │    ├── when [type=int8]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:17 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int8]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: y:8 [type=int]
-                │    └── variable: b_new:21 [type=int]
-                ├── case [as=upsert_c:25, type=int, outer=(13,17,22)]
+                │    │    └── variable: y:8 [type=int8]
+                │    └── variable: b_new:21 [type=int8]
+                ├── case [as=upsert_c:25, type=int8, outer=(13,17,22)]
                 │    ├── true [type=bool]
-                │    ├── when [type=int]
+                │    ├── when [type=int8]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:17 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int8]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: c_comp:13 [type=int]
-                │    └── variable: c_comp:22 [type=int]
-                └── case [as=upsert_rowid:26, type=int, outer=(12,17)]
+                │    │    └── variable: c_comp:13 [type=int8]
+                │    └── variable: c_comp:22 [type=int8]
+                └── case [as=upsert_rowid:26, type=int8, outer=(12,17)]
                      ├── true [type=bool]
-                     ├── when [type=int]
+                     ├── when [type=int8]
                      │    ├── is [type=bool]
-                     │    │    ├── variable: rowid:17 [type=int]
+                     │    │    ├── variable: rowid:17 [type=int8]
                      │    │    └── null [type=unknown]
-                     │    └── variable: rowid_default:12 [type=int]
-                     └── variable: rowid:17 [type=int]
+                     │    └── variable: rowid_default:12 [type=int8]
+                     └── variable: rowid:17 [type=int8]
 
 # DO NOTHING case.
 build
@@ -304,18 +304,18 @@ project
            │    │    │    │    │    │    │    │         ├── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
            │    │    │    │    │    │    │    │         └── unfiltered-cols: (7-11)
            │    │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int, volatile]
+           │    │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int8, volatile]
            │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │         └── plus [as=c_comp:13, type=int, outer=(8), immutable]
-           │    │    │    │    │    │              ├── variable: y:8 [type=int]
-           │    │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │    │         └── plus [as=c_comp:13, type=int8, outer=(8), immutable]
+           │    │    │    │    │    │              ├── variable: y:8 [type=int8]
+           │    │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    │    ├── scan abc
            │    │    │    │    │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null)
            │    │    │    │    │    │    ├── computed column expressions
            │    │    │    │    │    │    │    └── c:16
-           │    │    │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │    │    │              ├── variable: b:15 [type=int]
-           │    │    │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │    │    │              ├── variable: b:15 [type=int8]
+           │    │    │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    │    │    ├── key: (17)
            │    │    │    │    │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17), (15)-->(16)
            │    │    │    │    │    │    ├── prune: (14-17)
@@ -323,15 +323,15 @@ project
            │    │    │    │    │    │    └── unfiltered-cols: (14-19)
            │    │    │    │    │    └── filters
            │    │    │    │    │         └── eq [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
-           │    │    │    │    │              ├── variable: rowid_default:12 [type=int]
-           │    │    │    │    │              └── variable: rowid:17 [type=int]
+           │    │    │    │    │              ├── variable: rowid_default:12 [type=int8]
+           │    │    │    │    │              └── variable: rowid:17 [type=int8]
            │    │    │    │    ├── scan abc
            │    │    │    │    │    ├── columns: a:20(int!null) b:21(int) c:22(int) rowid:23(int!null)
            │    │    │    │    │    ├── computed column expressions
            │    │    │    │    │    │    └── c:22
-           │    │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │    │              ├── variable: b:21 [type=int]
-           │    │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │    │              ├── variable: b:21 [type=int8]
+           │    │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    │    ├── key: (23)
            │    │    │    │    │    ├── fd: (23)-->(20-22), (20)-->(21-23), (21,22)~~>(20,23), (21)-->(22)
            │    │    │    │    │    ├── prune: (20-23)
@@ -339,15 +339,15 @@ project
            │    │    │    │    │    └── unfiltered-cols: (20-25)
            │    │    │    │    └── filters
            │    │    │    │         └── eq [type=bool, outer=(7,20), constraints=(/7: (/NULL - ]; /20: (/NULL - ]), fd=(7)==(20), (20)==(7)]
-           │    │    │    │              ├── variable: x:7 [type=int]
-           │    │    │    │              └── variable: a:20 [type=int]
+           │    │    │    │              ├── variable: x:7 [type=int8]
+           │    │    │    │              └── variable: a:20 [type=int8]
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:26(int!null) b:27(int) c:28(int) rowid:29(int!null)
            │    │    │    │    ├── computed column expressions
            │    │    │    │    │    └── c:28
-           │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── variable: b:27 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │              ├── variable: b:27 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    ├── key: (29)
            │    │    │    │    ├── fd: (29)-->(26-28), (26)-->(27-29), (27,28)~~>(26,29), (27)-->(28)
            │    │    │    │    ├── prune: (26-29)
@@ -355,30 +355,30 @@ project
            │    │    │    │    └── unfiltered-cols: (26-31)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(8,27), constraints=(/8: (/NULL - ]; /27: (/NULL - ]), fd=(8)==(27), (27)==(8)]
-           │    │    │         │    ├── variable: y:8 [type=int]
-           │    │    │         │    └── variable: b:27 [type=int]
+           │    │    │         │    ├── variable: y:8 [type=int8]
+           │    │    │         │    └── variable: b:27 [type=int8]
            │    │    │         └── eq [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
-           │    │    │              ├── variable: c_comp:13 [type=int]
-           │    │    │              └── variable: c:28 [type=int]
+           │    │    │              ├── variable: c_comp:13 [type=int8]
+           │    │    │              └── variable: c:28 [type=int8]
            │    │    └── aggregations
-           │    │         ├── first-agg [as=x:7, type=int, outer=(7)]
-           │    │         │    └── variable: x:7 [type=int]
-           │    │         ├── first-agg [as=y:8, type=int, outer=(8)]
-           │    │         │    └── variable: y:8 [type=int]
-           │    │         └── first-agg [as=c_comp:13, type=int, outer=(13)]
-           │    │              └── variable: c_comp:13 [type=int]
+           │    │         ├── first-agg [as=x:7, type=int8, outer=(7)]
+           │    │         │    └── variable: x:7 [type=int8]
+           │    │         ├── first-agg [as=y:8, type=int8, outer=(8)]
+           │    │         │    └── variable: y:8 [type=int8]
+           │    │         └── first-agg [as=c_comp:13, type=int8, outer=(13)]
+           │    │              └── variable: c_comp:13 [type=int8]
            │    └── aggregations
-           │         ├── first-agg [as=y:8, type=int, outer=(8)]
-           │         │    └── variable: y:8 [type=int]
-           │         ├── first-agg [as=rowid_default:12, type=int, outer=(12)]
-           │         │    └── variable: rowid_default:12 [type=int]
-           │         └── first-agg [as=c_comp:13, type=int, outer=(13)]
-           │              └── variable: c_comp:13 [type=int]
+           │         ├── first-agg [as=y:8, type=int8, outer=(8)]
+           │         │    └── variable: y:8 [type=int8]
+           │         ├── first-agg [as=rowid_default:12, type=int8, outer=(12)]
+           │         │    └── variable: rowid_default:12 [type=int8]
+           │         └── first-agg [as=c_comp:13, type=int8, outer=(13)]
+           │              └── variable: c_comp:13 [type=int8]
            └── aggregations
-                ├── first-agg [as=x:7, type=int, outer=(7)]
-                │    └── variable: x:7 [type=int]
-                └── first-agg [as=rowid_default:12, type=int, outer=(12)]
-                     └── variable: rowid_default:12 [type=int]
+                ├── first-agg [as=x:7, type=int8, outer=(7)]
+                │    └── variable: x:7 [type=int8]
+                └── first-agg [as=rowid_default:12, type=int8, outer=(12)]
+                     └── variable: rowid_default:12 [type=int8]
 
 # UPSERT case.
 build
@@ -461,30 +461,30 @@ project
  │         │    │    │    │    │    │    ├── cardinality: [2 - 2]
  │         │    │    │    │    │    │    ├── prune: (7)
  │         │    │    │    │    │    │    ├── tuple [type=tuple{int}]
- │         │    │    │    │    │    │    │    └── const: 1 [type=int]
+ │         │    │    │    │    │    │    │    └── const: 1 [type=int8]
  │         │    │    │    │    │    │    └── tuple [type=tuple{int}]
- │         │    │    │    │    │    │         └── const: 2 [type=int]
+ │         │    │    │    │    │    │         └── const: 2 [type=int8]
  │         │    │    │    │    │    └── projections
- │         │    │    │    │    │         ├── const: 10 [as=b_default:8, type=int]
- │         │    │    │    │    │         └── function: unique_rowid [as=rowid_default:9, type=int, volatile]
+ │         │    │    │    │    │         ├── const: 10 [as=b_default:8, type=int8]
+ │         │    │    │    │    │         └── function: unique_rowid [as=rowid_default:9, type=int8, volatile]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── plus [as=c_comp:10, type=int, outer=(8), immutable]
- │         │    │    │    │              ├── variable: b_default:8 [type=int]
- │         │    │    │    │              └── const: 1 [type=int]
+ │         │    │    │    │         └── plus [as=c_comp:10, type=int8, outer=(8), immutable]
+ │         │    │    │    │              ├── variable: b_default:8 [type=int8]
+ │         │    │    │    │              └── const: 1 [type=int8]
  │         │    │    │    └── aggregations
- │         │    │    │         ├── first-agg [as=column1:7, type=int, outer=(7)]
- │         │    │    │         │    └── variable: column1:7 [type=int]
- │         │    │    │         ├── first-agg [as=b_default:8, type=int, outer=(8)]
- │         │    │    │         │    └── variable: b_default:8 [type=int]
- │         │    │    │         └── first-agg [as=c_comp:10, type=int, outer=(10)]
- │         │    │    │              └── variable: c_comp:10 [type=int]
+ │         │    │    │         ├── first-agg [as=column1:7, type=int8, outer=(7)]
+ │         │    │    │         │    └── variable: column1:7 [type=int8]
+ │         │    │    │         ├── first-agg [as=b_default:8, type=int8, outer=(8)]
+ │         │    │    │         │    └── variable: b_default:8 [type=int8]
+ │         │    │    │         └── first-agg [as=c_comp:10, type=int8, outer=(10)]
+ │         │    │    │              └── variable: c_comp:10 [type=int8]
  │         │    │    ├── scan abc
  │         │    │    │    ├── columns: a:11(int!null) b:12(int) c:13(int) rowid:14(int!null) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
  │         │    │    │    ├── computed column expressions
  │         │    │    │    │    └── c:13
- │         │    │    │    │         └── plus [type=int]
- │         │    │    │    │              ├── variable: b:12 [type=int]
- │         │    │    │    │              └── const: 1 [type=int]
+ │         │    │    │    │         └── plus [type=int8]
+ │         │    │    │    │              ├── variable: b:12 [type=int8]
+ │         │    │    │    │              └── const: 1 [type=int8]
  │         │    │    │    ├── key: (14)
  │         │    │    │    ├── fd: (14)-->(11-13,15,16), (11)-->(12-16), (12,13)~~>(11,14-16), (12)-->(13)
  │         │    │    │    ├── prune: (11-16)
@@ -492,41 +492,41 @@ project
  │         │    │    │    └── unfiltered-cols: (11-16)
  │         │    │    └── filters
  │         │    │         └── eq [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
- │         │    │              ├── variable: rowid_default:9 [type=int]
- │         │    │              └── variable: rowid:14 [type=int]
+ │         │    │              ├── variable: rowid_default:9 [type=int8]
+ │         │    │              └── variable: rowid:14 [type=int8]
  │         │    └── projections
- │         │         └── plus [as=c_comp:17, type=int, outer=(12), immutable]
- │         │              ├── variable: b:12 [type=int]
- │         │              └── const: 1 [type=int]
+ │         │         └── plus [as=c_comp:17, type=int8, outer=(12), immutable]
+ │         │              ├── variable: b:12 [type=int8]
+ │         │              └── const: 1 [type=int8]
  │         └── projections
- │              ├── case [as=upsert_b:18, type=int, outer=(8,12,14)]
+ │              ├── case [as=upsert_b:18, type=int8, outer=(8,12,14)]
  │              │    ├── true [type=bool]
- │              │    ├── when [type=int]
+ │              │    ├── when [type=int8]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid:14 [type=int]
+ │              │    │    │    ├── variable: rowid:14 [type=int8]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: b_default:8 [type=int]
- │              │    └── variable: b:12 [type=int]
- │              ├── case [as=upsert_c:19, type=int, outer=(10,13,14)]
+ │              │    │    └── variable: b_default:8 [type=int8]
+ │              │    └── variable: b:12 [type=int8]
+ │              ├── case [as=upsert_c:19, type=int8, outer=(10,13,14)]
  │              │    ├── true [type=bool]
- │              │    ├── when [type=int]
+ │              │    ├── when [type=int8]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid:14 [type=int]
+ │              │    │    │    ├── variable: rowid:14 [type=int8]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: c_comp:10 [type=int]
- │              │    └── variable: c:13 [type=int]
- │              └── case [as=upsert_rowid:20, type=int, outer=(9,14)]
+ │              │    │    └── variable: c_comp:10 [type=int8]
+ │              │    └── variable: c:13 [type=int8]
+ │              └── case [as=upsert_rowid:20, type=int8, outer=(9,14)]
  │                   ├── true [type=bool]
- │                   ├── when [type=int]
+ │                   ├── when [type=int8]
  │                   │    ├── is [type=bool]
- │                   │    │    ├── variable: rowid:14 [type=int]
+ │                   │    │    ├── variable: rowid:14 [type=int8]
  │                   │    │    └── null [type=unknown]
- │                   │    └── variable: rowid_default:9 [type=int]
- │                   └── variable: rowid:14 [type=int]
+ │                   │    └── variable: rowid_default:9 [type=int8]
+ │                   └── variable: rowid:14 [type=int8]
  └── projections
-      └── plus [as="?column?":21, type=int, outer=(2,3), immutable]
-           ├── variable: b:2 [type=int]
-           └── variable: c:3 [type=int]
+      └── plus [as="?column?":21, type=int8, outer=(2,3), immutable]
+           ├── variable: b:2 [type=int8]
+           └── variable: c:3 [type=int8]
 
 # ensure-upsert-distinct-on should create strict key in case where all grouping
 # columns are not NULL.
@@ -621,29 +621,29 @@ upsert abc
       │    │    │    │    │    │    │         │    └── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
       │    │    │    │    │    │    │         └── filters
       │    │    │    │    │    │    │              └── is-not [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
-      │    │    │    │    │    │    │                   ├── variable: y:8 [type=int]
+      │    │    │    │    │    │    │                   ├── variable: y:8 [type=int8]
       │    │    │    │    │    │    │                   └── null [type=unknown]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── const: 10 [as=b_default:12, type=int]
-      │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:13, type=int, volatile]
+      │    │    │    │    │    │         ├── const: 10 [as=b_default:12, type=int8]
+      │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:13, type=int8, volatile]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [as=c_comp:14, type=int, outer=(12), immutable]
-      │    │    │    │    │              ├── variable: b_default:12 [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [as=c_comp:14, type=int8, outer=(12), immutable]
+      │    │    │    │    │              ├── variable: b_default:12 [type=int8]
+      │    │    │    │    │              └── const: 1 [type=int8]
       │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=b_default:12, type=int, outer=(12)]
-      │    │    │    │         │    └── variable: b_default:12 [type=int]
-      │    │    │    │         ├── first-agg [as=rowid_default:13, type=int, outer=(13)]
-      │    │    │    │         │    └── variable: rowid_default:13 [type=int]
-      │    │    │    │         └── first-agg [as=c_comp:14, type=int, outer=(14)]
-      │    │    │    │              └── variable: c_comp:14 [type=int]
+      │    │    │    │         ├── first-agg [as=b_default:12, type=int8, outer=(12)]
+      │    │    │    │         │    └── variable: b_default:12 [type=int8]
+      │    │    │    │         ├── first-agg [as=rowid_default:13, type=int8, outer=(13)]
+      │    │    │    │         │    └── variable: rowid_default:13 [type=int8]
+      │    │    │    │         └── first-agg [as=c_comp:14, type=int8, outer=(14)]
+      │    │    │    │              └── variable: c_comp:14 [type=int8]
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:15(int!null) b:16(int) c:17(int) rowid:18(int!null) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid)
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── c:17
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: b:16 [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int8]
+      │    │    │    │    │              ├── variable: b:16 [type=int8]
+      │    │    │    │    │              └── const: 1 [type=int8]
       │    │    │    │    ├── key: (18)
       │    │    │    │    ├── fd: (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)-->(17)
       │    │    │    │    ├── prune: (15-20)
@@ -651,44 +651,44 @@ upsert abc
       │    │    │    │    └── unfiltered-cols: (15-20)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
-      │    │    │              ├── variable: y:8 [type=int]
-      │    │    │              └── variable: a:15 [type=int]
+      │    │    │              ├── variable: y:8 [type=int8]
+      │    │    │              └── variable: a:15 [type=int8]
       │    │    └── projections
-      │    │         └── const: 2 [as=b_new:21, type=int]
+      │    │         └── const: 2 [as=b_new:21, type=int8]
       │    └── projections
-      │         └── plus [as=c_comp:22, type=int, outer=(21), immutable]
-      │              ├── variable: b_new:21 [type=int]
-      │              └── const: 1 [type=int]
+      │         └── plus [as=c_comp:22, type=int8, outer=(21), immutable]
+      │              ├── variable: b_new:21 [type=int8]
+      │              └── const: 1 [type=int8]
       └── projections
-           ├── case [as=upsert_a:23, type=int, outer=(8,15)]
+           ├── case [as=upsert_a:23, type=int8, outer=(8,15)]
            │    ├── true [type=bool]
-           │    ├── when [type=int]
+           │    ├── when [type=int8]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:15 [type=int]
+           │    │    │    ├── variable: a:15 [type=int8]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: y:8 [type=int]
-           │    └── variable: a:15 [type=int]
-           ├── case [as=upsert_b:24, type=int, outer=(12,15,21)]
+           │    │    └── variable: y:8 [type=int8]
+           │    └── variable: a:15 [type=int8]
+           ├── case [as=upsert_b:24, type=int8, outer=(12,15,21)]
            │    ├── true [type=bool]
-           │    ├── when [type=int]
+           │    ├── when [type=int8]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:15 [type=int]
+           │    │    │    ├── variable: a:15 [type=int8]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: b_default:12 [type=int]
-           │    └── variable: b_new:21 [type=int]
-           ├── case [as=upsert_c:25, type=int, outer=(14,15,22)]
+           │    │    └── variable: b_default:12 [type=int8]
+           │    └── variable: b_new:21 [type=int8]
+           ├── case [as=upsert_c:25, type=int8, outer=(14,15,22)]
            │    ├── true [type=bool]
-           │    ├── when [type=int]
+           │    ├── when [type=int8]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:15 [type=int]
+           │    │    │    ├── variable: a:15 [type=int8]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: c_comp:14 [type=int]
-           │    └── variable: c_comp:22 [type=int]
-           └── case [as=upsert_rowid:26, type=int, outer=(13,15,18)]
+           │    │    └── variable: c_comp:14 [type=int8]
+           │    └── variable: c_comp:22 [type=int8]
+           └── case [as=upsert_rowid:26, type=int8, outer=(13,15,18)]
                 ├── true [type=bool]
-                ├── when [type=int]
+                ├── when [type=int8]
                 │    ├── is [type=bool]
-                │    │    ├── variable: a:15 [type=int]
+                │    │    ├── variable: a:15 [type=int8]
                 │    │    └── null [type=unknown]
-                │    └── variable: rowid_default:13 [type=int]
-                └── variable: rowid:18 [type=int]
+                │    └── variable: rowid_default:13 [type=int8]
+                └── variable: rowid:18 [type=int8]

@@ -155,7 +155,7 @@ top-k
       │    └── filters
       │         └── o_orderstatus:30 = 'F' [type=bool, outer=(30), constraints=(/30: [/'F' - /'F']; tight), fd=()-->(30)]
       └── aggregations
-           └── count-rows [as=count_rows:83, type=int]
+           └── count-rows [as=count_rows:83, type=int8]
 
 ----Stats for q21_top_k_1----
 column_names  row_count  distinct_count  null_count

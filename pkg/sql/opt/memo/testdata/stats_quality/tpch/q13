@@ -93,10 +93,10 @@ sort
       │    │    └── filters
       │    │         └── c_custkey:1 = o_custkey:12 [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
       │    └── aggregations
-      │         └── count [as=count:22, type=int, outer=(11)]
-      │              └── o_orderkey:11 [type=int]
+      │         └── count [as=count:22, type=int8, outer=(11)]
+      │              └── o_orderkey:11 [type=int8]
       └── aggregations
-           └── count-rows [as=count_rows:23, type=int]
+           └── count-rows [as=count_rows:23, type=int8]
 
 ----Stats for q13_sort_1----
 column_names  row_count  distinct_count  null_count

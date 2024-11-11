@@ -313,7 +313,7 @@ group-by (hash)
  │         └── filters (true)
  └── aggregations
       └── sum [as=sum:12, type=decimal, outer=(8)]
-           └── v:8 [type=int]
+           └── v:8 [type=int8]
 
 # Join selectivity: 1/max(distinct(x), distinct(u)) = 1/5000.
 norm
@@ -341,7 +341,7 @@ group-by (hash)
  │         └── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── aggregations
       └── sum [as=sum:12, type=decimal, outer=(8)]
-           └── v:8 [type=int]
+           └── v:8 [type=int8]
 
 # Semi-join.
 norm
@@ -468,7 +468,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:13, type=int]
+           └── count-rows [as=count_rows:13, type=int8]
 
 # Force column statistics calculation for anti-join.
 norm
@@ -505,7 +505,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:13, type=int]
+           └── count-rows [as=count_rows:13, type=int8]
 
 # Force column statistics calculation for left join.
 norm
@@ -542,7 +542,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:12, type=int]
+           └── count-rows [as=count_rows:12, type=int8]
 
 # Force column statistics calculation for right join.
 norm
@@ -579,7 +579,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:12, type=int]
+           └── count-rows [as=count_rows:12, type=int8]
 
 # Force column statistics calculation for outer join.
 norm
@@ -616,7 +616,7 @@ project
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:12, type=int]
+           └── count-rows [as=count_rows:12, type=int8]
 
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
@@ -1281,13 +1281,13 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
  │    │    │    └── projections
- │    │    │         └── 1 [as="?column?":23, type=int]
+ │    │    │         └── 1 [as="?column?":23, type=int8]
  │    │    └── filters (true)
  │    └── aggregations
- │         └── const-agg [as="?column?":23, type=int, outer=(23)]
- │              └── "?column?":23 [type=int]
+ │         └── const-agg [as="?column?":23, type=int8, outer=(23)]
+ │              └── "?column?":23 [type=int8]
  └── projections
-      └── "?column?":23 [as="?column?":24, type=int, outer=(23)]
+      └── "?column?":23 [as="?column?":24, type=int8, outer=(23)]
 
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
@@ -1725,16 +1725,16 @@ project
       │         │         └── v:30 = 6 [type=bool, outer=(30), constraints=(/30: [/6 - /6]; tight), fd=()-->(30)]
       │         └── filters (true)
       └── aggregations
-           ├── const-agg [as=y:2, type=int, outer=(2)]
-           │    └── y:2 [type=int]
+           ├── const-agg [as=y:2, type=int8, outer=(2)]
+           │    └── y:2 [type=int8]
            ├── const-agg [as=s:3, type=string, outer=(3)]
            │    └── s:3 [type=string]
            ├── const-agg [as=d:4, type=decimal, outer=(4)]
            │    └── d:4 [type=decimal]
-           ├── const-agg [as=u:7, type=int, outer=(7)]
-           │    └── u:7 [type=int]
-           └── const-agg [as=v:8, type=int, outer=(8)]
-                └── v:8 [type=int]
+           ├── const-agg [as=u:7, type=int8, outer=(7)]
+           │    └── u:7 [type=int8]
+           └── const-agg [as=v:8, type=int8, outer=(8)]
+                └── v:8 [type=int8]
 
 # Test selectivity of ORed join predicates
 # Estimate of # rows should be low, and nowhere near the no-stats
@@ -2110,7 +2110,7 @@ project
  │    │         │    └── fd: ()-->(15)
  │    │         └── filters
  │    │              └── col1_5:15 [type=bool, outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
- │    └── 82 [type=int]
+ │    └── 82 [type=int8]
  └── projections
       └── '1971-10-24' [as=date:19, type=date]
 

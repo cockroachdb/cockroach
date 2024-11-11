@@ -184,9 +184,9 @@ group-by (streaming)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── count-rows [as=count_rows:8, type=int]
-      └── const-agg [as=y:2, type=int, outer=(2)]
-           └── y:2 [type=int]
+      ├── count-rows [as=count_rows:8, type=int8]
+      └── const-agg [as=y:2, type=int8, outer=(2)]
+           └── y:2 [type=int8]
 
 # Test calculation of multi-column stats.
 opt
@@ -597,7 +597,7 @@ project
  │    └── filters
  │         └── col1:29 [type=bool, outer=(29), constraints=(/29: [/true - /true]; tight), fd=()-->(29)]
  └── projections
-      └── 1 [as="?column?":30, type=int]
+      └── 1 [as="?column?":30, type=int8]
 
 # ---------------------
 # Tests with Histograms
@@ -3419,7 +3419,7 @@ limit
  │    │         └── limit hint: 0.00
  │    └── filters
  │         └── (y:3 = 'bar1000') OR (y:3 = 'bar1001') [type=bool, outer=(3), constraints=(/3: [/'bar1000' - /'bar1000'] [/'bar1001' - /'bar1001']; tight)]
- └── 1 [type=int]
+ └── 1 [type=int8]
 
 # When optimizer_always_use_histograms is enabled, we should choose the unique
 # index.

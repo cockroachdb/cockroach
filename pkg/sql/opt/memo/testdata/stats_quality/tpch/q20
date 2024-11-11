@@ -165,10 +165,10 @@ sort
            │         │         │    │    │         ├── l_partkey:35 = ps_partkey:16 [type=bool, outer=(16,35), constraints=(/16: (/NULL - ]; /35: (/NULL - ]), fd=(16)==(35), (35)==(16)]
            │         │         │    │    │         └── l_suppkey:36 = ps_suppkey:17 [type=bool, outer=(17,36), constraints=(/17: (/NULL - ]; /36: (/NULL - ]), fd=(17)==(36), (36)==(17)]
            │         │         │    │    └── aggregations
-           │         │         │    │         ├── sum [as=sum:52, type=float, outer=(38)]
-           │         │         │    │         │    └── l_quantity:38 [type=float]
-           │         │         │    │         └── const-agg [as=ps_availqty:18, type=int, outer=(18)]
-           │         │         │    │              └── ps_availqty:18 [type=int]
+           │         │         │    │         ├── sum [as=sum:52, type=float8, outer=(38)]
+           │         │         │    │         │    └── l_quantity:38 [type=float8]
+           │         │         │    │         └── const-agg [as=ps_availqty:18, type=int8, outer=(18)]
+           │         │         │    │              └── ps_availqty:18 [type=int8]
            │         │         │    └── filters
            │         │         │         └── ps_availqty:18 > (sum:52 * 0.5) [type=bool, outer=(18,52), immutable, constraints=(/18: (/NULL - ])]
            │         │         └── filters

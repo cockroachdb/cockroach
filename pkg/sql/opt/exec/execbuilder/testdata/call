@@ -90,7 +90,7 @@ call
  ├── distribution: test
  └── procedure: foo [type=void]
       ├── args
-      │    └── const: 3 [type=int]
+      │    └── const: 3 [type=int8]
       ├── params: x:1(int)
       └── body
            ├── values
@@ -100,7 +100,7 @@ call
            │    ├── key: ()
            │    ├── fd: ()-->(2)
            │    └── tuple [type=tuple{int}]
-           │         └── const: 1 [type=int]
+           │         └── const: 1 [type=int8]
            ├── values
            │    ├── columns: "?column?":3(int!null)
            │    ├── cardinality: [1 - 1]
@@ -108,7 +108,7 @@ call
            │    ├── key: ()
            │    ├── fd: ()-->(3)
            │    └── tuple [type=tuple{int}]
-           │         └── const: 2 [type=int]
+           │         └── const: 2 [type=int8]
            └── values
                 ├── columns: column1:4(unknown)
                 ├── cardinality: [1 - 1]

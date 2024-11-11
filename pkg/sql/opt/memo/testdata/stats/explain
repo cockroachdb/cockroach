@@ -16,7 +16,7 @@ explain
       │    ├── key: ()
       │    └── () [type=tuple]
       └── projections
-           └── 1 [as="?column?":1, type=int]
+           └── 1 [as="?column?":1, type=int8]
 
 build
 SHOW TRACE FOR SESSION

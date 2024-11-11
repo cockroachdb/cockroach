@@ -178,11 +178,11 @@ sort
       │    │    └── filters
       │    │         └── s_nationkey:15 = n_nationkey:57 [type=bool, outer=(15,57), constraints=(/15: (/NULL - ]; /57: (/NULL - ]), fd=(15)==(57), (57)==(15)]
       │    └── projections
-      │         ├── extract('year', o_orderdate:50) [as=o_year:63, type=float, outer=(50), immutable]
-      │         └── (l_extendedprice:26 * (1.0 - l_discount:27)) - (ps_supplycost:42 * l_quantity:25) [as=amount:64, type=float, outer=(25-27,42), immutable]
+      │         ├── extract('year', o_orderdate:50) [as=o_year:63, type=float8, outer=(50), immutable]
+      │         └── (l_extendedprice:26 * (1.0 - l_discount:27)) - (ps_supplycost:42 * l_quantity:25) [as=amount:64, type=float8, outer=(25-27,42), immutable]
       └── aggregations
-           └── sum [as=sum:65, type=float, outer=(64)]
-                └── amount:64 [type=float]
+           └── sum [as=sum:65, type=float8, outer=(64)]
+                └── amount:64 [type=float8]
 
 ----Stats for q9_sort_1----
 column_names  row_count  distinct_count  null_count

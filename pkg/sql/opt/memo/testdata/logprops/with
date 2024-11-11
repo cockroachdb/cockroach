@@ -58,8 +58,8 @@ with &1 (foo)
  │    │    └── tuple [type=tuple]
  │    └── projections
  │         └── div [as="?column?":1, type=decimal, immutable]
- │              ├── const: 1 [type=int]
- │              └── const: 0 [type=int]
+ │              ├── const: 1 [type=int8]
+ │              └── const: 0 [type=int8]
  └── with-scan &1 (foo)
       ├── columns: "?column?":2(decimal!null)
       ├── mapping:
@@ -94,7 +94,7 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── const: 1 [as="?column?":1, type=int]
+ │         └── const: 1 [as="?column?":1, type=int8]
  └── project
       ├── columns: "?column?":3(decimal!null)
       ├── cardinality: [1 - 1]
@@ -116,8 +116,8 @@ with &1 (foo)
       │         └── &1: count=1 used-columns=(1)
       └── projections
            └── div [as="?column?":3, type=decimal, immutable]
-                ├── const: 1 [type=int]
-                └── const: 0 [type=int]
+                ├── const: 1 [type=int8]
+                └── const: 0 [type=int8]
 
 build
 WITH foo AS (SELECT $1::INT) SELECT 1 FROM foo
@@ -141,8 +141,8 @@ with &1 (foo)
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── cast: INT8 [as=int8:1, type=int, immutable]
- │              └── placeholder: $1 [type=int]
+ │         └── cast: INT8 [as=int8:1, type=int8, immutable]
+ │              └── placeholder: $1 [type=int8]
  └── project
       ├── columns: "?column?":3(int!null)
       ├── cardinality: [1 - 1]
@@ -162,7 +162,7 @@ with &1 (foo)
       │    └── cte-uses
       │         └── &1: count=1 used-columns=(1)
       └── projections
-           └── const: 1 [as="?column?":3, type=int]
+           └── const: 1 [as="?column?":3, type=int8]
 
 # Regression test for #40930.
 
@@ -216,9 +216,9 @@ inner-join-apply
  │    ├── cardinality: [2 - 2]
  │    ├── prune: (1)
  │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
+ │    │    └── const: 1 [type=int8]
  │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │         └── const: 2 [type=int8]
  ├── with &1 (foo)
  │    ├── columns: "?column?":3(int)
  │    ├── outer: (1)
@@ -240,9 +240,9 @@ inner-join-apply
  │    │    │    ├── key: ()
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
- │    │         └── plus [as="?column?":2, type=int, outer=(1), immutable]
- │    │              ├── const: 1 [type=int]
- │    │              └── variable: column1:1 [type=int]
+ │    │         └── plus [as="?column?":2, type=int8, outer=(1), immutable]
+ │    │              ├── const: 1 [type=int8]
+ │    │              └── variable: column1:1 [type=int8]
  │    └── with-scan &1 (foo)
  │         ├── columns: "?column?":3(int)
  │         ├── mapping:
@@ -274,9 +274,9 @@ with &2 (cte)
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── prune: (2)
  │    │    ├── tuple [type=tuple{int}]
- │    │    │    └── const: 1 [type=int]
+ │    │    │    └── const: 1 [type=int8]
  │    │    └── tuple [type=tuple{int}]
- │    │         └── const: 2 [type=int]
+ │    │         └── const: 2 [type=int8]
  │    └── null [type=string]
  └── with-scan &2 (cte)
       ├── columns: key:10(bytes) pretty:11(string) split_enforced_until:12(timestamp)

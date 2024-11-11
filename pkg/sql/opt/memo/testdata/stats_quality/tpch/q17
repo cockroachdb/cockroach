@@ -133,18 +133,18 @@ project
  │    │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── aggregations
- │    │    │    │    │         └── avg [as=avg:48, type=float, outer=(34)]
- │    │    │    │    │              └── l_quantity:34 [type=float]
+ │    │    │    │    │         └── avg [as=avg:48, type=float8, outer=(34)]
+ │    │    │    │    │              └── l_quantity:34 [type=float8]
  │    │    │    │    └── projections
- │    │    │    │         └── avg:48 * 0.2 [as="?column?":49, type=float, outer=(48), immutable]
+ │    │    │    │         └── avg:48 * 0.2 [as="?column?":49, type=float8, outer=(48), immutable]
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── l_quantity:5 < "?column?":49 [type=bool, outer=(5,49), constraints=(/5: (/NULL - ]; /49: (/NULL - ])]
  │    └── aggregations
- │         └── sum [as=sum:50, type=float, outer=(6)]
- │              └── l_extendedprice:6 [type=float]
+ │         └── sum [as=sum:50, type=float8, outer=(6)]
+ │              └── l_extendedprice:6 [type=float8]
  └── projections
-      └── sum:50 / 7.0 [as=avg_yearly:51, type=float, outer=(50)]
+      └── sum:50 / 7.0 [as=avg_yearly:51, type=float8, outer=(50)]
 
 ----Stats for q17_project_1----
 column_names  row_count  distinct_count  null_count

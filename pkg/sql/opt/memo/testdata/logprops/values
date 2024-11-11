@@ -11,15 +11,15 @@ values
  ├── immutable
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
- │    ├── const: 1 [type=int]
- │    └── const: 2 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 2 [type=int8]
  ├── tuple [type=tuple{int, int}]
- │    ├── const: 3 [type=int]
- │    └── const: 4 [type=int]
+ │    ├── const: 3 [type=int8]
+ │    └── const: 4 [type=int8]
  └── tuple [type=tuple{int, int}]
-      ├── cast: INT8 [type=int]
+      ├── cast: INT8 [type=int8]
       │    └── null [type=unknown]
-      └── const: 5 [type=int]
+      └── const: 5 [type=int8]
 
 build
 SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6))
@@ -29,14 +29,14 @@ values
  ├── cardinality: [3 - 3]
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
- │    ├── const: 1 [type=int]
- │    └── const: 2 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 2 [type=int8]
  ├── tuple [type=tuple{int, int}]
- │    ├── const: 3 [type=int]
- │    └── const: 4 [type=int]
+ │    ├── const: 3 [type=int8]
+ │    └── const: 4 [type=int8]
  └── tuple [type=tuple{int, int}]
-      ├── const: 5 [type=int]
-      └── const: 6 [type=int]
+      ├── const: 5 [type=int8]
+      └── const: 6 [type=int8]
 
 build
 SELECT * FROM (VALUES (NULL, 2), (3, NULL), (5, 6))
@@ -47,16 +47,16 @@ values
  ├── immutable
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
- │    ├── cast: INT8 [type=int]
+ │    ├── cast: INT8 [type=int8]
  │    │    └── null [type=unknown]
- │    └── const: 2 [type=int]
+ │    └── const: 2 [type=int8]
  ├── tuple [type=tuple{int, int}]
- │    ├── const: 3 [type=int]
- │    └── cast: INT8 [type=int]
+ │    ├── const: 3 [type=int8]
+ │    └── cast: INT8 [type=int8]
  │         └── null [type=unknown]
  └── tuple [type=tuple{int, int}]
-      ├── const: 5 [type=int]
-      └── const: 6 [type=int]
+      ├── const: 5 [type=int8]
+      └── const: 6 [type=int8]
 
 # Propagate outer columns.
 build
@@ -73,7 +73,7 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1)
  └── projections
-      └── subquery [as=column1:6, type=int, outer=(1,2), immutable, correlated-subquery]
+      └── subquery [as=column1:6, type=int8, outer=(1,2), immutable, correlated-subquery]
            └── max1-row
                 ├── columns: column1:5(int)
                 ├── error: "more than one row returned by a subquery used as an expression"
@@ -89,11 +89,11 @@ project
                      ├── immutable
                      ├── prune: (5)
                      ├── tuple [type=tuple{int}]
-                     │    └── variable: x:1 [type=int]
+                     │    └── variable: x:1 [type=int8]
                      └── tuple [type=tuple{int}]
-                          └── plus [type=int]
-                               ├── variable: y:2 [type=int]
-                               └── const: 1 [type=int]
+                          └── plus [type=int8]
+                               ├── variable: y:2 [type=int8]
+                               └── const: 1 [type=int8]
 
 # Single row.
 build
@@ -106,5 +106,5 @@ values
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)
  └── tuple [type=tuple{int, int}]
-      ├── const: 1 [type=int]
-      └── const: 2 [type=int]
+      ├── const: 1 [type=int8]
+      └── const: 2 [type=int8]

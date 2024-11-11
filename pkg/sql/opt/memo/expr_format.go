@@ -1221,7 +1221,11 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 		res = append(res, fmt.Sprintf(format, args...))
 	}
 	if !f.HasFlags(ExprFmtHideTypes) && typ.Family() != types.AnyFamily {
-		emitProp("type=%s", typ)
+		if typ.Family() == types.TupleFamily {
+			emitProp("type=%s", typ)
+		} else {
+			emitProp("type=%s", strings.ToLower(typ.SQLString()))
+		}
 	}
 	if propsExpr, ok := scalar.(ScalarPropsExpr); ok {
 		scalarProps := propsExpr.ScalarProps()

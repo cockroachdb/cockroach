@@ -426,7 +426,7 @@ inner-join (lookup wxyz)
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
  │    │    └── projections
- │    │         └── 10 [as="lookup_join_const_col_@8":13, type=int]
+ │    │         └── 10 [as="lookup_join_const_col_@8":13, type=int8]
  │    └── filters (true)
  └── filters (true)
 

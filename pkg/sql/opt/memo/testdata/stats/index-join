@@ -71,7 +71,7 @@ project
       │    └── filters
       │         └── (x:1 + y:2) = 10 [type=bool, outer=(1,2), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:7, type=int]
+           └── count-rows [as=count_rows:7, type=int8]
 
 opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=(1,2,3)
 SELECT * FROM a WHERE s = 'foo' AND x + y = 10

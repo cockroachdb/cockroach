@@ -46,10 +46,10 @@ select
  │         └── interesting orderings: (+4 opt(3))
  └── filters
       └── eq [type=bool, outer=(1,2), immutable]
-           ├── plus [type=int]
-           │    ├── variable: x:1 [type=int]
-           │    └── variable: y:2 [type=int]
-           └── const: 10 [type=int]
+           ├── plus [type=int8]
+           │    ├── variable: x:1 [type=int8]
+           │    └── variable: y:2 [type=int8]
+           └── const: 10 [type=int8]
 
 opt
 SELECT y FROM a WHERE s = 'foo' AND x + y = 10
@@ -77,10 +77,10 @@ project
       │         └── prune: (1,3)
       └── filters
            └── eq [type=bool, outer=(1,2), immutable]
-                ├── plus [type=int]
-                │    ├── variable: x:1 [type=int]
-                │    └── variable: y:2 [type=int]
-                └── const: 10 [type=int]
+                ├── plus [type=int8]
+                │    ├── variable: x:1 [type=int8]
+                │    └── variable: y:2 [type=int8]
+                └── const: 10 [type=int8]
 
 # Use secondary index to join to multi-valued primary index, but project only
 # a subset of the primary columns.
@@ -104,5 +104,5 @@ select
  │         └── interesting orderings: (+1,+2 opt(3))
  └── filters
       └── eq [type=bool, outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
-           ├── variable: d:4 [type=int]
-           └── const: 2 [type=int]
+           ├── variable: d:4 [type=int8]
+           └── const: 2 [type=int8]

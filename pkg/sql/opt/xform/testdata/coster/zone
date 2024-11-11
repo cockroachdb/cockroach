@@ -456,8 +456,8 @@ inner-join (lookup t.public.xy@y2)
  │    └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
  └── filters
       └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           ├── variable: t.public.xy.y:7 [type=int]
-           └── const: 1 [type=int]
+           ├── variable: t.public.xy.y:7 [type=int8]
+           └── const: 1 [type=int8]
 
 # Switch the data center for the target lookup join index.
 
@@ -496,8 +496,8 @@ inner-join (lookup t.public.xy@y1)
  │    └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
  └── filters
       └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           ├── variable: t.public.xy.y:7 [type=int]
-           └── const: 1 [type=int]
+           ├── variable: t.public.xy.y:7 [type=int8]
+           └── const: 1 [type=int8]
 
 # --------------------------------------------------
 # Lease preferences - single constraint.

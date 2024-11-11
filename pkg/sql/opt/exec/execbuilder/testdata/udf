@@ -331,7 +331,7 @@ values
  ├── distribution: test
  ├── prune: (6)
  └── tuple [type=tuple{int}]
-      └── udf: fn93210 [type=int]
+      └── udf: fn93210 [type=int8]
            └── body
                 └── limit
                      ├── columns: a:1(int!null)
@@ -343,7 +343,7 @@ values
                      │    ├── columns: a:1(int!null)
                      │    ├── stats: [rows=1000]
                      │    └── key: (1)
-                     └── const: 1 [type=int]
+                     └── const: 1 [type=int8]
 
 # Regression test for #88259. Arguments to UDFs should be formatted correctly in
 # EXPLAIN output.

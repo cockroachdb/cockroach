@@ -118,14 +118,14 @@ sort
       │    │    │    │    └── filters (true)
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column23:23, type=float, outer=(3,4), immutable]
+      │    │         └── ps_supplycost:4 * ps_availqty:3::FLOAT8 [as=column23:23, type=float8, outer=(3,4), immutable]
       │    └── aggregations
-      │         └── sum [as=sum:24, type=float, outer=(23)]
-      │              └── column23:23 [type=float]
+      │         └── sum [as=sum:24, type=float8, outer=(23)]
+      │              └── column23:23 [type=float8]
       └── filters
            └── gt [type=bool, outer=(24), immutable, subquery, constraints=(/24: (/NULL - ])]
-                ├── sum:24 [type=float]
-                └── subquery [type=float]
+                ├── sum:24 [type=float8]
+                └── subquery [type=float8]
                      └── project
                           ├── save-table-name: q11_project_10
                           ├── columns: "?column?":49(float)
@@ -192,12 +192,12 @@ sort
                           │    │    │    │    └── filters (true)
                           │    │    │    └── filters (true)
                           │    │    └── projections
-                          │    │         └── ps_supplycost:28 * ps_availqty:27::FLOAT8 [as=column47:47, type=float, outer=(27,28), immutable]
+                          │    │         └── ps_supplycost:28 * ps_availqty:27::FLOAT8 [as=column47:47, type=float8, outer=(27,28), immutable]
                           │    └── aggregations
-                          │         └── sum [as=sum:48, type=float, outer=(47)]
-                          │              └── column47:47 [type=float]
+                          │         └── sum [as=sum:48, type=float8, outer=(47)]
+                          │              └── column47:47 [type=float8]
                           └── projections
-                               └── sum:48 * 0.0001 [as="?column?":49, type=float, outer=(48), immutable]
+                               └── sum:48 * 0.0001 [as="?column?":49, type=float8, outer=(48), immutable]
 
 ----Stats for q11_sort_1----
 column_names  row_count  distinct_count  null_count

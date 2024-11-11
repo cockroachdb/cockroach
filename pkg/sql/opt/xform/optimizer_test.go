@@ -54,7 +54,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("after memo cannot be the same as the detached memo")
 	}
 
-	if !strings.Contains(after.RootExpr().String(), "variable: a:1 [type=int]") {
+	if !strings.Contains(after.RootExpr().String(), "variable: a:1 [type=int8]") {
 		t.Error("after memo did not contain expected operator")
 	}
 
