@@ -22,3 +22,11 @@ examples:
   targets using pre-generated `.pb.go` files under
   `@com_github_golang_protobuf//ptypes`. We do this because the `wkt` rules
   create conflicts in our build.
+
+The `build/scripts` directory contains scripts that can help with development of
+patches:
+* `patch-prepare-repo.sh` generates WORKSPACE and BUILD.bazel files for the
+  dependency;
+* `patch-apply.sh` applies a patch on a prepared repo;
+* `patch-gen.sh` extracts a patch from a prepared repo.
+
