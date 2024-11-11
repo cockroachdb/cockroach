@@ -8,7 +8,6 @@ package tablemetadatacache
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -204,9 +203,8 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 	}
 
 	if len(res.Errors) > 0 {
-		errMsg := strings.Join(res.Errors, " ; ")
-		// For now we won't write partial results to the cache.
-		return true, errors.Newf("%s", errMsg)
+		// For now, we won't write partial results to the cache.
+		return true, errors.New("An error has occurred while fetching span stats.")
 	}
 
 	if res.SpanToStats != nil {
