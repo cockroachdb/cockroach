@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // See the comments at the start of generators.go for details about
@@ -3689,11 +3690,11 @@ func newInternallyExecutedQueryIterator(
 // ExecuteQueryViaJobExecContext executes the provided query via the JobExecCtx
 // of the eval.Context. The method is initialized in the sql package to avoid
 // import cycles.
-var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, string, *kv.Txn, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
+var ExecuteQueryViaJobExecContext func(*eval.Context, context.Context, redact.RedactableString, *kv.Txn, sessiondata.InternalExecutorOverride, string, ...interface{}) (eval.InternalRows, error)
 
 // Start implements the eval.ValueGenerator interface.
 func (qi *internallyExecutedQueryIterator) Start(ctx context.Context, txn *kv.Txn) error {
-	opName := "internally-executed-query-builtin"
+	var opName redact.RedactableString = "internally-executed-query-builtin"
 	var ieo sessiondata.InternalExecutorOverride
 	// Always use the session's user, even in "jobs-like" mode.
 	ieo.User = qi.evalCtx.SessionData().User()
