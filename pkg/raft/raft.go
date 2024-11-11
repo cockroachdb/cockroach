@@ -1505,8 +1505,8 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inHeartbeatLease := r.checkQuorum && r.lead != None && r.leadEpoch == 0 &&
-				r.electionElapsed < r.electionTimeout
+			inHeartbeatLease := !r.supportingFortifiedLeader(true /* maybeDefortify */) &&
+				r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
 			inFortifyLease := r.supportingFortifiedLeader(true /* maybeDefortify */) &&
 				// NB: If the peer that's campaigning has an entry in its log with a
 				// higher term than what we're aware of, then this conclusively proves
