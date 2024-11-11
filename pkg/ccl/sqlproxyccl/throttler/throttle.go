@@ -5,11 +5,18 @@
 
 package throttler
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 const (
-	// throttleDisabled is a sentinal value used to disable the throttle.
+	// throttleDisabled is a sentinel value used to disable the throttle.
 	throttleDisabled = time.Duration(0)
+	// throttleLogErrorDuration indicates how frequent the throttle error should
+	// be logged for a given throttle instance.
+	throttleLogErrorDuration = 5 * time.Minute
 )
 
 type throttle struct {
@@ -18,12 +25,15 @@ type throttle struct {
 	// The amount of backoff to introduce the next time the throttle
 	// is triggered. Setting nextBackoff to zero disables the throttle.
 	nextBackoff time.Duration
+	// everyLog controls how frequent the throttle error should be logged.
+	everyLog log.EveryN
 }
 
 func newThrottle(initialBackoff time.Duration) *throttle {
 	return &throttle{
 		nextTime:    time.Time{},
 		nextBackoff: initialBackoff,
+		everyLog:    log.Every(throttleLogErrorDuration),
 	}
 }
 

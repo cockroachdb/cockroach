@@ -72,6 +72,8 @@ func NewLocalService(opts ...LocalOption) Service {
 	return s
 }
 
+var _ Service = (*localService)(nil)
+
 func (s *localService) lockedGetThrottle(connection ConnectionTags) *throttle {
 	l, ok := s.mu.throttleCache.Get(connection)
 	if ok && l != nil {
@@ -86,18 +88,26 @@ func (s *localService) lockedInsertThrottle(connection ConnectionTags) *throttle
 	return l
 }
 
-func (s *localService) LoginCheck(connection ConnectionTags) (time.Time, error) {
+// LoginCheck implements the Service interface.
+func (s *localService) LoginCheck(
+	ctx context.Context, connection ConnectionTags,
+) (time.Time, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := s.clock()
 	throttle := s.lockedGetThrottle(connection)
 	if throttle != nil && throttle.isThrottled(now) {
+		if throttle.everyLog.ShouldLog() {
+			// ctx should include logtags about the connection.
+			log.Error(ctx, "throttler refused connection due to too many failed authentication attempts")
+		}
 		return now, errRequestDenied
 	}
 	return now, nil
 }
 
+// ReportAttempt implements the Service interface.
 func (s *localService) ReportAttempt(
 	ctx context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus,
 ) error {
