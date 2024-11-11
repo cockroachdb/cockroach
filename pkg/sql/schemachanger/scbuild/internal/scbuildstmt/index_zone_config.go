@@ -34,7 +34,7 @@ func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
+func (izo *indexZoneConfigObj) getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element) {
 	subzones := []zonepb.Subzone{*izo.indexSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -55,6 +55,7 @@ func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 	//
 	// Update the index that is represented by izo, along with all other subzones.
 	idxToSpansMap := getSubzoneSpansWithIdx(len(subzones), ss)
+	var szCfg scpb.Element
 	var szCfgsToUpdate []scpb.Element
 	for i, sub := range subzones {
 		if spans, ok := idxToSpansMap[int32(i)]; ok {
@@ -65,7 +66,7 @@ func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 					PartitionName: sub.PartitionName,
 					Subzone:       sub,
 					SubzoneSpans:  spans,
-					SeqNum:        izo.seqNum,
+					SeqNum:        izo.seqNum + 1,
 				}
 				szCfgsToUpdate = append(szCfgsToUpdate, elem)
 			} else {
@@ -74,14 +75,24 @@ func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 					IndexID:      catid.IndexID(sub.IndexID),
 					Subzone:      sub,
 					SubzoneSpans: spans,
-					SeqNum:       izo.seqNum,
+					SeqNum:       izo.seqNum + 1,
 				}
-				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+				if sub.IndexID == uint32(izo.indexID) {
+					szCfg = elem
+				} else {
+					szCfgsToUpdate = append(szCfgsToUpdate, elem)
+				}
 			}
 		}
 	}
 
-	return szCfgsToUpdate
+	return szCfg, szCfgsToUpdate
+}
+
+func (izo *indexZoneConfigObj) getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element) {
+	// TODO(annie): this will need to be revised in order to implement subzone
+	// discards.
+	return izo.getZoneConfigElemForAdd(b)
 }
 
 func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
