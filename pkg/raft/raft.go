@@ -1155,22 +1155,15 @@ func (r *raft) tickElection() {
 		}
 	}
 
-	if r.leadEpoch != 0 {
-		assertTrue(r.electionElapsed == 0, "fortifying followers don't set electionElapsed")
-		if r.supportingFortifiedLeader(true /* maybeDefortify */) {
-			// There's a fortified leader and we're supporting it.
-			return
-		}
-		// We're no longer supporting the fortified leader. Calling r.deFortify()
-		// will forward the electionElapsed to electionTimeout which means that
-		// this peer can immediately vote in elections. Moreover, r.deFortify()
-		// will reset leadEpoch to 0 which ensures that we don't enter this
-		// conditional block again unless the term changes or the follower is
-		// re-fortified. This means we'll only ever skip the initial part of the
-		// election timeout once per fortified -> no longer fortified transition.
-		r.deFortify(r.id, r.Term)
-	} else {
-		r.electionElapsed++
+	r.electionElapsed++
+
+	if r.supportingFortifiedLeader(true /* maybeDefortify */) {
+		// There's a fortified leader and we're supporting it. We don't increment
+		// r.electionElapsed in that case. Expect that r.electionElapsed to be 0.
+		// However, since we incremented it above, we expect it to be 1 temporarily.
+		assertTrue(r.electionElapsed == 1, "fortifying followers don't set electionElapsed")
+		r.electionElapsed = 0
+		return
 	}
 
 	if r.atRandomizedElectionTimeout() {
