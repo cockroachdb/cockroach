@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/crlib/crbytes"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable/colblk"
 )
 
@@ -37,6 +38,15 @@ const (
 	cockroachColUntypedVersion
 	cockroachColCount
 )
+
+// KeySchemas holds the set of KeySchemas understandable by CockroachDB.
+var KeySchemas = []*pebble.KeySchema{&keySchema}
+
+// TODO(jackson): We need to rethink uses of DefaultKeySchema when we introduce
+// a new key schema.
+
+// DefaultKeySchema is the name of the default key schema.
+var DefaultKeySchema = keySchema.Name
 
 var keySchema = colblk.KeySchema{
 	Name:       "crdb1",

@@ -1132,9 +1132,24 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	return ret, nil
 }
 
-// GetSchemasForDatabase returns the schemas for a given database
-// visible by the transaction.
-// Deprecated: prefer GetAllSchemasInDatabase.
+// GetAllDatabaseDescriptorsMap returns the results of GetAllDatabaseDescriptors
+func (tc *Collection) GetAllDatabaseDescriptorsMap(
+	ctx context.Context, txn *kv.Txn,
+) (ret map[descpb.ID]catalog.DatabaseDescriptor, _ error) {
+	descriptors, err := tc.GetAllDatabaseDescriptors(ctx, txn)
+	result := map[descpb.ID]catalog.DatabaseDescriptor{}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, descriptor := range descriptors {
+		result[descriptor.GetID()] = descriptor
+	}
+
+	return result, nil
+}
+
+// but as a map with the database ID as the key.
 func (tc *Collection) GetSchemasForDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {

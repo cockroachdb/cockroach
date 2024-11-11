@@ -844,7 +844,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		Comparer:   EngineComparer,
 		FS:         vfs.Default,
 		KeySchema:  keySchema.Name,
-		KeySchemas: sstable.MakeKeySchemas(&keySchema),
+		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,

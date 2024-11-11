@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -228,8 +229,9 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 						strings.Contains(es, "driver: bad connection") ||
 						strings.Contains(es, "unexpected error inside CockroachDB") {
 						return &crasher{
-							sql: sql,
-							err: err,
+							sql:    sql,
+							err:    err,
+							detail: pgerror.FullError(err),
 						}
 					}
 					return &nonCrasher{sql: sql, err: err}
@@ -959,7 +961,7 @@ func testRandomSyntax(
 					// NOTE: Changes to this output format must be kept in-sync
 					// with logic in CondensedMessage.RSGCrash in order for
 					// crashes to be correctly reported to Github.
-					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
+					t.Errorf("Crash detected: %s\n%s;\n\nMore details:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}
 			countsMu.Unlock()
