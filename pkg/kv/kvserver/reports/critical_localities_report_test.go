@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -285,7 +286,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 // TableData reads a table and returns the rows as strings.
 func TableData(ctx context.Context, tableName string, executor isql.Executor) [][]string {
 	if it, err := executor.QueryIterator(
-		ctx, "test-select-"+tableName, nil /* txn */, "select * from "+tableName,
+		ctx, redact.Sprintf("test-select-%s", tableName), nil /* txn */, "select * from "+tableName,
 	); err == nil {
 		var result [][]string
 		var ok bool
