@@ -21,6 +21,23 @@ func UseRowID(d tree.ColumnTableDef) *tree.ColumnTableDef {
 	return &d
 }
 
+func UseUnorderedRowID(d tree.ColumnTableDef) *tree.ColumnTableDef {
+	d.DefaultExpr.Expr = &tree.FuncExpr{Func: tree.WrapFunction("unordered_unique_rowid")}
+	d.Type = types.Int
+	// Column is non-nullable in all cases. PostgreSQL requires this.
+	d.Nullable.Nullability = tree.NotNull
+	return &d
+}
+
+func UseSequence(d tree.ColumnTableDef, seqName *tree.TableName) *tree.ColumnTableDef {
+	d.DefaultExpr.Expr = &tree.FuncExpr{
+		Func:  tree.WrapFunction("nextval"),
+		Exprs: tree.Exprs{tree.NewStrVal(seqName.String())}}
+	// Column is non-nullable in all cases. PostgreSQL requires this.
+	d.Nullable.Nullability = tree.NotNull
+	return &d
+}
+
 func AssertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *tree.TableName) error {
 	if d.HasDefaultExpr() {
 		// SERIAL implies a new default expression, we can't have one to

@@ -3994,10 +3994,7 @@ subtest unimplemented_for_non_rowid_in_DSC
 statement ok
 SET serial_normalization = sql_sequence
 
-statement ok
-SET use_declarative_schema_changer = unsafe_always
-
-statement error pq: \*tree.ColumnTableDef not implemented in the new schema changer: contains serial data type in unsupported mode
+statement error .*nextval\(\): unimplemented: cannot evaluate scalar expressions containing sequence operations in this context.*
 alter table roach add column serial_id2 SERIAL
 
 subtest end
