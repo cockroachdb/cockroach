@@ -112,7 +112,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 			u.metrics.Errors.Inc(1)
 			if !more {
 				// If we were able to fetch some rows, we can proceed and move on to the next batch.
-				// Otherwise a non-recoverable error was encountered and we can't proceed.
+				// Otherwise, a non-recoverable error was encountered and we can't proceed.
 				return updated, batchErr
 			}
 		}
