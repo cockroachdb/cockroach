@@ -122,6 +122,11 @@ type testImpl struct {
 		// TODO(test-eng): this should just be an in-mem (ring) buffer attached to
 		// `t.L()`.
 		output []byte
+
+		// extraParams are test-specific parameters that will be added to the Github issue as
+		// parameters if there is a failure. They will additionally be logged in the test itself
+		// in case github issue posting is disabled.
+		extraParams map[string]string
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -284,6 +289,26 @@ func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
 // status message is erased.
 func (t *testImpl) Status(args ...interface{}) {
 	t.status(context.TODO(), t.runnerID, args...)
+}
+
+// AddParam adds a parameter to the test. This parameter will be logged both in
+// the github issue if one is created and in the artifacts directory. This is useful if a test
+// has metamorphic properties as it makes it easier to spot the differences between runs
+// without digging into the logs (i.e. mixed version test deployment mode). It also helps
+// debugging when the test failure is not posted to github (i.e. qualification runs).
+func (t *testImpl) AddParam(label, value string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.mu.extraParams == nil {
+		t.mu.extraParams = make(map[string]string)
+	}
+	t.mu.extraParams[label] = value
+}
+
+func (t *testImpl) getExtraParams() map[string]string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.extraParams
 }
 
 // IsDebug returns true if the test is in a debug state.
