@@ -120,6 +120,10 @@ func (br *bufferedRegistration) publish(
 	if br.mu.overflowed {
 		return
 	}
+	if br.mu.disconnected {
+		return
+	}
+
 	alloc.Use(ctx)
 	select {
 	case br.buf <- e:
