@@ -34,13 +34,13 @@ func (rzo *namedRangeZoneConfigObj) isNoOp() bool {
 	return rzo.zoneConfig == nil
 }
 
-func (rzo *namedRangeZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (rzo *namedRangeZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 	elem := &scpb.NamedRangeZoneConfig{
 		RangeID:    rzo.rangeID,
 		ZoneConfig: rzo.zoneConfig,
 		SeqNum:     rzo.seqNum,
 	}
-	return elem
+	return []scpb.Element{elem}
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(

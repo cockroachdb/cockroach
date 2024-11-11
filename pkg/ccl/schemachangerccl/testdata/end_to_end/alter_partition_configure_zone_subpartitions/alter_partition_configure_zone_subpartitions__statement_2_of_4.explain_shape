@@ -1,0 +1,32 @@
+/* setup */
+CREATE TABLE person (
+    name STRING,
+    country STRING,
+    birth_date DATE,
+    PRIMARY KEY (country, birth_date, name)
+)
+    PARTITION BY LIST (country) (
+            PARTITION australia
+                VALUES IN ('AU', 'NZ')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION north_america
+                VALUES IN ('US', 'CA')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_na VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_na VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION default
+                VALUES IN (default)
+        );
+
+/* test */
+ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
+EXPLAIN (DDL, SHAPE) ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
+----
+Schema change plan for ALTER PARTITION ‹old_au› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹4›; following ALTER PARTITION ‹australia› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹2›;
+ └── execute 1 system table mutations transaction
